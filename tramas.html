@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guiones · Tramas</title>
+<link rel="stylesheet" href="css/tramas.css">
+<script>
+/* Tema antes del primer pintado, para que no parpadee. Comparte el atributo del editor. */
+(function () {
+  try {
+    var t = localStorage.getItem('guiones.tramas.theme') || localStorage.getItem('guiones.editor.theme');
+    if (!t && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
+    document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+  } catch (e) {}
+})();
+</script>
+</head>
+<body>
+
+<header class="barra">
+  <div class="marca">Tramas</div>
+  <div class="tool"><span>Escala</span><input type="range" id="zoom" min="0.7" max="3" step="0.05" value="1.7" title="Píxeles por celda"></div>
+  <button class="btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↶ Deshacer</button>
+  <button class="btn" id="redoBtn" title="Rehacer (Ctrl+Shift+Z)">↷ Rehacer</button>
+  <span class="spacer"></span>
+  <span class="estado" id="estadoGuardado" title="El tablero se guarda solo en este navegador"></span>
+  <button class="btn" id="temaBtn" title="Modo claro / oscuro">◑ Oscuro</button>
+  <button class="btn" id="btnNuevo" title="Empezar un tablero vacío">Nuevo</button>
+  <button class="btn" id="btnAbrir" title="Abrir un tablero guardado (.json)">Abrir…</button>
+  <button class="btn" id="btnGuardar" title="Guardar el tablero como archivo (.json)">Guardar…</button>
+  <input type="file" id="archivo" accept=".json,application/json" hidden>
+</header>
+
+<main>
+  <div id="board"><div id="canvas">
+    <svg id="cables"></svg>
+    <div class="axis" id="axis"></div>
+    <div id="rows"></div>
+    <div id="celda" title="Crear aquí">+</div>
+  </div></div>
+  <aside id="panel"></aside>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <p id="dlgTexto"></p>
+    <menu>
+      <button type="button" class="btn" id="dlgCancel">Cancelar</button>
+      <button type="submit" class="btn danger" id="dlgOk">Eliminar</button>
+    </menu>
+  </form>
+</dialog>
+
+<div id="menu"></div>
+<div id="tip"></div>
+<div id="aviso"></div>
+
+<script src="js/tramas/modelo.js"></script>
+<script src="js/tramas/tablero.js"></script>
+<script src="js/tramas/app.js"></script>
+</body>
+</html>

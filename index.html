@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guiones · Editor</title>
+<link rel="stylesheet" href="css/editor.css">
+</head>
+<body>
+<!-- Cinta superior: aparece al acercar el ratón al borde superior o queda fija con el pin -->
+<header id="topbar" class="topbar">
+<div class="ribbon">
+  <div class="group">
+    <button data-cmd="undo" class="txt" title="Deshacer (Ctrl+Z)">↶</button>
+    <button data-cmd="redo" class="txt" title="Rehacer (Ctrl+Y)">↷</button>
+  </div>
+  <span class="sep"></span>
+
+  <select id="blockStyle" title="Estilo de párrafo">
+    <option value="p">Normal</option>
+    <option value="h1">Título 1</option>
+    <option value="h2">Título 2</option>
+    <option value="h3">Título 3</option>
+    <option value="h4">Título 4</option>
+    <option value="blockquote">Cita</option>
+    <option value="pre">Código</option>
+    <optgroup label="Guion">
+      <option value="sp-scene">Encabezado de escena</option>
+      <option value="sp-action">Acción</option>
+      <option value="sp-character">Personaje</option>
+      <option value="sp-paren">Paréntico</option>
+      <option value="sp-dialogue">Diálogo</option>
+      <option value="sp-transition">Transición</option>
+      <option value="sp-shot">Toma</option>
+    </optgroup>
+  </select>
+  <select id="fontFamily" title="Tipo de letra">
+    <option value="" hidden>—</option>
+    <option value="Courier Prime">Courier Prime</option>
+    <option value="Courier New">Courier New</option>
+    <option value="Menlo">Menlo</option>
+    <option value="Calibri">Calibri</option>
+    <option value="Arial">Arial</option>
+    <option value="Helvetica">Helvetica</option>
+    <option value="Verdana">Verdana</option>
+    <option value="Times New Roman">Times New Roman</option>
+    <option value="Georgia">Georgia</option>
+    <option value="Garamond">Garamond</option>
+    <option value="Palatino">Palatino</option>
+  </select>
+  <div class="pill size">
+    <button data-action="font-size-dec" title="Reducir tamaño (Ctrl+Shift+,)">−</button>
+    <input id="fontSize" type="number" min="6" max="200" step="0.5" value="12" title="Tamaño de letra (pt)">
+    <button data-action="font-size-inc" title="Aumentar tamaño (Ctrl+Shift+.)">＋</button>
+  </div>
+  <span class="sep"></span>
+
+  <div class="group">
+    <button data-cmd="bold" title="Negrita (Ctrl+B)" data-icon="bold"></button>
+    <button data-cmd="italic" title="Cursiva (Ctrl+I)" data-icon="italic"></button>
+    <button data-cmd="underline" title="Subrayado (Ctrl+U)" data-icon="underline"></button>
+    <button data-cmd="strikeThrough" title="Tachado (Ctrl+Shift+X)" data-icon="strike"></button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button class="color-btn" data-action="color-pop" data-kind="fore" title="Color de texto" data-icon="fore"><span class="bar" id="foreColorBar"></span></button>
+    <button class="color-btn hl" data-action="color-pop" data-kind="hilite" title="Resaltar (marcatextos)" data-icon="hilite"><span class="bar" id="hiliteColorBar"></span></button>
+  </div>
+  <span class="sep"></span>
+
+  <div class="group">
+    <button data-cmd="justifyLeft" title="Izquierda (Ctrl+Shift+L)" data-icon="alignLeft"></button>
+    <button data-cmd="justifyCenter" title="Centrar (Ctrl+Shift+E)" data-icon="alignCenter"></button>
+    <button data-cmd="justifyRight" title="Derecha (Ctrl+Shift+R)" data-icon="alignRight"></button>
+    <button data-cmd="justifyFull" title="Justificar (Ctrl+Shift+J)" data-icon="alignJustify"></button>
+  </div>
+  <span class="sep"></span>
+
+  <div class="group">
+    <button data-cmd="insertUnorderedList" title="Viñetas (Ctrl+Shift+8)" data-icon="listBullet"></button>
+    <button data-cmd="insertOrderedList" title="Numeración (Ctrl+Shift+7)" data-icon="listNumber"></button>
+    <button data-action="outdent" title="Reducir sangría (Shift+Tab)" data-icon="outdent"></button>
+    <button data-action="indent" title="Aumentar sangría (Tab)" data-icon="indent"></button>
+    <select id="lineSpacing" title="Interlineado">
+      <option value="" hidden>—</option>
+      <option value="1">1.0</option>
+      <option value="1.15">1.15</option>
+      <option value="1.5">1.5</option>
+      <option value="2">2.0</option>
+      <option value="3">3.0</option>
+    </select>
+  </div>
+  <span class="sep"></span>
+
+  <div class="group">
+    <button data-action="link" title="Enlace (Ctrl+K)" data-icon="link"></button>
+    <button data-action="table" title="Insertar tabla" data-icon="table"></button>
+    <button data-action="find-open" title="Buscar y reemplazar (Ctrl+F)" data-icon="search"></button>
+  </div>
+
+  <span class="spacer"></span>
+  <button data-action="theme" title="Modo claro / oscuro" data-icon="theme"></button>
+  <button data-action="pin" id="btnPin" title="Fijar la cinta" data-icon="pin"></button>
+</div>
+<div class="titlebar">
+  <button class="nav" title="Documento anterior" disabled>‹</button>
+  <button class="nav" title="Documento siguiente" disabled>›</button>
+  <input id="docTitle" class="doc-title" type="text" placeholder="Sin título" spellcheck="false" autocomplete="off" aria-label="Título del documento">
+</div>
+</header>
+
+<div id="findPanel" class="find-panel" hidden>
+  <input id="findInput" type="text" placeholder="Buscar…">
+  <button data-action="find-prev" title="Anterior (Shift+Enter)">↑</button>
+  <button data-action="find-next" title="Siguiente (Enter)">↓</button>
+  <input id="replaceInput" type="text" placeholder="Reemplazar por…">
+  <button data-action="replace">Reemplazar</button>
+  <button data-action="replace-all">Todo</button>
+  <label class="toggle"><input type="checkbox" id="findCase"> Aa</label>
+  <span id="findStatus" class="lbl"></span>
+  <button data-action="find-close" title="Cerrar (Esc)">✕</button>
+</div>
+
+<main id="workspace" class="workspace">
+  <div id="pageWrap" class="page-wrap">
+    <div id="editor" class="page" contenteditable="true" spellcheck="false"><p><br></p></div>
+  </div>
+</main>
+
+<!-- Barra inferior: aparece al acercar el ratón al borde inferior -->
+<div id="focusBar" class="focus-bar">
+  <div class="fb-item">
+    <select id="fbZoom" title="Tamaño del texto">
+      <option value="1">100%</option><option value="1.1">110%</option><option value="1.25">125%</option>
+      <option value="1.5">150%</option><option value="1.75">175%</option><option value="2">200%</option><option value="2.5">250%</option>
+    </select>
+    <span>Tamaño</span>
+  </div>
+  <div class="fb-item wide">
+    <div class="fb-range"><i class="ico-narrow"></i><input type="range" id="fbWidth" min="20" max="100" value="60" title="Ancho de la hoja"><i class="ico-wide"></i></div>
+    <span>Ancho de la hoja</span>
+  </div>
+  <span class="fb-sep"></span>
+  <div class="fb-item row"><button data-action="script" id="fbScript" title="Modo guion: el menú / solo muestra elementos de guion">✎</button><span>Modo guion</span></div>
+  <div class="fb-item row"><button data-action="typewriter" id="fbTypewriter" title="Typewriter">⌨</button><span>Typewriter</span></div>
+  <div class="fb-item row"><button data-action="theme" id="fbTheme" title="Modo claro / oscuro">◑</button><span>Modo oscuro</span></div>
+  <div class="fb-item row"><button data-action="spell" id="fbSpell" title="Ortografía">A✓</button><span>Ortografía</span></div>
+  <span class="fb-spacer"></span>
+  <div class="fb-item row"><button data-action="pin-bottom" id="btnPinBottom" title="Fijar la barra" data-icon="pin"></button><span>Fijar</span></div>
+</div>
+
+<!-- Selector de color: paleta pastel + gotero -->
+<div id="colorPop" class="color-pop" hidden>
+  <div class="cp-title" id="cpTitle"></div>
+  <div class="cp-grid" id="cpGrid"></div>
+  <div class="cp-actions">
+    <button type="button" id="cpNone"></button>
+    <label class="cp-more">Más colores… <input type="color" id="cpInput"></label>
+  </div>
+</div>
+
+<!-- Menú contextual (clic derecho) -->
+<div id="ctxMenu" class="ctx-menu" hidden>
+  <div id="ctxSpell" hidden></div>
+  <div id="ctxChar" hidden></div>
+  <button data-cmd="cut"><span>Cortar</span><kbd>Ctrl+X</kbd></button>
+  <button data-cmd="copy"><span>Copiar</span><kbd>Ctrl+C</kbd></button>
+  <button data-action="paste"><span>Pegar</span><kbd>Ctrl+V</kbd></button>
+  <hr>
+  <button data-cmd="bold"><span class="b">Negrita</span><kbd>Ctrl+B</kbd></button>
+  <button data-cmd="italic"><span class="i">Cursiva</span><kbd>Ctrl+I</kbd></button>
+  <button data-cmd="underline"><span class="u">Subrayado</span><kbd>Ctrl+U</kbd></button>
+  <button data-cmd="strikeThrough"><span class="s">Tachado</span><kbd>Ctrl+Shift+X</kbd></button>
+  <button data-action="highlight"><span class="hl">Resaltar</span><kbd>Ctrl+Shift+H</kbd></button>
+  <button data-cmd="hiliteColor" data-value="transparent"><span>Quitar resaltado</span></button>
+  <hr>
+  <button data-cmd="formatBlock" data-value="p"><span>Normal</span><kbd>Ctrl+Alt+0</kbd></button>
+  <button data-cmd="formatBlock" data-value="h1"><span>Título 1</span><kbd>Ctrl+Alt+1</kbd></button>
+  <button data-cmd="formatBlock" data-value="h2"><span>Título 2</span><kbd>Ctrl+Alt+2</kbd></button>
+  <button data-cmd="formatBlock" data-value="h3"><span>Título 3</span><kbd>Ctrl+Alt+3</kbd></button>
+  <button data-cmd="formatBlock" data-value="blockquote"><span>Cita</span></button>
+  <hr>
+  <div class="ctx-title">Guion (también con «/»)</div>
+  <button data-action="sp" data-kind="scene"><span>Encabezado de escena</span></button>
+  <button data-action="sp" data-kind="action"><span>Acción</span></button>
+  <button data-action="sp" data-kind="character"><span>Personaje</span></button>
+  <button data-action="sp" data-kind="paren"><span>Paréntico</span></button>
+  <button data-action="sp" data-kind="dialogue"><span>Diálogo</span></button>
+  <button data-action="sp" data-kind="transition"><span>Transición</span></button>
+  <button data-action="sp" data-kind="shot"><span>Toma</span></button>
+  <hr>
+  <button data-cmd="insertUnorderedList"><span>Lista con viñetas</span><kbd>Ctrl+Shift+8</kbd></button>
+  <button data-cmd="insertOrderedList"><span>Lista numerada</span><kbd>Ctrl+Shift+7</kbd></button>
+  <hr>
+  <button data-cmd="justifyLeft"><span>Alinear a la izquierda</span><kbd>Ctrl+Shift+L</kbd></button>
+  <button data-cmd="justifyCenter"><span>Centrar</span><kbd>Ctrl+Shift+E</kbd></button>
+  <button data-cmd="justifyRight"><span>Alinear a la derecha</span><kbd>Ctrl+Shift+R</kbd></button>
+  <button data-cmd="justifyFull"><span>Justificar</span><kbd>Ctrl+Shift+J</kbd></button>
+  <hr>
+  <button data-action="link"><span>Enlace…</span><kbd>Ctrl+K</kbd></button>
+  <button data-action="table"><span>Insertar tabla</span></button>
+  <button data-action="database"><span>Insertar base de datos</span></button>
+  <button data-action="clear-format"><span>Borrar formato</span></button>
+  <div id="ctxTable" hidden>
+    <hr>
+    <div class="ctx-title">Tabla</div>
+    <button data-action="table-row-above"><span>Insertar fila arriba</span></button>
+    <button data-action="table-row-below"><span>Insertar fila abajo</span></button>
+    <button data-action="table-col-left"><span>Insertar columna a la izquierda</span></button>
+    <button data-action="table-col-right"><span>Insertar columna a la derecha</span></button>
+    <button data-action="table-row-up"><span>Mover fila arriba</span></button>
+    <button data-action="table-row-down"><span>Mover fila abajo</span></button>
+    <button data-action="table-col-prev"><span>Mover columna a la izquierda</span></button>
+    <button data-action="table-col-next"><span>Mover columna a la derecha</span></button>
+    <button data-action="table-del-row"><span>Eliminar fila</span></button>
+    <button data-action="table-del-col"><span>Eliminar columna</span></button>
+    <button data-action="table-del"><span>Eliminar tabla</span></button>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <h3 id="dlgTitle"></h3>
+    <div id="dlgBody"></div>
+    <menu>
+      <button type="button" value="cancel" id="dlgCancel">Cancelar</button>
+      <button type="submit" value="ok" class="primary" id="dlgOk">Aceptar</button>
+    </menu>
+  </form>
+</dialog>
+
+<script src="js/utils.js"></script>
+<script src="js/markdown.js"></script>
+<script src="js/page.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/table.js"></script>
+<script src="js/screenplay.js"></script>
+<script src="js/database.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/slash.js"></script>
+<script src="js/characters.js"></script>
+<script src="js/vendor/typo.js"></script>
+<script src="js/dict/es.js"></script>
+<script src="js/dict/en.js"></script>
+<script src="js/spell.js"></script>
+</body>
+</html>

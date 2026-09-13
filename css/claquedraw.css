@@ -1,0 +1,90 @@
+/* ===== Claquedraw · vistas y tira de la trama =====
+   Se carga después de css/tramas.css y reutiliza sus tokens (tinta, panel, foco, sombras, modo
+   oscuro) y sus dibujos de nodo: la tira pinta los nodos igual que el tablero (.dot, .caja, .rombo,
+   cortado, fuera de escena). Todo lo propio lleva prefijo hilo- para no chocar con el tablero. */
+:root { --cd-dur: 180ms; --cd-ease: cubic-bezier(.4, 0, .2, 1); --gutter-plegado: 44px; }
+main { position: relative; }
+
+/* ---------- vistas: esquema de pasos / editor de texto ---------- */
+.vistas { display: flex; }
+.vistas .btn { border-radius: 0; margin-left: -1.5px; }
+.vistas .btn:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.vistas .btn:last-child { border-radius: 0 6px 6px 0; }
+.vistas .btn.on { position: relative; z-index: 1; }
+#texto { position: relative; flex: 1; min-width: 0; display: none; flex-direction: column; background: var(--chrome); overflow: hidden; }
+body.vista-texto #texto { display: flex; }
+body.vista-texto #board, body.vista-texto #panel, body.vista-texto #plegarTramas, body.vista-texto #asaTramas { display: none; }
+body.vista-texto .solo-esquema { display: none; }
+#editorMarco { flex: 1; width: 100%; border: 0; background: var(--chrome); }
+
+/* ---------- columna de tramas: ancho a gusto (--gutter, de tramas.css) y contraída ---------- */
+#plegarTramas { position: absolute; z-index: 7; top: 10px; left: calc(var(--gutter) - 34px); font-size: 18px; line-height: 1; padding: 2px 7px; }
+#asaTramas { position: absolute; z-index: 7; top: 0; bottom: 0; left: calc(var(--gutter) - 4px); width: 9px; cursor: col-resize; }
+#asaTramas::after { content: ''; position: absolute; left: 3.5px; top: 6px; bottom: 6px; width: 2px; border-radius: 1px;
+        background: var(--foco); opacity: 0; transition: opacity var(--cd-dur); }
+#asaTramas:hover::after, #asaTramas.activa::after { opacity: 1; }
+body.tramas-plegadas #plegarTramas { left: 10px; }
+body.tramas-plegadas #asaTramas { display: none; }
+body.tramas-plegadas #canvas { margin-left: calc(var(--gutter-plegado) - var(--gutter)); }
+body.tramas-plegadas .label, body.tramas-plegadas .axis .gutter { left: calc(var(--gutter-plegado) - var(--gutter)); }
+body.tramas-plegadas .label { justify-content: flex-end; padding-right: 16px; }
+body.tramas-plegadas .label .lbox, body.tramas-plegadas .label .mini { display: none; }
+body.tramas-plegadas .axis .gutter { font-size: 0; }
+body.tramas-plegadas .add-linea button { font-size: 0; gap: 0; }
+
+/* ---------- la tira: una trama a la vez, sus nodos como en el esquema ---------- */
+.hilo { scrollbar-width: thin; flex: none; height: 96px; display: flex; align-items: stretch;
+        overflow-x: auto; overflow-y: hidden; background: var(--panel); border-bottom: 1.5px solid var(--tinta);
+        padding: 0 10px 0 16px; user-select: none; }
+#texto.sin-tira .hilo { display: none; }                  /* con la cinta del editor a la vista */
+.hilo-trama { flex: none; display: flex; align-items: center; gap: 9px; padding-right: 14px; margin-right: 10px;
+        border-right: 1.5px solid var(--tinta); }
+.hilo-trama .lbox { display: flex; flex-direction: column; min-width: 0; max-width: 150px; }
+.hilo-nombre { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hilo-pista { position: relative; display: flex; align-items: stretch; flex: 1; min-width: 0; padding: 0 8px; }
+/* el carril de la trama, como .rail en el tablero: a 40px del borde inferior */
+.hilo-pista::before { content: ''; position: absolute; left: 0; right: 0; bottom: 39px; height: 3px; border-radius: 2px;
+        background: var(--c); opacity: .22; }
+.hilo-pista.alterna::before { background: transparent;
+        background-image: repeating-linear-gradient(90deg, var(--c) 0 6px, transparent 6px 12px); opacity: .45; }
+.hilo-pista.cortada::before { background: transparent;
+        background-image: repeating-linear-gradient(90deg, var(--c) 0 5px, transparent 5px 11px); }
+/* cada nodo ocupa toda la altura: el punto va sobre el carril, el título encima (o debajo si el
+   trazo del salto sube) */
+.hilo-nodo { position: relative; z-index: 1; min-width: 124px; padding: 0 10px; background: none; border: 0;
+        color: var(--tinta); font-family: var(--sans); font-size: 13.5px; cursor: pointer; border-radius: 6px; }
+.hilo-nodo:hover { background: var(--hover-fuerte); }
+.hilo-tit { position: absolute; left: 50%; bottom: 57px; transform: translateX(-50%); max-width: 190px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.hilo-nodo.arriba .hilo-tit { bottom: 9px; }
+/* el nodo, calcado de .dot (15px + borde), centrado en el carril */
+.hilo-punto { position: absolute; left: 50%; bottom: 31px; transform: translateX(-50%); display: block;
+        width: 15px; height: 15px; border-radius: 50%; background: var(--c, var(--t-azul));
+        border: 2px solid var(--papel); box-shadow: 0 0 0 1.5px var(--tinta); box-sizing: content-box; }
+.hilo-nodo.actual .hilo-punto, .hilo-nodo.pos .hilo-punto { box-shadow: 0 0 0 2px var(--foco), 0 0 0 6px var(--foco-halo); }
+.hilo-nodo.actual .hilo-tit, .hilo-nodo.pos .hilo-tit { color: var(--foco); }
+.hilo-nodo.fuera { opacity: .55; }
+.hilo-nodo.fuera .hilo-punto { border-width: 3px; }
+.hilo-nodo.cortado .hilo-tit { text-decoration: line-through; color: var(--tenue); }
+.hilo-nodo.cortado .hilo-punto { background: var(--papel) !important; border: 2px dashed var(--tenue);
+        box-shadow: 0 0 0 1px var(--regla-fuerte); }
+/* extremos de salto: cuadro beige o rombo morado, como en el tablero; llevan a la otra trama. El trazo
+   sale del nodo hacia donde está esa trama en el tablero: hacia abajo o hacia arriba */
+.hilo-nodo.caja .hilo-punto { width: 17px; height: 17px; border-radius: 4px; background: var(--escena) !important; bottom: 30px; }
+.hilo-nodo.rombo .hilo-punto { border-radius: 3px; background: var(--rombo) !important; transform: translateX(-50%) rotate(45deg); }
+.hilo-nodo.caja::after, .hilo-nodo.rombo::after { content: ''; position: absolute; left: 50%; width: 2px; margin-left: -1px;
+        background: var(--escena-trazo); z-index: -1; }
+.hilo-nodo.abajo::after { top: calc(100% - 31px); bottom: 0; }
+.hilo-nodo.arriba::after { top: 0; bottom: 50px; }
+.hilo-nodo.rombo::after { background: var(--rombo-trazo); }
+.hilo-vacio { align-self: center; color: var(--tenue); font-size: 14px; padding: 0 8px; }
+/* el botón para pasar a la cinta del editor (el de vuelta vive en la cinta, montado desde texto.js) */
+.hilo-pin { flex: none; align-self: flex-start; margin: 8px 0 0 auto; padding: 4px 5px; border: 1.5px solid var(--regla-fuerte);
+        border-radius: 6px; background: var(--papel); color: var(--tenue); display: flex; align-items: center; }
+.hilo-pin:hover { color: var(--tinta); border-color: var(--tinta); background: var(--hover); }
+
+/* ---------- indicador de guardado (cabecera): dónde está el guion y si hay cambios sin escribir ---------- */
+button.estado { background: none; border: 0; padding: 4px 8px; border-radius: 5px; cursor: pointer; letter-spacing: .06em; }
+button.estado:hover { background: var(--hover-fuerte); color: var(--tinta); }
+button.estado.sucio { color: var(--nota-tinta); }
+html[data-theme="dark"] button.estado.sucio { color: var(--t-ambar); }

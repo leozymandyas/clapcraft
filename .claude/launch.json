@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "guiones-web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["serve.js", "5173"],
+      "port": 5173
+    },
+    {
+      "name": "claquedraw-web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["serve.js", "5174"],
+      "port": 5174
+    }
+  ]
+}

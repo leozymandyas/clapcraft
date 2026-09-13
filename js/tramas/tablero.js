@@ -1,0 +1,1008 @@
+/* Tramas · tablero
+   La capa de dibujo e interacción: convierte celdas en píxeles, reconstruye el DOM a partir del
+   modelo y traduce gestos (clic, doble clic, clic secundario, arrastres) en operaciones del modelo.
+   Toda regla de dominio vive en modelo.js; aquí solo se enseña el aviso que devuelve.
+
+   Regla que cuesta descubrir: un clic seco no reconstruye el tablero. Si al hacer clic se
+   reconstruyera el DOM, el segundo clic de un doble clic caería sobre otro elemento y el navegador
+   no lo reconocería. Por eso seleccionar solo cambia clases (seleccionSuave). */
+(function (T) {
+  const { PALETA, FONDOS, ETIQUETA, FORMA, clamp, MIN_CELDAS, MAX_CELDAS } = T;
+
+  const BASE = 20;                       // px de una celda a escala 1
+  let GUTTER = 190;                      // ancho de la columna de tramas (px); ver T.tablero.gutter()
+  const FILA = 120, EJE = 44;
+  /* Los colores se pintan como variables CSS (css/tramas.css las define para el tema claro y el
+     oscuro), así cambiar de tema no obliga a redibujar. Solo el globo necesita el valor real. */
+  const tono = id => `var(--t-${PALETA.some(c => c.id === id) ? id : PALETA[0].id})`;
+  const fondo = id => id ? `var(--f-${id})` : 'transparent';
+  const colorSalto = t => t === 'rombo' ? 'var(--rombo-trazo)' : 'var(--escena-trazo)';
+  const resolver = v => {                // 'var(--x)' → valor calculado (hex) en el tema actual
+    const mm = /^var\((--[\w-]+)\)$/.exec(String(v).trim());
+    return mm ? getComputedStyle(document.documentElement).getPropertyValue(mm[1]).trim() : v;
+  };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  let m = null;                          // T.Modelo
+  let sel = null;                        // { tipo: 'punto'|'linea'|'acto'|'salto'|'nota', id }
+  let zoom = 1.7;
+  let pres = null, ruta = null;          // cálculos derivados del último render
+  const historial = new T.Historial(80);
+  let restaurando = false;
+  const ganchos = { alCambiar: () => {} };
+
+  let $axis, $rows, $cables, $canvas, $board, $panel, $menu, $tip, $aviso, $celda;
+
+  /* ---------- geometría: celdas → píxeles (única capa que conoce píxeles) ---------- */
+  const G = () => BASE * zoom;
+  const totalW = () => m.totalCeldas() * G();
+  const anchoDe = a => a.celdas * G();
+  const offsetDe = actoId => m.celdasAntes(actoId) * G();
+  const xDe = p => m.cg(p) * G();
+  const filaDe = lineaId => m.datos.lineas.findIndex(l => l.id === lineaId);
+  const yFila = lineaId => EJE + filaDe(lineaId) * FILA + FILA / 2;
+  const yDe = p => yFila(p.lineaId);
+  // borde izquierdo a partir del cual empieza la zona donde sí se puede soltar: el borde derecho de la
+  // columna de tramas tal como se ve (si el CSS la contrae, la zona útil empieza antes)
+  const zonaUtil = () => {
+    const g = $axis && $axis.querySelector('.gutter');
+    return g ? g.getBoundingClientRect().right : $board.getBoundingClientRect().left + GUTTER;
+  };
+
+  /* ---------- selección ---------- */
+  const esSel = (tipo, id) => !!sel && sel.tipo === tipo && sel.id === id;
+  function elegir(tipo, id) { sel = { tipo, id }; render(); }
+  function limpiarSelDOM() {
+    document.querySelectorAll('.pt.sel,.label.sel,.acto.sel,.nota.sel').forEach(x => x.classList.remove('sel'));
+  }
+  /* Selecciona sin reconstruir el tablero: solo cambia clases, el panel y el recorrido. */
+  function seleccionSuave(tipo, id, el) {
+    sel = { tipo, id }; limpiarSelDOM();
+    if (el) el.classList.add('sel');
+    panel(); pintarRuta();
+  }
+  /* Enseña el aviso de una operación y devuelve si salió bien. */
+  function aplicar(r) { if (r && r.aviso) avisar(r.aviso); return !!(r && r.ok); }
+
+  /* ====================================================================
+     Render
+     ==================================================================== */
+  function calcularRuta() {
+    ruta = (sel && sel.tipo === 'punto') ? m.recorrido(sel.id, pres) : null;
+  }
+  const enRuta = (lineaId, ca, cb) => !!ruta && ruta.incluye(lineaId, ca, cb);
+
+  function render() {
+    pres = m.presencia();
+    calcularRuta();
+    document.body.classList.toggle('con-ruta', !!ruta);
+    const g = G(), W = totalW(), d = m.datos;
+    $canvas.style.width = (GUTTER + W + 46) + 'px';
+
+    $axis.innerHTML = `<div class="gutter">Tramas</div>
+      <div class="acts" style="width:${W + 46}px">
+        ${d.actos.map(a => `<div class="acto${esSel('acto', a.id) ? ' sel' : ''}" data-acto="${a.id}"
+             style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondo(a.fondo)}">
+            <input class="aname" readonly data-acto-nombre="${a.id}" title="Clic: seleccionar · doble clic: renombrar">
+            ${d.actos.length > 1 ? `<button class="mini" data-acto-del="${a.id}" title="Eliminar acto">×</button>` : ''}
+            <span class="handle" data-handle="${a.id}" title="Arrastra para cambiar el ancho"></span></div>`).join('')}
+        <button class="add-acto" id="addActo" style="left:${W}px" title="Nuevo acto">+</button>
+      </div>`;
+    d.actos.forEach(a => { $axis.querySelector(`[data-acto-nombre="${a.id}"]`).value = a.nombre; });
+
+    const rejilla = `repeating-linear-gradient(90deg,var(--cuadricula) 0 1px,transparent 1px ${g}px)`;
+    const actoSel = sel && sel.tipo === 'acto' ? m.acto(sel.id) : null;
+
+    $rows.innerHTML = '';
+    d.lineas.forEach(l => {
+      const row = document.createElement('div');
+      row.className = 'row ' + l.tipo + (l.cortada ? ' cortada' : '');
+      row.dataset.linea = l.id;
+      row.innerHTML = `
+        <div class="label${esSel('linea', l.id) ? ' sel' : ''}">
+          <span class="chip ${l.tipo}" style="background:${tono(l.color)};color:${tono(l.color)}"></span>
+          <span class="lbox"><input class="lname" readonly data-linea-nombre="${l.id}" title="Clic: seleccionar · doble clic: renombrar">
+            <span class="ltipo">${ETIQUETA[l.tipo]}</span></span>
+          ${l.tipo === 'principal' ? '' : `<button class="mini" data-linea-del="${l.id}" title="Eliminar trama">×</button>`}
+        </div>
+        <div class="track" data-linea="${l.id}" style="width:${W}px;background-image:${rejilla}">
+          ${d.actos.filter(a => a.fondo).map(a => `<div class="banda"
+             style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondo(a.fondo)}"></div>`).join('')}
+          ${actoSel ? `<div class="banda sel" style="left:${offsetDe(actoSel.id)}px;width:${anchoDe(actoSel)}px"></div>` : ''}
+          <div class="rail" style="background:${tono(l.color)};color:${tono(l.color)}"></div>
+          ${d.actos.slice(1).map(a => `<div class="sep" style="left:${offsetDe(a.id)}px"></div>`).join('')}
+        </div>`;
+      row.querySelector('.lname').value = l.nombre;
+
+      const track = row.querySelector('.track');
+      const props = m.puntosDe(l.id);
+
+      // notas ancladas a dos nodos de esta trama
+      d.notas.forEach(nt => {
+        const a = m.punto(nt.deId), b = m.punto(nt.aId);
+        if (!a || !b || a.lineaId !== l.id) return;
+        const x1 = Math.min(xDe(a), xDe(b)), x2 = Math.max(xDe(a), xDe(b));
+        const el = document.createElement('div');
+        el.className = 'nota' + (esSel('nota', nt.id) ? ' sel' : '');
+        el.dataset.nota = nt.id;
+        el.style.left = x1 + 'px'; el.style.width = Math.max(30, x2 - x1) + 'px';
+        const s = document.createElement('span'); s.textContent = nt.texto;
+        el.appendChild(s); track.appendChild(el);
+      });
+
+      // huecos: bajo la línea, entre dos nodos consecutivos sin nota (doble clic o icono crea una)
+      props.forEach((p, i) => {
+        const sig = props[i + 1]; if (!sig) return;
+        if (m.notaDe(p.id, sig.id)) return;
+        const x1 = xDe(p), x2 = xDe(sig); if (x2 - x1 < 44) return;
+        const h = document.createElement('div');
+        h.className = 'hueco'; h.style.left = x1 + 'px'; h.style.width = (x2 - x1) + 'px';
+        h.dataset.tramo = `${p.id}|${sig.id}`;
+        h.title = 'Doble clic para poner una nota';
+        h.innerHTML = `<button class="add-nota" data-nota-add="${p.id}|${sig.id}" title="Nota entre estos dos puntos">
+          <svg viewBox="0 0 14 14"><path d="M1.6 1.8h10.8v7.4H6.2L3.4 12V9.2H1.6z"/></svg></button>`;
+        track.appendChild(h);
+      });
+
+      // cadena: el hilo de la historia de un nodo al siguiente
+      for (let i = 0; i < props.length - 1; i++) {
+        const a = props[i], b = props[i + 1], x1 = xDe(a), x2 = xDe(b);
+        if (x2 - x1 < 3) continue;
+        const ca = m.cg(a), cb = m.cg(b);
+        const seg = document.createElement('div');
+        seg.className = 'cadena' + (pres.tramoFuera(l.id, ca, cb) ? ' fuera' : '') + (enRuta(l.id, ca, cb) ? ' ruta' : '');
+        seg.dataset.ca = ca; seg.dataset.cb = cb;
+        seg.style.left = x1 + 'px'; seg.style.width = (x2 - x1) + 'px';
+        seg.style.background = tono(l.color); seg.style.color = tono(l.color);
+        track.appendChild(seg);
+      }
+
+      props.forEach((p, i) => track.appendChild(nodo(p, l, i)));
+      $rows.appendChild(row);
+    });
+
+    const add = document.createElement('div');
+    add.className = 'row add-linea';
+    add.innerHTML = `<div class="label"><button id="addLinea"><span class="plus">+</span> Nueva trama</button></div>`;
+    $rows.appendChild(add);
+
+    cables();
+    panel();
+    if (!restaurando && !arrastrando()) registrar();
+  }
+
+  function nodo(p, l, i) {
+    const el = document.createElement('div');
+    const forma = m.formaDe(p.id), c = m.cg(p);
+    el.className = 'pt ' + (i % 2 ? 'alto' : '')
+      + (esSel('punto', p.id) ? ' sel' : '')
+      + (forma ? ' caja' + (forma === 'rombo' ? ' rombo' : '') : '')
+      + (pres.fuera(p) ? ' fuera' : '')
+      + (enRuta(p.lineaId, c, c) ? ' en-ruta' : '')
+      + (p.cortado ? ' cortado' : '');
+    el.style.left = xDe(p) + 'px';
+    el.dataset.punto = p.id;
+    el.innerHTML = `<span class="dot" style="background:${tono(p.color || l.color)}" tabindex="0"></span><span class="cap"></span>`;
+    el.querySelector('.cap').textContent = p.titulo;
+    return el;
+  }
+
+  /* Saltos: unión estrictamente vertical entre dos extremos en la misma celda. */
+  function cables() {
+    const H = EJE + m.datos.lineas.length * FILA + 90;
+    $cables.setAttribute('width', GUTTER + totalW() + 46);
+    $cables.setAttribute('height', H);
+    $cables.style.height = H + 'px';
+    let d = '';
+    m.datos.saltos.forEach(s => {
+      const a = m.punto(s.deId), b = m.punto(s.aId);
+      if (!a || !b || a.lineaId === b.lineaId) return;
+      const x = GUTTER + xDe(a), y1 = yDe(a), y2 = yDe(b), dir = y2 > y1 ? 1 : -1;
+      const col = colorSalto(s.tipo);
+      const seleccionado = esSel('salto', s.id);
+      const enCamino = ruta && ruta.saltos.has(s.id);
+      let op = (m.linea(a.lineaId).cortada || m.linea(b.lineaId).cortada || a.cortado || b.cortado) ? .3 : 1;
+      if (ruta) op = enCamino ? 1 : .16;
+      const grosor = seleccionado ? 3.5 : (enCamino ? 4 : 2.5);
+      const ya = y1 + dir * 11, yb = y2 - dir * 11;
+      /* todo lo del salto va en un grupo: al arrastrarlo se desplaza entero sin redibujar */
+      d += `<g data-salto-g="${s.id}">
+            <line x1="${x}" y1="${ya}" x2="${x}" y2="${yb}" style="stroke:${col}" stroke-width="${grosor}" opacity="${op}" shape-rendering="crispEdges"/>
+            <polygon points="${x},${yb + dir * 4.5} ${x - 5},${yb - dir * 5} ${x + 5},${yb - dir * 5}" style="fill:${col}" opacity="${op}"/>
+            <path class="golpe" d="M ${x} ${ya + dir * 16} L ${x} ${yb - dir * 16}" stroke="transparent" stroke-width="14" fill="none" data-salto="${s.id}"/>`;
+      if (seleccionado) {
+        const my = (y1 + y2) / 2;
+        d += `<g class="badge" data-salto-del="${s.id}">
+                <circle cx="${x}" cy="${my}" r="9" style="fill:var(--papel);stroke:${col}" stroke-width="1.5"/>
+                <path d="M ${x - 3.5} ${my - 3.5} L ${x + 3.5} ${my + 3.5} M ${x + 3.5} ${my - 3.5} L ${x - 3.5} ${my + 3.5}" style="stroke:${col}" stroke-width="1.6"/></g>`;
+      }
+      d += '</g>';
+    });
+    $cables.innerHTML = d;
+  }
+
+  /* Enciende el recorrido sin reconstruir el tablero: solo clases y el SVG. */
+  function pintarRuta() {
+    calcularRuta();
+    document.body.classList.toggle('con-ruta', !!ruta);
+    document.querySelectorAll('.row[data-linea]').forEach(row => {
+      const id = row.dataset.linea;
+      row.querySelectorAll('.cadena').forEach(seg => seg.classList.toggle('ruta', enRuta(id, +seg.dataset.ca, +seg.dataset.cb)));
+    });
+    document.querySelectorAll('.pt').forEach(el => {
+      const q = m.punto(el.dataset.punto);
+      el.classList.toggle('en-ruta', !!q && enRuta(q.lineaId, m.cg(q), m.cg(q)));
+    });
+    cables();
+  }
+
+  /* ====================================================================
+     Arrastres
+     ==================================================================== */
+  let arr = null, res = null, mov = null, cel = null, notaArr = null, celArrastrado = false;
+  const arrastrando = () => !!(arr || res || mov || cel || notaArr);
+  const quitarHot = () => document.querySelectorAll('.track.hot').forEach(t => t.classList.remove('hot'));
+
+  function onPointerDown(e) {
+    $tip.classList.remove('show');
+
+    // el "+" del cruce se sostiene y se arrastra hasta otra trama: crea un salto
+    const marca = e.target.closest && e.target.closest('#celda');
+    if (marca && celdaObj) {
+      cel = Object.assign({}, celdaObj, { movido: false, destino: null, tmp: document.createElementNS('http://www.w3.org/2000/svg', 'path') });
+      cel.tmp.style.stroke = colorSalto('cuadro'); cel.tmp.setAttribute('stroke-width', '2.5');
+      cel.tmp.setAttribute('stroke-dasharray', '5 4'); cel.tmp.setAttribute('fill', 'none');
+      $cables.appendChild(cel.tmp);
+      try { marca.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault(); return;
+    }
+    // el trazo de un salto se arrastra de lado: mueve sus dos extremos
+    const sl = e.target.closest && e.target.closest('[data-salto]');
+    if (sl) {
+      const s = m.salto(sl.dataset.salto), a = s && m.punto(s.deId);
+      if (a) mov = { id: s.id, movido: false, c0: m.cg(a), pos: null };
+      e.preventDefault(); return;
+    }
+    // divisor entre actos
+    const h = e.target.closest && e.target.closest('[data-handle]');
+    if (h) {
+      const a = m.acto(h.dataset.handle); res = { a, x0: e.clientX, c0: a.celdas };
+      h.classList.add('activo'); try { h.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault(); return;
+    }
+    // una nota se arrastra de tramo en tramo
+    const nt0 = e.target.closest && e.target.closest('[data-nota]');
+    if (nt0 && !(e.target.classList && e.target.classList.contains('nota-edit'))) {
+      notaArr = { id: nt0.dataset.nota, movido: false };
+      nt0.classList.add('arrastrando');
+      e.preventDefault(); return;
+    }
+    // un nodo
+    const dot = e.target.closest && e.target.closest('.dot');
+    if (!dot) return;
+    const el = dot.parentElement, p = m.punto(el.dataset.punto);
+    if (!p) return;
+    arr = { p, el, track: el.parentElement, movido: false, x0: e.clientX, y0: e.clientY, destino: null, pos: null };
+    el.classList.add('arrastrando'); el.style.pointerEvents = 'none';
+    try { dot.setPointerCapture(e.pointerId); } catch (_) {}
+    seleccionSuave('punto', p.id, el);
+    e.preventDefault();
+  }
+
+  function onPointerMove(e) {
+    if (notaArr) {
+      if (e.clientX < zonaUtil()) return;
+      const bajo = document.elementFromPoint(e.clientX, e.clientY);
+      const tr = bajo && bajo.closest && bajo.closest('.track'); if (!tr) return;
+      const id = tr.dataset.linea, r = tr.getBoundingClientRect(), px = e.clientX - r.left;
+      const props = m.puntosDe(id);
+      let par = null;
+      for (let i = 0; i < props.length - 1; i++)
+        if (px >= xDe(props[i]) && px <= xDe(props[i + 1])) { par = [props[i], props[i + 1]]; break; }
+      if (!par) return;                                       // fuera de todo tramo: no se mueve
+      const rr = m.moverNota(notaArr.id, par[0].id, par[1].id);
+      if (!rr.ok || !rr.movida) return;                       // el destino ya tiene nota, o es el mismo
+      notaArr.movido = true; render();
+      const vivo = document.querySelector(`[data-nota="${notaArr.id}"]`);
+      if (vivo) vivo.classList.add('arrastrando');
+      return;
+    }
+    if (cel) {
+      const rc = $canvas.getBoundingClientRect();
+      const x = GUTTER + (m.celdasAntes(cel.actoId) + cel.celda) * G();
+      const y1 = yFila(cel.lineaId), yc = e.clientY - rc.top;
+      const bajo = document.elementFromPoint(e.clientX, e.clientY);
+      const pista = bajo && bajo.closest && bajo.closest('.track');
+      quitarHot();
+      cel.destino = (pista && pista.dataset.linea !== cel.lineaId) ? pista.dataset.linea : null;
+      /* si en esa celda de la trama de destino ya hay un nodo, no hay salto posible (el modelo lo
+         rechaza): la vista previa no la enciende */
+      if (cel.destino && m.datos.puntos.some(p => p.lineaId === cel.destino && p.actoId === cel.actoId && p.celda === cel.celda)) cel.destino = null;
+      if (cel.destino) { pista.classList.add('hot'); cel.movido = true; }
+      const y2 = cel.destino ? yFila(cel.destino) : yc;
+      const forma = cel.destino ? m.formaEntre(cel.lineaId, cel.destino) : 'cuadro';
+      cel.tmp.style.stroke = colorSalto(forma);               // la vista previa dice qué forma va a salir
+      cel.tmp.setAttribute('d', `M ${x} ${y1} L ${x} ${y2}`);
+      return;
+    }
+    if (mov) {
+      if (e.clientX < zonaUtil()) return;                     // sobre la columna de nombres: no se coloca
+      mov.movido = true;
+      const r = $canvas.getBoundingClientRect();
+      const pos = m.ubicarCelda((e.clientX - r.left - GUTTER) / G());
+      mov.pos = pos;
+      /* solo se desplaza el dibujo (los dos extremos y el trazo); el modelo se mueve al soltar, y si
+         la celda está ocupada es entonces cuando avisa y todo vuelve a su sitio */
+      const dx = (m.celdasAntes(pos.actoId) + pos.celda - mov.c0) * G();
+      const s = m.salto(mov.id);
+      if (s) [s.deId, s.aId].forEach(id => {
+        const el = document.querySelector(`[data-punto="${id}"]`);
+        if (el) { el.style.transform = `translate(calc(-50% + ${dx}px), -50%)`; el.classList.add('arrastrando'); }
+      });
+      const g = $cables.querySelector(`[data-salto-g="${mov.id}"]`);
+      if (g) g.setAttribute('transform', `translate(${dx} 0)`);
+      return;
+    }
+    if (res) {
+      m.fijarAncho(res.a.id, Math.round((res.c0 * G() + (e.clientX - res.x0)) / G()));
+      render();
+      const h = document.querySelector(`[data-handle="${res.a.id}"]`); if (h) h.classList.add('activo');
+      return;
+    }
+    if (!arr) return;
+    if (Math.abs(e.clientX - arr.x0) <= 3 && Math.abs(e.clientY - arr.y0) <= 3) return;   // temblor del clic
+    if (e.clientX < zonaUtil()) return;                       // sobre la columna de nombres: no se coloca
+    arr.movido = true;
+    const bajo = document.elementFromPoint(e.clientX, e.clientY);
+    const destino = (bajo && bajo.closest && bajo.closest('.track')) || arr.track;
+    quitarHot();
+    if (destino !== arr.track) destino.classList.add('hot');
+    const r = destino.getBoundingClientRect();
+    const pos = m.ubicarCelda((e.clientX - r.left) / G());
+    arr.destino = destino; arr.pos = pos;
+    arr.el.style.left = ((m.celdasAntes(pos.actoId) + pos.celda) * G()) + 'px';
+  }
+
+  function onPointerUp() {
+    if (notaArr) {
+      const movida = notaArr.movido; notaArr = null;
+      document.querySelectorAll('.nota.arrastrando').forEach(x => x.classList.remove('arrastrando'));
+      if (movida) render();                                   // clic seco: no se redibuja nada
+      return;
+    }
+    if (cel) {
+      const { lineaId, actoId, celda, destino, movido } = cel;
+      cel.tmp.remove(); quitarHot();
+      cel = null; celArrastrado = movido;
+      if (destino) saltoDesdeCruce({ lineaId, actoId, celda }, destino);
+      render(); return;
+    }
+    if (mov) {
+      const { id, pos, movido } = mov; mov = null;
+      if (movido && pos) { const r = m.moverSalto(id, pos.actoId, pos.celda); if (!r.ok) avisar(r.aviso); }
+      render(); return;                                       // con rechazo, el dibujo vuelve a su celda
+    }
+    if (res) {
+      document.querySelectorAll('.handle.activo').forEach(h => h.classList.remove('activo'));
+      res = null; render(); return;
+    }
+    if (!arr) return;
+    const { p, el, destino, pos, movido } = arr;
+    el.classList.remove('arrastrando'); el.style.pointerEvents = '';
+    quitarHot();
+    if (!movido) { arr = null; return; }                      // clic seco: nada que recolocar
+    if (pos) {
+      const nueva = destino.dataset.linea;
+      const r = m.moverPunto(p.id, { actoId: pos.actoId, celda: pos.celda, lineaId: nueva });
+      if (!r.ok) avisar(r.aviso);
+      else if (r.cambioTrama) avisar(`«${p.titulo}» pasó a ${m.linea(nueva).nombre}`);
+    }
+    arr = null; render();
+  }
+
+  /* Arrastre del "+" del cruce hasta otra trama: nacen los dos extremos y el salto. */
+  function saltoDesdeCruce(origen, lineaDestino) {
+    const forma = m.formaEntre(origen.lineaId, lineaDestino);
+    const r = m.nuevoPunto(origen.lineaId, origen.actoId, origen.celda, { titulo: FORMA[forma] });
+    if (!aplicar(r)) return;
+    const s = m.crearSalto(r.punto.id, lineaDestino, forma);
+    if (!s.ok) { m.borrarPunto(r.punto.id); avisar(s.aviso); return; }
+    sel = { tipo: 'salto', id: s.salto.id };
+    avisar(s.aviso);
+  }
+
+  /* ====================================================================
+     Panel lateral: solo lo que necesita espacio para escribir
+     ==================================================================== */
+  function panel() {
+    const abre = sel && ['punto', 'linea', 'acto'].includes(sel.tipo);
+    document.body.classList.toggle('con-panel', !!abre);
+    if (!abre) { $panel.innerHTML = ''; return; }
+
+    if (sel.tipo === 'punto') {
+      const p = m.punto(sel.id); if (!p) { sel = null; return panel(); }
+      const l = m.linea(p.lineaId), forma = m.formaDe(p.id), v = m.vecinos(p.id);
+      $panel.innerHTML = `
+        <div class="panel-cabecera"><h2>${forma ? esc(FORMA[forma]) : 'Nodo'} · ${esc(l.nombre)}</h2>
+          <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)">×</button></div>
+        <div class="hilo-nav">
+          <button class="btn" data-hilo="${v.anterior || ''}" ${v.anterior ? '' : 'disabled'} title="Nodo anterior (←)">‹</button>
+          <span class="hilo-pos">${v.indice + 1} de ${v.total} · ${v.enHilo ? 'en el hilo' : 'solo en ' + esc(l.nombre)}</span>
+          <button class="btn" data-hilo="${v.siguiente || ''}" ${v.siguiente ? '' : 'disabled'} title="Nodo siguiente (→)">›</button>
+        </div>
+        ${pres.fuera(p) ? `<p class="empty" style="font-size:12px;margin-top:0">Está <b>fuera de escena</b>: la historia se fue a otra trama en este tramo.</p>` : ''}
+        <div class="field"><label>Título</label><input type="text" id="fTitulo"></div>
+        <div class="field"><label>Descripción</label>
+          <textarea id="fNota" placeholder="Qué pasa aquí" style="min-height:340px"></textarea></div>
+        ${forma ? '' : `<button class="btn act-btn${p.cortado ? ' on' : ''}" id="bCortar">${p.cortado ? 'Descartado ✓' : 'Descartar'}</button>`}
+        <button class="btn act-btn danger" id="bBorrar">${forma ? 'Eliminar salto' : 'Eliminar punto'}</button>`;
+      $panel.querySelector('#fTitulo').value = p.titulo;
+      $panel.querySelector('#fNota').value = p.descripcion;
+      $panel.querySelector('#fTitulo').oninput = e => { m.editarPunto(p.id, { titulo: e.target.value }); rapido(p); tocar(); };
+      $panel.querySelector('#fNota').oninput = e => { m.editarPunto(p.id, { descripcion: e.target.value }); tocar(); };
+      const bc = $panel.querySelector('#bCortar');
+      if (bc) bc.onclick = () => { aplicar(m.descartarPunto(p.id)); render(); };
+      $panel.querySelector('#bBorrar').onclick = () => pedirBorrarPunto(p.id);
+    }
+
+    if (sel.tipo === 'linea') {
+      const l = m.linea(sel.id); if (!l) { sel = null; return panel(); }
+      $panel.innerHTML = `
+        <div class="panel-cabecera"><h2>Trama</h2>
+          <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)">×</button></div>
+        <div class="field"><label>Nombre</label><input type="text" id="fNombre"></div>
+        <div class="field"><label>Tipo</label>
+          ${l.tipo === 'principal' ? '<p class="empty" style="font-size:12.5px;margin:0">Es la trama principal: el hilo del que parte la historia. No se elimina ni cambia de tipo.</p>' : `
+          <div class="chips">
+            ${['secundaria', 'alterna'].map(t => `<button class="btn${l.tipo === t ? ' on' : ''}" data-tipo="${l.id}|${t}">${ETIQUETA[t]}</button>`).join('')}
+          </div>`}
+        </div>
+        <div class="field"><label>Color</label><div class="swatches">
+          ${PALETA.map(c => `<button class="sw${l.color === c.id ? ' on' : ''}" data-lcolor="${l.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
+        </div></div>
+        <button class="btn act-btn${l.cortada ? ' on' : ''}" id="bCortar">${l.cortada ? 'Descartada ✓' : 'Marcar como descartada'}</button>
+        ${l.tipo === 'principal' ? '' : '<button class="btn act-btn danger" id="bBorrar">Eliminar trama</button>'}`;
+      $panel.querySelector('#fNombre').value = l.nombre;
+      $panel.querySelector('#fNombre').oninput = e => {
+        m.editarLinea(l.id, { nombre: e.target.value });
+        const i = $rows.querySelector(`[data-linea-nombre="${l.id}"]`); if (i) i.value = l.nombre; tocar();
+      };
+      $panel.querySelector('#bCortar').onclick = () => { m.descartarLinea(l.id); render(); };
+      const bb = $panel.querySelector('#bBorrar');
+      if (bb) bb.onclick = () => { if (aplicar(m.borrarLinea(l.id))) sel = null; render(); };
+    }
+
+    if (sel.tipo === 'acto') {
+      const a = m.acto(sel.id); if (!a) { sel = null; return panel(); }
+      $panel.innerHTML = `
+        <div class="panel-cabecera"><h2>Acto</h2>
+          <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)">×</button></div>
+        <div class="field"><label>Nombre</label><input type="text" id="fNombre"></div>
+        <div class="field"><label id="lAncho">Ancho: ${a.celdas} celdas</label>
+          <input type="range" id="fAncho" min="${MIN_CELDAS}" max="${MAX_CELDAS}" step="1" value="${a.celdas}"></div>
+        <div class="field"><label>Fondo del acto</label><div class="swatches">
+          ${FONDOS.map(f => `<button class="sw${(a.fondo || '') === f.id ? ' on' : ''}" data-fondo="${a.id}|${f.id}"
+            title="${f.label}" style="background:${fondo(f.id)};${f.id ? '' : 'border:1px dashed var(--regla-fuerte)'}"></button>`).join('')}
+        </div></div>
+        ${m.datos.actos.length > 1 ? '<button class="btn act-btn danger" id="bBorrar">Eliminar acto</button>' : ''}`;
+      $panel.querySelector('#fNombre').value = a.nombre;
+      $panel.querySelector('#fNombre').oninput = e => {
+        m.editarActo(a.id, { nombre: e.target.value });
+        const i = $axis.querySelector(`[data-acto-nombre="${a.id}"]`); if (i) i.value = a.nombre; tocar();
+      };
+      $panel.querySelector('#fAncho').oninput = e => { m.fijarAncho(a.id, +e.target.value); render(); };
+      const bb = $panel.querySelector('#bBorrar');
+      if (bb) bb.onclick = () => { if (aplicar(m.borrarActo(a.id))) sel = null; render(); };
+    }
+  }
+
+  /* Diálogo modal de confirmación. Resuelve con true (aceptar) o false (Cancelar, Escape, clic fuera).
+     No se confía en el evento `close` del <dialog>: en algunos entornos embebidos no se dispara. */
+  function confirmar(texto, etiqueta) {
+    return new Promise(resolver => {
+      const dlg = document.getElementById('dlg');
+      if (!dlg || !dlg.showModal) return resolver(window.confirm(texto));
+      const ok = dlg.querySelector('#dlgOk'), cancel = dlg.querySelector('#dlgCancel'), form = dlg.querySelector('form');
+      dlg.querySelector('#dlgTexto').textContent = texto;
+      ok.textContent = etiqueta || 'Eliminar';
+      let hecho = false;
+      const fin = v => {
+        if (hecho) return; hecho = true;
+        form.removeEventListener('submit', onSubmit); cancel.removeEventListener('click', onCancel);
+        dlg.removeEventListener('cancel', onCancel); dlg.removeEventListener('keydown', onKey);
+        dlg.removeEventListener('click', onFuera);
+        if (dlg.open) dlg.close();
+        resolver(v);
+      };
+      const onSubmit = e => { e.preventDefault(); fin(true); };
+      const onCancel = e => { if (e) e.preventDefault(); fin(false); };
+      const onKey = e => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); fin(false); } };
+      const onFuera = e => { if (e.target === dlg) fin(false); };   // clic en el fondo
+      form.addEventListener('submit', onSubmit); cancel.addEventListener('click', onCancel);
+      dlg.addEventListener('cancel', onCancel); dlg.addEventListener('keydown', onKey);
+      dlg.addEventListener('click', onFuera);
+      cerrarMenu(); $tip.classList.remove('show');
+      dlg.showModal(); ok.focus();
+    });
+  }
+
+  /* Eliminar siempre pide confirmación, venga del menú del nodo, del panel o de la tecla Supr. */
+  async function pedirBorrarPunto(id) {
+    const p = m.punto(id); if (!p) return;
+    const forma = m.formaDe(id);
+    const texto = forma
+      ? `¿Seguro que deseas eliminar este ${FORMA[forma].toLowerCase()}? Se eliminan sus dos extremos.`
+      : '¿Seguro que deseas eliminar este punto?';
+    if (!await confirmar(texto)) return;
+    if (aplicar(m.borrarPunto(id))) sel = null;
+    render();
+  }
+  async function pedirBorrarSalto(id) {
+    const s = m.salto(id); if (!s) return;
+    if (!await confirmar(`¿Seguro que deseas eliminar este ${FORMA[s.tipo].toLowerCase()}? Se eliminan sus dos extremos.`)) return;
+    if (aplicar(m.borrarSalto(id))) sel = null;
+    render();
+  }
+
+  /* Ir a otro nodo del hilo: lo selecciona, ilumina su recorrido y lo trae a la vista. */
+  function irANodo(id) {
+    if (!m.punto(id)) return;
+    elegir('punto', id);
+    const dot = document.querySelector(`[data-punto="${id}"] .dot`);
+    if (dot && dot.scrollIntoView) dot.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
+  function rapido(p) {
+    const el = document.querySelector(`[data-punto="${p.id}"] .cap`);
+    if (el) el.textContent = p.titulo;
+  }
+
+  /* ====================================================================
+     Clic, doble clic y clic secundario
+     ==================================================================== */
+  function onClick(e) {
+    const t = e.target, cl = s => t.closest && t.closest(s);
+    if (cl('#dlg')) return;                                   // el diálogo modal no es el tablero
+    if (!t.isConnected) return;   // un botón que ya redibujó (p. ej. Descartar) no es un clic en blanco
+    if (t.classList && (t.classList.contains('cap-edit') || t.classList.contains('nota-edit'))) return;
+
+    if (cl('#celda')) {
+      if (celArrastrado) { celArrastrado = false; return; }
+      if (celdaObj) abrirMenuCrear(e.clientX, e.clientY, celdaObj.lineaId, celdaObj);
+      return;
+    }
+    const cr = cl('[data-crear]');
+    if (cr) {
+      const v = cr.dataset.crear, q = pendiente; cerrarMenu();
+      if (!q) return;
+      if (v === 'nodo') {
+        const r = m.nuevoPunto(q.lineaId, q.actoId, q.celda);
+        if (aplicar(r)) sel = { tipo: 'punto', id: r.punto.id };
+      } else {
+        const [forma, destino] = v.split('|');
+        const r = m.nuevoPunto(q.lineaId, q.actoId, q.celda, { titulo: FORMA[forma] });
+        if (aplicar(r)) {
+          const s = m.crearSalto(r.punto.id, destino, forma);
+          if (s.ok) sel = { tipo: 'salto', id: s.salto.id }; else m.borrarPunto(r.punto.id);
+          avisar(s.aviso);
+        }
+      }
+      render(); return;
+    }
+    if (!cl('#menu')) cerrarMenu();
+
+    if (cl('#addLinea')) {
+      const r = cl('#addLinea').getBoundingClientRect();
+      abrirMenuEn(r.left, r.bottom + 8, `<div class="mt">Nueva trama de tipo…</div>
+        <button data-nuevatrama="secundaria"><span class="ic" style="background:var(--t-violeta)"></span>Secundaria</button>
+        <button data-nuevatrama="alterna"><span class="ic" style="background:var(--papel);border:1.5px dashed var(--t-ambar)"></span>Alternativa</button>`);
+      return;
+    }
+    const nl = cl('[data-nuevatrama]');
+    if (nl) { const r = m.nuevaLinea(nl.dataset.nuevatrama); cerrarMenu(); if (aplicar(r)) elegir('linea', r.linea.id); return; }
+    if (cl('#addActo')) { const r = m.nuevoActo(); if (aplicar(r)) elegir('acto', r.acto.id); return; }
+
+    if (cl('[data-panel-cerrar]')) { sel = null; render(); return; }
+    const hn = cl('[data-hilo]');
+    if (hn) { if (hn.dataset.hilo) irANodo(hn.dataset.hilo); return; }
+    const mc = cl('[data-mcolor]');
+    if (mc) {
+      const [id, c] = mc.dataset.mcolor.split('|'); const q = m.punto(id);
+      if (q) { m.editarPunto(id, { color: c || null }); render(); const el = document.querySelector(`[data-punto="${id}"]`); if (el) menuNodo(q, el); }
+      return;
+    }
+    const mk = cl('[data-mcortar]');
+    if (mk) { aplicar(m.descartarPunto(mk.dataset.mcortar)); cerrarMenu(); render(); return; }
+    const mb = cl('[data-mborrar]');
+    if (mb) { cerrarMenu(); pedirBorrarPunto(mb.dataset.mborrar); return; }
+    const ne = cl('[data-nota-editar]');
+    if (ne) {
+      const id = ne.dataset.notaEditar; cerrarMenu();
+      const el = document.querySelector(`[data-nota="${id}"] span`), n = m.nota(id);
+      if (el && n) editarEnSitio(el, n.texto, 'nota-edit', v => { if (v) m.editarNota(id, v); return n.texto; });
+      return;
+    }
+    const nd = cl('[data-nota-del]');
+    if (nd) { if (aplicar(m.borrarNota(nd.dataset.notaDel))) sel = null; cerrarMenu(); render(); return; }
+    const sf = cl('[data-salto-forma]');
+    if (sf) { const [id, forma] = sf.dataset.saltoForma.split('|'); aplicar(m.convertirSalto(id, forma)); cerrarMenu(); render(); return; }
+    const si = cl('[data-salto-inv]');
+    if (si) { m.invertirSalto(si.dataset.saltoInv); cerrarMenu(); render(); return; }
+    const sd = cl('[data-salto-del]');
+    if (sd) { cerrarMenu(); pedirBorrarSalto(sd.dataset.saltoDel); return; }
+    const sl = cl('[data-salto]');
+    if (sl) { elegir('salto', sl.dataset.salto); return; }
+    const fo = cl('[data-fondo]');
+    if (fo) { const [id, f] = fo.dataset.fondo.split('|'); m.editarActo(id, { fondo: f || null }); render(); return; }
+    const tp = cl('[data-tipo]');
+    if (tp) { const [id, tipo] = tp.dataset.tipo.split('|'); aplicar(m.fijarTipo(id, tipo)); render(); return; }
+    const lc = cl('[data-lcolor]');
+    if (lc) { const [id, c] = lc.dataset.lcolor.split('|'); m.editarLinea(id, { color: c }); render(); return; }
+    const na = cl('[data-nota-add]');
+    if (na) { const [d, a] = na.dataset.notaAdd.split('|'); ponerNota(d, a); return; }
+    const nt = cl('[data-nota]');
+    if (nt) { seleccionSuave('nota', nt.dataset.nota, nt); return; }
+    const ld = cl('[data-linea-del]');
+    if (ld) { if (aplicar(m.borrarLinea(ld.dataset.lineaDel))) sel = null; render(); return; }
+    const ad = cl('[data-acto-del]');
+    if (ad) { if (aplicar(m.borrarActo(ad.dataset.actoDel))) sel = null; render(); return; }
+    if (cl('[data-punto]')) return;                            // ya quedó seleccionado en pointerdown
+    const lab = cl('.label');
+    if (lab && lab.parentElement.dataset.linea && !cl('.mini') && !t.matches('.lname')) {
+      elegir('linea', lab.parentElement.dataset.linea); return;
+    }
+    const ac = cl('[data-acto]');
+    if (ac && !cl('.mini') && !t.matches('.aname')) { elegir('acto', ac.dataset.acto); return; }
+
+    // clic en blanco: se suelta la selección y se cierra el panel
+    if (cl('aside') || cl('header') || cl('#menu')) return;
+    if (t.matches && t.matches('.lname,.aname,.cap-edit,.nota-edit')) return;
+    if (sel) { sel = null; render(); }
+  }
+
+  function onContextMenu(e) {
+    const cl = s => e.target.closest && e.target.closest(s);
+    const pt = cl('[data-punto]');
+    if (pt) {
+      const q = m.punto(pt.dataset.punto); if (!q) return;
+      e.preventDefault(); cerrarMenu();
+      seleccionSuave('punto', q.id, pt);
+      menuNodo(q, pt); return;
+    }
+    const nt = cl('[data-nota]');
+    if (nt) {
+      const n = m.nota(nt.dataset.nota); if (!n) return;
+      e.preventDefault(); cerrarMenu();
+      seleccionSuave('nota', n.id, nt);
+      menuNota(n, nt); return;
+    }
+    const sl = cl('[data-salto]');
+    if (sl) {
+      const x = m.salto(sl.dataset.salto); if (!x) return;
+      e.preventDefault(); cerrarMenu();
+      sel = { tipo: 'salto', id: x.id }; render();
+      menuSalto(x, e.clientX, e.clientY);
+    }
+  }
+
+  function onDblClick(e) {
+    cerrarMenu();
+    const cl = s => e.target.closest && e.target.closest(s);
+    const hu = cl('.hueco');
+    if (hu && hu.dataset.tramo && !cl('.add-nota')) { const [d, a] = hu.dataset.tramo.split('|'); ponerNota(d, a); return; }
+    const nm = cl('.lname,.aname');
+    if (nm) { nm.readOnly = false; nm.focus(); nm.select(); return; }      // renombrar trama o acto
+    const pt = cl('.pt');
+    if (pt) {                                                               // renombrar el nodo ahí mismo
+      const p = m.punto(pt.dataset.punto); if (!p) return;
+      const vivo = pt.querySelector('.cap');
+      if (vivo) editarEnSitio(vivo, p.titulo, 'cap-edit', v => { if (v) m.editarPunto(p.id, { titulo: v }); const f = $panel.querySelector('#fTitulo'); if (f) f.value = p.titulo; return p.titulo; });
+      return;
+    }
+    const nt = cl('.nota');
+    if (nt) {                                                               // editar el texto de la nota
+      const n = m.nota(nt.dataset.nota); if (!n) return;
+      const vivo = nt.querySelector('span');
+      if (vivo) editarEnSitio(vivo, n.texto, 'nota-edit', v => { if (v) m.editarNota(n.id, v); return n.texto; });
+      return;
+    }
+    const track = cl('.track');
+    if (!track) return;
+    const r = track.getBoundingClientRect();
+    abrirMenuCrear(e.clientX, e.clientY, track.dataset.linea, m.ubicarCelda((e.clientX - r.left) / G()));
+  }
+
+  /* Crea la nota y la deja lista para escribir encima, sin pasar por el panel. */
+  function ponerNota(deId, aId) {
+    const r = m.crearNota(deId, aId, 'Nota nueva');
+    if (!aplicar(r)) return;
+    elegir('nota', r.nota.id);
+    const el = document.querySelector(`[data-nota="${r.nota.id}"] span`);
+    if (el) editarEnSitio(el, r.nota.texto, 'nota-edit', v => { if (v) m.editarNota(r.nota.id, v); return r.nota.texto; });
+  }
+
+  /* Renombrar sobre la propia trama: Enter confirma, Escape cancela.
+     Al terminar NO se reconstruye el tablero: se devuelve el texto al mismo elemento. Si el cierre
+     llega por un clic fuera (blur), un render aquí reemplazaría el elemento bajo el puntero antes
+     del pointerup y el navegador descartaría ese clic. `alGuardar` devuelve el texto definitivo. */
+  function editarEnSitio(el, viejo, clase, alGuardar) {
+    const inp = document.createElement('input');
+    inp.className = clase; inp.value = viejo;
+    el.replaceWith(inp);
+    inp.focus(); inp.select();
+    let cerrado = false;
+    const fin = guardar => {
+      if (cerrado) return; cerrado = true;
+      const nuevo = guardar ? alGuardar(inp.value.trim()) : viejo;
+      if (inp.parentNode) inp.replaceWith(el);
+      el.textContent = nuevo == null ? viejo : nuevo;
+      registrar();
+    };
+    inp.addEventListener('blur', () => fin(true));
+    inp.addEventListener('keydown', ev => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter' || ev.code === 'Enter' || ev.keyCode === 13) { ev.preventDefault(); fin(true); }
+      if (ev.key === 'Escape' || ev.code === 'Escape' || ev.keyCode === 27) { ev.preventDefault(); fin(false); }
+    });
+    inp.addEventListener('pointerdown', ev => ev.stopPropagation());
+    inp.addEventListener('dblclick', ev => ev.stopPropagation());
+  }
+
+  /* Nombres de trama y acto: doble clic los hace editables; al salir vuelven a solo lectura. */
+  function onFocusIn(e) {
+    const ln = e.target.closest && e.target.closest('[data-linea-nombre]');
+    if (ln) { seleccionSuave('linea', ln.dataset.lineaNombre, ln.closest('.label')); return; }
+    const an = e.target.closest && e.target.closest('[data-acto-nombre]');
+    if (an) seleccionSuave('acto', an.dataset.actoNombre, an.closest('[data-acto]'));
+  }
+  function onFocusOut(e) {
+    const nm = e.target.closest && e.target.closest('.lname,.aname');
+    if (nm) nm.readOnly = true;
+  }
+  function onInput(e) {
+    const ln = e.target.closest && e.target.closest('[data-linea-nombre]');
+    if (ln) { m.editarLinea(ln.dataset.lineaNombre, { nombre: ln.value }); const f = $panel.querySelector('#fNombre'); if (f) f.value = ln.value; tocar(); return; }
+    const an = e.target.closest && e.target.closest('[data-acto-nombre]');
+    if (an) { m.editarActo(an.dataset.actoNombre, { nombre: an.value }); const f = $panel.querySelector('#fNombre'); if (f) f.value = an.value; tocar(); }
+  }
+
+  /* ====================================================================
+     Menús flotantes
+     ==================================================================== */
+  let pendiente = null;
+  function abrirMenuEn(cx, cy, html) {
+    $menu.innerHTML = html;
+    $menu.classList.add('show');
+    $menu.style.left = '0px'; $menu.style.top = '0px';
+    $menu.style.left = Math.max(8, Math.min(cx, innerWidth - $menu.offsetWidth - 10)) + 'px';
+    $menu.style.top = Math.max(8, Math.min(cy, innerHeight - $menu.offsetHeight - 10)) + 'px';
+  }
+  function cerrarMenu() { $menu.classList.remove('show'); pendiente = null; }
+
+  /* Menú de creación: nodo, cambio de escena a…, salto alternativo a… */
+  function abrirMenuCrear(cx, cy, lineaId, pos) {
+    pendiente = { lineaId, actoId: pos.actoId, celda: pos.celda };
+    const l = m.linea(lineaId);
+    const cuadros = m.datos.lineas.filter(x => x.id !== lineaId && x.tipo !== 'alterna');
+    const rombos = m.datos.lineas.filter(x => x.id !== lineaId);
+    const puedeCuadro = cuadros.length && l.tipo !== 'alterna';
+    abrirMenuEn(cx, cy, `<div class="mt">Crear en ${esc(l.nombre)}</div>
+      <button data-crear="nodo"><span class="ic" style="background:${tono(l.color)}"></span>Nodo</button>
+      ${puedeCuadro ? `<div class="sep"></div><div class="mt">Cambio de escena a…</div>`
+        + cuadros.map(d => `<button data-crear="cuadro|${d.id}"><span class="ic caja"></span>${esc(d.nombre)}</button>`).join('') : ''}
+      ${rombos.length ? `<div class="sep"></div><div class="mt">Salto alternativo a…</div>`
+        + rombos.map(d => `<button data-crear="rombo|${d.id}"><span class="ic rombo"></span>${esc(d.nombre)}</button>`).join('') : ''}`);
+  }
+
+  /* Clic secundario en un nodo: color, descartar y eliminar; en un extremo: convertir, invertir, eliminar. */
+  function menuNodo(p, el) {
+    const s = m.saltoDe(p.id);
+    const html = (s ? `<div class="mt">${esc(FORMA[s.tipo])}</div>${opcionesSalto(s)}<div class="sep"></div>`
+      : `<div class="mt">Nodo</div>
+         <div class="colores">
+           ${PALETA.map(c => `<button class="sw${p.color === c.id ? ' on' : ''}" data-mcolor="${p.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
+           <button class="sw hereda${p.color ? '' : ' on'}" data-mcolor="${p.id}|" title="Hereda el color de la trama">trama</button>
+         </div><div class="sep"></div>
+         <button data-mcortar="${p.id}"><span class="ic" style="border:1.5px dashed var(--tenue);background:none"></span>${p.cortado ? 'Quitar el descarte' : 'Descartar'}</button>`)
+      + `<button class="peligro" data-mborrar="${p.id}">Eliminar</button>`;
+    const r = el.getBoundingClientRect();
+    abrirMenuEn(r.left + r.width / 2 - 105, r.bottom + 16, html);
+  }
+  function opcionesSalto(s) {
+    const a = m.punto(s.deId), b = m.punto(s.aId);
+    const alterna = a && b && m.formaEntre(a.lineaId, b.lineaId) === 'rombo';
+    return (s.tipo === 'rombo'
+      ? (alterna ? `<div class="no">No puede ser un salto trama: uno de sus extremos está en una trama alternativa.</div>`
+                 : `<button data-salto-forma="${s.id}|cuadro"><span class="ic caja"></span>Convertir a salto trama</button>`)
+      : `<button data-salto-forma="${s.id}|rombo"><span class="ic rombo"></span>Convertir a salto alternativo</button>`)
+      + `<button data-salto-inv="${s.id}">Invertir el sentido</button>`;
+  }
+  function menuSalto(s, cx, cy) {
+    abrirMenuEn(cx, cy, `<div class="mt">${esc(FORMA[s.tipo])}</div>${opcionesSalto(s)}
+      <div class="sep"></div><button class="peligro" data-salto-del="${s.id}">Eliminar</button>`);
+  }
+  function menuNota(n, el) {
+    const r = el.getBoundingClientRect();
+    abrirMenuEn(r.left + r.width / 2 - 100, r.bottom + 12, `<div class="mt">Nota</div>
+      <button data-nota-editar="${n.id}">Editar el texto</button>
+      <button class="peligro" data-nota-del="${n.id}">Eliminar nota</button>`);
+  }
+
+  /* ---------- marca de cruce entre trama y celda ---------- */
+  let celdaObj = null;
+  function onMouseMove(e) {
+    if (cel) return;                                                       // se está arrastrando
+    if (e.target.closest && e.target.closest('#celda')) return;            // ya está encima de la marca
+    const tr = e.target.closest && e.target.closest('.track');
+    const libre = tr && !e.target.closest('.pt') && !e.target.closest('.nota')
+      && e.clientX >= zonaUtil() && !arrastrando();
+    if (!libre) { $celda.classList.remove('show'); celdaObj = null; return; }
+    const r = tr.getBoundingClientRect();
+    const pos = m.ubicarCelda((e.clientX - r.left) / G());
+    const id = tr.dataset.linea;
+    if (m.datos.puntos.some(p => p.lineaId === id && p.actoId === pos.actoId && p.celda === pos.celda)) {
+      $celda.classList.remove('show'); celdaObj = null; return;
+    }
+    celdaObj = { lineaId: id, actoId: pos.actoId, celda: pos.celda };
+    $celda.style.left = (GUTTER + (m.celdasAntes(pos.actoId) + pos.celda) * G()) + 'px';
+    $celda.style.top = yFila(id) + 'px';
+    $celda.classList.add('show');
+  }
+
+  /* ---------- globo: nodos y notas ---------- */
+  function tinta(col) {                                                    // texto legible sobre cualquier fondo
+    const c = col.replace('#', '');
+    const r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) > 155 ? '#1a1a1a' : '#ffffff';
+  }
+  function mostrarTip(el, titulo, texto, color) {
+    color = color ? resolver(color) : '';
+    $tip.innerHTML = '';
+    if (titulo) { const h = document.createElement('div'); h.className = 'tip-t'; h.textContent = titulo; $tip.appendChild(h); }
+    if (texto) { const b = document.createElement('div'); b.textContent = texto; $tip.appendChild(b); }
+    if (!$tip.childNodes.length) return;
+    $tip.style.background = color || '';       // sin color propio manda el tema
+    $tip.style.color = color && /^#[0-9a-f]{6}$/i.test(color) ? tinta(color) : '';
+    $tip.classList.add('show');
+    const r = el.getBoundingClientRect(), w = $tip.offsetWidth, h = $tip.offsetHeight;
+    $tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8)) + 'px';
+    $tip.style.top = (r.bottom + 10 + h > innerHeight ? r.top - h - 10 : r.bottom + 10) + 'px';
+  }
+  function onMouseOver(e) {
+    if (arrastrando()) return;
+    const n = e.target.closest && e.target.closest('.nota');
+    if (n) { const nt = m.nota(n.dataset.nota); if (nt) mostrarTip(n, null, nt.texto, null); return; }
+    const pt = e.target.closest && e.target.closest('.pt');
+    if (pt) {
+      const p = m.punto(pt.dataset.punto); if (!p) return;
+      const forma = m.formaDe(p.id);
+      mostrarTip(pt, p.titulo, p.descripcion, forma ? colorSalto(forma) : tono(p.color || m.linea(p.lineaId).color));
+    }
+  }
+  function onMouseOut(e) {
+    const de = (e.target.closest && e.target.closest('.nota')) || (e.target.closest && e.target.closest('.pt'));
+    if (!de) return;
+    if (e.relatedTarget && de.contains(e.relatedTarget)) return;
+    $tip.classList.remove('show');
+  }
+
+  /* ---------- teclado ---------- */
+  function onKeyDown(e) {
+    const cmd = e.metaKey || e.ctrlKey, enCampo = e.target instanceof Element && e.target.matches('input,textarea');
+    if (cmd && e.key.toLowerCase() === 'z' && !enCampo) { e.preventDefault(); e.shiftKey ? rehacer() : deshacer(); return; }
+    if (cmd && e.key.toLowerCase() === 'y' && !enCampo) { e.preventDefault(); rehacer(); return; }
+    if (enCampo) return;
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && sel && sel.tipo === 'punto') {
+      const v = m.vecinos(sel.id), id = v && (e.key === 'ArrowLeft' ? v.anterior : v.siguiente);
+      if (id) { e.preventDefault(); irANodo(id); }
+      return;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && sel) {
+      e.preventDefault();
+      if (sel.tipo === 'punto') return pedirBorrarPunto(sel.id);
+      if (sel.tipo === 'salto') return pedirBorrarSalto(sel.id);
+      const r = { linea: m.borrarLinea, acto: m.borrarActo, nota: m.borrarNota }[sel.tipo];
+      if (r && aplicar(r.call(m, sel.id))) sel = null;
+      render();
+    }
+    if (e.key === 'Escape') { cerrarMenu(); if (sel) { sel = null; render(); } }
+  }
+
+  /* ====================================================================
+     Historial y avisos
+     ==================================================================== */
+  function registrar() {
+    if (historial.registrar(JSON.stringify(m.datos))) ganchos.alCambiar();
+    botonesHistoria();
+  }
+  /* Cambios que no reconstruyen el tablero (escribir en el panel): se avisan igual al gancho. */
+  function tocar() { ganchos.alCambiar(); }
+  function aplicarInstantanea(json) {
+    m.cargar(JSON.parse(json)); sel = null;
+    restaurando = true; render(); restaurando = false;
+    botonesHistoria(); ganchos.alCambiar();
+  }
+  function deshacer() {
+    registrar();
+    const j = historial.deshacer();
+    if (!j) return avisar('No hay nada que deshacer');
+    aplicarInstantanea(j); avisar('Deshecho');
+  }
+  function rehacer() {
+    registrar();
+    const j = historial.rehacer();
+    if (!j) return avisar('No hay nada que rehacer');
+    aplicarInstantanea(j); avisar('Rehecho');
+  }
+  function botonesHistoria() {
+    const u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
+    if (u) u.disabled = !historial.puedeDeshacer();
+    if (r) r.disabled = !historial.puedeRehacer();
+  }
+  let tt;
+  function avisar(msg) {
+    if (!msg) return;
+    $aviso.textContent = msg; $aviso.classList.add('show');
+    clearTimeout(tt); tt = setTimeout(() => $aviso.classList.remove('show'), 2200);
+  }
+
+  /* ====================================================================
+     API del tablero
+     ==================================================================== */
+  function iniciar(opciones) {
+    m = opciones.modelo;
+    if (opciones.alCambiar) ganchos.alCambiar = opciones.alCambiar;
+    if (opciones.zoom) zoom = opciones.zoom;
+    $axis = document.getElementById('axis'); $rows = document.getElementById('rows');
+    $cables = document.getElementById('cables'); $canvas = document.getElementById('canvas');
+    $board = document.getElementById('board'); $panel = document.getElementById('panel');
+    $menu = document.getElementById('menu'); $tip = document.getElementById('tip');
+    $aviso = document.getElementById('aviso'); $celda = document.getElementById('celda');
+
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+    document.addEventListener('click', onClick);
+    document.addEventListener('contextmenu', onContextMenu);
+    document.addEventListener('dblclick', onDblClick);
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    document.addEventListener('input', onInput);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseover', onMouseOver);
+    document.addEventListener('mouseout', onMouseOut);
+    document.addEventListener('keydown', onKeyDown);
+    const u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
+    if (u) u.onclick = deshacer;
+    if (r) r.onclick = rehacer;
+
+    historial.reiniciar(JSON.stringify(m.datos));
+    restaurando = true; render(); restaurando = false;
+    botonesHistoria();
+  }
+
+  /* Sustituye el tablero entero (abrir un archivo, nuevo tablero): el historial empieza de cero. */
+  function cargar(datos) {
+    m.cargar(datos); sel = null; cerrarMenu();
+    historial.reiniciar(JSON.stringify(m.datos));
+    restaurando = true; render(); restaurando = false;
+    botonesHistoria();
+  }
+
+  T.tablero = {
+    iniciar, render, cargar, deshacer, rehacer, avisar, confirmar,
+    modelo: () => m,
+    seleccion: () => sel,
+    zoom: v => { if (v !== undefined) { zoom = clamp(+v || 1.7, .5, 4); render(); } return zoom; },
+    /* Ancho de la columna de tramas. El CSS lo lee de --gutter (css/tramas.css); aquí se usa para
+       colocar la marca de cruce, los cables y el ancho del lienzo. */
+    gutter: v => {
+      if (v !== undefined) {
+        GUTTER = Math.round(clamp(+v || 190, 110, 420));
+        document.documentElement.style.setProperty('--gutter', GUTTER + 'px');
+        if (m) render();
+      }
+      return GUTTER;
+    }
+  };
+})(window.Tramas);

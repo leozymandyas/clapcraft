@@ -1,0 +1,58 @@
+{
+  "name": "claquedraw",
+  "version": "0.1.0",
+  "description": "Guiones: editor de texto tipo hoja de Word con atajos Markdown, tablero de tramas y Claquedraw (esquema de pasos con una nota de texto por nodo), listo para empaquetar con Electron",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "web": "node serve.js 5173",
+    "dist": "electron-builder",
+    "test": "node --test",
+    "tramas": "node serve.js 5173"
+  },
+  "devDependencies": {
+    "electron": "^36.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "dev.leo.claquedraw",
+    "productName": "Claquedraw",
+    "files": [
+      "index.html",
+      "tramas.html",
+      "claquedraw.html",
+      "css/**",
+      "js/**",
+      "fonts/**",
+      "electron/**"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "fileAssociations": [
+      {
+        "ext": "cld",
+        "name": "Guion de Claquedraw",
+        "role": "Editor"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claquedraw</title>
+<link rel="stylesheet" href="css/tramas.css">
+<link rel="stylesheet" href="css/claquedraw.css">
+<script>
+/* Tema antes del primer pintado, para que no parpadee. Misma clave que tramas.html y respaldo en la del editor. */
+(function () {
+  try {
+    var t = localStorage.getItem('guiones.tramas.theme') || localStorage.getItem('guiones.editor.theme');
+    if (!t && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
+    document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+  } catch (e) {}
+})();
+</script>
+</head>
+<body>
+
+<header class="barra">
+  <div class="marca">Claquedraw</div>
+  <div class="vistas" role="tablist" aria-label="Vista">
+    <button class="btn on" data-vista="esquema" role="tab" title="Esquema de pasos (Ctrl+Shift+G alterna)">Esquema</button>
+    <button class="btn" data-vista="texto" role="tab" title="Editor de texto: una nota por nodo (Ctrl+Shift+G alterna)">Texto</button>
+  </div>
+  <div class="tool solo-esquema"><span>Escala</span><input type="range" id="zoom" min="0.7" max="3" step="0.05" value="1.7" title="Píxeles por celda"></div>
+  <button class="btn solo-esquema" id="undoBtn" title="Deshacer (Ctrl+Z)">↶ Deshacer</button>
+  <button class="btn solo-esquema" id="redoBtn" title="Rehacer (Ctrl+Shift+Z)">↷ Rehacer</button>
+  <span class="spacer"></span>
+  <!-- indicador: dónde está el guion y si hay cambios sin escribir en su archivo (clic = Guardar) -->
+  <button type="button" class="estado" id="estadoGuardado" title="Dónde está guardado el guion"></button>
+  <button class="btn" id="temaBtn" title="Modo claro / oscuro">◑ Oscuro</button>
+  <button class="btn" id="btnNuevo" title="Empezar un guion vacío">Nuevo</button>
+  <button class="btn" id="btnAbrir" title="Abrir un guion (.cld): desde entonces se guarda ahí solo (Ctrl+O)">Abrir…</button>
+  <button class="btn" id="btnGuardar" title="Guardar ahora en el archivo del guion (Ctrl+S)">Guardar</button>
+  <button class="btn" id="btnGuardarComo" title="Guardar en otro archivo (.cld) y seguir guardando ahí (Ctrl+Shift+S)">Guardar como…</button>
+  <input type="file" id="archivo" accept=".cld,.json,application/json" hidden>
+</header>
+
+<main>
+  <!-- contrae la columna de tramas del tablero (queda el punto de color de cada una) -->
+  <button type="button" class="mini" id="plegarTramas" title="Contraer la columna de tramas">‹</button>
+  <!-- asa para cambiar el ancho de la columna de tramas (doble clic: ancho de partida) -->
+  <div id="asaTramas" title="Arrastra para cambiar el ancho de la columna · doble clic: ancho de partida"></div>
+  <div id="board"><div id="canvas">
+    <svg id="cables"></svg>
+    <div class="axis" id="axis"></div>
+    <div id="rows"></div>
+    <div id="celda" title="Crear aquí">+</div>
+  </div></div>
+  <!-- Vista de texto: la tira de la trama y el editor (index.html, sin tocar) en un marco -->
+  <section id="texto" aria-label="Editor de texto">
+    <!-- sobre la hoja va la línea de tiempo o la cinta del editor, una de las dos (Ctrl+Shift+K) -->
+    <nav id="hilo" class="hilo" aria-label="Nodos de la trama"></nav>
+    <iframe id="editorMarco" title="Editor de texto"></iframe>
+  </section>
+  <aside id="panel"></aside>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <p id="dlgTexto"></p>
+    <menu>
+      <button type="button" class="btn" id="dlgCancel">Cancelar</button>
+      <button type="submit" class="btn danger" id="dlgOk">Eliminar</button>
+    </menu>
+  </form>
+</dialog>
+
+<div id="menu"></div>
+<div id="tip"></div>
+<div id="aviso"></div>
+
+<script src="js/tramas/modelo.js"></script>
+<script src="js/tramas/tablero.js"></script>
+<script src="js/claquedraw/biblioteca.js"></script>
+<script src="js/claquedraw/texto.js"></script>
+<script src="js/claquedraw/app.js"></script>
+</body>
+</html>
