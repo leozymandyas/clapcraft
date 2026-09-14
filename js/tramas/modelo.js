@@ -17,8 +17,10 @@
     { id: 'rojo',    label: 'Rojo',    c: '#8f3a2c' },
     { id: 'gris',    label: 'Gris',    c: '#5c584f' }
   ];
+  /* Fondo de un acto: un color, «ninguno» (sin fondo, elegido a mano) o null: el automático por su
+     posición (FONDOS_AUTO, en ciclo), como en el diseño de ClapCraft. */
   const FONDOS = [
-    { id: '',        label: 'Sin fondo', c: 'transparent' },
+    { id: 'ninguno', label: 'Sin fondo', c: 'transparent' },
     { id: 'azul',    label: 'Azul',    c: '#dfe8ff' },
     { id: 'violeta', label: 'Violeta', c: '#ede0f7' },
     { id: 'verde',   label: 'Verde',   c: '#e2f0e0' },
@@ -26,6 +28,7 @@
     { id: 'rojo',    label: 'Rojo',    c: '#fde2dc' },
     { id: 'gris',    label: 'Gris',    c: '#e4e4e2' }
   ];
+  const FONDOS_AUTO = ['azul', 'ambar', 'verde', 'violeta', 'rojo', 'gris'];
   const TIPOS = ['principal', 'secundaria', 'alterna'];
   const ETIQUETA = { principal: 'Principal', secundaria: 'Secundaria', alterna: 'Alternativa' };
   const FORMA = { cuadro: 'Cambio de escena', rombo: 'Salto alternativo' };
@@ -33,7 +36,9 @@
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const hex = id => (PALETA.find(p => p.id === id) || PALETA[0]).c;
-  const fondoDe = id => (FONDOS.find(f => f.id === (id || '')) || FONDOS[0]).c;
+  const fondoDe = id => (FONDOS.find(f => f.id === id) || FONDOS[0]).c;
+  /* El fondo que se ve en el acto de la posición `i`: el elegido o el automático. */
+  const fondoEfectivo = (a, i) => (a && a.fondo) || FONDOS_AUTO[i % FONDOS_AUTO.length];
   const romano = k => ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][k] || String(k);
   const clonar = d => JSON.parse(JSON.stringify(d));
   const no = aviso => ({ ok: false, aviso });
@@ -51,7 +56,7 @@
       if (!a || !a.id) return;
       d.actos.push({ id: String(a.id), nombre: String(a.nombre ?? ('Acto ' + romano(i + 1))),
         celdas: clamp(Math.round(+a.celdas || ANCHO_ACTO), MIN_CELDAS, MAX_CELDAS),
-        fondo: FONDOS.some(f => f.id === a.fondo && f.id) ? a.fondo : null });
+        fondo: FONDOS.some(f => f.id === a.fondo) ? a.fondo : null });
     });
     if (!d.actos.length) d.actos.push({ id: 'a1', nombre: 'Acto I', celdas: ANCHO_ACTO, fondo: null });
 
@@ -60,7 +65,7 @@
       d.lineas.push({ id: String(l.id), nombre: String(l.nombre ?? ('Trama ' + (i + 1))),
         tipo: TIPOS.includes(l.tipo) ? l.tipo : 'secundaria',
         color: PALETA.some(c => c.id === l.color) ? l.color : PALETA[i % PALETA.length].id,
-        cortada: !!l.cortada });
+        cortada: !!l.cortada, ...(typeof l.personaje === 'string' && l.personaje ? { personaje: l.personaje } : {}) });   // en ClapCraft, el personaje del carril
     });
     if (!d.lineas.length) d.lineas.push({ id: 'l1', nombre: 'Principal', tipo: 'principal', color: 'azul', cortada: false });
     // exactamente una principal
@@ -192,7 +197,7 @@
       const p = Object.assign({
         id: this._nid('p'), lineaId, actoId: a.id,
         celda: clamp(Math.round(celda ?? Math.floor(a.celdas / 2)), 0, a.celdas - 1),
-        titulo: 'Punto nuevo', descripcion: '', color: null, cortado: false
+        titulo: this.nombre('punto'), descripcion: '', color: null, cortado: false
       }, props || {});
       const ocupada = this.ocupante(lineaId, a.id, p.celda);
       if (ocupada) return no(`Ahí ya está «${ocupada.titulo || 'un nodo'}»: elige una celda libre`);
@@ -282,7 +287,7 @@
       if (tipo === 'principal' && this.lineaPrincipal()) tipo = 'secundaria';
       const usados = this.datos.lineas.map(l => l.color);
       const libre = PALETA.find(c => !usados.includes(c.id)) || PALETA[this.datos.lineas.length % PALETA.length];
-      const l = { id: this._nid('l'), nombre: 'Trama ' + (this.datos.lineas.length + 1), tipo, color: libre.id, cortada: false };
+      const l = { id: this._nid('l'), nombre: ((this.nombres && this.nombres.linea) || 'Trama') + ' ' + (this.datos.lineas.length + 1), tipo, color: libre.id, cortada: false };
       this.datos.lineas.push(l);
       return si({ linea: l });
     }
@@ -291,6 +296,7 @@
       const l = this.linea(id); if (!l) return no('Esa trama no existe');
       if ('nombre' in cambios) l.nombre = String(cambios.nombre);
       if ('color' in cambios && PALETA.some(c => c.id === cambios.color)) l.color = cambios.color;
+      if ('personaje' in cambios) { if (cambios.personaje) l.personaje = String(cambios.personaje); else delete l.personaje; }
       return si({ linea: l });
     }
 
@@ -330,8 +336,14 @@
     /* ====================================================================
        Actos
        ==================================================================== */
+    /* `nombres` (opcional) cambia cómo se llaman las piezas: en Personajes de ClapCraft, «Momento»,
+       «Personaje», «Evento» (nodo) y «Relación» (cuadro) */
+    nombre(pieza) { return (this.nombres && this.nombres[pieza]) || { acto: 'Acto', linea: 'Trama', punto: 'Punto nuevo', nodo: 'Nodo' }[pieza]; }
+    forma(tipo) { return (this.nombres && this.nombres[tipo]) || FORMA[tipo]; }
+    /* concordancia: «Relación eliminada», «esta relación» (`nombres.femeninos`: las piezas en femenino) */
+    femenino(tipo) { return !!(this.nombres && (this.nombres.femeninos || []).includes(tipo)); }
     nuevoActo() {
-      const a = { id: this._nid('a'), nombre: 'Acto ' + romano(this.datos.actos.length + 1), celdas: ANCHO_ACTO, fondo: null };
+      const a = { id: this._nid('a'), nombre: ((this.nombres && this.nombres.acto) || 'Acto') + ' ' + romano(this.datos.actos.length + 1), celdas: ANCHO_ACTO, fondo: null };
       this.datos.actos.push(a);
       return si({ acto: a });
     }
@@ -339,7 +351,7 @@
     editarActo(id, cambios) {
       const a = this.acto(id); if (!a) return no('Ese acto no existe');
       if ('nombre' in cambios) a.nombre = String(cambios.nombre);
-      if ('fondo' in cambios) a.fondo = FONDOS.some(f => f.id === cambios.fondo && f.id) ? cambios.fondo : null;
+      if ('fondo' in cambios) a.fondo = FONDOS.some(f => f.id === cambios.fondo) ? cambios.fondo : null;
       return si({ acto: a });
     }
 
@@ -356,7 +368,7 @@
     borrarActo(id) {
       const actos = this.datos.actos, i = actos.findIndex(a => a.id === id);
       if (i < 0) return no('Ese acto no existe');
-      if (actos.length <= 1) return no('Tiene que quedar al menos un acto');
+      if (actos.length <= 1) return no('Tiene que quedar al menos un ' + this.nombre('acto').toLowerCase());
       const vecino = actos[i + 1] || actos[i - 1];
       const mudados = this.datos.puntos.filter(p => p.actoId === id);
       mudados.forEach(p => { p.actoId = vecino.id; p.celda = clamp(p.celda, 0, vecino.celdas - 1); });
@@ -388,7 +400,7 @@
       const s = { id: this._nid('s'), deId: a.id, aId: b.id, tipo };
       this.datos.saltos.push(s);
       return si({ salto: s, creado: true,
-        aviso: `${FORMA[tipo]}: ${this.linea(a.lineaId).nombre} → ${destino.nombre}` });
+        aviso: `${this.forma(tipo)}: ${this.linea(a.lineaId).nombre} → ${destino.nombre}` });
     }
 
     convertirSalto(id, tipo) {
@@ -417,9 +429,9 @@
     /* Un cuadro o un rombo existe para ser un salto: sin la unión, sus dos extremos se van. */
     borrarSalto(id) {
       const s = this.salto(id); if (!s) return no('Ese salto no existe');
-      const forma = FORMA[s.tipo];
+      const forma = this.forma(s.tipo);
       this._quitarPuntos(new Set([s.deId, s.aId]));
-      return si({ aviso: forma + ' eliminado' });
+      return si({ aviso: forma + (this.femenino(s.tipo) ? ' eliminada' : ' eliminado') });
     }
 
     /* ====================================================================
@@ -659,7 +671,7 @@
   }
 
   Object.assign(T, { Modelo, Historial, normalizar, inicial, ejemplo,
-    PALETA, FONDOS, TIPOS, ETIQUETA, FORMA, MIN_CELDAS, MAX_CELDAS, ANCHO_ACTO,
+    PALETA, FONDOS, FONDOS_AUTO, fondoEfectivo, TIPOS, ETIQUETA, FORMA, MIN_CELDAS, MAX_CELDAS, ANCHO_ACTO,
     hex, fondoDe, clamp, romano });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = T;

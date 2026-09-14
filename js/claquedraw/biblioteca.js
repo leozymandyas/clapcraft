@@ -55,7 +55,9 @@
         modificado: +g.modificado || creado,
         datos: esTablero(g.datos) ? clonar(g.datos) : null,
         notas: sanearNotas(g.notas),
-        notaActual: typeof g.notaActual === 'string' && g.notaActual ? g.notaActual : null
+        notaActual: typeof g.notaActual === 'string' && g.notaActual ? g.notaActual : null,
+        /* el gestor de documentos (contenedores, etiquetas, notas): lo sanea C.Documentos al usarse */
+        documentos: g.documentos && typeof g.documentos === 'object' && !Array.isArray(g.documentos) ? clonar(g.documentos) : { contenedores: [], etiquetas: [], notas: [] }
       });
     });
     const activo = datos && String(datos.activo || '');
@@ -125,7 +127,8 @@
       const t = this.ahora();
       const g = { id: this.idNuevo(), nombre: this.nombreLibre(o.nombre), fijado: false,
                   creado: t, modificado: t, datos: o.datos ? clonar(o.datos) : null,
-                  notas: sanearNotas(o.notas), notaActual: null };
+                  notas: sanearNotas(o.notas), notaActual: null,
+                  documentos: o.documentos && typeof o.documentos === 'object' && !Array.isArray(o.documentos) ? clonar(o.documentos) : { contenedores: [], etiquetas: [], notas: [] } };
       this.datos.guiones.push(g);
       if (o.activar !== false) this.datos.activo = g.id;
       return si({ guion: g });
@@ -162,6 +165,9 @@
       g.datos = clonar(datos); g.modificado = this.ahora();
       return si({ guion: g, cambio: true });
     }
+
+    /* Algo del guion cambió fuera de la biblioteca (p. ej. sus documentos): cuenta como modificación. */
+    marcar(id) { const g = this.guion(id); if (!g) return no('Ese guion ya no existe'); g.modificado = this.ahora(); return si({ guion: g }); }
 
     /* ---------- notas del editor de texto (una por nodo del tablero) ---------- */
     nota(id, puntoId) { const g = this.guion(id); return (g && g.notas[puntoId]) || null; }

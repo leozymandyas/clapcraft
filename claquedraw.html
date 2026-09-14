@@ -3,9 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claquedraw</title>
+<title>ClapCraft</title>
+<link rel="icon" href="img/clapcraft.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/tramas.css">
 <link rel="stylesheet" href="css/claquedraw.css">
+<link rel="stylesheet" href="css/clapcraft.css">
 <script>
 /* Tema antes del primer pintado, para que no parpadee. Misma clave que tramas.html y respaldo en la del editor. */
 (function () {
@@ -18,45 +20,138 @@
 </script>
 </head>
 <body>
+<!-- juego de iconos del rediseño (rejilla de 16, trazo 1.4, currentColor): <svg><use href="#ic-…"></use></svg> -->
+<svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true"><defs>
+<symbol id="ic-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 6.6h6.4a3.4 3.4 0 0 1 0 6.8H6.4"/><path d="M6.3 3.4 3.1 6.6l3.2 3.2"/></symbol>
+<symbol id="ic-redo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 6.6H6.4a3.4 3.4 0 0 0 0 6.8h3.2"/><path d="M9.7 3.4l3.2 3.2-3.2 3.2"/></symbol>
+<symbol id="ic-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.9" cy="6.9" r="4.3"/><path d="M10.1 10.1 13.6 13.6"/></symbol>
+<symbol id="ic-panel" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="3.2" width="11.6" height="9.6" rx="1.4"/><path d="M6.2 3.2v9.6"/></symbol>
+<symbol id="ic-more" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.9" cy="8" r=".95"/><circle cx="8" cy="8" r=".95"/><circle cx="12.1" cy="8" r=".95"/></symbol>
+<symbol id="ic-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3.4v9.2M3.4 8h9.2"/></symbol>
+<symbol id="ic-chev-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 4.2 10.2 8l-3.8 3.8"/></symbol>
+<symbol id="ic-chev-d" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 6.4 8 10.2l3.8-3.8"/></symbol>
+<symbol id="ic-script" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 2.4h8.8v11.2H3.6z"/><path d="M5.9 5.4h4.2M5.9 8h4.2M5.9 10.6h2.4"/></symbol>
+<symbol id="ic-docs" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="3.4" width="11.2" height="9.2" rx="1.3"/><path d="M2.4 6.6h11.2M6.9 6.6v6"/></symbol>
+<symbol id="ic-trash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 4.8h9.6M6.4 4.8V3.2h3.2v1.6"/><path d="M4.8 4.8l.6 8.4h5.2l.6-8.4"/></symbol>
+<symbol id="ic-close" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/></symbol>
+<symbol id="ic-drag" viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r=".95"/><circle cx="10" cy="4" r=".95"/><circle cx="6" cy="8" r=".95"/><circle cx="10" cy="8" r=".95"/><circle cx="6" cy="12" r=".95"/><circle cx="10" cy="12" r=".95"/></symbol>
+<symbol id="ic-edit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.6 13.4 4.7 5.9 12.2l-2.8.7.7-2.8z"/></symbol>
+<symbol id="ic-filter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 3.6h11.2L9.2 8.8v4.4L6.8 11.8V8.8z"/></symbol>
+<symbol id="ic-sort" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4.4h10M3 8h6.6M3 11.6h3.6"/></symbol>
+<symbol id="ic-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8.4 6.5 11.5 12.8 4.8"/></symbol>
+<symbol id="ic-arr-l" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 4.2 5.8 8l3.8 3.8"/></symbol>
+<symbol id="ic-arr-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 4.2 10.2 8l-3.8 3.8"/></symbol>
+<symbol id="ic-folder" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 4.2h4l1.3 1.7h5.9v7.1H2.4z"/></symbol>
+<symbol id="ic-ancho" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 8h10.8M5 5.6 2.6 8 5 10.4M11 5.6 13.4 8 11 10.4"/></symbol>
+<symbol id="ic-alto" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.6v10.8M5.6 5 8 2.6 10.4 5M5.6 11 8 13.4 10.4 11"/></symbol>
+<symbol id="ic-reset" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.3 8a4.7 4.7 0 1 0 1.4-3.3"/><path d="M4.4 2.4v2.6H7"/></symbol>
+<symbol id="ic-board" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 5h11.2M2.4 11h11.2"/><circle cx="5.4" cy="5" r="1.3"/><circle cx="10.2" cy="11" r="1.3"/><path d="M8 5v6"/></symbol>
+<symbol id="ic-person" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.4"/><path d="M3.4 13.6c0-2.5 2.1-4 4.6-4s4.6 1.5 4.6 4"/></symbol>
+<symbol id="ic-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></symbol>
+</defs></svg>
 
-<header class="barra">
-  <div class="marca">Claquedraw</div>
-  <div class="vistas" role="tablist" aria-label="Vista">
-    <button class="btn on" data-vista="esquema" role="tab" title="Esquema de pasos (Ctrl+Shift+G alterna)">Esquema</button>
-    <button class="btn" data-vista="texto" role="tab" title="Editor de texto: una nota por nodo (Ctrl+Shift+G alterna)">Texto</button>
+<!-- franja de pestañas (38 px): un guion abierto por pestaña, cada uno con su archivo; a la derecha, en el
+     navegador, lo que en la app de escritorio va en el menú Archivo / Ver -->
+<div class="franja">
+  <nav class="pestanas" id="pestanas" aria-label="Guiones abiertos"></nav>
+  <div class="franja-acc">
+    <!-- indicador: dónde está el guion y si hay cambios sin escribir en su archivo (clic = Guardar) -->
+    <button type="button" class="estado" id="estadoGuardado" title="Dónde está guardado el guion"></button>
+    <button class="icono" id="temaBtn" title="Modo claro / oscuro" aria-label="Modo claro / oscuro"><svg width="16" height="16"><use href="#ic-sun"></use></svg></button>
+    <button class="btn" id="btnNuevo" title="Empezar un guion vacío">Nuevo</button>
+    <button class="btn" id="btnAbrir" title="Abrir un guion (.clapcraft): desde entonces se guarda ahí solo (Ctrl+O)">Abrir…</button>
+    <button class="btn" id="btnGuardar" title="Guardar ahora en el archivo del guion (Ctrl+S)">Guardar</button>
+    <button class="btn" id="btnGuardarComo" title="Guardar en otro archivo (.clapcraft) y seguir guardando ahí (Ctrl+Shift+S)">Guardar como…</button>
+    <input type="file" id="archivo" accept=".clapcraft" hidden>
   </div>
-  <div class="tool solo-esquema"><span>Escala</span><input type="range" id="zoom" min="0.7" max="3" step="0.05" value="1.7" title="Píxeles por celda"></div>
-  <button class="btn solo-esquema" id="undoBtn" title="Deshacer (Ctrl+Z)">↶ Deshacer</button>
-  <button class="btn solo-esquema" id="redoBtn" title="Rehacer (Ctrl+Shift+Z)">↷ Rehacer</button>
-  <span class="spacer"></span>
-  <!-- indicador: dónde está el guion y si hay cambios sin escribir en su archivo (clic = Guardar) -->
-  <button type="button" class="estado" id="estadoGuardado" title="Dónde está guardado el guion"></button>
-  <button class="btn" id="temaBtn" title="Modo claro / oscuro">◑ Oscuro</button>
-  <button class="btn" id="btnNuevo" title="Empezar un guion vacío">Nuevo</button>
-  <button class="btn" id="btnAbrir" title="Abrir un guion (.cld): desde entonces se guarda ahí solo (Ctrl+O)">Abrir…</button>
-  <button class="btn" id="btnGuardar" title="Guardar ahora en el archivo del guion (Ctrl+S)">Guardar</button>
-  <button class="btn" id="btnGuardarComo" title="Guardar en otro archivo (.cld) y seguir guardando ahí (Ctrl+Shift+S)">Guardar como…</button>
-  <input type="file" id="archivo" accept=".cld,.json,application/json" hidden>
-</header>
+</div>
 
 <main>
-  <!-- contrae la columna de tramas del tablero (queda el punto de color de cada una) -->
-  <button type="button" class="mini" id="plegarTramas" title="Contraer la columna de tramas">‹</button>
-  <!-- asa para cambiar el ancho de la columna de tramas (doble clic: ancho de partida) -->
-  <div id="asaTramas" title="Arrastra para cambiar el ancho de la columna · doble clic: ancho de partida"></div>
-  <div id="board"><div id="canvas">
-    <svg id="cables"></svg>
-    <div class="axis" id="axis"></div>
-    <div id="rows"></div>
-    <div id="celda" title="Crear aquí">+</div>
-  </div></div>
+  <!-- el menú: la marca, los contenedores con sus esquemas y documentos, y la papelera al pie. Está en todas
+       las vistas; se pliega a 56 px (vista.ladoPlegado, Ctrl+Shift+B) y entonces solo queda el riel -->
+  <aside class="gd-side" id="gdSide">
+    <div class="gd-marca">
+      <span class="logo" style="--logo:27px" aria-hidden="true"><img src="img/clapcraft.svg" alt="" class="logo-claro"><img src="img/clapcraft-oscuro.svg" alt="" class="logo-oscuro"></span>
+      <span>ClapCraft</span>
+      <button type="button" class="icono" data-gd-lado title="Plegar el menú (Ctrl+Shift+B)" aria-label="Plegar el menú"><svg width="16" height="16"><use href="#ic-panel"></use></svg></button>
+    </div>
+    <button type="button" class="gd-nuevo" data-gd-nuevo><svg width="15" height="15"><use href="#ic-plus"></use></svg><span data-gd-nuevo-txt>Nuevo contenedor</span></button>
+    <div class="gd-rotulo">Contenedores</div>
+    <!-- los fijados primero; cada contenedor enseña sus esquemas (con su documentos enlazado) y sus documentos -->
+    <div class="gd-arbol">
+      <div class="gd-lista" data-gd-lista="fijados"></div>
+      <div class="gd-lista" data-gd-lista="contenedores"></div>
+      <div class="gd-vacio" data-gd-vacio hidden></div>
+    </div>
+    <!-- el pie: Contenedores y Personajes (lo que enseña el menú) y la papelera (las notas tiradas, se vacía sola a los 30 días) -->
+    <div class="gd-pie" data-gd-lista="papelera"></div>
+    <!-- el borde derecho: arrastrar cambia el ancho; muy estrecho, se pliega -->
+    <div class="gd-borde" id="ladoBorde" title="Arrastra para cambiar el ancho del menú · muy estrecho se pliega · doble clic: ancho de partida"></div>
+    <!-- plegado: el logo, nuevo contenedor, desplegar y la papelera -->
+    <div class="gd-riel">
+      <span class="logo" style="--logo:22px" aria-hidden="true"><img src="img/clapcraft.svg" alt="" class="logo-claro"><img src="img/clapcraft-oscuro.svg" alt="" class="logo-oscuro"></span>
+      <button type="button" class="gd-riel-nuevo" data-gd-nuevo title="Nuevo contenedor" aria-label="Nuevo contenedor"><svg width="14" height="14"><use href="#ic-plus"></use></svg></button>
+      <button type="button" class="gd-riel-abrir" data-gd-lado title="Desplegar el menú (Ctrl+Shift+B)" aria-label="Desplegar el menú"><svg width="14" height="14"><use href="#ic-chev-r"></use></svg></button>
+      <span class="spacer"></span>
+      <button type="button" class="gd-riel-btn" data-gd-ir-personajes title="Personajes" aria-label="Personajes"><svg width="14" height="14"><use href="#ic-person"></use></svg></button>
+      <button type="button" class="gd-riel-btn" data-gd-papelera data-gd-drop-cont="papelera" title="Papelera" aria-label="Papelera"><svg width="14" height="14"><use href="#ic-trash"></use></svg></button>
+    </div>
+  </aside>
+
+  <!-- Vista Esquema: el esquema montado arriba, el tablero con su panel y, al pie, escala y deshacer -->
+  <section id="esquema" aria-label="Esquema de pasos">
+    <header class="esq-cab">
+      <!-- «CONTENEDOR [Esquema] Nombre» del esquema montado (solo rótulo) y, si tiene documentos enlazados, el acceso a ellos -->
+      <div class="esq-titulo" id="esquemaChip" hidden><span class="esq-cont" data-chip-cont></span><span class="gd-chip gd-chip--esquema">Esquema</span><span class="esq-nom" data-chip-esq></span></div>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="verDocumentos" title="Abrir la biblioteca enlazada a este esquema" hidden><svg width="15" height="15"><use href="#ic-docs"></use></svg>Ver biblioteca</button>
+    </header>
+    <!-- solo en Personajes: los segmentos de la biblioteca del personaje abierto, en carrusel -->
+    <section class="per-seg" id="personajesSeg" aria-label="Segmentos del personaje"><div data-per-cuerpo></div></section>
+    <div class="esq-cuerpo">
+      <!-- sin ningún esquema de pasos en el guion: el tablero queda tapado con este aviso -->
+      <div id="sinEsquema"><div><b>No hay ningún esquema de pasos</b><span>Créalo con el «＋» de un contenedor del menú.</span></div></div>
+      <div id="board"><div id="canvas">
+        <svg id="cables"></svg>
+        <div class="axis" id="axis"></div>
+        <div id="rows"></div>
+        <div id="celda" title="Crear aquí">+</div>
+      </div></div>
+      <aside id="panel"></aside>
+    </div>
+    <footer class="esq-pie">
+      <!-- escala horizontal (ancho de celda) y vertical (alto de carril); el botón vuelve a las de partida -->
+      <div class="tool escalas"><span>Escala</span>
+        <label class="escala" title="Escala horizontal: ancho de las celdas"><svg width="14" height="14" aria-hidden="true"><use href="#ic-ancho"></use></svg><input type="range" id="zoom" min="0.7" max="3" step="0.05" value="1.7" aria-label="Escala horizontal"></label>
+        <label class="escala" title="Escala vertical: alto de las tramas"><svg width="14" height="14" aria-hidden="true"><use href="#ic-alto"></use></svg><input type="range" id="altoFila" min="48" max="200" step="2" value="80" aria-label="Escala vertical"></label>
+        <button type="button" class="icono" id="escalaReset" title="Restablecer las dos escalas" aria-label="Restablecer las escalas"><svg width="15" height="15"><use href="#ic-reset"></use></svg></button>
+      </div>
+      <div class="historia">
+        <button class="icono" id="undoBtn" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><svg width="16" height="16"><use href="#ic-undo"></use></svg></button>
+        <button class="icono" id="redoBtn" title="Rehacer (Ctrl+Shift+Z)" aria-label="Rehacer"><svg width="16" height="16"><use href="#ic-redo"></use></svg></button>
+      </div>
+    </footer>
+  </section>
   <!-- Vista de texto: la tira de la trama y el editor (index.html, sin tocar) en un marco -->
   <section id="texto" aria-label="Editor de texto">
-    <!-- sobre la hoja va la línea de tiempo o la cinta del editor, una de las dos (Ctrl+Shift+K) -->
+    <!-- «CONTENEDOR [Acto] Título del nodo», ver en el esquema y ‹ › para recorrer las notas de la trama -->
+    <header class="esq-cab texto-cab" id="textoCab">
+      <div class="esq-titulo"><span class="esq-cont" data-texto-cont></span><span class="gd-chip gd-chip--esquema" data-texto-acto></span><input type="text" class="texto-nom" data-texto-nom spellcheck="false" autocomplete="off" placeholder="Sin título" aria-label="Título del documento"></div>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-texto-biblioteca title="Abrir la biblioteca enlazada al esquema" hidden><svg width="15" height="15"><use href="#ic-docs"></use></svg>Ver biblioteca</button>
+      <button type="button" class="btn" data-texto-esquema title="Ver este nodo en el esquema (Ctrl+Shift+G)"><svg width="15" height="15"><use href="#ic-board"></use></svg>Ver en el esquema</button>
+      <span class="par-nav"><button type="button" data-texto-mover="-1" title="Nota anterior (Ctrl+Alt+↑)" aria-label="Nota anterior"><svg width="13" height="13"><use href="#ic-arr-l"></use></svg></button><button type="button" data-texto-mover="1" title="Nota siguiente (Ctrl+Alt+↓)" aria-label="Nota siguiente"><svg width="13" height="13"><use href="#ic-arr-r"></use></svg></button></span>
+    </header>
+    <!-- la tira de la trama; debajo, dentro del marco, la cinta del editor y la hoja -->
     <nav id="hilo" class="hilo" aria-label="Nodos de la trama"></nav>
+    <!-- con una nota del gestor de documentos: las migas en lugar de la tira -->
+    <nav id="migas" class="migas" aria-label="Ruta de la nota"></nav>
     <iframe id="editorMarco" title="Editor de texto"></iframe>
   </section>
-  <aside id="panel"></aside>
+  <!-- Vista Documentos: barra lateral (solo aquí) y tablero de etiquetas del contenedor abierto -->
+  <section id="documentos" aria-label="Gestor de documentos">
+    <div class="gd-main" id="gdMain"></div>
+  </section>
 </main>
 
 <dialog id="dlg">
@@ -69,6 +164,34 @@
   </form>
 </dialog>
 
+<!-- nombre para un contenedor nuevo -->
+<dialog id="dlgNombre">
+  <form method="dialog">
+    <div class="dlg-ceja" data-dlg-ceja></div>
+    <p class="dlg-titulo" data-dlg-titulo>Crear contenedor</p>
+    <label class="dlg-campo"><span class="dlg-rotulo">Nombre</span><input type="text" name="nombre" autocomplete="off" placeholder="" aria-label="Nombre"></label>
+    <!-- solo al crear un personaje: su color (la paleta de 16 del editor) -->
+    <div class="dlg-colores" data-dlg-colores hidden>
+      <span class="dlg-rotulo">Color</span>
+      <div class="gd-paleta dlg-paleta"></div>
+    </div>
+    <!-- solo al crear dentro de un contenedor: qué clase de hijo -->
+    <div class="dlg-tipos" data-dlg-tipos hidden>
+      <span class="dlg-rotulo">Tipo</span>
+      <div class="dlg-tipos-grid">
+        <button type="button" class="dlg-tipo" data-dlg-tipo="esquema"><span class="dlg-tipo-cab"><span class="gd-chip gd-chip--esquema">Esquema</span><span class="dlg-radio"><svg width="11" height="11"><use href="#ic-check"></use></svg></span></span><span class="dlg-tipo-desc">Un tablero de tramas, actos y nodos.</span></button>
+        <button type="button" class="dlg-tipo" data-dlg-tipo="sub"><span class="dlg-tipo-cab"><span class="gd-chip gd-chip--sub">Biblioteca</span><span class="dlg-radio"><svg width="11" height="11"><use href="#ic-check"></use></svg></span></span><span class="dlg-tipo-desc">Tarjetas por segmento con notas.</span></button>
+      </div>
+    </div>
+    <menu>
+      <span class="dlg-pista">Enter crea · Esc cancela</span>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-dlg-cancel>Cancelar</button>
+      <button type="submit" class="btn primario" data-dlg-ok>Crear</button>
+    </menu>
+  </form>
+</dialog>
+
 <div id="menu"></div>
 <div id="tip"></div>
 <div id="aviso"></div>
@@ -76,7 +199,9 @@
 <script src="js/tramas/modelo.js"></script>
 <script src="js/tramas/tablero.js"></script>
 <script src="js/claquedraw/biblioteca.js"></script>
+<script src="js/claquedraw/documentos.js"></script>
 <script src="js/claquedraw/texto.js"></script>
+<script src="js/claquedraw/gestor.js"></script>
 <script src="js/claquedraw/app.js"></script>
 </body>
 </html>

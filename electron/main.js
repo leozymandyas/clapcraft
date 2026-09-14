@@ -1,5 +1,5 @@
 /* Proceso principal de Electron: ventana + diálogos nativos de abrir/guardar */
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 
@@ -9,7 +9,7 @@ function createWindow() {
     height: 860,
     minWidth: 900,
     minHeight: 600,
-    title: 'Claquedraw',
+    title: 'ClapCraft',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -17,7 +17,7 @@ function createWindow() {
       spellcheck: false /* el corrector propio (js/spell.js) evita el doble subrayado */
     }
   });
-  /* La app abre Claquedraw (esquema de pasos + editor); el editor va dentro, en su marco */
+  /* La app abre ClapCraft (claquedraw.html: esquema de pasos + editor); el editor va dentro, en su marco */
   win.loadFile(path.join(__dirname, '..', 'claquedraw.html'));
   ventana = win;
   win.on('closed', () => { if (ventana === win) ventana = null; });
@@ -29,19 +29,57 @@ function createWindow() {
   });
 }
 
-/* Abrir un .cld desde el Finder (doble clic o «Abrir con»): macOS avisa con open-file, a veces antes
+/* Abrir un .clapcraft desde el Finder (doble clic o «Abrir con»): macOS avisa con open-file, a veces antes
    de que exista la ventana; Windows/Linux pasan la ruta en los argumentos. */
 let ventana = null, rutaPendiente = null;
 function abrirRuta(p) {
-  if (!p || !/\.(cld|json)$/i.test(p)) return;
+  if (!p || !/\.clapcraft$/i.test(p)) return;
   if (ventana && !ventana.webContents.isLoading()) ventana.webContents.send('abrir-ruta', p);
   else rutaPendiente = p;
 }
 app.on('open-file', (e, p) => { e.preventDefault(); abrirRuta(p); });
 
+/* Menú de la aplicación: Archivo, Edición y Ver mandan órdenes al renderer (canal 'menu'); así los
+   botones de guardar, abrir o modo oscuro no hace falta tenerlos en la barra de la página. Deshacer y
+   Rehacer no llevan rol nativo: el tablero tiene su propio historial y el editor el suyo. En Ver solo
+   va el modo oscuro (Leo): las vistas se cambian desde la barra de documentos y con los atajos de la
+   página (Ctrl+Shift+G/F/K/T/B), que en Electron llegan porque el menú ya no los captura. */
+function enviar(accion) { const w = BrowserWindow.getFocusedWindow() || ventana; if (w) w.webContents.send('menu', accion); }
+let temaOscuro = false;
+ipcMain.on('tema', (_e, oscuro) => { temaOscuro = !!oscuro; montarMenu(); });   // el rótulo del menú sigue al tema
+function montarMenu() {
+  const mac = process.platform === 'darwin';
+  const plantilla = [
+    ...(mac ? [{ label: app.name, submenu: [
+      { role: 'about', label: 'Acerca de ClapCraft' }, { type: 'separator' },
+      { role: 'hide', label: 'Ocultar ClapCraft' }, { role: 'hideOthers', label: 'Ocultar otros' }, { role: 'unhide', label: 'Mostrar todo' },
+      { type: 'separator' }, { role: 'quit', label: 'Salir de ClapCraft' }] }] : []),
+    { label: 'Archivo', submenu: [
+      { label: 'Nueva pestaña', accelerator: 'CmdOrCtrl+N', click: () => enviar('nuevo') },
+      { label: 'Abrir…', accelerator: 'CmdOrCtrl+O', click: () => enviar('abrir') },
+      { type: 'separator' },
+      { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => enviar('guardar') },
+      { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => enviar('guardarComo') },
+      { type: 'separator' },
+      { label: 'Cerrar pestaña', accelerator: 'CmdOrCtrl+W', click: () => enviar('cerrar') },
+      ...(mac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Salir' }]) ] },
+    { label: 'Edición', submenu: [
+      { label: 'Deshacer', accelerator: 'CmdOrCtrl+Z', click: () => enviar('deshacer') },
+      { label: 'Rehacer', accelerator: 'CmdOrCtrl+Shift+Z', click: () => enviar('rehacer') },
+      { type: 'separator' },
+      { role: 'cut', label: 'Cortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Pegar' },
+      { role: 'selectAll', label: 'Seleccionar todo' } ] },
+    { label: 'Ver', submenu: [
+      { label: temaOscuro ? 'Modo claro' : 'Modo oscuro', accelerator: 'CmdOrCtrl+Shift+D', click: () => enviar('tema') } ] },
+    { role: 'window', label: 'Ventana', submenu: [{ role: 'minimize', label: 'Minimizar' }, { role: 'zoom', label: 'Zoom' }, ...(mac ? [{ type: 'separator' }, { role: 'front', label: 'Traer todo al frente' }] : [{ role: 'close', label: 'Cerrar' }])] }
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(plantilla));
+}
+
 app.whenReady().then(() => {
+  montarMenu();
   createWindow();
-  const arg = process.argv.slice(1).find(a => /\.(cld|json)$/i.test(a));
+  const arg = process.argv.slice(1).find(a => /\.clapcraft$/i.test(a));
   if (arg) rutaPendiente = arg;
   ventana.webContents.on('did-finish-load', () => { if (rutaPendiente) { const p = rutaPendiente; rutaPendiente = null; ventana.webContents.send('abrir-ruta', p); } });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -49,25 +87,29 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
+/* El contenido puede ser texto (tramas.html) o bytes (los .clapcraft van comprimidos con gzip); al leer,
+   `binario` devuelve los bytes tal cual. */
+const escribir = (p, content) => typeof content === 'string' ? fs.writeFile(p, content, 'utf8') : fs.writeFile(p, Buffer.from(content));
+const leer = (p, binario) => binario ? fs.readFile(p).then(b => new Uint8Array(b)) : fs.readFile(p, 'utf8');
 ipcMain.handle('file:save', async (event, { defaultPath, content, filters }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const { canceled, filePath } = await dialog.showSaveDialog(win, { defaultPath, filters });
   if (canceled || !filePath) return null;
-  await fs.writeFile(filePath, content, 'utf8');
+  await escribir(filePath, content);
   return filePath;
 });
 
 /* Escritura y lectura sin diálogo, para el autoguardado de Claquedraw en el archivo ya elegido */
 ipcMain.handle('file:write', async (event, { path: p, content }) => {
-  await fs.writeFile(p, content, 'utf8');
+  await escribir(p, content);
   return p;
 });
-ipcMain.handle('file:read', async (event, { path: p }) => fs.readFile(p, 'utf8'));
+ipcMain.handle('file:read', async (event, { path: p, binario }) => leer(p, binario));
 
-ipcMain.handle('file:open', async (event, { filters }) => {
+ipcMain.handle('file:open', async (event, { filters, binario }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const { canceled, filePaths } = await dialog.showOpenDialog(win, { properties: ['openFile'], filters });
   if (canceled || !filePaths[0]) return null;
   const p = filePaths[0];
-  return { path: p, name: path.basename(p), content: await fs.readFile(p, 'utf8') };
+  return { path: p, name: path.basename(p), content: await leer(p, binario) };
 });

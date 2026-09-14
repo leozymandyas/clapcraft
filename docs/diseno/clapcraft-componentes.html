@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClapCraft · pantallas y componentes para el diseño</title>
+<style>
+/* Hoja neutra a propósito (gris, sin estilo): enseña la estructura para que el diseño la vista.
+   Nada de aquí es el aspecto final. */
+:root { --g0: #fff; --g1: #f6f6f6; --g2: #e6e6e6; --g3: #c8c8c8; --g4: #8a8a8a; --g5: #333; --nota: #fff7d6; --marca: #6a4c9c; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--g5); background: var(--g0); }
+main { max-width: 1180px; margin: 0 auto; padding: 32px 28px 80px; }
+h1 { font-size: 28px; margin: 0 0 6px; }
+h2 { font-size: 20px; margin: 48px 0 10px; padding-top: 18px; border-top: 1px solid var(--g2); }
+h3 { font-size: 15px; margin: 26px 0 8px; }
+p, li { max-width: 860px; }
+.sub { color: var(--g4); margin: 0 0 18px; }
+code, .tok { font: 12.5px ui-monospace, Menlo, Consolas, monospace; background: var(--g1); padding: 1px 5px; border-radius: 3px; }
+.nota { background: var(--nota); border: 1px solid #ead9a0; padding: 10px 14px; border-radius: 6px; max-width: 860px; }
+table { border-collapse: collapse; width: 100%; max-width: 980px; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--g2); vertical-align: top; }
+th { color: var(--g4); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+/* wireframes */
+.wf { border: 1px solid var(--g3); border-radius: 6px; background: var(--g0); overflow: hidden; margin: 10px 0 6px; font-size: 12px; }
+.wf .bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--g1); border-bottom: 1px solid var(--g3); flex-wrap: wrap; }
+.wf .tabs { display: flex; gap: 6px; padding: 6px 10px 0; background: var(--g1); border-bottom: 1px solid var(--g3); }
+.wf .tab { padding: 4px 10px; border: 1px solid var(--g3); border-bottom: 0; border-radius: 6px 6px 0 0; background: var(--g0); }
+.wf .tab.on { font-weight: 600; }
+.wf .cuerpo { display: flex; min-height: 300px; }
+.wf .lado { width: 200px; flex: none; border-right: 1px solid var(--g3); padding: 10px; background: var(--g1); }
+.wf .centro { flex: 1; padding: 12px; min-width: 0; overflow: hidden; position: relative; }
+.wf .panel { width: 190px; flex: none; border-left: 1px solid var(--g3); padding: 10px; background: var(--g1); }
+.wf .caja { border: 1px dashed var(--g3); border-radius: 4px; padding: 6px 8px; margin: 6px 0; background: var(--g0); }
+.wf .fila { padding: 3px 4px; }
+.wf .fila.sub { padding-left: 18px; color: var(--g4); }
+.wf .fila.on { background: var(--g2); border-radius: 3px; }
+.wf .btn { border: 1px solid var(--g3); border-radius: 4px; padding: 3px 8px; background: var(--g0); display: inline-block; }
+.wf .btn.on { background: var(--g2); }
+.wf .chip { display: inline-block; border: 1px solid var(--g3); border-radius: 3px; padding: 0 5px; font-size: 11px; }
+.wf .tarjetas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.wf .tarjeta { border: 1px solid var(--g3); border-radius: 6px; overflow: hidden; }
+.wf .tarjeta > header { padding: 5px 8px; background: var(--g1); border-bottom: 1px solid var(--g3); display: flex; justify-content: space-between; }
+.wf .tarjeta > div { padding: 6px; }
+.wf .nota-c { border: 1px solid var(--g3); border-radius: 4px; padding: 4px 6px; margin-bottom: 5px; background: var(--g0); display: flex; justify-content: space-between; }
+.wf .tira { display: flex; align-items: flex-end; gap: 26px; padding: 10px 14px 16px; border-bottom: 1px solid var(--g3); background: var(--g1); position: relative; }
+.wf .tira::before { content: ''; position: absolute; left: 90px; right: 14px; bottom: 22px; height: 2px; background: var(--g3); }
+.wf .nodo { position: relative; text-align: center; width: 70px; }
+.wf .nodo i { display: block; width: 12px; height: 12px; border: 2px solid var(--g5); border-radius: 50%; margin: 4px auto 0; background: var(--g0); }
+.wf .nodo i.caja { border-radius: 2px; } .wf .nodo i.rombo { transform: rotate(45deg); border-radius: 1px; }
+.wf .hoja { margin: 16px auto; width: 60%; min-height: 160px; border: 1px solid var(--g3); background: var(--g0); padding: 16px; font-family: "Courier Prime", "Courier New", monospace; }
+.wf .barra-inf { background: var(--g5); color: var(--g0); padding: 6px 12px; display: flex; gap: 14px; }
+.wf .tablero { position: relative; height: 200px; background: repeating-linear-gradient(90deg, var(--g2) 0 1px, transparent 1px 48px); }
+.wf .tablero .acto { position: absolute; top: 0; height: 22px; line-height: 22px; padding: 0 8px; border-right: 1px solid var(--g3); border-bottom: 1px solid var(--g3); background: var(--g1); }
+.wf .tablero .trama { position: absolute; left: 0; right: 0; height: 2px; background: var(--g3); }
+.wf .tablero .etq { position: absolute; left: 0; width: 90px; padding: 0 8px; font-size: 11px; background: var(--g1); border-right: 1px solid var(--g3); height: 40px; line-height: 40px; }
+.wf .tablero .pt { position: absolute; width: 12px; height: 12px; border: 2px solid var(--g5); border-radius: 50%; background: var(--g0); }
+.wf .tablero .pt.caja { border-radius: 2px; } .wf .tablero .pt.rombo { transform: rotate(45deg); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.comp { border: 1px solid var(--g2); border-radius: 6px; padding: 12px 14px; }
+.comp h4 { margin: 0 0 6px; font-size: 13px; }
+.comp .demo { border: 1px dashed var(--g3); border-radius: 4px; padding: 10px; background: var(--g1); margin-bottom: 6px; font-size: 12px; }
+.comp .estados { color: var(--g4); font-size: 12px; }
+.pop { display: inline-block; border: 1px solid var(--g3); border-radius: 6px; background: var(--g0); padding: 4px; min-width: 150px; }
+.pop div { padding: 3px 8px; } .pop .t { font-size: 10px; text-transform: uppercase; color: var(--g4); letter-spacing: .05em; }
+.pop .sep { border-top: 1px solid var(--g2); padding: 0; margin: 3px 0; } .pop .peligro { color: #a33; }
+.paleta { display: grid; grid-template-columns: repeat(8, 18px); gap: 4px; }
+.paleta i { display: block; width: 18px; height: 18px; border-radius: 3px; border: 1px solid var(--g3); }
+.dlg { border: 1px solid var(--g3); border-radius: 8px; padding: 14px 16px; background: var(--g0); max-width: 320px; }
+.toast { display: inline-block; background: var(--g5); color: var(--g0); padding: 6px 12px; border-radius: 6px; }
+.kbd { border: 1px solid var(--g3); border-radius: 3px; padding: 0 4px; font: 11px ui-monospace, monospace; }
+.ok { color: #2a7; }
+/* estado actual */
+@font-face { font-family: "Patrick Hand"; src: url("../../fonts/PatrickHand-Regular.ttf") format("truetype"); }
+@font-face { font-family: "Courier Prime"; src: url("../../fonts/CourierPrime-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "Courier Prime"; src: url("../../fonts/CourierPrime-Bold.ttf") format("truetype"); font-weight: 700; }
+.captura { margin: 14px 0 22px; }
+.captura img { width: 100%; max-width: 1180px; border: 1px solid var(--g2); border-radius: 6px; display: block; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+.captura figcaption { font-size: 12.5px; color: var(--g4); margin-top: 6px; }
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.dos .captura img { max-width: 100%; }
+.recorte img { width: auto; max-width: 100%; }
+.tokens td:first-child { width: 190px; }
+.tokens .grupo { background: var(--g1); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--g4); }
+.sw { display: inline-block; width: 26px; height: 18px; border: 1px solid var(--g3); border-radius: 3px; vertical-align: middle; margin-right: 8px; background-image: linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%), linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%); background-size: 8px 8px; background-position: 0 0, 4px 4px; }
+.pal16 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 980px; }
+.tono { font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+.chip16 { display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
+.tipo { border: 1px solid var(--g2); border-radius: 6px; padding: 12px 14px; margin: 10px 0; }
+.tipo .muestra { font-size: 22px; margin: 6px 0; }
+.tipo .usos { color: var(--g4); font-size: 12.5px; }
+.tallas td { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+<h1>ClapCraft · pantallas y componentes</h1>
+<p class="sub">Documento para pedir un diseño visual. Enseña, sin estilo, todo lo que la aplicación pinta hoy y con qué nombre lo pinta el código, para que el diseño que vuelva se pueda aplicar tal cual.</p>
+
+<div class="nota"><b>Qué se pide.</b> Un sistema visual (tipografías, colores claro y oscuro, bordes, radios, sombras, espaciados) y el aspecto de cada componente de la sección 4 en sus estados, aplicado a las cuatro pantallas de la sección 3. Entregar en el formato que se prefiera (Figma, imágenes, HTML/CSS). Cuanto más se respeten los nombres de esta página, más directo es llevarlo al código. <b>Único requisito fijo:</b> la marca «ClapCraft» junto al logo va en <b>Courier New negrita</b>. El documento del guion se escribe en Courier Prime (letra estándar de guion).</div>
+
+<h2>0. Estado actual (lo que hay hoy, para mejorarlo)</h2>
+<div class="nota"><b>Cambios posteriores a estas capturas.</b> Los subcontenedores «Personajes» y «Documentos guión» se quitaron: cada contenedor tiene esquemas de pasos y subcontenedores con nombre propio (un contenedor nuevo trae «Documentos»), creados con su «＋» y un diálogo, y se reordenan o se mueven a otro contenedor arrastrando. Ya no hay contenedor especial (Trama global es uno más). Los tableros no llevan botones arriba (＋ Segmento, ＋ Nota, ⋯); la cabecera son migas navegables con «‹». El campo «Nombre del contenedor…» de la barra es ahora un botón «＋ Nuevo contenedor» que abre un diálogo. El árbol se reordena arrastrando. El menú Ver de la app solo tiene Modo oscuro. Las capturas se regeneran con el script indicado al final.</div>
+<p>Capturas reales de la aplicación con datos de muestra, a 1280×820 (imágenes a doble resolución). Debajo, la paleta y la tipografía exactas que usa el código. Todo esto es lo que se quiere sustituir: sirve para saber qué hay y con qué nombre, no como referencia de estilo.</p>
+
+<h3>0.1 Pantallas actuales</h3>
+<figure class="captura"><img src="img/01-esquema-claro.png" alt="Vista Esquema, modo claro"><figcaption>Esquema de pasos, modo claro: cabecera, pestañas, barra de documentos fija a la izquierda, columna de tramas, eje de actos, nodos (punto, cuadro y rombo de salto, nota amarilla entre nodos).</figcaption></figure>
+<figure class="captura"><img src="img/02-esquema-oscuro.png" alt="Vista Esquema, modo oscuro"><figcaption>Lo mismo en modo oscuro.</figcaption></figure>
+<figure class="captura"><img src="img/03-texto-claro.png" alt="Vista Texto"><figcaption>Texto: la tira de la trama Principal arriba (nodo actual resaltado, cuadros con el trazo del salto), la barra de título del documento con «‹ Esquema» y las flechas, y la hoja en Courier Prime con chips de personaje. La cinta de formato del editor está escondida (se cambia por la tira con el pin de la derecha).</figcaption></figure>
+<figure class="captura"><img src="img/04-texto-oscuro.png" alt="Vista Texto, modo oscuro"><figcaption>Texto en modo oscuro.</figcaption></figure>
+<figure class="captura"><img src="img/05-documentos-claro.png" alt="Vista Documentos"><figcaption>Documentos: el tablero «Documentos» del contenedor «Investigación»: cabecera con ruta, barra de sección con filtro, bandeja, tarjetas por segmento (color de la paleta) y «＋ nuevo segmento».</figcaption></figure>
+<figure class="captura"><img src="img/06-personajes-global.png" alt="Personajes de Trama global"><figcaption>«Personajes» de Trama global: una tarjeta por personaje con su color; la ficha de Ana que vive en «Investigación» aparece con borde discontinuo y su origen.</figcaption></figure>
+<figure class="captura"><img src="img/07-documentos-guion.png" alt="Documentos guión"><figcaption>«Documentos guión»: el esquema del proyecto como tarjetas fijas por acto con los nodos como notas.</figcaption></figure>
+<div class="dos">
+<figure class="captura"><img src="img/08-menu-contextual.png" alt="Menú del contenedor"><figcaption>Menú ⋯ de un contenedor.</figcaption></figure>
+<figure class="captura"><img src="img/10-barra-suelta-asomada.png" alt="Barra suelta asomada"><figcaption>Barra de documentos suelta, asomada por encima del esquema (con el asa «Documentos» en el borde cuando está escondida).</figcaption></figure>
+</div>
+<figure class="captura"><img src="img/09-documentos-oscuro.png" alt="Documentos, modo oscuro"><figcaption>Documentos en modo oscuro.</figcaption></figure>
+<figure class="captura"><img src="img/11-editor-solo.png" alt="El editor solo"><figcaption>El editor de texto por sí solo (<code>index.html</code>, el que va dentro del marco): cinta de formato de dos filas, barra de título, hoja y barra inferior oscura con zoom, tamaño, ancho, Modo guion, Typewriter, Modo oscuro, Ortografía y Fijar.</figcaption></figure>
+
+<h3>0.2 Piezas recortadas</h3>
+<div class="dos">
+<figure class="captura recorte"><img src="img/12-arbol.png" alt="El árbol de la barra"><figcaption>El árbol de la barra de documentos: título con buscar y pin, campo de crear con pista, buscador, rótulo «CONTENEDORES · 2» con botón de orden, «Trama global» activo con sus cuatro subcontenedores (el punto lavanda marca el esquema montado; «Documentos guión» seleccionado), «Investigación» con un esquema propio «Flashbacks» (chip), y «Papelera» con borde discontinuo.</figcaption></figure>
+<div>
+<figure class="captura recorte"><img src="img/14-cabecera.png" alt="Cabecera"><figcaption>Cabecera y pestañas: logo + «ClapCraft» en Courier New negrita, rótulo ESCALA con deslizador, Deshacer/Rehacer desactivados; pestaña «Sin título 1 *» y «＋».</figcaption></figure>
+<figure class="captura recorte"><img src="img/13-tira.png" alt="La tira"><figcaption>La tira de la trama y la barra de título del documento.</figcaption></figure>
+<figure class="captura recorte"><img src="img/16-editor-cinta.png" alt="Cinta del editor"><figcaption>La cinta de formato del editor (dos filas) y su barra de título.</figcaption></figure>
+</div>
+</div>
+<figure class="captura recorte"><img src="img/15-tarjetas.png" alt="Tarjetas del gestor"><figcaption>Tarjetas de segmento con notas, bandeja, «＋ nota» y «＋ nuevo segmento» con muestras de color.</figcaption></figure>
+
+<h3>0.3 Tipografía actual</h3>
+<div class="tipo"><b>Interfaz</b> · <code>--sans</code>: <code>-apple-system, "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial</code> (la del sistema; en Mac, SF Pro)<div class="muestra" style="font-family:-apple-system,'SF Pro Text','Segoe UI',Roboto,Helvetica,Arial,sans-serif">Trama global · Documentos guión · Nueva nota · Personajes</div><div class="usos">Cuerpo 14 px; filas del árbol 13 px; contenedores 13 px semibold; títulos de tablero 20 px semibold; botones 13 px medium; pestañas 13 px.</div></div>
+<div class="tipo"><b>Rótulos</b> · <code>--mono</code>: <code>ui-monospace, "SF Mono", Menlo, Consolas, "Courier New"</code><div class="muestra" style="font: 600 12px ui-monospace, Menlo, monospace; letter-spacing:.08em; text-transform:uppercase; color:#9a9aa6">CONTENEDORES · 2 &nbsp; SEGMENTOS &nbsp; ESCALA &nbsp; 4 notas · 2 segmentos &nbsp; hoy · ayer · 3 sep</div><div class="usos">10.5–11 px en mayúsculas con tracking .06–.08em: rótulos de grupo, barra de sección, metadatos, contadores, nombres de acto y tipo de trama en el tablero.</div></div>
+<div class="tipo"><b>Marca</b> · <code>--marca</code>: <code>"Courier New", Courier</code> negrita (requisito fijo)<div class="muestra" style="font: 700 22px 'Courier New', Courier, monospace">ClapCraft</div><div class="usos">15 px en la cabecera, junto al logo.</div></div>
+<div class="tipo"><b>Documento</b> · <code>--doc-font</code>: <code>"Courier Prime"</code> (empaquetada, regular/negrita/cursiva)<div class="muestra" style="font-family:'Courier Prime','Courier New',monospace">INT. CAFETERÍA DEL PUERTO – DÍA<br><b>ANA</b> &nbsp; No pensaba volver.</div><div class="usos">12 pt en la hoja (escalable 60–140 %), títulos h1 18 pt, h2 15 pt, h3 13 pt. También en el título del documento sobre la hoja.</div></div>
+<div class="tipo"><b>La anterior</b> · <code>"Patrick Hand"</code> (empaquetada; era toda la interfaz antes de la piel y aún es la base de <code>tramas.css</code> y <code>editor.css</code>)<div class="muestra" style="font-family:'Patrick Hand',cursive">Trama global · Documentos guión · Nueva nota · Personajes</div><div class="usos">Manuscrita, 15 px. Se descartó por poco profesional; puede desaparecer del todo.</div></div>
+<table class="tallas"><tr><th>Escala de tamaños en uso</th><th>Dónde</th></tr>
+<tr><td>9.5–11 px mono</td><td>rótulos, contadores, metadatos, pista «Enter crea · Esc cancela»</td></tr>
+<tr><td>12.5–13 px</td><td>filas del árbol, notas, botones, pestañas, menús, migas, cinta del editor</td></tr>
+<tr><td>14 px</td><td>cuerpo, campos, panel del nodo</td></tr>
+<tr><td>15–16 px</td><td>título «Documentos» de la barra, nombre de trama en la tira, contenedores</td></tr>
+<tr><td>20–22 px</td><td>título del tablero («Trama global › Documentos»)</td></tr>
+<tr><td>12 pt Courier Prime</td><td>la hoja del guion</td></tr></table>
+
+<h3>0.4 Paleta actual</h3>
+<p>Valores exactos de las variables CSS, claro y oscuro. La piel actual es gris neutro con la lavanda del logo como acento; debajo está también la paleta base anterior (crema y tinta) por si sirve de contraste.</p>
+<h3>Colores de la interfaz (piel actual: <code>css/clapcraft.css</code>)</h3><table class="tokens"><tr><th>Token</th><th>Claro</th><th>Oscuro</th></tr>
+<tr><td colspan="3" class="grupo">Superficies</td></tr>
+<tr><td><code>--papel</code></td><td><span class="sw" style="background:#ffffff"></span><code>#ffffff</code></td><td><span class="sw" style="background:#202026"></span><code>#202026</code></td></tr>
+<tr><td><code>--chrome</code></td><td><span class="sw" style="background:#f3f3f6"></span><code>#f3f3f6</code></td><td><span class="sw" style="background:#141418"></span><code>#141418</code></td></tr>
+<tr><td><code>--panel</code></td><td><span class="sw" style="background:#fafafb"></span><code>#fafafb</code></td><td><span class="sw" style="background:#1b1b20"></span><code>#1b1b20</code></td></tr>
+<tr><td><code>--hover</code></td><td><span class="sw" style="background:#f2f2f5"></span><code>#f2f2f5</code></td><td><span class="sw" style="background:#26262d"></span><code>#26262d</code></td></tr>
+<tr><td><code>--hover-fuerte</code></td><td><span class="sw" style="background:#e9e9ee"></span><code>#e9e9ee</code></td><td><span class="sw" style="background:#2e2e37"></span><code>#2e2e37</code></td></tr>
+<tr><td><code>--cuadricula</code></td><td><span class="sw" style="background:#ececf0"></span><code>#ececf0</code></td><td><span class="sw" style="background:#26262d"></span><code>#26262d</code></td></tr>
+<tr><td><code>--pista-hot</code></td><td><span class="sw" style="background:#f2f2f6"></span><code>#f2f2f6</code></td><td><span class="sw" style="background:#24242b"></span><code>#24242b</code></td></tr>
+<tr><td><code>--linea-menu</code></td><td><span class="sw" style="background:#ebebef"></span><code>#ebebef</code></td><td><span class="sw" style="background:#2f2f38"></span><code>#2f2f38</code></td></tr>
+<tr><td colspan="3" class="grupo">Trazos</td></tr>
+<tr><td><code>--regla</code></td><td><span class="sw" style="background:#e6e6eb"></span><code>#e6e6eb</code></td><td><span class="sw" style="background:#2c2c34"></span><code>#2c2c34</code></td></tr>
+<tr><td><code>--regla-fuerte</code></td><td><span class="sw" style="background:#d3d3da"></span><code>#d3d3da</code></td><td><span class="sw" style="background:#3b3b46"></span><code>#3b3b46</code></td></tr>
+<tr><td><code>--borde</code></td><td><span class="sw" style="background:#dcdce2"></span><code>#dcdce2</code></td><td><span class="sw" style="background:#33333d"></span><code>#33333d</code></td></tr>
+<tr><td><code>--borde-fuerte</code></td><td><span class="sw" style="background:#b9b9c3"></span><code>#b9b9c3</code></td><td><span class="sw" style="background:#4a4a58"></span><code>#4a4a58</code></td></tr>
+<tr><td colspan="3" class="grupo">Texto</td></tr>
+<tr><td><code>--tinta</code></td><td><span class="sw" style="background:#1d1d22"></span><code>#1d1d22</code></td><td><span class="sw" style="background:#ececf1"></span><code>#ececf1</code></td></tr>
+<tr><td><code>--tenue</code></td><td><span class="sw" style="background:#6b6b76"></span><code>#6b6b76</code></td><td><span class="sw" style="background:#9a9aa6"></span><code>#9a9aa6</code></td></tr>
+<tr><td><code>--palido</code></td><td><span class="sw" style="background:#9a9aa6"></span><code>#9a9aa6</code></td><td><span class="sw" style="background:#6c6c78"></span><code>#6c6c78</code></td></tr>
+<tr><td><code>--inverso</code></td><td><span class="sw" style="background:#f3f3f6"></span><code>#f3f3f6</code></td><td><span class="sw" style="background:#141418"></span><code>#141418</code></td></tr>
+<tr><td colspan="3" class="grupo">Acento</td></tr>
+<tr><td><code>--foco</code></td><td><span class="sw" style="background:#6a4c9c"></span><code>#6a4c9c</code></td><td><span class="sw" style="background:#c8abe8"></span><code>#c8abe8</code></td></tr>
+<tr><td><code>--foco-suave</code></td><td><span class="sw" style="background:#efe8f8"></span><code>#efe8f8</code></td><td><span class="sw" style="background:#2f2741"></span><code>#2f2741</code></td></tr>
+<tr><td><code>--foco-halo</code></td><td><span class="sw" style="background:rgba(106, 76, 156, .18)"></span><code>rgba(106, 76, 156, .18)</code></td><td><span class="sw" style="background:rgba(200, 171, 232, .22)"></span><code>rgba(200, 171, 232, .22)</code></td></tr>
+<tr><td><code>--foco-banda</code></td><td><span class="sw" style="background:rgba(106, 76, 156, .06)"></span><code>rgba(106, 76, 156, .06)</code></td><td><span class="sw" style="background:rgba(200, 171, 232, .07)"></span><code>rgba(200, 171, 232, .07)</code></td></tr>
+<tr><td><code>--foco-linea</code></td><td><span class="sw" style="background:rgba(106, 76, 156, .3)"></span><code>rgba(106, 76, 156, .3)</code></td><td><span class="sw" style="background:rgba(200, 171, 232, .32)"></span><code>rgba(200, 171, 232, .32)</code></td></tr>
+<tr><td colspan="3" class="grupo">Semánticos</td></tr>
+<tr><td><code>--peligro</code></td><td><span class="sw" style="background:#b3362a"></span><code>#b3362a</code></td><td><span class="sw" style="background:#e8857a"></span><code>#e8857a</code></td></tr>
+<tr><td><code>--peligro-bg</code></td><td><span class="sw" style="background:#fbe4e0"></span><code>#fbe4e0</code></td><td><span class="sw" style="background:#3f2522"></span><code>#3f2522</code></td></tr>
+<tr><td><code>--nota</code></td><td><span class="sw" style="background:#fbf3dc"></span><code>#fbf3dc</code></td><td><span class="sw" style="background:#3a3220"></span><code>#3a3220</code></td></tr>
+<tr><td><code>--nota-borde</code></td><td><span class="sw" style="background:#e6d5a3"></span><code>#e6d5a3</code></td><td><span class="sw" style="background:#6b5729"></span><code>#6b5729</code></td></tr>
+<tr><td><code>--nota-tinta</code></td><td><span class="sw" style="background:#6e4f12"></span><code>#6e4f12</code></td><td><span class="sw" style="background:#e3c98c"></span><code>#e3c98c</code></td></tr>
+<tr><td><code>--nota-edit</code></td><td><span class="sw" style="background:#fdf8e8"></span><code>#fdf8e8</code></td><td><span class="sw" style="background:#41361f"></span><code>#41361f</code></td></tr>
+<tr><td><code>--nota-tenue</code></td><td><span class="sw" style="background:#9a7a2a"></span><code>#9a7a2a</code></td><td><span class="sw" style="background:#c2a24e"></span><code>#c2a24e</code></td></tr>
+<tr><td colspan="3" class="grupo">Tablero: tramas y nodos</td></tr>
+<tr><td><code>--t-azul</code></td><td><span class="sw" style="background:#3556a8"></span><code>#3556a8</code></td><td><span class="sw" style="background:#8aa8ee"></span><code>#8aa8ee</code></td></tr>
+<tr><td><code>--t-violeta</code></td><td><span class="sw" style="background:#6a4c9c"></span><code>#6a4c9c</code></td><td><span class="sw" style="background:#c8abe8"></span><code>#c8abe8</code></td></tr>
+<tr><td><code>--t-verde</code></td><td><span class="sw" style="background:#2f7a3e"></span><code>#2f7a3e</code></td><td><span class="sw" style="background:#7cc48c"></span><code>#7cc48c</code></td></tr>
+<tr><td><code>--t-ambar</code></td><td><span class="sw" style="background:#9a6a10"></span><code>#9a6a10</code></td><td><span class="sw" style="background:#d8a63f"></span><code>#d8a63f</code></td></tr>
+<tr><td><code>--t-rojo</code></td><td><span class="sw" style="background:#b3362a"></span><code>#b3362a</code></td><td><span class="sw" style="background:#e8857a"></span><code>#e8857a</code></td></tr>
+<tr><td><code>--t-gris</code></td><td><span class="sw" style="background:#5b5b66"></span><code>#5b5b66</code></td><td><span class="sw" style="background:#b0b0bb"></span><code>#b0b0bb</code></td></tr>
+<tr><td><code>--escena</code></td><td><span class="sw" style="background:#cdb787"></span><code>#cdb787</code></td><td><span class="sw" style="background:#cbb583"></span><code>#cbb583</code></td></tr>
+<tr><td><code>--escena-trazo</code></td><td><span class="sw" style="background:#b39d70"></span><code>#b39d70</code></td><td><span class="sw" style="background:#cbb583"></span><code>#cbb583</code></td></tr>
+<tr><td><code>--rombo</code></td><td><span class="sw" style="background:#7a5aa8"></span><code>#7a5aa8</code></td><td><span class="sw" style="background:#b592e0"></span><code>#b592e0</code></td></tr>
+<tr><td><code>--rombo-trazo</code></td><td><span class="sw" style="background:#7a5aa8"></span><code>#7a5aa8</code></td><td><span class="sw" style="background:#b592e0"></span><code>#b592e0</code></td></tr>
+<tr><td colspan="3" class="grupo">Tablero: fondos de acto</td></tr>
+<tr><td><code>--f-azul</code></td><td><span class="sw" style="background:#e6ecfb"></span><code>#e6ecfb</code></td><td><span class="sw" style="background:#1f2a44"></span><code>#1f2a44</code></td></tr>
+<tr><td><code>--f-violeta</code></td><td><span class="sw" style="background:#efe8f8"></span><code>#efe8f8</code></td><td><span class="sw" style="background:#2f2741"></span><code>#2f2741</code></td></tr>
+<tr><td><code>--f-verde</code></td><td><span class="sw" style="background:#e4f2e6"></span><code>#e4f2e6</code></td><td><span class="sw" style="background:#1d3324"></span><code>#1d3324</code></td></tr>
+<tr><td><code>--f-ambar</code></td><td><span class="sw" style="background:#fbf1d6"></span><code>#fbf1d6</code></td><td><span class="sw" style="background:#3a3020"></span><code>#3a3020</code></td></tr>
+<tr><td><code>--f-rojo</code></td><td><span class="sw" style="background:#fbe4e0"></span><code>#fbe4e0</code></td><td><span class="sw" style="background:#3f2522"></span><code>#3f2522</code></td></tr>
+<tr><td><code>--f-gris</code></td><td><span class="sw" style="background:#ebebef"></span><code>#ebebef</code></td><td><span class="sw" style="background:#2b2b32"></span><code>#2b2b32</code></td></tr>
+</table>
+<h3>Colores del editor (<code>css/clapcraft-editor.css</code>)</h3><table class="tokens"><tr><th>Token</th><th>Claro</th><th>Oscuro</th></tr>
+<tr><td><code>--bg</code></td><td><span class="sw" style="background:#f3f3f6"></span><code>#f3f3f6</code></td><td><span class="sw" style="background:#1b1b20"></span><code>#1b1b20</code></td></tr>
+<tr><td><code>--canvas</code></td><td><span class="sw" style="background:#e9e9ee"></span><code>#e9e9ee</code></td><td><span class="sw" style="background:#141418"></span><code>#141418</code></td></tr>
+<tr><td><code>--bar</code></td><td><span class="sw" style="background:#fafafb"></span><code>#fafafb</code></td><td><span class="sw" style="background:#1b1b20"></span><code>#1b1b20</code></td></tr>
+<tr><td><code>--bar-2</code></td><td><span class="sw" style="background:#f3f3f6"></span><code>#f3f3f6</code></td><td><span class="sw" style="background:#202026"></span><code>#202026</code></td></tr>
+<tr><td><code>--ink</code></td><td><span class="sw" style="background:#dcdce2"></span><code>#dcdce2</code></td><td><span class="sw" style="background:#33333d"></span><code>#33333d</code></td></tr>
+<tr><td><code>--line</code></td><td><span class="sw" style="background:#d3d3da"></span><code>#d3d3da</code></td><td><span class="sw" style="background:#4a4a58"></span><code>#4a4a58</code></td></tr>
+<tr><td><code>--line-soft</code></td><td><span class="sw" style="background:#e6e6eb"></span><code>#e6e6eb</code></td><td><span class="sw" style="background:#2c2c34"></span><code>#2c2c34</code></td></tr>
+<tr><td><code>--fg</code></td><td><span class="sw" style="background:#1d1d22"></span><code>#1d1d22</code></td><td><span class="sw" style="background:#ececf1"></span><code>#ececf1</code></td></tr>
+<tr><td><code>--muted</code></td><td><span class="sw" style="background:#6b6b76"></span><code>#6b6b76</code></td><td><span class="sw" style="background:#9a9aa6"></span><code>#9a9aa6</code></td></tr>
+<tr><td><code>--muted-2</code></td><td><span class="sw" style="background:#9a9aa6"></span><code>#9a9aa6</code></td><td><span class="sw" style="background:#6c6c78"></span><code>#6c6c78</code></td></tr>
+<tr><td><code>--icon</code></td><td><span class="sw" style="background:#4f4f5a"></span><code>#4f4f5a</code></td><td><span class="sw" style="background:#b8b8c4"></span><code>#b8b8c4</code></td></tr>
+<tr><td><code>--hover</code></td><td><span class="sw" style="background:#ececf0"></span><code>#ececf0</code></td><td><span class="sw" style="background:#26262d"></span><code>#26262d</code></td></tr>
+<tr><td><code>--accent</code></td><td><span class="sw" style="background:#6a4c9c"></span><code>#6a4c9c</code></td><td><span class="sw" style="background:#c8abe8"></span><code>#c8abe8</code></td></tr>
+<tr><td><code>--accent-bg</code></td><td><span class="sw" style="background:#efe8f8"></span><code>#efe8f8</code></td><td><span class="sw" style="background:#2f2741"></span><code>#2f2741</code></td></tr>
+<tr><td><code>--accent-fg</code></td><td><span class="sw" style="background:#6a4c9c"></span><code>#6a4c9c</code></td><td><span class="sw" style="background:#c8abe8"></span><code>#c8abe8</code></td></tr>
+<tr><td><code>--select-bg</code></td><td><span class="sw" style="background:rgba(239, 232, 248, .7)"></span><code>rgba(239, 232, 248, .7)</code></td><td><span class="sw" style="background:rgba(47, 39, 65, .6)"></span><code>rgba(47, 39, 65, .6)</code></td></tr>
+<tr><td><code>--star</code></td><td><span class="sw" style="background:#d9a021"></span><code>#d9a021</code></td><td><span class="sw" style="background:#e8b74a"></span><code>#e8b74a</code></td></tr>
+<tr><td><code>--page-bg</code></td><td><span class="sw" style="background:#ffffff"></span><code>#ffffff</code></td><td><span class="sw" style="background:#202026"></span><code>#202026</code></td></tr>
+<tr><td><code>--page-fg</code></td><td><span class="sw" style="background:#1d1d22"></span><code>#1d1d22</code></td><td><span class="sw" style="background:#ececf1"></span><code>#ececf1</code></td></tr>
+<tr><td><code>--page-muted</code></td><td><span class="sw" style="background:#6b6b76"></span><code>#6b6b76</code></td><td><span class="sw" style="background:#9a9aa6"></span><code>#9a9aa6</code></td></tr>
+<tr><td><code>--page-soft</code></td><td><span class="sw" style="background:#f2f2f5"></span><code>#f2f2f5</code></td><td><span class="sw" style="background:#2a2a31"></span><code>#2a2a31</code></td></tr>
+<tr><td><code>--page-line</code></td><td><span class="sw" style="background:#dcdce2"></span><code>#dcdce2</code></td><td><span class="sw" style="background:#33333d"></span><code>#33333d</code></td></tr>
+<tr><td><code>--bb-bg</code></td><td><span class="sw" style="background:#2a2a31"></span><code>#2a2a31</code></td><td><span class="sw" style="background:#141418"></span><code>#141418</code></td></tr>
+<tr><td><code>--bb-fg</code></td><td><span class="sw" style="background:#ececf1"></span><code>#ececf1</code></td><td><span class="sw" style="background:#ececf1"></span><code>#ececf1</code></td></tr>
+<tr><td><code>--bb-muted</code></td><td><span class="sw" style="background:#9a9aa6"></span><code>#9a9aa6</code></td><td><span class="sw" style="background:#8a8a96"></span><code>#8a8a96</code></td></tr>
+<tr><td><code>--bb-line</code></td><td><span class="sw" style="background:#3b3b46"></span><code>#3b3b46</code></td><td><span class="sw" style="background:#2c2c34"></span><code>#2c2c34</code></td></tr>
+<tr><td><code>--bb-active</code></td><td><span class="sw" style="background:#6a4c9c"></span><code>#6a4c9c</code></td><td><span class="sw" style="background:#c8abe8"></span><code>#c8abe8</code></td></tr>
+<tr><td><code>--bb-active-fg</code></td><td><span class="sw" style="background:#ffffff"></span><code>#ffffff</code></td><td><span class="sw" style="background:#141418"></span><code>#141418</code></td></tr>
+</table>
+<h3>Paleta de 16 tonos (personajes y segmentos)</h3><p>Cada tono tiene un par: fondo claro y tinta oscura. En modo oscuro se invierten (fondo oscuro, texto claro). Vive en <code>js/claquedraw/documentos.js</code> (<code>PALETA</code>), <code>js/characters.js</code> (<code>PALETTE</code>) y <code>js/editor.js</code> (<code>TONES</code>).</p><div class="pal16">
+<div class="tono"><span class="chip16" style="background:#DFE8FF;color:#26417F">Azul</span><span class="chip16 inv" style="background:#26417F;color:#DFE8FF">Azul</span><code>#DFE8FF</code> <code>#26417F</code></div>
+<div class="tono"><span class="chip16" style="background:#E2F0E0;color:#2C5730">Verde</span><span class="chip16 inv" style="background:#2C5730;color:#E2F0E0">Verde</span><code>#E2F0E0</code> <code>#2C5730</code></div>
+<div class="tono"><span class="chip16" style="background:#FBE6DA;color:#8A4320">Terracota</span><span class="chip16 inv" style="background:#8A4320;color:#FBE6DA">Terracota</span><code>#FBE6DA</code> <code>#8A4320</code></div>
+<div class="tono"><span class="chip16" style="background:#EDE0F7;color:#563180">Violeta</span><span class="chip16 inv" style="background:#563180;color:#EDE0F7">Violeta</span><code>#EDE0F7</code> <code>#563180</code></div>
+<div class="tono"><span class="chip16" style="background:#FBF0D2;color:#7A5410">Ámbar</span><span class="chip16 inv" style="background:#7A5410;color:#FBF0D2">Ámbar</span><code>#FBF0D2</code> <code>#7A5410</code></div>
+<div class="tono"><span class="chip16" style="background:#FBDFE6;color:#8A2B47">Rosa</span><span class="chip16 inv" style="background:#8A2B47;color:#FBDFE6">Rosa</span><code>#FBDFE6</code> <code>#8A2B47</code></div>
+<div class="tono"><span class="chip16" style="background:#D8EFEE;color:#1F5B58">Teal</span><span class="chip16 inv" style="background:#1F5B58;color:#D8EFEE">Teal</span><code>#D8EFEE</code> <code>#1F5B58</code></div>
+<div class="tono"><span class="chip16" style="background:#E8EED3;color:#4E5C1E">Oliva</span><span class="chip16 inv" style="background:#4E5C1E;color:#E8EED3">Oliva</span><code>#E8EED3</code> <code>#4E5C1E</code></div>
+<div class="tono"><span class="chip16" style="background:#DEE0F8;color:#333B85">Índigo</span><span class="chip16 inv" style="background:#333B85;color:#DEE0F8">Índigo</span><code>#DEE0F8</code> <code>#333B85</code></div>
+<div class="tono"><span class="chip16" style="background:#FDE2DC;color:#8F3A2C">Coral</span><span class="chip16 inv" style="background:#8F3A2C;color:#FDE2DC">Coral</span><code>#FDE2DC</code> <code>#8F3A2C</code></div>
+<div class="tono"><span class="chip16" style="background:#F3DCEF;color:#71306A">Ciruela</span><span class="chip16 inv" style="background:#71306A;color:#F3DCEF">Ciruela</span><code>#F3DCEF</code> <code>#71306A</code></div>
+<div class="tono"><span class="chip16" style="background:#EFE7DA;color:#6B5638">Arena</span><span class="chip16 inv" style="background:#6B5638;color:#EFE7DA">Arena</span><code>#EFE7DA</code> <code>#6B5638</code></div>
+<div class="tono"><span class="chip16" style="background:#D9ECFA;color:#1F5476">Cielo</span><span class="chip16 inv" style="background:#1F5476;color:#D9ECFA">Cielo</span><code>#D9ECFA</code> <code>#1F5476</code></div>
+<div class="tono"><span class="chip16" style="background:#E6F2CF;color:#4A6013">Lima</span><span class="chip16 inv" style="background:#4A6013;color:#E6F2CF">Lima</span><code>#E6F2CF</code> <code>#4A6013</code></div>
+<div class="tono"><span class="chip16" style="background:#F8E3CD;color:#835012">Óxido</span><span class="chip16 inv" style="background:#835012;color:#F8E3CD">Óxido</span><code>#F8E3CD</code> <code>#835012</code></div>
+<div class="tono"><span class="chip16" style="background:#E4E4E2;color:#3B3B39">Grafito</span><span class="chip16 inv" style="background:#3B3B39;color:#E4E4E2">Grafito</span><code>#E4E4E2</code> <code>#3B3B39</code></div>
+</div>
+<h3>Colores base anteriores (<code>css/tramas.css</code>, el aspecto «a mano» que había antes de la piel)</h3><p>Se dejan como referencia de lo que no gustó: papel crema, tinta negra, azul <code>#26417f</code> de acento, bordes de 1.5 px, sombras planas desplazadas.</p><table class="tokens"><tr><th>Token</th><th>Claro</th><th>Oscuro</th></tr>
+<tr><td><code>--papel</code></td><td><span class="sw" style="background:#ffffff"></span><code>#ffffff</code></td><td><span class="sw" style="background:#1c1b19"></span><code>#1c1b19</code></td></tr>
+<tr><td><code>--chrome</code></td><td><span class="sw" style="background:#f0eee9"></span><code>#f0eee9</code></td><td><span class="sw" style="background:#131211"></span><code>#131211</code></td></tr>
+<tr><td><code>--panel</code></td><td><span class="sw" style="background:#fbfaf8"></span><code>#fbfaf8</code></td><td><span class="sw" style="background:#232120"></span><code>#232120</code></td></tr>
+<tr><td><code>--regla</code></td><td><span class="sw" style="background:#dcd7ce"></span><code>#dcd7ce</code></td><td><span class="sw" style="background:#3a3733"></span><code>#3a3733</code></td></tr>
+<tr><td><code>--regla-fuerte</code></td><td><span class="sw" style="background:#c9c5bd"></span><code>#c9c5bd</code></td><td><span class="sw" style="background:#4e4a45"></span><code>#4e4a45</code></td></tr>
+<tr><td><code>--tinta</code></td><td><span class="sw" style="background:#1a1a1a"></span><code>#1a1a1a</code></td><td><span class="sw" style="background:#ece8e0"></span><code>#ece8e0</code></td></tr>
+<tr><td><code>--tenue</code></td><td><span class="sw" style="background:#8d8880"></span><code>#8d8880</code></td><td><span class="sw" style="background:#948e85"></span><code>#948e85</code></td></tr>
+<tr><td><code>--palido</code></td><td><span class="sw" style="background:#a8a29a"></span><code>#a8a29a</code></td><td><span class="sw" style="background:#6f6a63"></span><code>#6f6a63</code></td></tr>
+<tr><td><code>--foco</code></td><td><span class="sw" style="background:#26417f"></span><code>#26417f</code></td><td><span class="sw" style="background:#8fb0f0"></span><code>#8fb0f0</code></td></tr>
+<tr><td><code>--foco-suave</code></td><td><span class="sw" style="background:#dfe8ff"></span><code>#dfe8ff</code></td><td><span class="sw" style="background:#25324c"></span><code>#25324c</code></td></tr>
+<tr><td><code>--nota</code></td><td><span class="sw" style="background:#fbf0d2"></span><code>#fbf0d2</code></td><td><span class="sw" style="background:#3a3120"></span><code>#3a3120</code></td></tr>
+<tr><td><code>--t-azul</code></td><td><span class="sw" style="background:#26417f"></span><code>#26417f</code></td><td><span class="sw" style="background:#7ea2e8"></span><code>#7ea2e8</code></td></tr>
+<tr><td><code>--t-violeta</code></td><td><span class="sw" style="background:#563180"></span><code>#563180</code></td><td><span class="sw" style="background:#b28ae0"></span><code>#b28ae0</code></td></tr>
+<tr><td><code>--t-verde</code></td><td><span class="sw" style="background:#2c5730"></span><code>#2c5730</code></td><td><span class="sw" style="background:#6fbf7f"></span><code>#6fbf7f</code></td></tr>
+<tr><td><code>--t-ambar</code></td><td><span class="sw" style="background:#7a5410"></span><code>#7a5410</code></td><td><span class="sw" style="background:#d8a63f"></span><code>#d8a63f</code></td></tr>
+<tr><td><code>--t-rojo</code></td><td><span class="sw" style="background:#8f3a2c"></span><code>#8f3a2c</code></td><td><span class="sw" style="background:#e0796a"></span><code>#e0796a</code></td></tr>
+<tr><td><code>--t-gris</code></td><td><span class="sw" style="background:#5c584f"></span><code>#5c584f</code></td><td><span class="sw" style="background:#b0aaa1"></span><code>#b0aaa1</code></td></tr>
+</table>
+<h3>0.5 Forma actual</h3>
+<ul>
+<li>Bordes de 1 px (<code>--borde</code>); radios 6 px en controles y notas, 8 px en tarjetas y menús, 7 px arriba en pestañas.</li>
+<li>Sombras: <code>0 1px 2px rgba(20,20,30,.06), 0 6px 18px rgba(20,20,30,.08)</code> en menús, fantasma de arrastre y hoja; <code>0 1px 1px</code> en botones y notas.</li>
+<li>Foco: anillo de 3 px <code>--foco-halo</code>; selección: fondo <code>--foco-suave</code> + borde <code>--foco</code>.</li>
+<li>Barra de documentos 292 px; columna de tramas 190 px (110–420, contraíble a 44 px); panel del nodo 330 px; tira 96 px de alto; celda del tablero 48 px × escala.</li>
+<li>Iconos: caracteres de texto (⌕ 📌 ⋯ ＋ ⌄ › ◫ ☰ ☺ ▤ ✎ × ⠿ ↶ ↷), no un juego de iconos SVG salvo la cinta del editor.</li>
+</ul>
+<h2>1. Qué es la aplicación</h2>
+<p>ClapCraft es una herramienta de escritura de guiones para Mac (Electron; también corre en el navegador). Un archivo <code>.cld</code> es un <b>proyecto</b>. Tiene tres vistas que comparten cabecera, pestañas y una barra lateral de documentos:</p>
+<ul>
+  <li><b>Esquema de pasos</b>: un tablero con las tramas de la historia como carriles horizontales, dividido en actos; cada punto es una escena o momento («nodo»). Los cuadros y rombos son saltos entre tramas.</li>
+  <li><b>Texto</b>: el editor de guion (una hoja tipo procesador de texto) con, encima, la <b>tira</b> de una trama: sus nodos en línea de tiempo, para saltar de nota en nota. Cada nodo del esquema tiene su nota de texto.</li>
+  <li><b>Documentos</b>: el gestor. Contenedores (carpetas) con subcontenedores: Esquema de pasos, Documentos guión, Personajes y Documentos; tableros tipo kanban con tarjetas por segmento y notas dentro.</li>
+</ul>
+<p>Sensación buscada: herramienta profesional de escritura, sobria, densa pero legible, agradable durante horas. Modo claro y oscuro con el mismo diseño. Referentes que gustan: Scrivener, Notion, Figma (tira de navegación), Clip Studio (pestañas de archivos).</p>
+
+<h2>2. Marca y restricciones</h2>
+<ul>
+  <li>Logo: una claqueta (SVG en <code>img/clapcraft.svg</code>; colores del logo: gris oscuro <span class="tok">#2f2f2f</span>, gris <span class="tok">#707070</span>, lavanda <span class="tok">#d5b3ea</span>). El icono de la app sale del mismo SVG.</li>
+  <li>Texto de marca «ClapCraft» en <b>Courier New, negrita</b>, a la izquierda de la cabecera, junto al logo.</li>
+  <li>El documento del guion siempre en Courier Prime; la interfaz puede usar cualquier familia (indicar cuál y si es de sistema o hay que empaquetarla). Hoy hay dos tipografías empaquetadas: Patrick Hand y Courier Prime.</li>
+  <li>Todo el color se pinta con variables CSS (tokens). El tablero y la tira dibujan nodos y colores de trama con esos tokens, así que basta con definir la paleta.</li>
+  <li>Idioma: español. Densidad: escritorio, ventana mínima 900×600.</li>
+</ul>
+
+<h2>3. Pantallas</h2>
+<p>Las cuatro composiciones. La cabecera, las pestañas y la barra lateral son las mismas en todas. En la app de Mac, Nuevo/Abrir/Guardar/tema van en el menú nativo, no en la cabecera.</p>
+
+<h3>3.1 Esquema de pasos</h3>
+<div class="wf">
+  <div class="bar"><b style="font-family:'Courier New';font-weight:700">▣ ClapCraft</b><span class="chip">Tablero: Trama global › Esquema de pasos ▾</span><span class="chip">Escala ━━●━</span><span class="btn">↶ Deshacer</span><span class="btn">↷ Rehacer</span><span style="flex:1"></span><span class="chip">● guion.cld</span></div>
+  <div class="tabs"><span class="tab on">Sin título 1 *</span><span class="tab">Piloto.cld</span><span class="tab">＋</span></div>
+  <div class="cuerpo">
+    <div class="lado"><b>Documentos</b> <span class="chip">⌕</span> <span class="chip">📌</span>
+      <div class="caja">＋ Nombre del contenedor…</div><div class="caja">⌕ Buscar nota o contenedor</div>
+      <div class="fila"><b>⌄ Trama global</b></div><div class="fila sub on">◫ Esquema de pasos ●</div><div class="fila sub">☰ Documentos guión</div><div class="fila sub">☺ Personajes</div><div class="fila sub">▤ Documentos</div>
+      <div class="fila"><b>⌄ Investigación</b></div><div class="fila sub">☺ Personajes</div><div class="fila sub">▤ Documentos</div>
+      <div class="fila" style="margin-top:8px">⌄ Papelera</div></div>
+    <div class="centro" style="padding:0">
+      <div class="tablero">
+        <div class="acto" style="left:90px;width:260px">Acto I</div><div class="acto" style="left:350px;width:200px">Acto II</div><div class="acto" style="left:550px;right:0">Acto III</div>
+        <div class="etq" style="top:50px">● Principal</div><div class="trama" style="top:70px"></div>
+        <div class="pt" style="left:140px;top:64px"></div><div class="pt" style="left:200px;top:64px"></div><div class="pt caja" style="left:260px;top:64px"></div><div class="pt" style="left:400px;top:64px"></div>
+        <div class="etq" style="top:120px">● Secundaria</div><div class="trama" style="top:140px"></div>
+        <div class="pt rombo" style="left:260px;top:134px"></div><div class="pt" style="left:320px;top:134px"></div>
+        <div class="etq" style="top:175px;color:#999">＋ Nueva trama</div>
+      </div>
+    </div>
+    <div class="panel"><b>Nodo</b><div class="caja">Título</div><div class="caja" style="height:50px">Descripción</div><div class="caja">Estado: en escena ▾</div><span class="btn">‹</span> <span class="btn">›</span> <span class="btn">Abrir documento</span> <span class="btn">Eliminar</span></div>
+  </div>
+</div>
+<p>Elementos: columna de tramas (contraíble a un punto de color, ancho ajustable con un asa), eje de actos arriba, cuadrícula de celdas, nodos (punto = escena; cuadro y rombo = extremos de un salto entre tramas, unidos por un trazo), «＋» de celda al pasar el ratón, cadena de la ruta resaltada al seleccionar, panel lateral del nodo seleccionado, globo de descripción al pasar el ratón, menú contextual, diálogo de confirmación, aviso flotante abajo.</p>
+
+<h3>3.2 Texto (editor con la tira de la trama)</h3>
+<div class="wf">
+  <div class="bar"><b style="font-family:'Courier New';font-weight:700">▣ ClapCraft</b><span style="flex:1"></span><span class="chip">✓ guion.cld</span></div>
+  <div class="tabs"><span class="tab on">Sin título 1</span><span class="tab">＋</span></div>
+  <div class="cuerpo">
+    <div class="lado"><b>Documentos</b><div class="fila"><b>⌄ Trama global</b></div><div class="fila sub">◫ Esquema de pasos ●</div><div class="fila sub on">☰ Documentos guión</div><div class="fila sub">☺ Personajes</div><div class="fila sub">▤ Documentos</div></div>
+    <div class="centro" style="padding:0">
+      <div class="tira"><div style="width:70px;font-weight:600">● Principal<br><small>PRINCIPAL</small></div>
+        <div class="nodo">Inicio<i></i></div><div class="nodo"><b>Encuentro</b><i></i></div><div class="nodo">Cambio<i class="caja"></i></div><div class="nodo">Huida<i></i></div>
+        <span class="btn" style="margin-left:auto">📌 cinta</span></div>
+      <div class="bar" style="background:#fff">‹ Documentos › Trama global › Documentos guión › <span class="chip">Acto I</span> › <b>Encuentro</b></div>
+      <div class="bar" style="background:#fff;gap:6px"><span class="btn">Normal ▾</span><span class="btn">Courier Prime ▾</span><span class="btn">12</span><span class="btn">B</span><span class="btn">I</span><span class="btn">U</span><span class="btn">≡</span><span class="btn">1.15 ▾</span></div>
+      <div class="bar" style="background:#fff">‹ › <b style="font-family:'Courier New'">Encuentro</b></div>
+      <div class="hoja">INT. CAFETERÍA – DÍA<br><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip">ANA</span><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;No pensaba volver.</div>
+      <div class="barra-inf"><span>125% ▾</span><span>Tamaño ━●━</span><span>Ancho de la hoja ━●━</span><span style="flex:1"></span><span>Modo guion</span><span>Typewriter</span><span>Modo oscuro</span><span>Ortografía</span><span>📌 Fijar</span></div>
+    </div>
+  </div>
+</div>
+<p>Elementos: la tira (chip de la trama a la izquierda; nodos dibujados igual que en el tablero con el título encima; el nodo actual resaltado; cuadros y rombos con el trazo del salto hacia la otra trama; botón para cambiar la tira por la cinta del editor), migas cuando la nota viene del gestor, cinta de formato del editor (dos filas de botones con iconos, selects de estilo/fuente/tamaño), barra de título del documento con flechas ‹ › para ir a la nota anterior/siguiente, la hoja (página blanca con sombra, tamaño y ancho ajustables, modo máquina de escribir), barra inferior oscura con conmutadores, chips de personaje con color, menú contextual del personaje con paleta de 16 colores, panel de buscar/reemplazar, menú «/» de bloques, tablas y bases de datos en la hoja.</p>
+
+<h3>3.3 Documentos (gestor)</h3>
+<div class="wf">
+  <div class="bar"><b style="font-family:'Courier New';font-weight:700">▣ ClapCraft</b><span style="flex:1"></span><span class="chip">● guion.cld</span></div>
+  <div class="tabs"><span class="tab on">Sin título 1 *</span><span class="tab">＋</span></div>
+  <div class="cuerpo">
+    <div class="lado"><b>Documentos</b><div class="caja">＋ Nombre del contenedor…</div><div class="caja">⌕ Buscar</div>
+      <div class="fila"><b>⌄ Trama global</b> <span class="chip">＋</span><span class="chip">⋯</span></div><div class="fila sub">◫ Esquema de pasos</div><div class="fila sub">☰ Documentos guión</div><div class="fila sub">☺ Personajes</div><div class="fila sub on">▤ Documentos</div>
+      <div class="fila"><b>⌄ Investigación</b></div><div class="fila sub">◫ Esquema de pasos <span class="chip">Flashbacks</span></div><div class="fila sub">☰ Documentos guión <span class="chip">Flashbacks</span></div><div class="fila sub">☺ Personajes</div><div class="fila sub">▤ Documentos</div>
+      <div class="fila" style="margin-top:8px">⌄ Papelera</div></div>
+    <div class="centro">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><span><span style="color:#888;font-size:16px">Trama global › </span><b style="font-size:16px">Documentos</b> <small>4 notas · 2 segmentos</small></span><span><span class="btn">＋ Segmento</span> <span class="btn">＋ Nota</span> <span class="btn">⋯</span></span></div>
+      <div style="display:flex;justify-content:space-between;margin:8px 0;color:#888;font-size:10px;letter-spacing:.06em">SEGMENTOS <span class="chip">⌕ filtrar notas</span></div>
+      <div class="tarjetas">
+        <div class="tarjeta"><header>Bandeja <span>1</span></header><div><div class="nota-c">Ideas sueltas <small>hoy</small></div><div class="caja">＋ nota</div></div></div>
+        <div class="tarjeta"><header>⠿ Lugares <span>2 ✎ ×</span></header><div><div class="nota-c">La cafetería <small>ayer</small></div><div class="nota-c">El faro <small>3 sep</small></div><div class="caja">＋ nota</div></div></div>
+        <div class="tarjeta"><header>⠿ Tono <span>1 ✎ ×</span></header><div><div class="nota-c">Referencias <small>hoy</small></div><div class="caja">＋ nota</div></div></div>
+        <div class="caja" style="text-align:center;padding:20px">＋ nuevo segmento ▪▪▪▪</div>
+      </div>
+    </div>
+  </div>
+</div>
+<p>Variantes del tablero central: <b>Documentos guión</b> (tarjetas fijas por acto con los nodos como notas, sin editar), <b>Personajes</b> (una tarjeta por personaje con el color que tiene en el editor; en Trama global, también las fichas de ese personaje en otros contenedores, con su origen y borde discontinuo), <b>Papelera</b> (lista de notas tiradas con origen y antigüedad, botón «Vaciar»). Estados de arrastre: fantasma de la nota bajo el puntero, zona de destino resaltada, marca de inserción entre notas, arrastre de segmentos por su cabecera.</p>
+
+<h3>3.4 Estados vacíos y arranque</h3>
+<ul>
+  <li>Proyecto nuevo: tablero de partida (3 actos, trama Principal con «Inicio», Secundaria vacía); barra con solo «Trama global» y sus cuatro subcontenedores.</li>
+  <li>Tablero de Documentos sin notas: «La bandeja está vacía», «Segmento vacío · arrastra una nota aquí», «＋ nuevo segmento».</li>
+  <li>Personajes sin personajes: «Los personajes aparecen aquí solos al escribirlos en las notas del editor».</li>
+  <li>Sin guion abierto: «No hay ningún guion abierto».</li>
+  <li>Barra suelta (no fijada): desaparece y queda un asa vertical «Documentos» en el borde izquierdo; al pulsarla la barra se asoma por encima.</li>
+</ul>
+
+<h2>4. Componentes</h2>
+<p>Cada uno con su nombre en el código (clase CSS), lo que contiene y los estados que necesita.</p>
+<div class="grid2">
+
+<div class="comp"><h4>Cabecera <code>.barra</code></h4><div class="demo"><b style="font-family:'Courier New';font-weight:700">▣ ClapCraft</b> · rótulo+control <code>.tool</code> · botones <code>.btn</code> · indicador de guardado <code>.estado</code> (● cambios sin guardar / ✓ guardado / vacío sin archivo)</div><div class="estados">Sin botones de vista. En Mac: sin Nuevo/Abrir/Guardar/tema (van al menú).</div></div>
+
+<div class="comp"><h4>Pestañas de archivo <code>.pestanas .pestana</code></h4><div class="demo"><span class="btn on">Sin título 1 * ×</span> <span class="btn">Piloto.cld ×</span> <span class="btn">＋</span></div><div class="estados">Estados: activa, inactiva, hover, con asterisco (sin guardar), botón cerrar al hover, «＋» nueva pestaña. Como Clip Studio.</div></div>
+
+<div class="comp"><h4>Botón <code>.btn</code>, mini <code>.mini</code>, peligro <code>.btn.danger</code></h4><div class="demo"><span class="btn">Normal</span> <span class="btn on">Activo</span> <span class="btn" style="opacity:.4">Desactivado</span> <span class="btn" style="color:#a33">Eliminar</span> <span class="btn">⌕</span></div><div class="estados">Estados: normal, hover, activo/on, desactivado, foco de teclado.</div></div>
+
+<div class="comp"><h4>Selector y deslizador <code>select</code>, <code>input[type=range]</code></h4><div class="demo"><span class="btn">Trama global › Esquema de pasos ▾</span> &nbsp; Escala ━━●━━</div><div class="estados">El selector de esquema solo se ve en el navegador (en Mac va al menú Ver).</div></div>
+
+<div class="comp"><h4>Campo de texto <code>.gd-crear</code>, <code>.gd-buscar</code>, <code>.gd-filtro</code>, campos del panel <code>.field</code></h4><div class="demo"><span class="btn">＋ Nombre del contenedor…</span> <span class="btn">⌕ Buscar nota o contenedor</span> <span class="btn">⌕ filtrar notas</span><br><small>Enter crea · Esc cancela</small></div><div class="estados">Estados: normal, foco, con texto, placeholder. Pista pequeña debajo.</div></div>
+
+<div class="comp"><h4>Barra lateral <code>.gd-side</code></h4><div class="demo">Título «Documentos» + botones buscar y fijar (📌) · crear · buscar · grupo «Fijados» (plegable, solo si hay) · «Contenedores · N» con botón de orden · lista · «Papelera» al final</div><div class="estados">Fija (ocupa 292 px) o suelta (escondida; asa <code>#ladoAsa</code> en el borde y aparece encima con sombra).</div></div>
+
+<div class="comp"><h4>Fila de contenedor <code>.gd-cont</code></h4><div class="demo"><div class="fila"><b>⌄ Trama global</b> <span class="chip">0</span> <span class="chip">＋</span><span class="chip">⋯</span></div><div class="fila">› Investigación (plegado) ★ fijado</div></div><div class="estados">Estados: activo, hover (asoman ＋ y ⋯), plegado/desplegado, fijado (★), destino de arrastre, renombrar en sitio (campo <code>.gd-edit</code>). «Trama global» no se renombra ni elimina.</div></div>
+
+<div class="comp"><h4>Fila de subcontenedor <code>.gd-sub</code></h4><div class="demo"><div class="fila sub">◫ Esquema de pasos ● <small>(montado)</small></div><div class="fila sub">☰ Documentos guión <span class="chip">Flashbacks</span> 4 ⋯</div><div class="fila sub on">☺ Personajes 3</div><div class="fila sub">▤ Documentos 12</div></div><div class="estados">Cuatro tipos con icono. Estados: activo, hover, montado (el esquema que está en el tablero), destino de arrastre. Chip con el nombre del esquema si no es el del proyecto.</div></div>
+
+<div class="comp"><h4>Fila de nota en el árbol <code>.gd-nota-fila</code> y etiqueta <code>.gd-tag</code></h4><div class="demo"><div class="fila sub"><span class="chip">Acto I</span> Encuentro ⋯</div><div class="fila sub"><span class="chip">Lugares</span> El faro</div><div class="fila sub"><span class="chip" style="border-style:dashed">bandeja</span> Ideas sueltas</div><div class="fila sub" style="color:#999"><span class="chip">Investigación</span> Vieja (en la papelera)</div></div><div class="estados">Solo aparecen al buscar. Estados: activa (abierta en el editor), seleccionada, hover, tirada.</div></div>
+
+<div class="comp"><h4>Cabecera del tablero <code>.gd-head</code> y barra de sección <code>.gd-barra</code></h4><div class="demo"><span style="color:#888;font-size:15px">Trama global › </span><b style="font-size:15px">Personajes</b> <small>3 personajes · 5 notas · 1 en otros contenedores</small> &nbsp; <span class="btn">＋ Nota</span> <span class="btn">⋯</span><br><small style="letter-spacing:.06em">PERSONAJES</small> <span class="chip">⌕ filtrar notas</span></div><div class="estados">Ruta en gris, nombre en negro, meta pequeña, acciones a la derecha.</div></div>
+
+<div class="comp"><h4>Tarjeta de segmento <code>.gd-etq</code></h4><div class="demo"><div class="tarjeta" style="max-width:220px"><header>⠿ Lugares <span>2 ✎ ×</span></header><div><div class="nota-c">La cafetería <small>ayer</small></div><div class="caja">＋ nota</div></div></div></div><div class="estados">Cabecera con el color del segmento (16 pares claro/oscuro). Variantes: bandeja (sin color, discontinua), fija (acto de un esquema: sin asa ni botones), personaje (color del personaje, sin ✎ ×), «＋ nuevo segmento» con muestras de color. Estados: destino de arrastre, arrastrándose.</div></div>
+
+<div class="comp"><h4>Nota en tarjeta <code>.gd-nota</code></h4><div class="demo"><div class="nota-c" style="max-width:220px">Encuentro <small>hoy</small> ⋯</div><div class="nota-c" style="max-width:220px;border-style:dashed">Ficha de Ana <small><i>en «Investigación»</i></small></div></div><div class="estados">Estados: normal, hover (asoma ⋯), seleccionada (un clic), activa (abierta en el editor), ajena (de otro contenedor: discontinua, con origen), arrastrándose (fantasma <code>.gd-fantasma</code>), marca de inserción «antes».</div></div>
+
+<div class="comp"><h4>Menú flotante <code>.gd-pop</code>, menú contextual del tablero <code>#menu</code></h4><div class="demo"><div class="pop"><div>Nueva nota</div><div>Nuevo segmento</div><div>Nuevo esquema de pasos</div><div class="sep"></div><div>Renombrar</div><div>Fijar arriba</div><div class="sep"></div><div class="peligro">Eliminar contenedor</div><div class="t">El contenedor del proyecto: no se elimina</div></div></div><div class="estados">Opciones, separadores, títulos en pequeño, opción peligrosa en rojo, opción marcada (orden actual), opciones con punto de color (destinos).</div></div>
+
+<div class="comp"><h4>Paleta de color <code>.gd-paleta</code> (segmentos y personajes)</h4><div class="demo"><div class="paleta"><i style="background:#DFE8FF"></i><i style="background:#E2F0E0"></i><i style="background:#FBE6DA"></i><i style="background:#EDE0F7"></i><i style="background:#FBF0D2"></i><i style="background:#FBDFE6"></i><i style="background:#D8EFEE"></i><i style="background:#E8EED3"></i><i style="background:#DEE0F8"></i><i style="background:#FDE2DC"></i><i style="background:#F3DCEF"></i><i style="background:#EFE7DA"></i><i style="background:#D9ECFA"></i><i style="background:#E6F2CF"></i><i style="background:#F8E3CD"></i><i style="background:#E4E4E2"></i></div></div><div class="estados">16 tonos, cada uno con par claro (fondo) y oscuro (texto); en modo oscuro se invierten. Se puede rediseñar la paleta entera manteniendo 16 pares.</div></div>
+
+<div class="comp"><h4>Diálogo <code>#dlg</code> y aviso <code>#aviso</code></h4><div class="demo"><div class="dlg">¿Eliminar «Investigación»? Sus 3 notas van a la papelera.<br><br><span class="btn">Cancelar</span> <span class="btn" style="color:#a33">Eliminar</span></div><br><span class="toast">Esquema «Flashbacks» creado en «Investigación»</span></div><div class="estados">Diálogo modal con fondo atenuado; aviso flotante abajo, se va solo.</div></div>
+
+<div class="comp"><h4>Tablero de tramas (componentes de <code>tramas.css</code>)</h4><div class="demo">Eje de actos <code>.axis .acto</code> (nombre, fondo de color opcional, ×) · etiqueta de trama <code>.label</code> (punto de color, nombre, tipo PRINCIPAL/SECUNDARIA, ×) · carril <code>.rail</code> (continuo, discontinuo si alterna, cortado) · nodo <code>.pt</code>: punto, <code>.caja</code> (cuadro beige), <code>.rombo</code> (morado), descartado (tachado), fuera de escena (apagado), seleccionado (halo) · trazo del salto <code>#cables</code> · «＋» de celda <code>#celda</code> · ruta resaltada <code>.cadena.ruta</code> · nota entre nodos (post-it) · «＋ Nueva trama» · botón contraer columna <code>#plegarTramas</code> y asa de ancho <code>#asaTramas</code></div><div class="estados">Colores por token: 6 colores de trama (<code>--t-azul…gris</code>) y 6 fondos de acto (<code>--f-*</code>), cuadrícula, foco, halo.</div></div>
+
+<div class="comp"><h4>Panel del nodo <code>aside</code> (tablero)</h4><div class="demo"><b>NODO</b> · Título · Descripción (textarea) · Estado (select) · Trama/acto · flechas ‹ › (anterior/siguiente en la historia) · «Abrir documento» · «Eliminar» · atajos <span class="kbd">Supr</span> <span class="kbd">Esc</span></div><div class="estados">Panel derecho de 330 px; también para actos, tramas, saltos y notas.</div></div>
+
+<div class="comp"><h4>Tira de la trama <code>.hilo</code></h4><div class="demo"><div class="tira" style="border:0;padding:6px 10px 12px"><div style="width:70px">● Principal</div><div class="nodo">Inicio<i></i></div><div class="nodo"><b>Encuentro</b><i></i></div><div class="nodo">Cambio<i class="caja"></i></div></div></div><div class="estados">Chip de trama <code>.chip .ltipo</code>, nodos <code>.hilo-nodo</code> como en el tablero (título encima, o debajo si el trazo sube), actual <code>.actual</code>, posición de vuelta <code>.pos</code>, pin para cambiar a la cinta <code>.hilo-pin</code>. 96 px de alto.</div></div>
+
+<div class="comp"><h4>Migas <code>.migas</code></h4><div class="demo">‹ Documentos › Investigación › Personajes › <span class="chip">Ana</span> › <b>Ficha de Ana</b></div><div class="estados">Botón volver + ruta con la etiqueta de color.</div></div>
+
+<div class="comp"><h4>Editor: cinta <code>.ribbon</code>, barra de título <code>.topbar</code>, hoja <code>.page</code>, barra inferior <code>.bottombar</code></h4><div class="demo">Selects (estilo, fuente, tamaño), botones con iconos (negrita, cursiva, subrayado, tachado, color, resaltado, alineaciones, listas, sangría, interlineado, enlaces, tabla, buscar), pin de la cinta · barra de título con ‹ › y el título · hoja blanca con sombra, tamaño 60–140 % · barra inferior oscura: zoom, tamaño, ancho, Modo guion, Typewriter, Modo oscuro, Ortografía, Fijar.</div><div class="estados">Estados de botón: normal, hover, activo. Bloques de guion (escena, acción, personaje con chip de color, paréntesis, diálogo, transición), tablas, base de datos, menú «/», buscar/reemplazar, menú contextual con paleta de personaje.</div></div>
+
+</div>
+
+<h2>5. Tokens que el diseño debe definir</h2>
+<p>Con estos valores (claro y oscuro) el código se viste solo. Nombres actuales, para ir a lo seguro:</p>
+<table>
+<tr><th>Grupo</th><th>Token</th><th>Para qué</th></tr>
+<tr><td>Tipografía</td><td><code>--sans</code>, <code>--mono</code>, <code>--marca</code> (Courier New negrita), <code>--doc-font</code> (Courier Prime)</td><td>interfaz, rótulos pequeños, marca, documento. Tamaños base: cuerpo 14, rótulos 10–11, títulos de tablero 20–22.</td></tr>
+<tr><td>Superficies</td><td><code>--chrome</code>, <code>--panel</code>, <code>--papel</code>, <code>--hover</code>, <code>--hover-fuerte</code>, <code>--cuadricula</code></td><td>fondo de app, barras/paneles, tarjetas y hoja, estados hover, cuadrícula del tablero</td></tr>
+<tr><td>Trazos</td><td><code>--regla</code>, <code>--regla-fuerte</code>, <code>--borde</code>, <code>--borde-fuerte</code>, <code>--linea-menu</code></td><td>separadores, bordes de controles y tarjetas</td></tr>
+<tr><td>Texto</td><td><code>--tinta</code>, <code>--tenue</code>, <code>--palido</code>, <code>--inverso</code></td><td>principal, secundario, rótulos, texto sobre fondo oscuro</td></tr>
+<tr><td>Acento</td><td><code>--foco</code>, <code>--foco-suave</code>, <code>--foco-halo</code>, <code>--foco-banda</code>, <code>--foco-linea</code></td><td>selección, activo, foco de teclado, ruta resaltada</td></tr>
+<tr><td>Semánticos</td><td><code>--peligro</code>, <code>--peligro-bg</code>, <code>--nota</code>, <code>--nota-borde</code>, <code>--nota-tinta</code></td><td>acciones destructivas, post-it del tablero</td></tr>
+<tr><td>Tablero</td><td><code>--t-azul</code>, <code>--t-violeta</code>, <code>--t-verde</code>, <code>--t-ambar</code>, <code>--t-rojo</code>, <code>--t-gris</code>; <code>--f-*</code> (fondos de acto); <code>--escena</code>/<code>--escena-trazo</code>, <code>--rombo</code>/<code>--rombo-trazo</code></td><td>colores de trama y nodo, fondos de acto, cuadro y rombo de salto</td></tr>
+<tr><td>Paleta</td><td>16 pares claro/oscuro (<code>PALETTE</code>)</td><td>personajes y segmentos</td></tr>
+<tr><td>Forma</td><td>radios (controles, tarjetas, menús), grosor de borde, <code>--sombra</code> (tarjetas, menús, hoja), espaciados</td><td>—</td></tr>
+<tr><td>Editor</td><td><code>--bg</code>, <code>--bar</code>, <code>--fg</code>, <code>--muted</code>, <code>--line</code>, <code>--accent</code>, <code>--page-*</code>, <code>--bb-*</code> (barra inferior)</td><td>mismo sistema, otros nombres (módulo aparte)</td></tr>
+</table>
+
+<h2>6. Cómo entregar</h2>
+<ul>
+  <li>Una pantalla de cada vista (3.1, 3.2, 3.3) en claro y en oscuro, a 1280×820 o mayor.</li>
+  <li>Una hoja de componentes con los estados de la sección 4 (basta con los principales: normal, hover, activo/seleccionado, desactivado, arrastre).</li>
+  <li>La tabla de tokens de la sección 5 con valores; tipografías con nombre y origen.</li>
+  <li>Si es HTML/CSS: valen las clases de esta página; si es Figma o imagen: anotar medidas y colores.</li>
+</ul>
+<p class="sub">Archivo: <code>docs/diseno/clapcraft-componentes.html</code> · capturas en <code>docs/diseno/img/</code> (se regeneran con <code>./node_modules/.bin/electron docs/diseno/capturar.js</code>) · 13 de septiembre de 2026.</p>
+</main>
+</body>
+</html>

@@ -14,9 +14,12 @@
     const wrap = $('#pageWrap');
     /* el ancho se calcula en px sobre el espacio disponible (ya descontado el zoom); la hoja va centrada */
     wrap.style.zoom = state.zoom;
-    const avail = ws.clientWidth / state.zoom;
-    const pw = Math.min(avail, Math.max(280, avail * state.width / 100));
-    wrap.style.width = pw + 'px';
+    /* escondido (el marco de ClapCraft sin mostrar) no hay ancho: no se toca, o la hoja quedaría a 0 */
+    if (ws.clientWidth) {
+      const avail = ws.clientWidth / state.zoom;
+      const pw = Math.min(avail, Math.max(280, avail * state.width / 100));
+      wrap.style.width = pw + 'px';
+    }
     document.body.classList.toggle('typewriter', state.typewriter);
     $('#fbZoom').value = String(state.zoom);
     $('#fbWidth').value = state.width;
@@ -58,4 +61,9 @@
   };
 
   window.addEventListener('resize', page.apply);
+  /* dentro de ClapCraft el editor se carga escondido (ancho 0): al verse, el espacio cambia sin evento resize */
+  if (window.ResizeObserver) document.addEventListener('DOMContentLoaded', () => {
+    let w = -1;
+    new ResizeObserver(() => { const ws = $('#workspace'); if (ws && ws.clientWidth !== w) { w = ws.clientWidth; page.apply(); } }).observe($('#workspace'));
+  });
 })(window.Ed);

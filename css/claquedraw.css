@@ -2,7 +2,7 @@
    Se carga después de css/tramas.css y reutiliza sus tokens (tinta, panel, foco, sombras, modo
    oscuro) y sus dibujos de nodo: la tira pinta los nodos igual que el tablero (.dot, .caja, .rombo,
    cortado, fuera de escena). Todo lo propio lleva prefijo hilo- para no chocar con el tablero. */
-:root { --cd-dur: 180ms; --cd-ease: cubic-bezier(.4, 0, .2, 1); --gutter-plegado: 44px; }
+:root { --cd-dur: 180ms; --cd-ease: cubic-bezier(.4, 0, .2, 1); }
 main { position: relative; }
 
 /* ---------- vistas: esquema de pasos / editor de texto ---------- */
@@ -13,24 +13,32 @@ main { position: relative; }
 .vistas .btn.on { position: relative; z-index: 1; }
 #texto { position: relative; flex: 1; min-width: 0; display: none; flex-direction: column; background: var(--chrome); overflow: hidden; }
 body.vista-texto #texto { display: flex; }
-body.vista-texto #board, body.vista-texto #panel, body.vista-texto #plegarTramas, body.vista-texto #asaTramas { display: none; }
+/* la vista Esquema: título del esquema montado, tablero con su panel y pie (escala, deshacer) */
+#esquema { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.esq-cab { flex: none; display: flex; align-items: center; min-width: 0; }
+.esq-cuerpo { position: relative; flex: 1; min-height: 0; display: flex; }
+.esq-pie { flex: none; display: flex; align-items: center; }
+body.vista-texto #esquema, body.vista-documentos #esquema { display: none; }
+/* Personajes: la vista del esquema con el carrusel de segmentos encima del tablero */
+.per-seg { display: none; flex: none; }
+body.vista-personajes .per-seg { display: block; }
+body.vista-personajes #verDocumentos { display: none !important; }
 body.vista-texto .solo-esquema { display: none; }
 #editorMarco { flex: 1; width: 100%; border: 0; background: var(--chrome); }
 
-/* ---------- columna de tramas: ancho a gusto (--gutter, de tramas.css) y contraída ---------- */
-#plegarTramas { position: absolute; z-index: 7; top: 10px; left: calc(var(--gutter) - 34px); font-size: 18px; line-height: 1; padding: 2px 7px; }
-#asaTramas { position: absolute; z-index: 7; top: 0; bottom: 0; left: calc(var(--gutter) - 4px); width: 9px; cursor: col-resize; }
-#asaTramas::after { content: ''; position: absolute; left: 3.5px; top: 6px; bottom: 6px; width: 2px; border-radius: 1px;
-        background: var(--foco); opacity: 0; transition: opacity var(--cd-dur); }
-#asaTramas:hover::after, #asaTramas.activa::after { opacity: 1; }
-body.tramas-plegadas #plegarTramas { left: 10px; }
-body.tramas-plegadas #asaTramas { display: none; }
-body.tramas-plegadas #canvas { margin-left: calc(var(--gutter-plegado) - var(--gutter)); }
-body.tramas-plegadas .label, body.tramas-plegadas .axis .gutter { left: calc(var(--gutter-plegado) - var(--gutter)); }
-body.tramas-plegadas .label { justify-content: flex-end; padding-right: 16px; }
-body.tramas-plegadas .label .lbox, body.tramas-plegadas .label .mini { display: none; }
-body.tramas-plegadas .axis .gutter { font-size: 0; }
-body.tramas-plegadas .add-linea button { font-size: 0; gap: 0; }
+/* ---------- columna de tramas: un carril de 48 px (T.tablero.gutter(48)) con la inicial de cada trama;
+   el nombre y el tipo se asoman al pasar el ratón o al renombrar (doble clic en el nombre asomado) ---------- */
+#esquema .label { justify-content: center; padding: 0; }
+#esquema .label .mini { display: none; }
+#esquema .label .lbox { display: none; }
+#esquema .label:hover, #esquema .label:focus-within { z-index: 8; }
+#esquema .label:hover .lbox, #esquema .label:focus-within .lbox { display: flex; position: absolute; left: 38px; top: 50%; transform: translateY(-50%);
+        flex-direction: row; align-items: center; white-space: nowrap; }
+#esquema .label .lname { field-sizing: content; width: auto; min-width: 4ch; }
+#esquema .axis .gutter { justify-content: center; padding: 0; font-size: 0; }
+#esquema .axis .gutter::after { content: 'TR'; }
+#esquema .add-linea .label { justify-content: center; }
+#esquema .add-linea button { font-size: 0; gap: 0; }
 
 /* ---------- la tira: una trama a la vez, sus nodos como en el esquema ---------- */
 .hilo { scrollbar-width: thin; flex: none; height: 96px; display: flex; align-items: stretch;
@@ -88,3 +96,263 @@ button.estado { background: none; border: 0; padding: 4px 8px; border-radius: 5p
 button.estado:hover { background: var(--hover-fuerte); color: var(--tinta); }
 button.estado.sucio { color: var(--nota-tinta); }
 html[data-theme="dark"] button.estado.sucio { color: var(--t-ambar); }
+
+/* ---------- pestañas: un guion por pestaña ---------- */
+.pestanas { display: flex; align-items: flex-end; gap: 4px; padding: 6px 12px 0; background: var(--chrome);
+        border-bottom: 1.5px solid var(--tinta); overflow-x: auto; scrollbar-width: thin; user-select: none; }
+.pestana { display: flex; align-items: center; gap: 6px; max-width: 220px; padding: 5px 8px 5px 12px; margin-bottom: -1.5px;
+        border: 1.5px solid var(--regla-fuerte); border-bottom-color: var(--tinta); border-radius: 7px 7px 0 0;
+        background: var(--panel); color: var(--tenue); font-size: 14px; cursor: pointer; white-space: nowrap; }
+.pestana:hover { color: var(--tinta); background: var(--hover); }
+.pestana.activa { color: var(--tinta); background: var(--papel); border-color: var(--tinta); border-bottom-color: var(--papel); }
+.pestana-nom { overflow: hidden; text-overflow: ellipsis; }
+.pestana-sucio { color: inherit; font-size: 15px; line-height: 1; }
+.pestana-cerrar { border: 0; background: none; color: var(--palido); font-size: 14px; line-height: 1; padding: 1px 4px; border-radius: 4px; }
+.pestana-cerrar:hover { color: var(--peligro); background: var(--peligro-bg); }
+.pestana-nueva { border: 1.5px dashed var(--regla-fuerte); background: none; color: var(--tenue); border-radius: 6px;
+        font-size: 16px; line-height: 1; padding: 3px 9px; margin: 0 0 4px 4px; }
+.pestana-nueva:hover { color: var(--tinta); border-color: var(--tinta); }
+/* En la app de escritorio estas órdenes viven en el menú Archivo / Ver */
+body.escritorio #btnNuevo, body.escritorio #btnAbrir, body.escritorio #btnGuardar, body.escritorio #btnGuardarComo,
+body.escritorio #temaBtn { display: none; }
+/* la franja de pestañas: las pestañas a la izquierda y, en el navegador, archivo y tema a la derecha */
+.franja { position: relative; z-index: 3; flex: none; display: flex; align-items: flex-end; }
+.franja .pestanas { flex: 1; min-width: 0; }
+.franja-acc { flex: none; display: flex; align-items: center; gap: 6px; align-self: center; }
+/* sin esquema de pasos: el tablero se tapa con el aviso */
+#sinEsquema { display: none; position: absolute; z-index: 8; inset: 0; align-items: center; justify-content: center; background: var(--papel); }
+#sinEsquema > div { display: flex; flex-direction: column; gap: 6px; max-width: 360px; text-align: center; color: var(--tenue); padding: 24px; border: 1px dashed var(--regla-fuerte); border-radius: 8px; }
+#sinEsquema b { color: var(--tinta); font-size: 16px; }
+body.sin-esquema:not(.vista-documentos):not(.vista-texto) #sinEsquema { display: flex; }
+body.sin-esquema #panel, body.sin-esquema #verDocumentos { display: none; }
+/* Personajes sin ningún personaje: no hay tablero, solo el aviso del carrusel */
+body.vista-personajes.sin-personajes .esq-cuerpo, body.vista-personajes.sin-personajes .esq-pie { display: none; }
+
+/* ---------- vista Documentos: barra lateral (solo aquí) y tablero de etiquetas ----------
+   Adaptación del prototipo «gestor-guiones-2a» a los tokens de Tramas. Prefijo gd-. */
+#documentos { flex: 1; min-width: 0; display: none; background: var(--papel); order: -1; }   /* delante del editor */
+/* el menú (barra de documentos) vive en <main>, delante de todo, en las tres vistas; plegado queda el riel */
+#gdSide { order: -2; display: none; }
+#gdSide { display: flex; }
+.gd-riel { display: none; }
+body.lado-plegado #gdSide > :not(.gd-riel):not(.gd-borde) { display: none; }
+body.lado-plegado .gd-riel { display: flex; flex: 1; flex-direction: column; align-items: center; }
+.gd-cab-acc { display: flex; gap: 4px; }
+[data-gd-fijar].on { color: var(--foco); border-color: var(--foco); }
+/* el esquema que está en el tablero, señalado en el árbol */
+.gd-sub--esquema.montado::after { content: ''; position: absolute; left: 11px; top: 50%; width: 6px; height: 6px; border-radius: 50%;
+        background: var(--foco); transform: translateY(-50%); }
+body.vista-documentos #documentos { display: flex; }
+body.vista-documentos .solo-esquema { display: none; }
+body.vista-documentos #texto { display: none; }
+/* con una nota abierta: la barra se queda y el editor ocupa el tablero */
+body.vista-documentos.nota-abierta #documentos { display: none; }
+body.vista-documentos.nota-abierta #documentos .gd-main { display: none; }
+body.vista-documentos.nota-abierta #texto { display: flex; }
+#texto.documento .hilo { display: none; }
+#texto .migas { display: none; }
+#texto.documento .migas { display: flex; align-items: center; gap: 8px; padding: 7px 14px; background: var(--panel);
+        border-bottom: 1.5px solid var(--tinta); font-size: 14px; color: var(--tenue); min-height: 38px; }
+.migas .btn { padding: 3px 9px; font-size: 13px; }
+.migas-sep { color: var(--palido); }
+.migas-actual { color: var(--tinta); }
+.migas .gd-tag { margin-left: 2px; }
+
+.gd-side { width: 292px; flex: 0 0 292px; display: flex; flex-direction: column; gap: 11px; padding: 14px 12px;
+        background: var(--panel); border-right: 1.5px solid var(--tinta); overflow-y: auto; overflow-x: hidden;
+        scrollbar-width: thin; user-select: none; }   /* la barra entera se desplaza: ninguna lista queda recortada */
+.gd-side [hidden] { display: none !important; }
+.gd-cab { display: flex; align-items: center; justify-content: space-between; }
+.gd-titulo { font-size: 20px; }
+.gd-crear { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1.5px solid var(--tinta); border-radius: 6px; background: var(--papel); }
+.gd-crear input, .gd-buscar input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--tinta); font: inherit; }
+.gd-crear input::placeholder, .gd-buscar input::placeholder { color: var(--tenue); opacity: 1; }
+.gd-pista { font: 9.5px var(--mono); color: var(--palido); margin-top: -7px; padding-left: 2px; }
+.gd-buscar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1.5px solid var(--regla-fuerte); border-radius: 6px; color: var(--tenue); }
+.gd-buscar:focus-within { border-color: var(--tinta); }
+.gd-grupo { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.gd-grupo--todos { flex: none; }
+.gd-grupo-tit { display: flex; align-items: center; justify-content: space-between; margin: 3px 0 4px;
+        font: 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); }
+.gd-grupo-tit button { background: none; border: 0; color: inherit; font: inherit; letter-spacing: inherit; padding: 2px 4px; border-radius: 4px; }
+.gd-grupo-tit button:hover { color: var(--tinta); background: var(--hover-fuerte); }
+.gd-lista { display: flex; flex-direction: column; gap: 2px; }
+.gd-cont { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 6px; border-radius: 5px; cursor: pointer; }
+.gd-cont + .gd-cont, .gd-hijos + .gd-cont { margin-top: 5px; }
+.gd-cont:hover { background: var(--hover-fuerte); }
+.gd-cont.activo { background: var(--foco-suave); box-shadow: inset 3px 0 0 var(--foco); }
+.gd-cont.fijado { background: var(--nota); }
+.gd-cont.fijado.activo { background: var(--foco-suave); }
+.gd-cont-nom { display: flex; align-items: center; gap: 7px; font-size: 16px; min-width: 0; }
+.gd-cont-nom > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-chev { background: none; border: 0; color: var(--palido); font-size: 11px; width: 14px; padding: 0; }
+.gd-estrella { color: var(--t-ambar); font-size: 11px; }
+.gd-cont-acc { display: flex; gap: 4px; align-items: center; color: var(--palido); font-size: 13px; opacity: 0; }
+.gd-cont:hover .gd-cont-acc, .gd-cont.activo .gd-cont-acc { opacity: 1; }
+.gd-cont-acc button { background: none; border: 0; color: inherit; padding: 0 4px; border-radius: 4px; font-size: 14px; }
+.gd-cont-acc button:hover { color: var(--tinta); background: var(--papel); }
+.gd-cont-num { font: 10px var(--mono); color: var(--palido); }
+.gd-nota-fila { display: flex; align-items: center; gap: 7px; width: 100%; padding: 4px 6px 4px 24px; border: 0; background: none;
+        border-radius: 5px; color: var(--tinta); font-size: 15px; text-align: left; cursor: pointer; }
+.gd-nota-fila > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-nota-fila:hover { background: var(--hover-fuerte); }
+.gd-nota-fila.activa { background: var(--foco-suave); }
+.gd-tag { flex: none; border-radius: 4px; padding: 1px 6px; font-size: 11.5px; background: var(--sbg, var(--hover-fuerte)); color: var(--sink, var(--tenue)); }
+.gd-tag--bandeja { border: 1px dashed var(--regla-fuerte); color: var(--tenue); background: none; padding: 0 6px; }
+.gd-vacio { border: 1.5px dashed var(--regla-fuerte); border-radius: 6px; padding: 9px 10px; color: var(--tenue); font-size: 14px; text-align: center; }
+
+.gd-main { flex: 1; min-width: 0; padding: 16px 20px; display: flex; flex-direction: column; gap: 13px; overflow: auto; }
+.gd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gd-head-tit { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.gd-head-nom { font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-meta { font: 9.5px var(--mono); color: var(--palido); letter-spacing: .04em; }
+.gd-acciones { display: flex; gap: 8px; flex: none; }
+.gd-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1.5px solid var(--regla); }
+.gd-barra-tit { font: 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); }
+.gd-filtro { display: flex; align-items: center; gap: 6px; border: 1.5px solid var(--regla-fuerte); border-radius: 6px; padding: 2px 8px; color: var(--tenue); }
+.gd-filtro input { width: 150px; border: 0; outline: none; background: none; color: var(--tinta); font: inherit; font-size: 13px; }
+.gd-tablero { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 13px; align-content: start; }
+.gd-etq { border: 1.5px solid var(--tinta); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; background: var(--papel); }
+.gd-etq-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 11px;
+        background: var(--sbg); color: var(--sink); border-bottom: 1.5px solid var(--tinta); }
+.gd-etq-nom { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 16px; }
+.gd-etq-nom > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-etq-acc { display: flex; gap: 6px; align-items: center; font-size: 13px; flex: none; }
+.gd-etq-acc button { background: none; border: 0; color: inherit; padding: 1px 4px; border-radius: 4px; font-size: 14px; }
+.gd-etq-acc button:hover { background: rgba(255, 255, 255, .55); }
+html[data-theme="dark"] .gd-etq-acc button:hover { background: rgba(0, 0, 0, .3); }
+.gd-cuenta { background: var(--papel); color: var(--tinta); border-radius: 9px; padding: 0 7px; font-size: 12px; }
+.gd-etq-body { padding: 10px 11px; display: flex; flex-direction: column; gap: 8px; min-height: 52px; }
+.gd-etq-body.sobre { background: var(--hover); }
+.gd-nota { display: flex; justify-content: space-between; align-items: center; gap: 9px; width: 100%; padding: 7px 9px;
+        border: 1.5px solid var(--tinta); border-radius: 6px; background: var(--papel); color: var(--tinta);
+        font: inherit; text-align: left; cursor: pointer; transition: box-shadow var(--cd-dur) var(--cd-ease); }
+.gd-nota:hover { box-shadow: 2px 2px 0 var(--sombra-dura); }
+.gd-nota.activa { background: var(--foco-suave); box-shadow: 2px 2px 0 var(--sombra-dura); }
+.gd-nota.arrastrando { opacity: .45; }
+.gd-nota > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-nota-meta { font: 9.5px var(--mono); color: var(--palido); flex: none; }
+.gd-nota-acc { flex: none; background: none; border: 0; color: var(--palido); font-size: 13px; padding: 0 4px; border-radius: 4px; }
+.gd-nota-acc:hover { color: var(--tinta); background: var(--hover-fuerte); }
+.gd-nota-add { border: 1.5px dashed var(--regla-fuerte); border-radius: 6px; padding: 7px 9px; color: var(--tenue); background: none;
+        text-align: left; width: 100%; font: inherit; cursor: pointer; }
+.gd-nota-add:hover { color: var(--tinta); border-color: var(--tinta); }
+.gd-etq-vacia { border: 1.5px dashed var(--regla-fuerte); border-radius: 6px; padding: 12px 9px; color: var(--tenue); text-align: center; font-size: 14px; }
+.gd-etq--bandeja { border-color: var(--regla-fuerte); }
+.gd-etq--bandeja .gd-etq-head { background: var(--hover); color: var(--tenue); border-bottom-color: var(--regla-fuerte); }
+.gd-etq--bandeja .gd-nota { border-color: var(--regla-fuerte); }
+.gd-etq-nueva { border: 1.5px dashed var(--regla-fuerte); border-radius: 8px; padding: 14px; min-height: 74px; width: 100%;
+        display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--tenue); background: none; font: inherit; cursor: pointer; }
+.gd-etq-nueva:hover { color: var(--tinta); border-color: var(--tinta); }
+.gd-muestras { display: flex; gap: 5px; }
+.gd-muestras i { width: 13px; height: 13px; border-radius: 3px; display: block; }
+.gd-nada { border: 1.5px dashed var(--regla-fuerte); border-radius: 8px; padding: 40px 20px; text-align: center; color: var(--tenue);
+        display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.gd-nada b { font-weight: 400; font-size: 18px; color: var(--tinta); }
+.gd-edit { font: inherit; color: var(--tinta); background: var(--papel); border: 1.5px solid var(--foco); border-radius: 4px; padding: 0 4px; outline: none; min-width: 60px; }
+
+/* menús flotantes del gestor */
+.gd-pop { position: fixed; z-index: 30; min-width: 176px; padding: 5px; display: flex; flex-direction: column; gap: 1px;
+        background: var(--papel); border: 1.5px solid var(--tinta); border-radius: 7px; box-shadow: var(--sombra); font-size: 14px; }
+.gd-pop button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 5px 8px; border: 0; border-radius: 4px;
+        background: none; color: var(--tinta); font: inherit; font-size: 14px; }
+.gd-pop button:hover, .gd-pop button:focus-visible { background: var(--hover-fuerte); }
+.gd-pop button.peligro { color: var(--tenue); }
+.gd-pop button.peligro:hover { background: var(--peligro-bg); color: var(--peligro); }
+.gd-pop button.on::after { content: " ✓"; color: var(--foco); margin-left: auto; }
+.gd-pop-sep { height: 1px; background: var(--linea-menu); margin: 3px 6px; }
+.gd-pop-tit { font: 9.5px var(--mono); color: var(--palido); padding: 3px 8px 5px; letter-spacing: .06em; text-transform: uppercase; }
+.gd-pop-punto { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.gd-paleta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 2px 4px 5px; width: 190px; }
+.gd-paleta button { height: 26px; padding: 0; border-radius: 5px; border: 1.5px solid rgba(26, 26, 26, .18); }
+.gd-paleta button:hover, .gd-paleta button.on { border-color: var(--tinta); }
+.gd-pop-fila { display: flex; gap: 6px; padding: 4px 4px 2px; }
+.gd-pop-fila .btn { flex: 1; text-align: center; font-size: 13px; padding: 4px 8px; }
+/* el contenedor «Tramas» (derivado del esquema) y las zonas donde se sueltan notas */
+.gd-cont.tramas { border: 1.5px dashed var(--regla-fuerte); }
+.gd-cont.tramas.activo { border-color: var(--foco); }
+.gd-cont-acc.siempre { opacity: 1; }
+.gd-cont.sobre { outline: 1.5px dashed var(--foco); outline-offset: -1.5px; background: var(--foco-suave); }
+.gd-etq.fija .gd-nota { cursor: pointer; }
+.gd-nota-fila[draggable="true"] { cursor: grab; }
+/* arrastre con clic sostenido: el fantasma sigue al puntero; la nota seleccionada con un clic */
+.gd-fantasma { position: fixed; z-index: 60; pointer-events: none; opacity: .85; display: flex; align-items: center; gap: 9px;
+        padding: 7px 9px; border: 1.5px solid var(--tinta); border-radius: 6px; background: var(--papel); color: var(--tinta);
+        box-shadow: 3px 3px 0 var(--sombra-dura); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#documentos.arrastrando, #documentos.arrastrando *, #gdSide.arrastrando, #gdSide.arrastrando * { user-select: none; cursor: grabbing; }
+.gd-nota.arrastrando, .gd-nota-fila.arrastrando { opacity: .4; }
+.gd-nota.sel { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
+.gd-nota-fila.sel { background: var(--foco-suave); }
+/* papelera, orden manual y asa de los segmentos */
+.gd-cont.papelera { border: 1.5px dashed var(--regla-fuerte); margin-top: 6px; }
+.gd-cont.papelera.activo { border-color: var(--foco); }
+.gd-nota-fila.tirada { color: var(--tenue); }
+.gd-nota-fila { position: relative; padding-right: 26px; }
+.gd-nota-fila .gd-nota-acc { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); opacity: 0; }
+.gd-nota-fila:hover .gd-nota-acc, .gd-nota-fila.sel .gd-nota-acc { opacity: 1; }
+.gd-nota.antes { box-shadow: 0 -3px 0 0 var(--foco); }
+.gd-etq.sobre { outline: 2px solid var(--foco); outline-offset: 2px; }
+.gd-asa { color: inherit; opacity: .55; cursor: grab; }
+.gd-etq:not(.fija):not(.gd-etq--bandeja) > .gd-etq-head { cursor: grab; }
+.gd-fantasma--etq { padding: 8px 11px; background: var(--sbg, var(--panel)); color: var(--sink, var(--tinta)); }
+.gd-papelera .gd-etq-body { min-height: 80px; }
+.gd-papelera .gd-etq-body.sobre { background: var(--hover); }
+
+/* ---------- esquema montado: el del proyecto o el propio de un contenedor ---------- */
+#esquemaSel { font: inherit; font-size: 13.5px; color: var(--tinta); background: var(--papel); border: 1.5px solid var(--regla-fuerte);
+              border-radius: 6px; padding: 3px 6px; max-width: 180px; cursor: pointer; }
+#esquemaSel:hover { border-color: var(--tinta); background: var(--hover); }
+#esquemaSel:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+/* en el árbol, los nodos del esquema propio de un contenedor van en cursiva suave para distinguirlos de sus notas */
+.gd-nota-fila.nodo > span:last-child { font-style: italic; }
+
+/* subcontenedores de un contenedor, en el árbol: Esquema de pasos, Documentos guión, Personajes, Documentos */
+.gd-sub { display: flex; align-items: center; gap: 7px; padding: 4px 6px 4px 22px; color: var(--tinta); cursor: pointer; border-radius: 6px;
+          position: relative; }
+.gd-sub:hover { background: var(--hover-fuerte); }
+.gd-sub.activo { background: var(--foco-suave); }
+.gd-sub-ico { flex: none; width: 16px; text-align: center; color: var(--tenue); font-size: 13px; }
+.gd-sub-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-sub .gd-cont-acc { margin-left: auto; }
+.gd-sub .gd-cont-acc button { opacity: 0; }
+.gd-sub:hover .gd-cont-acc button, .gd-sub.activo .gd-cont-acc button { opacity: 1; }
+.gd-sub.sobre { outline: 2px dashed var(--foco); outline-offset: -2px; }
+.gd-hijos--notas { padding-left: 14px; }
+.gd-tag--esq { border: 1px solid var(--regla-fuerte); background: none; color: var(--tenue); font-size: 11px; }
+.gd-head-tit .gd-tag--esq { font-size: 13px; margin: 0 4px; }
+.gd-cont.global > .gd-cont-nom [data-gd-nombre] { font-weight: 600; }
+/* la ruta «Contenedor › » delante del nombre del subcontenedor en la cabecera del tablero */
+.gd-head-ruta { font-size: 22px; color: var(--tenue); white-space: nowrap; }
+.gd-head-tit { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
+/* una nota de otro contenedor (el «Personajes» global): la misma nota, con su origen */
+.gd-nota.ajena { border-style: dashed; }
+.gd-nota.ajena .gd-nota-meta { font-style: italic; }
+.gd-etq-nueva--quieta { cursor: default; color: var(--tenue); }
+.gd-etq-nueva--quieta:hover { border-color: var(--regla-fuerte); color: var(--tenue); }
+/* un segmento que es un personaje del editor: sin botones de editar */
+.gd-etq.personaje .gd-etq-nom > span:last-child { cursor: default; }
+
+
+/* migas navegables en la cabecera del tablero y sobre el editor: cada miga es un botón */
+.gd-miga { background: none; border: 0; padding: 2px 5px; border-radius: 4px; color: var(--tenue); font: inherit; cursor: pointer; }
+.gd-miga:hover { background: var(--hover-fuerte); color: var(--tinta); }
+.gd-atras { font-size: 15px; line-height: 1; padding: 1px 7px; margin-right: 2px; }
+.gd-atras:disabled { opacity: .35; cursor: default; }
+.gd-head-tit .gd-atras { align-self: center; }
+
+/* botón de contenedor nuevo y su diálogo */
+.gd-nuevo { width: 100%; justify-content: center; text-align: center; }
+#dlgNombre { border: 1px solid var(--borde, var(--regla-fuerte)); border-radius: 8px; padding: 18px 20px 16px; width: min(380px, calc(100vw - 40px));
+             background: var(--papel); color: var(--tinta); box-shadow: var(--sombra); }
+#dlgNombre::backdrop { background: rgba(0, 0, 0, .25); }
+#dlgNombre p { margin: 0 0 10px; font-weight: 600; }
+#dlgNombre input { width: 100%; font: inherit; color: var(--tinta); background: var(--papel); border: 1px solid var(--regla-fuerte); border-radius: 6px; padding: 7px 10px; outline: none; }
+#dlgNombre input:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+#dlgNombre menu { display: flex; justify-content: flex-end; gap: 8px; margin: 14px 0 0; padding: 0; }
+.btn.primario { background: var(--foco); border-color: var(--foco); color: var(--papel); }
+.btn.primario:hover { background: var(--foco); color: var(--papel); opacity: .9; }
+/* arrastre en el árbol: contenedores y esquemas se ordenan; la línea marca delante o detrás */
+.gd-cont.arrastrando, .gd-sub.arrastrando { opacity: .4; }
+.gd-cont.sobre-antes, .gd-sub.sobre-antes { box-shadow: 0 -2px 0 0 var(--foco); }
+.gd-cont.sobre-despues, .gd-sub.sobre-despues { box-shadow: 0 2px 0 0 var(--foco); }
+.gd-cont.sobre-antes, .gd-cont.sobre-despues, .gd-sub.sobre-antes, .gd-sub.sobre-despues { outline: none; }

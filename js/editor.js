@@ -297,15 +297,34 @@
     afterChange();
   }
 
+  /* Las imágenes van dentro del documento (data URL): una foto del móvil pegada tal cual son 4-6 MB en
+     el guardado y en el archivo. Si pesa más de 200 KB se reduce a 1600 px por el lado largo y se
+     recomprime en WebP (JPEG si no hay WebP); los GIF (animación) y SVG se quedan como vienen, y si la
+     versión reducida no es más ligera se usa la original. */
+  const IMG_LADO = 1600, IMG_LIGERA = 200 * 1024;
+  const leerDataURL = file => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+  async function imagenLigera(file) {
+    const original = await leerDataURL(file);
+    if (file.size <= IMG_LIGERA || /gif|svg/.test(file.type) || !window.createImageBitmap) return original;
+    try {
+      const bmp = await createImageBitmap(file);
+      const k = Math.min(1, IMG_LADO / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+      cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+      if (bmp.close) bmp.close();
+      let url = cv.toDataURL('image/webp', 0.82);
+      if (!url.startsWith('data:image/webp')) url = cv.toDataURL('image/jpeg', 0.82);
+      return url.length < original.length ? url : original;
+    } catch (_) { return original; }
+  }
   function insertImageFile(file) {
     if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => {
+    imagenLigera(file).then(src => {
       Ed.focusEditor();
-      Ed.cmd('insertHTML', `<img src="${reader.result}" alt="${Ed.escapeHtml(file.name)}">`);
+      Ed.cmd('insertHTML', `<img src="${src}" alt="${Ed.escapeHtml(file.name)}">`);
       afterChange();
-    };
-    reader.readAsDataURL(file);
+    });
   }
 
   const HL_KEY = 'guiones.editor.hilite';

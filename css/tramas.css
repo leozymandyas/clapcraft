@@ -12,6 +12,7 @@
 
 :root {
   --gutter: 190px;                        /* ancho de la columna de tramas; T.tablero.gutter() lo cambia */
+  --fila: 120px; --eje: 44px;             /* alto de carril y del eje; tablero.js los lee para colocar los cables */
   --papel: #ffffff; --chrome: #f0eee9; --panel: #fbfaf8; --regla: #dcd7ce; --regla-fuerte: #c9c5bd;
   --cuadricula: #ece8e0; --escena: #c9b287; --rombo: #6f4a9c;
   --escena-trazo: #b7a179; --rombo-trazo: #6f4a9c;
@@ -76,7 +77,7 @@ main { flex: 1; display: flex; min-height: 0; }
 #canvas { position: relative; min-height: 100%; padding-bottom: 30px; }
 
 /* ---------- actos ---------- */
-.axis { position: sticky; top: 0; z-index: 6; height: 44px; display: flex; background: var(--panel);
+.axis { position: sticky; top: 0; z-index: 6; height: var(--eje); display: flex; background: var(--panel);
         border-bottom: 1.5px solid var(--tinta); }
 .axis .gutter { position: sticky; left: 0; z-index: 2; width: var(--gutter); flex: 0 0 var(--gutter); background: var(--panel);
         border-right: 1.5px solid var(--tinta); display: flex; align-items: center; padding-left: 16px;
@@ -97,7 +98,7 @@ main { flex: 1; display: flex; min-height: 0; }
 .add-acto:hover { background: var(--hover); color: var(--foco); }
 
 /* ---------- filas ---------- */
-.row { display: flex; height: 120px; position: relative; }
+.row { display: flex; height: var(--fila); position: relative; }
 .row.cortada { opacity: .45; }
 .label { position: sticky; left: 0; z-index: 5; width: var(--gutter); flex: 0 0 var(--gutter); background: var(--panel);
          border-right: 1.5px solid var(--tinta); display: flex; align-items: center; gap: 9px;
@@ -233,6 +234,17 @@ aside h2 { font: 9.5px var(--mono); letter-spacing: .08em; text-transform: upper
 /* Flechas para recorrer los nodos según el hilo de la historia */
 .hilo-nav { display: flex; align-items: center; gap: 8px; margin: -4px 0 16px; }
 .hilo-nav .btn { width: 30px; padding: 3px 0; text-align: center; font-size: 17px; line-height: 1.1; }
+/* panel del nodo: ‹ › y × en la cabecera, estado, dónde está, acciones y atajos */
+.panel-nav { display: flex; align-items: center; gap: 4px; margin-top: -4px; }
+.panel-nav .btn, .panel-nav .mini { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; margin: 0; }
+.field.field-crece textarea { min-height: 340px; }
+.field select { width: 100%; font: inherit; font-size: 14px; padding: 6px 8px; border: 1.5px solid var(--regla-fuerte); border-radius: 6px; background: var(--papel); color: var(--tinta); }
+.panel-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--tenue); font-size: 13.5px; }
+.panel-meta-punto { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.panel-meta-sep { color: var(--palido); }
+.panel-acciones { display: flex; gap: 8px; }
+.panel-acciones .act-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.panel-pista { display: flex; gap: 14px; margin-top: 10px; font: 9.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--palido); }
 .hilo-pos { flex: 1; text-align: center; font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase;
         color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .field { margin-bottom: 15px; }

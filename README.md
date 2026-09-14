@@ -29,7 +29,7 @@ npm start        # abre la app (Claquedraw: esquema de pasos + editor)
 npm run dist     # genera el instalador (dmg / nsis / AppImage) en dist/
 ```
 
-La app se llama **Claquedraw** y abre `claquedraw.html`; los archivos `.cld` quedan asociados, así que
+La app se llama **ClapCraft** (antes Claquedraw; el código conserva ese nombre) y abre `claquedraw.html`; los archivos `.clapcraft` quedan asociados, así que
 un doble clic en el Finder los abre en la app y desde entonces se guardan ahí solos. El instalador de
 macOS es un `.dmg` sin firmar: se arrastra la app a Aplicaciones y, si Gatekeeper protesta la primera
 vez, clic derecho → Abrir.
@@ -287,13 +287,66 @@ editor (`index.html`) en un marco.
 | `claquedraw.html`, `css/claquedraw.css` | Página, vistas y aspecto de la tira (se carga sobre `css/tramas.css`) |
 | `js/claquedraw/biblioteca.js` | Modelo puro del guion guardado: tablero, notas por nodo, nota actual. Sin DOM |
 | `js/claquedraw/texto.js` | Vista Texto: el editor en un marco y la tira de la trama (una nota por nodo) |
-| `js/claquedraw/app.js` | Autoguardado, Nuevo / Abrir… / Guardar…, el conmutador de vistas, ganchos con el tablero |
+| `js/claquedraw/documentos.js` | Modelo puro del gestor: contenedores, segmentos, notas y bandeja. Sin DOM |
+| `js/claquedraw/gestor.js` | Vista Documentos: barra lateral, tablero de segmentos, menús, arrastre, notas en el editor |
+| `js/claquedraw/app.js` | Autoguardado, pestañas, Nuevo / Abrir… / Guardar…, el conmutador de vistas, ganchos con el tablero |
+| `test/documentos.test.js` | Reglas del gestor (`npm test`) |
 | `test/claquedraw.test.js` | Reglas del modelo (`npm test`) |
 
 **Cómo se usa**
 
-- **Esquema / Texto**: el conmutador de la cabecera, o `Cmd/Ctrl+Shift+G` (también con el cursor en el
-  editor). La vista se recuerda. En el esquema, el panel de un nodo tiene «✎ Escribir la nota»; al volver
+- **Pestañas**: cada guion abierto es una pestaña bajo la cabecera, con su propio archivo, como en
+  cualquier programa de dibujo. El «+» (o `Cmd/Ctrl+N` en la app) abre una «Sin título 1», «Sin título
+  2»… (el número más bajo libre); al guardarla toma el nombre del archivo. Un asterisco junto al nombre
+  (y en el título de la ventana) marca los cambios sin guardar: en una pestaña sin archivo, desde que se
+  toca; con archivo, hasta que el autoguardado escribe. La «×» la cierra (si tiene archivo, escribe lo
+  pendiente y cierra; si tiene contenido y no tiene archivo, pregunta). `Ctrl+Tab` / `Ctrl+Shift+Tab`
+  pasan de pestaña. Abrir un archivo que ya está en una pestaña salta a ella.
+- **En la app de escritorio** las órdenes viven en el menú: Archivo (Nueva pestaña, Abrir…, Guardar,
+  Guardar como…, Cerrar pestaña), Edición (Deshacer, Rehacer, Cortar, Copiar, Pegar) y Ver (Esquema /
+  Texto, Documentos, Línea de tiempo / Cinta, columna de tramas, Modo oscuro, pestañas). La barra deja solo el
+  conmutador Esquema / Documentos, la escala, Deshacer/Rehacer y el indicador de guardado.
+- **Aspecto**: el rediseño «sala de montaje» (`docs/diseno/rediseno/`): IBM Plex Sans en la interfaz y
+  Plex Mono en los rótulos (empaquetadas en `fonts/`), Courier Prime en el documento, tres planos de gris
+  y un solo acento lavanda del logo (Leo eligió el morado), bordes de 1 px, iconos de trazo y etiquetas
+  de tipo en el árbol; modo claro y oscuro con los mismos tokens (`css/clapcraft.css` y
+  `css/clapcraft-editor.css` van encima de las hojas base). La cabecera ya no lleva botones de vista: se navega desde la barra de
+  documentos (atajos: `Cmd/Ctrl+Shift+G` esquema/texto, `Cmd/Ctrl+Shift+F` documentos). El menú Ver de la
+  app solo tiene «Modo oscuro».
+- **Documentos** (`Cmd/Ctrl+Shift+F`): el gestor de documentos del proyecto. Su barra lateral está en
+  las tres vistas, también con el esquema de pasos abierto; con el pin de su cabecera (o
+  `Cmd/Ctrl+Shift+B`) se fija a la izquierda o se suelta: suelta se esconde y se asoma con el asa
+  «Documentos» del borde izquierdo (un clic fuera la cierra). Enseña los **contenedores** del proyecto
+  («＋ Nuevo contenedor» abre un diálogo para ponerle nombre); cada uno es una carpeta con hijos de dos
+  clases, que se crean con su «＋» (también con un diálogo para el nombre):
+  · **Esquema de pasos**: un tablero. Un contenedor puede tener varios; un clic en su fila lo monta en
+    la vista Esquema (un punto marca el que está montado).
+  · **Subcontenedor**: un tablero de documentos: la bandeja (notas sin segmento) primero, una tarjeta
+    por segmento (nombre y color de la paleta de 16) y «＋ nuevo segmento». Un contenedor nuevo trae uno
+    llamado «Documentos».
+  Nada es especial: contenedores, esquemas y subcontenedores se renombran (doble clic o menú `⋯`), se
+  ordenan y se eliminan. Un guion nuevo arranca con «Trama global» y su «Esquema de pasos»; si no queda
+  ningún esquema, el tablero avisa y el primero que se cree se monta solo. Los tableros no llevan botones
+  arriba: nueva nota y nuevo segmento van en el menú `⋯` del subcontenedor y en las tarjetas («＋ nota»,
+  «＋ nuevo segmento»). La cabecera de cada tablero son migas para navegar: «‹» vuelve al tablero
+  anterior, el nombre del contenedor abre su primer subcontenedor; con una nota abierta, las migas de
+  encima del editor hacen lo mismo. **El árbol se ordena arrastrando**: contenedores entre sí (con el
+  orden en Manual); esquemas y subcontenedores dentro de su contenedor o a otro contenedor (delante o
+  detrás de otro de su clase, o sobre el contenedor para dejarlo al final); también con Subir / Bajar en
+  sus menús. Cada nota se abre en el editor con doble clic (un clic la selecciona); arriba van las migas
+  (contenedor › subcontenedor › segmento › nota). El título del documento es el de la nota. Las notas se
+  mueven arrastrándolas con el clic sostenido: a otro segmento, dentro del suyo para ordenarlas, a un
+  subcontenedor o contenedor de la barra (a su bandeja) o a la papelera; también desde su menú `⋯`, que
+  está en la tarjeta y en el árbol. Los segmentos se ordenan arrastrándolos por su cabecera o desde su
+  menú. Con texto en «Buscar», bajo cada subcontenedor aparecen las notas que casan. La **Papelera**, al
+  final de la barra, guarda las notas que se tiran (desde su menú o arrastrándolas a ella) y las de un
+  contenedor o subcontenedor eliminado, con su origen y la fecha; desde ahí se restauran (menú, o
+  arrastrándolas a un subcontenedor) o se eliminan del todo; «Vaciar papelera» lo borra todo, y al
+  arrancar se eliminan solas las que lleven más de 30 días.
+- **Abrir el editor desde el esquema**: doble clic en un nodo (o «Abrir documento» en su panel) abre su
+  documento en el editor; «‹ Esquema» en la barra de título del editor, o `Cmd/Ctrl+Shift+G`, vuelve.
+  Renombrar un nodo se hace en el panel o desde el título del editor. Los cuadros y rombos conservan su
+  doble clic de renombrar, porque no tienen documento. La vista se recuerda. En el esquema, el panel de un nodo tiene «✎ Escribir la nota»; al volver
   al esquema queda seleccionado el nodo de la nota abierta.
 - **La tira**: sobre la cinta del editor, enseña **una trama a la vez** con sus nodos dibujados igual que
   en el esquema (título encima; nodo descartado tachado; fuera de escena apagado) y el chip de la trama a
@@ -313,16 +366,16 @@ editor (`index.html`) en un marco.
 - **Título**: el título de la nota es el del nodo; cambiarlo en el editor renombra el nodo en el esquema.
 - **Globo**: al pasar el ratón por un nodo de la tira aparece debajo su título y la descripción que se
   escribió en el esquema (en los saltos, adónde llevan).
-- **Archivos `.cld`**: el guion (esquema y notas) se guarda solo en el navegador siempre, y además en un
-  archivo `.cld` en cuanto lo eliges: «Guardar como…» (`Cmd/Ctrl+Shift+S`) lo crea y «Abrir…»
+- **Archivos `.clapcraft`**: el guion se guarda solo en el navegador siempre, y además en un
+  archivo `.clapcraft` (comprimido: un guion largo ocupa del orden de 100-150 KB) en cuanto lo eliges: «Guardar como…» (`Cmd/Ctrl+Shift+S`) lo crea y «Abrir…»
   (`Cmd/Ctrl+O`) toma uno existente; desde entonces cada cambio se escribe ahí solo, sin pulsar nada.
   «Guardar» (`Cmd/Ctrl+S`) escribe en el acto (o pide archivo si aún no hay). El indicador de la
-  cabecera dice dónde está el guion: «Solo en este navegador», «✓ nombre.cld» o «● nombre.cld» si hay
+  cabecera dice dónde está el guion (nada si aún no tiene archivo): «✓ nombre.clapcraft» o «● nombre.clapcraft» si hay
   cambios sin escribir; un clic en él también guarda. Al volver a abrir la página se retoma el mismo
   archivo (en Chrome/Edge puede pedir permiso una vez: el indicador dice «reconectar» y «Guardar» lo
   pide; en la app de escritorio no hace falta). En navegadores sin acceso a archivos solo se descarga.
-  «Nuevo» empieza otro guion sin archivo (pide confirmación). Los `.json` de `tramas.html` también se
-  abren, y un `.cld` se abre en `tramas.html` como tablero. La primera vez hereda el tablero de
+  «Nuevo» empieza otro guion sin archivo (pide confirmación). Los antiguos `.cld` ya no se abren. Las
+  imágenes que se pegan en el editor se reducen (1600 px, WebP) para que el archivo no pese. La primera vez hereda el tablero de
   `tramas.html` si lo había. El editor abierto a solas (`index.html`) conserva su propio documento. La
   nota de un nodo borrado se descarta al abrir otro guion.
 - **Integración**: `Claquedraw.biblioteca` y `Claquedraw.app` (`abrir(id)`, `nuevo()`, `exportar()`,

@@ -18,6 +18,9 @@
 
   /* registro: clave normalizada → { name, color }. Viaja dentro del documento (ver Ed.document). */
   let registry = {};
+  /* el elenco de fuera (ClapCraft: los personajes de todo el guion): se sugiere y manda en los colores,
+     pero no se guarda en el documento */
+  let global = {};
   C.export = () => JSON.parse(JSON.stringify(registry));
   C.import = obj => { registry = obj && typeof obj === 'object' ? JSON.parse(JSON.stringify(obj)) : {}; if (Ed.editor) C.refresh(); };
 
@@ -26,20 +29,30 @@
   const key = s => clean(s).replace(/\s*\([^)]*\)\s*$/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const save = () => { if (Ed.afterChange) Ed.afterChange(); };
 
+  C.setGlobal = function (lista) {
+    global = {};
+    (lista || []).forEach(p => { const k = key(p && p.name); if (k) global[k] = { name: clean(p.name), color: C.PALETTE[p.color] ? p.color : 0 }; });
+    Object.keys(registry).forEach(k => { if (global[k]) { registry[k].color = global[k].color; registry[k].name = global[k].name; } });   // manda el elenco
+    if (Ed.editor) C.refresh();
+  };
   function nextColor() {
-    const used = Object.values(registry).map(r => r.color);
+    const used = Object.values(registry).map(r => r.color).concat(Object.values(global).map(r => r.color));
     for (let i = 0; i < C.PALETTE.length; i++) if (!used.includes(i)) return i;
     return Object.keys(registry).length % C.PALETTE.length;
   }
   C.register = function (name) {
     const k = key(name);
     if (!k) return null;
-    if (!registry[k]) { registry[k] = { name: clean(name).replace(/\s*\([^)]*\)\s*$/, ''), color: nextColor() }; save(); }
+    if (!registry[k]) { registry[k] = global[k] ? { name: global[k].name, color: global[k].color } : { name: clean(name).replace(/\s*\([^)]*\)\s*$/, ''), color: nextColor() }; save(); }
     return registry[k];
   };
-  C.list = () => Object.values(registry).map(r => r.name).sort((a, b) => a.localeCompare(b, 'es'));
+  C.list = () => {
+    const nombres = new Map();
+    Object.values(global).concat(Object.values(registry)).forEach(r => { const k = key(r.name); if (!nombres.has(k)) nombres.set(k, r.name); });
+    return Array.from(nombres.values()).sort((a, b) => a.localeCompare(b, 'es'));
+  };
   C.has = word => !!registry[key(word)];
-  C.colorOf = name => { const r = registry[key(name)]; return r ? C.PALETTE[r.color] : null; };
+  C.colorOf = name => { const r = registry[key(name)] || global[key(name)]; return r ? C.PALETTE[r.color] : null; };
   /* El personaje de un bloque (null si el bloque no es un personaje registrado). */
   C.entryOf = block => (block && block.classList && block.classList.contains('sp-character')) ? registry[key(block.textContent)] || null : null;
 
@@ -82,7 +95,12 @@
   }
   C.refresh = function () {
     const editing = document.activeElement === editor() ? currentCharBlock() : null;
-    $$('p.sp-character', editor()).forEach(b => paint(b, b !== editing));
+    const bloques = $$('p.sp-character', editor());
+    /* un nombre que ya no está en ningún bloque de personaje sale del registro: así una errata que llegó a
+       registrarse (al salir del bloque antes de corregirla) no se queda como personaje */
+    const vivos = new Set(bloques.map(b => key(b.textContent)).filter(Boolean));
+    Object.keys(registry).forEach(k => { if (!vivos.has(k)) delete registry[k]; });
+    bloques.forEach(b => paint(b, b !== editing));
     /* los bloques que dejaron de ser personaje pierden el color */
     $$('[data-ch]:not(.sp-character)', editor()).forEach(b => { b.removeAttribute('data-ch'); b.style.removeProperty('--chl'); b.style.removeProperty('--chd'); });
   };
@@ -103,7 +121,7 @@
       if (!menu.hidden) { const b = currentCharBlock(); if (b !== activeBlock) close(); }
       /* al salir de un bloque de personaje se registra su nombre */
       const b = currentCharBlock();
-      if (lastBlock && b !== lastBlock && lastBlock.isConnected) paint(lastBlock, true);
+      if (lastBlock && b !== lastBlock) C.refresh();              // registra el que se deja y poda los que ya no están
       lastBlock = b;
     });
     editor().addEventListener('input', () => { if (Ed.page) C.schedule(); });

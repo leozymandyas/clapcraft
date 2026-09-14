@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="width:1280px;height:820px;display:flex;flex-direction:column;overflow:hidden;background:var(--chrome);color:var(--tinta);font-family:var(--sans);font-size:13px;border:1px solid var(--borde-fuerte);border-radius:6px">
+
+  <div style="height:48px;flex:none;display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--chrome);border-bottom:1px solid var(--regla)">
+    <div style="display:flex;align-items:center;gap:8px">
+      <svg width="19" height="19" viewBox="0 0 16 16"><rect x="1.4" y="5.6" width="13.2" height="8.9" rx="1.3" fill="var(--logo-1)"></rect><path d="M1.6 5.6 2.9 2.4l12.3 1-.5 2.2z" fill="var(--logo-2)"></path><path d="M5.4 2.7 4.3 5.5M8.7 3 7.6 5.7M12 3.3 10.9 5.9" stroke="var(--logo-3)" stroke-width="1.1"></path></svg>
+      <span style="font-family:var(--marca);font-weight:700;font-size:15px;letter-spacing:-.015em">ClapCraft</span>
+    </div>
+    <div style="width:1px;height:20px;background:var(--regla)"></div>
+    <div style="display:inline-flex;align-items:center;gap:7px;height:27px;padding:0 9px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);font-size:12.5px;font-weight:500">
+      <span style="color:var(--tenue)">Trama global</span><svg width="13" height="13" style="color:var(--palido)"><use href="#ic-chev-r"></use></svg><span>Esquema de pasos</span><svg width="13" height="13" style="color:var(--palido);margin-left:2px"><use href="#ic-chev-d"></use></svg>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px">
+      <span style="font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--palido)">ESCALA</span>
+      <div style="position:relative;width:88px;height:3px;border-radius:2px;background:var(--borde-fuerte)">
+        <div style="position:absolute;left:0;top:0;height:3px;width:56px;border-radius:2px;background:var(--foco)"></div>
+        <div style="position:absolute;left:56px;top:-4px;width:11px;height:11px;margin-left:-5px;border-radius:50%;background:var(--papel);border:1px solid var(--borde-fuerte);box-shadow:var(--sombra)"></div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:2px">
+      <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--tinta)"><svg width="16" height="16"><use href="#ic-undo"></use></svg></div>
+      <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--palido)"><svg width="16" height="16"><use href="#ic-redo"></use></svg></div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--tenue)">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--foco)"></span>guion.cld
+    </div>
+  </div>
+
+  <div style="height:33px;flex:none;display:flex;align-items:flex-end;gap:3px;padding:0 10px;background:var(--chrome);border-bottom:1px solid var(--borde)">
+    <div style="display:flex;align-items:center;gap:8px;height:27px;margin-bottom:-1px;padding:0 10px;background:var(--lienzo);border:1px solid var(--borde);border-bottom-color:var(--lienzo);border-radius:5px 5px 0 0;font-size:12.5px;font-weight:500">Sin título 1<span style="color:var(--foco);font-size:14px;line-height:1">•</span><svg width="12" height="12" style="color:var(--palido)"><use href="#ic-close"></use></svg></div>
+    <div style="display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;font-size:12.5px;color:var(--tenue)">Piloto.cld</div>
+    <div style="display:flex;align-items:center;justify-content:center;width:24px;height:26px;color:var(--palido)"><svg width="14" height="14"><use href="#ic-plus"></use></svg></div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <div style="width:292px;flex:none;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--borde-fuerte);box-shadow:var(--sombra-lado)">
+      <div style="height:42px;flex:none;display:flex;align-items:center;gap:4px;padding:0 10px 0 12px">
+        <span style="font-size:13.5px;font-weight:600;letter-spacing:-.005em">Documentos</span>
+        <div style="flex:1"></div>
+        <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--tenue)"><svg width="15" height="15"><use href="#ic-search"></use></svg></div>
+        <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--foco);background:var(--foco-suave)"><svg width="15" height="15"><use href="#ic-panel"></use></svg></div>
+      </div>
+      <div style="padding:0 10px">
+        <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 9px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;color:var(--palido);font-size:12.5px"><svg width="14" height="14"><use href="#ic-plus"></use></svg>Nombre del contenedor…</div>
+        <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;color:var(--palido);padding:5px 2px 0">ENTER CREA · ESC CANCELA</div>
+        <div style="display:flex;align-items:center;gap:8px;height:30px;margin-top:8px;padding:0 9px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;color:var(--palido);font-size:12.5px"><svg width="14" height="14"><use href="#ic-search"></use></svg>Buscar nota o contenedor</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 12px 6px;font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--palido)">CONTENEDORES · 2<svg width="14" height="14"><use href="#ic-sort"></use></svg></div>
+      <div style="flex:1;min-height:0;padding:0 6px;display:flex;flex-direction:column;gap:1px">
+        <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:4px;font-size:13px;font-weight:600;background:var(--hover)"><svg width="13" height="13" style="color:var(--tenue);flex:none"><use href="#ic-chev-d"></use></svg><span style="display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.04em;background:var(--p-grafito-bg);color:var(--p-grafito-tinta);flex:none">Contenedor</span>Trama global<div style="flex:1"></div><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-plus"></use></svg><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-more"></use></svg></div>
+        <div style="display:flex;align-items:center;gap:8px;height:28px;padding:0 8px 0 24px;border-radius:4px;background:var(--sel-bg);box-shadow:inset 2px 0 0 var(--foco);font-weight:500"><span style="display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.04em;background:var(--p-violeta-bg);color:var(--p-violeta-tinta);flex:none">Esquema</span>Esquema de pasos<div style="flex:1"></div><span style="width:6px;height:6px;border-radius:50%;background:var(--foco)"></span></div>
+        <div style="display:flex;align-items:center;gap:8px;height:28px;padding:0 8px 0 24px;border-radius:4px"><span style="display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.04em;background:var(--p-azul-bg);color:var(--p-azul-tinta);flex:none">Documentos</span>Documentos<div style="flex:1"></div><span style="font-family:var(--mono);font-size:10px;color:var(--palido)">12</span></div>
+        <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:4px;font-size:13px;font-weight:600;margin-top:6px"><svg width="13" height="13" style="color:var(--tenue);flex:none"><use href="#ic-chev-d"></use></svg><span style="display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.04em;background:var(--p-grafito-bg);color:var(--p-grafito-tinta);flex:none">Contenedor</span>Investigación<div style="flex:1"></div></div>
+        <div style="display:flex;align-items:center;gap:8px;height:28px;padding:0 8px 0 24px;border-radius:4px"><span style="display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.04em;background:var(--p-violeta-bg);color:var(--p-violeta-tinta);flex:none">Esquema</span>Flashbacks<div style="flex:1"></div></div>
+        <div style="display:flex;align-items:center;gap:8px;height:28px;padding:0 8px 0 24px;border-radius:4px"><span style="display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.04em;background:var(--p-azul-bg);color:var(--p-azul-tinta);flex:none">Documentos</span>Documentos<div style="flex:1"></div><span style="font-family:var(--mono);font-size:10px;color:var(--palido)">4</span></div>
+      </div>
+      <div style="flex:none;padding:8px 6px 10px;border-top:1px solid var(--regla)">
+        <div style="display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:4px;color:var(--tenue)"><svg width="15" height="15"><use href="#ic-trash"></use></svg>Papelera<div style="flex:1"></div><span style="font-family:var(--mono);font-size:10px;color:var(--palido)">2</span></div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--lienzo);position:relative">
+      <div style="height:27px;flex:none;display:flex;border-bottom:1px solid var(--regla)">
+        <div style="width:168px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;border-right:1px solid var(--regla);font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido)">TRAMAS</div>
+        <div style="flex:1;display:flex;min-width:0">
+          <div style="width:196px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 10px;background:var(--f-azul);border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--tenue)">ACTO I</div>
+          <div style="width:147px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 10px;background:var(--f-ambar);border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--tenue)">ACTO II</div>
+          <div style="flex:1;min-width:0;display:flex;align-items:center;padding:0 10px;background:var(--f-verde);font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--tenue);white-space:nowrap;overflow:hidden;box-sizing:border-box">ACTO III</div>
+        </div>
+      </div>
+
+      <div style="flex:1;display:flex;min-height:0">
+        <div style="width:168px;flex:none;border-right:1px solid var(--regla);display:flex;flex-direction:column">
+          <div style="height:80px;display:flex;align-items:center;gap:9px;padding:0 12px;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)">
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--t-violeta)"></span>
+            <div><div style="font-size:13px;font-weight:600">Principal</div><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido);margin-top:2px">PRINCIPAL</div></div>
+          </div>
+          <div style="height:80px;display:flex;align-items:center;gap:9px;padding:0 12px;border-bottom:1px solid var(--cuadricula)">
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--t-azul)"></span>
+            <div><div style="font-size:13px;font-weight:600">Secundaria</div><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido);margin-top:2px">SECUNDARIA</div></div>
+          </div>
+          <div style="height:80px;display:flex;align-items:center;gap:9px;padding:0 12px;border-bottom:1px solid var(--cuadricula)">
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--t-verde)"></span>
+            <div><div style="font-size:13px;font-weight:600">Ana</div><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido);margin-top:2px">PERSONAJE</div></div>
+          </div>
+          <div style="height:34px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--palido);font-size:12.5px"><svg width="14" height="14"><use href="#ic-plus"></use></svg>Nueva trama</div>
+        </div>
+
+        <div style="flex:1;min-width:0;position:relative;background:repeating-linear-gradient(90deg,var(--cuadricula) 0 1px,transparent 1px 49px)">
+          <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none"><path d="M196 40 L196 120" stroke="var(--rombo)" stroke-width="1.5" stroke-dasharray="3 3" fill="none"></path></svg>
+
+          <div style="position:absolute;left:0;top:0;right:0;height:80px;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)">
+            <div style="position:absolute;left:0;right:0;top:39px;height:2px;background:var(--t-violeta);opacity:.45"></div>
+            <div style="position:absolute;left:0;top:39px;width:196px;height:2px;background:var(--foco-linea)"></div>
+            <div style="position:absolute;left:49px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+            <div style="position:absolute;left:49px;top:14px;transform:translateX(-50%);font-size:11px;color:var(--tenue);white-space:nowrap">Inicio</div>
+            <div style="position:absolute;left:147px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--foco);border:2px solid var(--foco);box-shadow:0 0 0 4px var(--foco-halo)"></div>
+            <div style="position:absolute;left:147px;top:12px;transform:translateX(-50%);font-size:11px;font-weight:600;white-space:nowrap">Encuentro</div>
+            <div style="position:absolute;left:196px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:2px;background:var(--escena);border:2px solid var(--escena-trazo)"></div>
+            <div style="position:absolute;left:294px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+            <div style="position:absolute;left:294px;top:14px;transform:translateX(-50%);font-size:11px;color:var(--tenue);white-space:nowrap">Huida</div>
+            <div style="position:absolute;left:392px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+            <div style="position:absolute;left:392px;top:14px;transform:translateX(-50%);font-size:11px;color:var(--tenue);white-space:nowrap">Puerto</div>
+          </div>
+
+          <div style="position:absolute;left:0;top:80px;right:0;height:80px;border-bottom:1px solid var(--cuadricula)">
+            <div style="position:absolute;left:0;right:0;top:39px;height:2px;background:var(--t-azul);opacity:.35"></div>
+            <div style="position:absolute;left:196px;top:40px;transform:translate(-50%,-50%) rotate(45deg);width:10px;height:10px;border-radius:2px;background:var(--rombo);border:2px solid var(--rombo-trazo)"></div>
+            <div style="position:absolute;left:245px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-azul)"></div>
+            <div style="position:absolute;left:245px;top:14px;transform:translateX(-50%);font-size:11px;color:var(--tenue);white-space:nowrap">Aviso</div>
+            <div style="position:absolute;left:343px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px dashed var(--t-gris);opacity:.6"></div>
+            <div style="position:absolute;left:343px;top:14px;transform:translateX(-50%);font-size:11px;color:var(--palido);text-decoration:line-through;white-space:nowrap">Descartada</div>
+            <div style="position:absolute;right:14px;top:46px;width:124px;box-sizing:border-box;padding:5px 7px;background:var(--nota);border:1px solid var(--nota-borde);border-radius:3px;font-size:10.5px;line-height:1.35;color:var(--nota-tinta);box-shadow:var(--sombra)">¿Aquí revela la carta?</div>
+          </div>
+
+          <div style="position:absolute;left:0;top:160px;right:0;height:80px;border-bottom:1px solid var(--cuadricula)">
+            <div style="position:absolute;left:0;right:0;top:39px;height:2px;background:repeating-linear-gradient(90deg,var(--t-verde) 0 6px,transparent 6px 11px);opacity:.4"></div>
+            <div style="position:absolute;left:98px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-verde)"></div>
+            <div style="position:absolute;left:98px;top:14px;transform:translateX(-50%);font-size:11px;color:var(--tenue);white-space:nowrap">Llega</div>
+            <div style="position:absolute;left:294px;top:40px;transform:translate(-50%,-50%);width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:4px;border:1px dashed var(--borde-fuerte);color:var(--palido);background:var(--papel)"><svg width="12" height="12"><use href="#ic-plus"></use></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:9px;padding:8px 13px;border-radius:5px;background:var(--toast-bg);color:var(--toast-fg);font-size:12.5px;box-shadow:var(--sombra-alta)"><svg width="14" height="14" style="color:var(--toast-acento)"><use href="#ic-check"></use></svg>Esquema «Flashbacks» creado en «Investigación»</div>
+    </div>
+
+    <div style="width:330px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;gap:11px;padding:14px;background:var(--papel);border-left:1px solid var(--borde-fuerte)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:11px;border-bottom:1px solid var(--regla)">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--palido)">NODO</span>
+        <div style="display:flex;gap:2px">
+          <div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--tenue)"><svg width="13" height="13"><use href="#ic-arr-l"></use></svg></div>
+          <div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--tenue)"><svg width="13" height="13"><use href="#ic-arr-r"></use></svg></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--palido);margin-bottom:5px">TÍTULO</div>
+        <div style="height:32px;display:flex;align-items:center;padding:0 10px;background:var(--lienzo);border:1px solid var(--foco);border-radius:4px;box-shadow:0 0 0 3px var(--foco-halo);font-size:14px">Encuentro</div>
+      </div>
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--palido);margin-bottom:5px">DESCRIPCIÓN</div>
+        <div style="flex:1;min-height:0;padding:10px 11px;background:var(--lienzo);border:1px solid var(--borde);border-radius:4px;font-size:13px;line-height:1.55;color:var(--tinta)">Ana vuelve a la cafetería del puerto y reconoce a quien no esperaba. Primer punto de giro del acto: a partir de aquí ya no puede seguir fingiendo que el viaje era por trabajo.</div>
+      </div>
+      <div>
+        <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--palido);margin-bottom:5px">ESTADO</div>
+        <div style="height:30px;display:flex;align-items:center;gap:7px;padding:0 10px;background:var(--lienzo);border:1px solid var(--borde);border-radius:4px;font-size:12.5px">En escena<div style="flex:1"></div><svg width="13" height="13" style="color:var(--palido)"><use href="#ic-chev-d"></use></svg></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--tenue)"><span style="width:8px;height:8px;border-radius:50%;background:var(--t-violeta)"></span>Principal<span style="color:var(--palido)">·</span>Acto I</div>
+      <div style="display:flex;align-items:center;gap:7px">
+        <div style="flex:1;height:30px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:4px;background:var(--foco);color:var(--foco-sobre);font-size:12.5px;font-weight:500"><svg width="14" height="14"><use href="#ic-script"></use></svg>Abrir documento</div>
+        <div style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--peligro)"><svg width="14" height="14"><use href="#ic-trash"></use></svg></div>
+      </div>
+      <div style="display:flex;gap:12px;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)"><span>SUPR ELIMINA</span><span>ESC CIERRA</span></div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:820}}"></script>
+</body>
+</html>

@@ -11,22 +11,35 @@
 
   const BASE = 20;                       // px de una celda a escala 1
   let GUTTER = 190;                      // ancho de la columna de tramas (px); ver T.tablero.gutter()
-  const FILA = 120, EJE = 44;
+  /* Alto de carril y del eje: los fija la hoja de estilos (--fila, --eje) para que la piel de
+     ClapCraft pueda cambiarlos sin desalinear los cables del SVG; si no están, 120 y 44. */
+  const medida = (v, defecto) => { const n = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v)); return n > 0 ? n : defecto; };
+  let FILA = medida('--fila', 120);                // el alto de carril se puede cambiar: T.tablero.alto()
+  const EJE = medida('--eje', 44);
   /* Los colores se pintan como variables CSS (css/tramas.css las define para el tema claro y el
      oscuro), así cambiar de tema no obliga a redibujar. Solo el globo necesita el valor real. */
   const tono = id => `var(--t-${PALETA.some(c => c.id === id) ? id : PALETA[0].id})`;
-  const fondo = id => id ? `var(--f-${id})` : 'transparent';
+  const fondo = id => id && id !== 'ninguno' ? `var(--f-${id})` : 'transparent';
+  const fondoActo = a => fondo(T.fondoEfectivo(a, m.datos.actos.indexOf(a)));   // el elegido o el automático por posición
   const colorSalto = t => t === 'rombo' ? 'var(--rombo-trazo)' : 'var(--escena-trazo)';
   const resolver = v => {                // 'var(--x)' → valor calculado (hex) en el tema actual
     const mm = /^var\((--[\w-]+)\)$/.exec(String(v).trim());
     return mm ? getComputedStyle(document.documentElement).getPropertyValue(mm[1]).trim() : v;
   };
+  /* iconos de trazo del panel (rejilla de 16, como el sprite de ClapCraft, pero sin depender de él) */
+  const svg = d => `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const ICONO = { izq: svg('<path d="M9.6 4.2 5.8 8l3.8 3.8"/>'), der: svg('<path d="M6.4 4.2 10.2 8l-3.8 3.8"/>'),
+    cerrar: svg('<path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/>'), borrar: svg('<path d="M3.2 4.8h9.6M6.4 4.8V3.2h3.2v1.6"/><path d="M4.8 4.8l.6 8.4h5.2l.6-8.4"/>') };
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   let m = null;                          // T.Modelo
   let sel = null;                        // { tipo: 'punto'|'linea'|'acto'|'salto'|'nota', id }
   let zoom = 1.7;
   let pres = null, ruta = null;          // cálculos derivados del último render
+  /* Tablero «simple» (el de Personajes en ClapCraft): sin fuera de escena ni camino iluminado, sin saltos
+     alternativos (rombos) y sin sentido en los saltos (ni flecha ni «Invertir el sentido») */
+  let simple = false;
+  const SIN_PRESENCIA = { fuera: () => false, tramoFuera: () => false, lineaEnFlujo: () => false };
   const historial = new T.Historial(80);
   let restaurando = false;
   const ganchos = { alCambiar: () => {} };
@@ -68,12 +81,12 @@
      Render
      ==================================================================== */
   function calcularRuta() {
-    ruta = (sel && sel.tipo === 'punto') ? m.recorrido(sel.id, pres) : null;
+    ruta = (!simple && sel && sel.tipo === 'punto') ? m.recorrido(sel.id, pres) : null;
   }
   const enRuta = (lineaId, ca, cb) => !!ruta && ruta.incluye(lineaId, ca, cb);
 
   function render() {
-    pres = m.presencia();
+    pres = simple ? SIN_PRESENCIA : m.presencia();
     calcularRuta();
     document.body.classList.toggle('con-ruta', !!ruta);
     const g = G(), W = totalW(), d = m.datos;
@@ -82,11 +95,11 @@
     $axis.innerHTML = `<div class="gutter">Tramas</div>
       <div class="acts" style="width:${W + 46}px">
         ${d.actos.map(a => `<div class="acto${esSel('acto', a.id) ? ' sel' : ''}" data-acto="${a.id}"
-             style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondo(a.fondo)}">
+             style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondoActo(a)}">
             <input class="aname" readonly data-acto-nombre="${a.id}" title="Clic: seleccionar · doble clic: renombrar">
-            ${d.actos.length > 1 ? `<button class="mini" data-acto-del="${a.id}" title="Eliminar acto">×</button>` : ''}
+            ${d.actos.length > 1 ? `<button class="mini" data-acto-del="${a.id}" title="Eliminar ${esc(m.nombre('acto').toLowerCase())}">×</button>` : ''}
             <span class="handle" data-handle="${a.id}" title="Arrastra para cambiar el ancho"></span></div>`).join('')}
-        <button class="add-acto" id="addActo" style="left:${W}px" title="Nuevo acto">+</button>
+        <button class="add-acto" id="addActo" style="left:${W}px" title="Nuevo ${esc(m.nombre('acto').toLowerCase())}">+</button>
       </div>`;
     d.actos.forEach(a => { $axis.querySelector(`[data-acto-nombre="${a.id}"]`).value = a.nombre; });
 
@@ -99,15 +112,15 @@
       row.className = 'row ' + l.tipo + (l.cortada ? ' cortada' : '');
       row.dataset.linea = l.id;
       row.innerHTML = `
-        <div class="label${esSel('linea', l.id) ? ' sel' : ''}">
-          <span class="chip ${l.tipo}" style="background:${tono(l.color)};color:${tono(l.color)}"></span>
+        <div class="label${esSel('linea', l.id) ? ' sel' : ''}" style="--tc:${tono(l.color)}">
+          <span class="chip ${l.tipo}" data-inicial="${esc((l.nombre || '?').trim().charAt(0).toUpperCase())}" style="background:${tono(l.color)};color:${tono(l.color)}"></span>
           <span class="lbox"><input class="lname" readonly data-linea-nombre="${l.id}" title="Clic: seleccionar · doble clic: renombrar">
             <span class="ltipo">${ETIQUETA[l.tipo]}</span></span>
           ${l.tipo === 'principal' ? '' : `<button class="mini" data-linea-del="${l.id}" title="Eliminar trama">×</button>`}
         </div>
         <div class="track" data-linea="${l.id}" style="width:${W}px;background-image:${rejilla}">
-          ${d.actos.filter(a => a.fondo).map(a => `<div class="banda"
-             style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondo(a.fondo)}"></div>`).join('')}
+          ${d.actos.map(a => `<div class="banda"
+             style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondoActo(a)}"></div>`).join('')}
           ${actoSel ? `<div class="banda sel" style="left:${offsetDe(actoSel.id)}px;width:${anchoDe(actoSel)}px"></div>` : ''}
           <div class="rail" style="background:${tono(l.color)};color:${tono(l.color)}"></div>
           ${d.actos.slice(1).map(a => `<div class="sep" style="left:${offsetDe(a.id)}px"></div>`).join('')}
@@ -208,7 +221,7 @@
       /* todo lo del salto va en un grupo: al arrastrarlo se desplaza entero sin redibujar */
       d += `<g data-salto-g="${s.id}">
             <line x1="${x}" y1="${ya}" x2="${x}" y2="${yb}" style="stroke:${col}" stroke-width="${grosor}" opacity="${op}" shape-rendering="crispEdges"/>
-            <polygon points="${x},${yb + dir * 4.5} ${x - 5},${yb - dir * 5} ${x + 5},${yb - dir * 5}" style="fill:${col}" opacity="${op}"/>
+            ${simple ? '' : `<polygon points="${x},${yb + dir * 4.5} ${x - 5},${yb - dir * 5} ${x + 5},${yb - dir * 5}" style="fill:${col}" opacity="${op}"/>`}
             <path class="golpe" d="M ${x} ${ya + dir * 16} L ${x} ${yb - dir * 16}" stroke="transparent" stroke-width="14" fill="none" data-salto="${s.id}"/>`;
       if (seleccionado) {
         const my = (y1 + y2) / 2;
@@ -403,7 +416,7 @@
   /* Arrastre del "+" del cruce hasta otra trama: nacen los dos extremos y el salto. */
   function saltoDesdeCruce(origen, lineaDestino) {
     const forma = m.formaEntre(origen.lineaId, lineaDestino);
-    const r = m.nuevoPunto(origen.lineaId, origen.actoId, origen.celda, { titulo: FORMA[forma] });
+    const r = m.nuevoPunto(origen.lineaId, origen.actoId, origen.celda, { titulo: m.forma(forma) });
     if (!aplicar(r)) return;
     const s = m.crearSalto(r.punto.id, lineaDestino, forma);
     if (!s.ok) { m.borrarPunto(r.punto.id); avisar(s.aviso); return; }
@@ -422,33 +435,35 @@
     if (sel.tipo === 'punto') {
       const p = m.punto(sel.id); if (!p) { sel = null; return panel(); }
       const l = m.linea(p.lineaId), forma = m.formaDe(p.id), v = m.vecinos(p.id);
+      /* cabecera con ‹ › y ×; título, descripción (ocupa el alto), estado, dónde está y las acciones */
+      const pos = `${v.indice + 1} de ${v.total} · ${v.enHilo ? 'en el hilo' : 'solo en ' + l.nombre}`;
       $panel.innerHTML = `
-        <div class="panel-cabecera"><h2>${forma ? esc(FORMA[forma]) : 'Nodo'} · ${esc(l.nombre)}</h2>
-          <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)">×</button></div>
-        <div class="hilo-nav">
-          <button class="btn" data-hilo="${v.anterior || ''}" ${v.anterior ? '' : 'disabled'} title="Nodo anterior (←)">‹</button>
-          <span class="hilo-pos">${v.indice + 1} de ${v.total} · ${v.enHilo ? 'en el hilo' : 'solo en ' + esc(l.nombre)}</span>
-          <button class="btn" data-hilo="${v.siguiente || ''}" ${v.siguiente ? '' : 'disabled'} title="Nodo siguiente (→)">›</button>
-        </div>
+        <div class="panel-cabecera"><h2>${esc(forma ? m.forma(forma) : m.nombre('nodo'))}</h2>
+          <span class="panel-nav">
+            <button class="btn nav" data-hilo="${v.anterior || ''}" ${v.anterior ? '' : 'disabled'} title="Nodo anterior (←) · ${esc(pos)}" aria-label="Nodo anterior">${ICONO.izq}</button>
+            <button class="btn nav" data-hilo="${v.siguiente || ''}" ${v.siguiente ? '' : 'disabled'} title="Nodo siguiente (→) · ${esc(pos)}" aria-label="Nodo siguiente">${ICONO.der}</button>
+            <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)" aria-label="Cerrar el panel">${ICONO.cerrar}</button>
+          </span></div>
         ${pres.fuera(p) ? `<p class="empty" style="font-size:12px;margin-top:0">Está <b>fuera de escena</b>: la historia se fue a otra trama en este tramo.</p>` : ''}
-        <div class="field"><label>Título</label><input type="text" id="fTitulo"></div>
-        <div class="field"><label>Descripción</label>
-          <textarea id="fNota" placeholder="Qué pasa aquí" style="min-height:340px"></textarea></div>
-        ${forma ? '' : `<button class="btn act-btn${p.cortado ? ' on' : ''}" id="bCortar">${p.cortado ? 'Descartado ✓' : 'Descartar'}</button>`}
-        <button class="btn act-btn danger" id="bBorrar">${forma ? 'Eliminar salto' : 'Eliminar punto'}</button>`;
+        <div class="field"><label for="fTitulo">Título</label><input type="text" id="fTitulo"></div>
+        <div class="field field-crece"><label for="fNota">Descripción</label>
+          <textarea id="fNota" placeholder="Qué pasa aquí"></textarea></div>
+        <div class="panel-meta"><span class="panel-meta-punto" style="background:${tono(l.color)}"></span>${esc(l.nombre)}<span class="panel-meta-sep">·</span>${esc((m.acto(p.actoId) || {}).nombre || '')}</div>
+        <div class="panel-acciones">
+          <button class="btn act-btn danger" id="bBorrar" title="${forma ? 'Eliminar salto' : 'Eliminar punto'} (Supr)" aria-label="${forma ? 'Eliminar salto' : 'Eliminar punto'}">${ICONO.borrar}</button></div>
+        <div class="panel-pista"><span>Supr elimina</span><span>Esc cierra</span></div>`;
       $panel.querySelector('#fTitulo').value = p.titulo;
       $panel.querySelector('#fNota').value = p.descripcion;
       $panel.querySelector('#fTitulo').oninput = e => { m.editarPunto(p.id, { titulo: e.target.value }); rapido(p); tocar(); };
       $panel.querySelector('#fNota').oninput = e => { m.editarPunto(p.id, { descripcion: e.target.value }); tocar(); };
-      const bc = $panel.querySelector('#bCortar');
-      if (bc) bc.onclick = () => { aplicar(m.descartarPunto(p.id)); render(); };
+      /* (Leo, 14-09-2026: el panel ya no lleva «Estado»; descartar sigue en el menú del nodo) */
       $panel.querySelector('#bBorrar').onclick = () => pedirBorrarPunto(p.id);
     }
 
     if (sel.tipo === 'linea') {
       const l = m.linea(sel.id); if (!l) { sel = null; return panel(); }
       $panel.innerHTML = `
-        <div class="panel-cabecera"><h2>Trama</h2>
+        <div class="panel-cabecera"><h2>${esc(m.nombre('linea'))}</h2>
           <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)">×</button></div>
         <div class="field"><label>Nombre</label><input type="text" id="fNombre"></div>
         <div class="field"><label>Tipo</label>
@@ -475,16 +490,16 @@
     if (sel.tipo === 'acto') {
       const a = m.acto(sel.id); if (!a) { sel = null; return panel(); }
       $panel.innerHTML = `
-        <div class="panel-cabecera"><h2>Acto</h2>
+        <div class="panel-cabecera"><h2>${esc(m.nombre('acto'))}</h2>
           <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)">×</button></div>
         <div class="field"><label>Nombre</label><input type="text" id="fNombre"></div>
         <div class="field"><label id="lAncho">Ancho: ${a.celdas} celdas</label>
           <input type="range" id="fAncho" min="${MIN_CELDAS}" max="${MAX_CELDAS}" step="1" value="${a.celdas}"></div>
-        <div class="field"><label>Fondo del acto</label><div class="swatches">
-          ${FONDOS.map(f => `<button class="sw${(a.fondo || '') === f.id ? ' on' : ''}" data-fondo="${a.id}|${f.id}"
-            title="${f.label}" style="background:${fondo(f.id)};${f.id ? '' : 'border:1px dashed var(--regla-fuerte)'}"></button>`).join('')}
+        <div class="field"><label>Fondo del ${esc(m.nombre('acto').toLowerCase())}</label><div class="swatches">
+          ${FONDOS.map(f => `<button class="sw${T.fondoEfectivo(a, m.datos.actos.indexOf(a)) === f.id ? ' on' : ''}" data-fondo="${a.id}|${f.id}"
+            title="${f.label}${!a.fondo && T.fondoEfectivo(a, m.datos.actos.indexOf(a)) === f.id ? ' (automático)' : ''}" style="background:${fondo(f.id)};${f.id === 'ninguno' ? 'border:1px dashed var(--regla-fuerte)' : ''}"></button>`).join('')}
         </div></div>
-        ${m.datos.actos.length > 1 ? '<button class="btn act-btn danger" id="bBorrar">Eliminar acto</button>' : ''}`;
+        ${m.datos.actos.length > 1 ? `<button class="btn act-btn danger" id="bBorrar">Eliminar ${esc(m.nombre('acto').toLowerCase())}</button>` : ''}`;
       $panel.querySelector('#fNombre').value = a.nombre;
       $panel.querySelector('#fNombre').oninput = e => {
         m.editarActo(a.id, { nombre: e.target.value });
@@ -531,7 +546,7 @@
     const p = m.punto(id); if (!p) return;
     const forma = m.formaDe(id);
     const texto = forma
-      ? `¿Seguro que deseas eliminar este ${FORMA[forma].toLowerCase()}? Se eliminan sus dos extremos.`
+      ? `¿Seguro que deseas eliminar ${m.femenino(forma) ? 'esta' : 'este'} ${m.forma(forma).toLowerCase()}? Se eliminan sus dos extremos.`
       : '¿Seguro que deseas eliminar este punto?';
     if (!await confirmar(texto)) return;
     if (aplicar(m.borrarPunto(id))) sel = null;
@@ -539,7 +554,7 @@
   }
   async function pedirBorrarSalto(id) {
     const s = m.salto(id); if (!s) return;
-    if (!await confirmar(`¿Seguro que deseas eliminar este ${FORMA[s.tipo].toLowerCase()}? Se eliminan sus dos extremos.`)) return;
+    if (!await confirmar(`¿Seguro que deseas eliminar ${m.femenino(s.tipo) ? 'esta' : 'este'} ${m.forma(s.tipo).toLowerCase()}? Se eliminan sus dos extremos.`)) return;
     if (aplicar(m.borrarSalto(id))) sel = null;
     render();
   }
@@ -580,7 +595,7 @@
         if (aplicar(r)) sel = { tipo: 'punto', id: r.punto.id };
       } else {
         const [forma, destino] = v.split('|');
-        const r = m.nuevoPunto(q.lineaId, q.actoId, q.celda, { titulo: FORMA[forma] });
+        const r = m.nuevoPunto(q.lineaId, q.actoId, q.celda, { titulo: m.forma(forma) });
         if (aplicar(r)) {
           const s = m.crearSalto(r.punto.id, destino, forma);
           if (s.ok) sel = { tipo: 'salto', id: s.salto.id }; else m.borrarPunto(r.punto.id);
@@ -787,18 +802,18 @@
     const rombos = m.datos.lineas.filter(x => x.id !== lineaId);
     const puedeCuadro = cuadros.length && l.tipo !== 'alterna';
     abrirMenuEn(cx, cy, `<div class="mt">Crear en ${esc(l.nombre)}</div>
-      <button data-crear="nodo"><span class="ic" style="background:${tono(l.color)}"></span>Nodo</button>
-      ${puedeCuadro ? `<div class="sep"></div><div class="mt">Cambio de escena a…</div>`
+      <button data-crear="nodo"><span class="ic" style="background:${tono(l.color)}"></span>${esc(m.nombre('nodo'))}</button>
+      ${puedeCuadro ? `<div class="sep"></div><div class="mt">${esc(m.forma('cuadro'))} a…</div>`
         + cuadros.map(d => `<button data-crear="cuadro|${d.id}"><span class="ic caja"></span>${esc(d.nombre)}</button>`).join('') : ''}
-      ${rombos.length ? `<div class="sep"></div><div class="mt">Salto alternativo a…</div>`
+      ${rombos.length && !simple ? `<div class="sep"></div><div class="mt">Salto alternativo a…</div>`
         + rombos.map(d => `<button data-crear="rombo|${d.id}"><span class="ic rombo"></span>${esc(d.nombre)}</button>`).join('') : ''}`);
   }
 
   /* Clic secundario en un nodo: color, descartar y eliminar; en un extremo: convertir, invertir, eliminar. */
   function menuNodo(p, el) {
     const s = m.saltoDe(p.id);
-    const html = (s ? `<div class="mt">${esc(FORMA[s.tipo])}</div>${opcionesSalto(s)}<div class="sep"></div>`
-      : `<div class="mt">Nodo</div>
+    const html = (s ? `<div class="mt">${esc(m.forma(s.tipo))}</div>${simple ? '' : opcionesSalto(s) + '<div class="sep"></div>'}`
+      : `<div class="mt">${esc(m.nombre('nodo'))}</div>
          <div class="colores">
            ${PALETA.map(c => `<button class="sw${p.color === c.id ? ' on' : ''}" data-mcolor="${p.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
            <button class="sw hereda${p.color ? '' : ' on'}" data-mcolor="${p.id}|" title="Hereda el color de la trama">trama</button>
@@ -818,8 +833,8 @@
       + `<button data-salto-inv="${s.id}">Invertir el sentido</button>`;
   }
   function menuSalto(s, cx, cy) {
-    abrirMenuEn(cx, cy, `<div class="mt">${esc(FORMA[s.tipo])}</div>${opcionesSalto(s)}
-      <div class="sep"></div><button class="peligro" data-salto-del="${s.id}">Eliminar</button>`);
+    abrirMenuEn(cx, cy, `<div class="mt">${esc(m.forma(s.tipo))}</div>${simple ? '' : opcionesSalto(s) + '<div class="sep"></div>'}
+      <button class="peligro" data-salto-del="${s.id}">Eliminar</button>`);
   }
   function menuNota(n, el) {
     const r = el.getBoundingClientRect();
@@ -994,11 +1009,18 @@
     modelo: () => m,
     seleccion: () => sel,
     zoom: v => { if (v !== undefined) { zoom = clamp(+v || 1.7, .5, 4); render(); } return zoom; },
+    /* sin fuera de escena ni camino iluminado (true) o con ellos (false, lo normal) */
+    simple: v => { if (v !== undefined && !!v !== simple) { simple = !!v; render(); } return simple; },
+    /* Alto de carril (escala vertical), en px: lo escribe en --fila para que el CSS de las filas vaya a la par. */
+    alto: v => {
+      if (v !== undefined) { FILA = Math.round(clamp(+v || 80, 48, 240)); document.documentElement.style.setProperty('--fila', FILA + 'px'); render(); }
+      return FILA;
+    },
     /* Ancho de la columna de tramas. El CSS lo lee de --gutter (css/tramas.css); aquí se usa para
        colocar la marca de cruce, los cables y el ancho del lienzo. */
     gutter: v => {
       if (v !== undefined) {
-        GUTTER = Math.round(clamp(+v || 190, 110, 420));
+        GUTTER = Math.round(clamp(+v || 190, 40, 420));
         document.documentElement.style.setProperty('--gutter', GUTTER + 'px');
         if (m) render();
       }

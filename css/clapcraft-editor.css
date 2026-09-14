@@ -1,0 +1,140 @@
+/* ===== ClapCraft · piel del editor (rediseño) =====
+   Se carga la última en index.html (el editor, también dentro del marco de ClapCraft) y pone los
+   mismos tokens que css/clapcraft.css encima de css/editor.css: IBM Plex Sans en la interfaz, Plex
+   Mono en rótulos, tres planos de gris, acento lavanda, bordes finos, barra inferior grafito.
+   El documento sigue en Courier Prime. */
+@font-face { font-family: "IBM Plex Sans"; src: url("../fonts/IBMPlexSans-400.ttf") format("truetype"); font-weight: 400; font-style: normal; }
+@font-face { font-family: "IBM Plex Sans"; src: url("../fonts/IBMPlexSans-500.ttf") format("truetype"); font-weight: 500; font-style: normal; }
+@font-face { font-family: "IBM Plex Sans"; src: url("../fonts/IBMPlexSans-600.ttf") format("truetype"); font-weight: 600; font-style: normal; }
+@font-face { font-family: "IBM Plex Mono"; src: url("../fonts/IBMPlexMono-400.ttf") format("truetype"); font-weight: 400; font-style: normal; }
+@font-face { font-family: "IBM Plex Mono"; src: url("../fonts/IBMPlexMono-500.ttf") format("truetype"); font-weight: 500; font-style: normal; }
+:root {
+  --ui-font: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --bg: #e9e9ec; --canvas: #f6f6f8; --bar: #e9e9ec; --bar-2: #f6f6f8;
+  --ink: #c7c7d0; --line: #c7c7d0; --line-soft: #d4d4db;
+  --fg: #1e1e22; --muted: #61616b; --muted-2: #8d8d97; --icon: #61616b; --hover: #d6d6dd;
+  --accent-bg: #eae6f1; --accent-fg: #6b5b8e; --accent: #6b5b8e; --select-bg: rgba(232, 228, 240, .8); --star: #86682c;
+  --page-bg: #ffffff; --page-fg: #1e1e22; --page-muted: #61616b; --page-soft: #f6f6f8; --page-line: #d4d4db;
+  --page-shadow: 0 1px 2px rgba(24, 24, 32, .07), 0 10px 24px rgba(24, 24, 32, .1);
+  --bb-bg: #2b2b31; --bb-fg: #ececef; --bb-muted: #9494a0; --bb-line: #42424b; --bb-border: #42424b; --bb-thumb: #ececef; --bb-active: #6b5b8e; --bb-active-fg: #ffffff; --bb-top: transparent;
+}
+html[data-theme="dark"] {
+  --bg: #202024; --canvas: #141417; --bar: #202024; --bar-2: #191a1d;
+  --ink: #3a3a42; --line: #3a3a42; --line-soft: #2f2f36;
+  --fg: #e8e8ec; --muted: #9a9aa4; --muted-2: #75757f; --icon: #9a9aa4; --hover: #2c2c32;
+  --accent-bg: #2e2839; --accent-fg: #bfaed8; --accent: #bfaed8; --select-bg: rgba(47, 42, 59, .8); --star: #cfa957;
+  --page-bg: #26262a; --page-fg: #e8e8ec; --page-muted: #9a9aa4; --page-soft: #2c2c32; --page-line: #3a3a42;
+  --page-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 28px rgba(0, 0, 0, .45);
+  --bb-bg: #0f0f11; --bb-fg: #e8e8ec; --bb-muted: #84848e; --bb-line: #2a2a30; --bb-border: #2a2a30; --bb-thumb: #e8e8ec; --bb-active: #bfaed8; --bb-active-fg: #221d2b; --bb-top: #2a2a30;
+}
+body { font-size: 13px; -webkit-font-smoothing: antialiased; }
+/* barra inferior: una fila de 36 px sobre grafito, rótulos mono y una sola pastilla encendida en lavanda */
+.focus-bar { height: 36px; gap: 0; padding: 0 14px; border-top: 1px solid var(--bb-top); font-size: 12px; }
+body.pin-bottom .workspace { padding-bottom: 60px; }
+.fb-item { flex-direction: row-reverse; align-items: center; gap: 9px; padding-right: 14px; margin-right: 14px; border-right: 1px solid var(--bb-line); height: 36px; }
+.fb-item > span { font: 500 9.5px var(--mono); letter-spacing: .09em; color: var(--bb-muted); }
+.fb-item.row { flex-direction: row; gap: 6px; height: 24px; padding: 0 9px; margin: 0 3px 0 0; border: 0; border-radius: 4px; color: var(--bb-muted); }
+.fb-item.row > span { font: 500 12px var(--ui-font); color: var(--bb-muted); }
+.fb-item.row:hover { background: rgba(255, 255, 255, .06); }
+.fb-item.row:has(button.active) { background: var(--bb-active); }
+.fb-item.row:has(button.active) > span, .fb-item.row:has(button.active) button { color: var(--bb-active-fg); }
+.fb-item.row button { width: auto; height: auto; border: 0; padding: 0; font-size: 12px; color: var(--bb-muted); }
+.fb-item.row button.active { background: none; }
+.fb-item.row button:hover { background: none; }
+.fb-item.wide .fb-range i { display: none; }
+.fb-range { gap: 0; }
+.focus-bar select { height: 24px; border: 0; padding: 0 20px 0 0; font: 500 10.5px var(--mono); letter-spacing: .04em; background-position: right 2px center; }
+.fb-item:first-child > span { display: none; }
+.focus-bar input[type=range] { width: 70px; height: 3px; background: var(--bb-line); }
+.focus-bar input[type=range]::-webkit-slider-thumb { width: 11px; height: 11px; background: var(--bb-fg); }
+.fb-sep { display: none; }
+.fb-spacer { flex: 1; }
+.fb-item.row:last-child { margin-right: 0; padding: 0 5px; }
+.fb-item.row:last-child > span { display: none; }
+.fb-item.row:last-child button svg { width: 14px; height: 14px; }
+.ribbon { font-size: 12.5px; border-bottom: 1px solid var(--line-soft); }
+.topbar button, .find-panel button { border-radius: 4px; }
+.topbar button.active { background: var(--accent-bg); color: var(--accent-fg); }
+.topbar select, .pill { border: 1px solid var(--line); border-radius: 4px; font-weight: 400; font-size: 12px; }
+.doc-title { font-family: var(--ui-font); font-weight: 600; }
+.focus-bar { border-top: 1px solid var(--bb-top); }
+.focus-bar button { border-width: 1px; border-radius: 4px; }
+.fb-item > span { font-family: var(--mono); letter-spacing: .09em; font-size: 9.5px; }
+.fb-item.row > span { font-family: var(--ui-font); }
+.focus-bar input[type=range] { height: 3px; }
+
+/* ===== Dentro de ClapCraft (html.clapcraft, lo pone js/claquedraw/texto.js): Pantalla Texto del rediseño 3 =====
+   Sin barra de título (el título y ‹ › van en la cabecera de la página), la cinta en una sola fila de 44 px y
+   la barra inferior clara de 42 px, las dos siempre a la vista; la hoja sobre el lienzo con 26 px de aire.
+   index.html abierto a solas no cambia. */
+html.clapcraft {
+  --bb-bg: #e9e9ec; --bb-fg: #1e1e22; --bb-muted: #61616b; --bb-line: #c7c7d0; --bb-border: #c7c7d0; --bb-thumb: #ffffff;
+  --bb-active: #6b5b8e; --bb-active-fg: #ffffff; --bb-top: #c7c7d0;
+}
+html.clapcraft[data-theme="dark"] {
+  --bb-bg: #0f0f11; --bb-fg: #e8e8ec; --bb-muted: #84848e; --bb-line: #2a2a30; --bb-border: #2a2a30; --bb-thumb: #26262a;
+  --bb-active: #bfaed8; --bb-active-fg: #221d2b; --bb-top: #2a2a30;
+}
+html.clapcraft body { height: 100vh; overflow: hidden; }   /* solo se desplaza la hoja */
+/* desplazadores morados, como en el resto de ClapCraft (la hoja, los menús y los desplegables) */
+html.clapcraft ::-webkit-scrollbar { width: 10px; height: 10px; }
+html.clapcraft ::-webkit-scrollbar-track { background: transparent; }
+html.clapcraft ::-webkit-scrollbar-thumb { background: var(--accent); background-clip: padding-box; border: 2px solid transparent; border-radius: 6px; min-height: 32px; }
+html.clapcraft ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--accent) 85%, var(--fg)); }
+html.clapcraft ::-webkit-scrollbar-corner { background: transparent; }
+html.clapcraft .topbar { position: static; transform: none !important; flex: none; transition: none; background: var(--bg); }
+html.clapcraft .titlebar { display: none; }
+/* cinta: una fila; enlace, tabla, buscar, tema y pin no van (buscar sigue con Ctrl+F) */
+html.clapcraft .ribbon { height: 44px; box-sizing: border-box; flex-wrap: nowrap; overflow: hidden; gap: 5px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+html.clapcraft .ribbon .group:has([data-action="link"]), html.clapcraft .ribbon .sep:has(+ .group [data-action="link"]),
+html.clapcraft .ribbon .spacer, html.clapcraft .ribbon [data-action="theme"], html.clapcraft #btnPin { display: none; }
+html.clapcraft .ribbon .sep { width: 1px; height: 20px; margin: 0 4px; background: var(--line-soft); }
+html.clapcraft .ribbon .group { gap: 1px; }
+html.clapcraft .topbar button { width: 27px; min-width: 27px; height: 27px; border: 1px solid transparent; border-radius: 4px; color: var(--fg); }
+html.clapcraft .topbar button.txt { width: 26px; min-width: 26px; height: 26px; color: var(--fg); }
+html.clapcraft .topbar button.txt:hover { background: var(--hover); }
+html.clapcraft .topbar button.active { border-color: rgba(107, 91, 142, .42); background: var(--accent-bg); color: var(--accent-fg); }
+html.clapcraft[data-theme="dark"] .topbar button.active { border-color: rgba(191, 174, 216, .4); }
+html.clapcraft .ribbon .group:has([data-cmd="justifyLeft"]) button, html.clapcraft .ribbon .group:has([data-cmd="insertUnorderedList"]) button:not(.active) { color: var(--muted); }
+html.clapcraft .topbar select, html.clapcraft .pill { height: 27px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 4px; background-color: var(--page-bg); font-size: 12.5px; }
+html.clapcraft #blockStyle { width: 132px; padding-left: 9px; }
+html.clapcraft #fontFamily { width: 158px; padding-left: 9px; font-size: 12px; }
+html.clapcraft #lineSpacing { width: 64px; margin-left: 4px; font-family: var(--mono); font-size: 12px; }
+html.clapcraft .pill.size { gap: 2px; padding: 0 4px; background: var(--page-bg); }
+html.clapcraft .pill.size button { width: 18px; min-width: 18px; height: 22px; border: 0; color: var(--muted); }
+html.clapcraft #fontSize { font-family: var(--mono); font-size: 12px; width: 24px; }
+/* hoja: sobre el lienzo, 26 px por arriba, borde fino */
+html.clapcraft .workspace { padding: 26px 0 32px; }
+html.clapcraft body.typewriter .workspace { padding-top: 26px; padding-bottom: 50vh; }   /* arriba, el mismo aire con typewriter (Leo: «muy amplio») */
+html.clapcraft .page { padding-top: 1.1cm; border: 1px solid var(--line); border-radius: 0; box-shadow: 0 1px 1px rgba(24, 24, 32, .05); min-height: calc(100vh - 44px - 42px - 58px); }
+html.clapcraft .find-panel { top: 52px; border-width: 1px; border-radius: 0 0 6px 6px; }
+/* barra inferior: clara, 42 px, siempre a la vista; tamaño y ancho a la izquierda, los modos a la derecha */
+html.clapcraft .focus-bar { position: static; transform: none !important; transition: none; flex: none; height: 42px; box-sizing: border-box; padding: 0 16px; gap: 0;
+  background: var(--bb-bg); color: var(--bb-fg); border-top: 1px solid var(--bb-top); }
+html.clapcraft body.pin-bottom .workspace { padding-bottom: 32px; }
+html.clapcraft .fb-item { height: 42px; box-sizing: border-box; gap: 12px; padding-right: 14px; margin-right: 14px; border-right: 1px solid var(--bb-line); }
+html.clapcraft .fb-item:first-child { flex-direction: row-reverse; }
+html.clapcraft .fb-item:first-child > span, html.clapcraft .fb-item.wide > span { display: inline; font: 400 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bb-muted); }
+html.clapcraft .fb-item.wide { flex-direction: row-reverse; }
+html.clapcraft .fb-item.fb-paginas { border-right: 0; margin-right: auto; }   /* los modos, a la derecha */
+html.clapcraft .fb-paginas-n { font: 400 12px var(--mono); color: var(--bb-fg); }
+html.clapcraft .fb-spacer { display: none; }
+html.clapcraft .fb-item.wide > span { font-size: 0; }
+html.clapcraft .fb-item.wide > span::before { content: 'Ancho'; font-size: 10px; }
+html.clapcraft .focus-bar select { height: 27px; font: 400 12px var(--mono); letter-spacing: 0; color: var(--bb-fg); background-color: transparent; }
+html.clapcraft .focus-bar input[type=range] { width: 112px; height: 3px; border-radius: 2px;
+  background: linear-gradient(var(--accent), var(--accent)) 0 / var(--pct, 50%) 100% no-repeat, var(--bb-line); }
+html.clapcraft .focus-bar input[type=range]::-webkit-slider-thumb { width: 11px; height: 11px; background: var(--page-bg); border: 1px solid var(--muted-2); box-shadow: 0 1px 1px rgba(24, 24, 32, .08); }
+/* los modos: pastillas de texto (el botón cubre la pastilla entera); la encendida en lavanda sólido */
+html.clapcraft .fb-item.row { position: relative; height: 27px; padding: 0 10px; margin: 0 0 0 6px; border: 0; border-radius: 5px; }
+html.clapcraft .fb-item.row > span { font: 400 12.5px var(--ui-font); color: var(--bb-fg); }
+html.clapcraft .fb-item.row button { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+html.clapcraft .fb-item.row:hover { background: var(--hover); }
+html.clapcraft .fb-item.row:has(button.active) { background: var(--bb-active); }
+html.clapcraft .fb-item.row:has(button.active) > span { color: var(--bb-active-fg); font-weight: 500; }
+html.clapcraft .fb-item.row:has(#fbTheme), html.clapcraft .fb-item.row:has(#btnPinBottom) { display: none; }
+html.clapcraft .fb-item.row:last-child { margin-right: 0; }
+html.clapcraft .fb-item.cd-lado { width: 27px; padding: 0; margin-left: 6px; }
+html.clapcraft .fb-item.cd-lado button { position: static; opacity: 1; display: flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--bb-muted); }
+html.clapcraft .fb-item.cd-lado button svg { width: 15px; height: 15px; }

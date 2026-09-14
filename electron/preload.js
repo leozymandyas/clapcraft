@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('editorAPI', {
   /* sin diálogo: autoguardado en el archivo ya elegido (Claquedraw) */
   writeFile: opts => ipcRenderer.invoke('file:write', opts),
   readFile: opts => ipcRenderer.invoke('file:read', opts),
-  /* un .cld abierto desde el sistema (doble clic en el Finder): llega la ruta */
-  onAbrirRuta: cb => ipcRenderer.on('abrir-ruta', (_e, p) => cb(p))
+  /* un .clapcraft abierto desde el sistema (doble clic en el Finder): llega la ruta */
+  onAbrirRuta: cb => ipcRenderer.on('abrir-ruta', (_e, p) => cb(p)),
+  /* órdenes del menú de la aplicación (Archivo, Edición, Ver): 'nuevo', 'abrir', 'guardar', … */
+  onMenu: cb => ipcRenderer.on('menu', (_e, accion) => cb(accion)),
+  /* el tema actual, para que el menú Ver diga «Modo claro» u «oscuro» según toque */
+  informarTema: oscuro => ipcRenderer.send('tema', !!oscuro)
 });

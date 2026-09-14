@@ -160,7 +160,7 @@ body:not(.show-top):not(.pin-top) .find-panel { top: 0; }
 .ctx-menu .ctx-empty { padding: 4px 10px; font-size: 12px; color: var(--muted); }
 
 /* ===== Área de trabajo y hoja ===== */
-.workspace { flex: 1; overflow: auto; padding: 100px 0 48px; background: var(--canvas); scroll-padding: 40px; }
+.workspace { flex: 1; overflow: auto; padding: 100px 0 48px; background: var(--canvas); scroll-padding: 40px; overflow-anchor: none; }   /* sin anclaje: las páginas mueven márgenes y el navegador «corregía» el desplazamiento */
 body.typewriter .workspace { padding-top: 18vh; padding-bottom: 50vh; }
 .page-wrap { margin: 0 auto; position: relative; }
 .page {
@@ -216,9 +216,9 @@ html[data-theme="dark"] .page mark { background: #6b5d16; color: #fff; }
 
 /* ===== Estilos del contenido del documento ===== */
 .page p, .page div { margin: 0 0 8pt; }
-.page h1 { font-size: 18pt; font-weight: 700; margin: 14pt 0 6pt; line-height: 1.2; }
-.page h2 { font-size: 15pt; font-weight: 700; margin: 12pt 0 4pt; line-height: 1.2; }
-.page h3 { font-size: 13pt; font-weight: 700; margin: 10pt 0 4pt; line-height: 1.2; }
+.page h1 { font-size: 18pt; font-weight: 700; margin: 8pt 0 6pt; line-height: 1.2; }
+.page h2 { font-size: 15pt; font-weight: 700; margin: 6pt 0 4pt; line-height: 1.2; }
+.page h3 { font-size: 13pt; font-weight: 700; margin: 6pt 0 4pt; line-height: 1.2; }
 .page h4 { font-size: 12pt; font-weight: 700; margin: 8pt 0 4pt; }
 .page h5 { font-size: 11pt; font-weight: 700; font-style: italic; margin: 8pt 0 4pt; }
 .page h6 { font-size: 10pt; font-weight: 700; margin: 8pt 0 4pt; }
@@ -245,9 +245,11 @@ html[data-theme="dark"] .page mark { background: #6b5d16; color: #fff; }
 
 /* ===== Formatos de guion ===== */
 .page p[class^="sp-"] { margin: 0 0 12pt; }
-.page p.sp-scene { text-transform: uppercase; font-weight: 700; margin-top: 24pt; }
+.page p.sp-scene { text-transform: uppercase; font-weight: 700; margin-top: 12pt; }
+/* el primer bloque no deja hueco arriba: el margen de un encabezado parecía un salto de línea imborrable */
+.page > :first-child { margin-top: 0 !important; }
 .page p.sp-shot { text-transform: uppercase; }
-.page p.sp-character { text-transform: uppercase; margin-left: min(5.6cm, 38%); margin-bottom: 0; }
+.page p.sp-character { text-transform: uppercase; margin-left: auto; margin-right: auto; margin-bottom: 0; }   /* centrado */
 .page p.sp-paren { margin-left: min(4.1cm, 28%); margin-right: min(5cm, 25%); margin-bottom: 0; }
 .page p.sp-paren::before { content: "("; }
 .page p.sp-paren::after { content: ")"; }
@@ -265,7 +267,7 @@ html[data-theme="dark"] .page mark { background: #6b5d16; color: #fff; }
 .page p.sp-shot:has(> br:only-child)::before { content: "TOMA"; }
 
 /* ===== Personajes: resaltado de color por personaje (como el marcatextos) ===== */
-.page p.sp-character { width: fit-content; max-width: calc(100% - min(5.6cm, 38%)); padding: 0 6px; border-radius: 4px; }
+.page p.sp-character { width: fit-content; max-width: 100%; padding: 0 6px; border-radius: 4px; }
 .page p.sp-character[data-ch] { background: var(--chl); color: var(--chd); }
 html[data-theme="dark"] .page p.sp-character[data-ch] { background: var(--chd); color: var(--chl); }
 .char-menu { min-width: 200px; }
@@ -356,7 +358,7 @@ html[data-theme="dark"] .c-purple { background: #3f2d55; color: #dcc6f0; } html[
 /* ===== Asa de bloque (estilo Notion) ===== */
 .blk-handle { position: absolute; z-index: 6; display: flex; gap: 1px; align-items: center; user-select: none; }
 .blk-handle[hidden] { display: none; }
-.blk-handle { padding: 1px; border-radius: 6px; background: var(--bar); border: 1.5px solid var(--ink); box-shadow: 2px 2px 0 rgba(26, 26, 26, .1); }
+.blk-handle { padding: 1px; border-radius: 6px; background: transparent; border: 0; box-shadow: none; }
 .blk-handle button {
   width: 20px; height: 20px; border: 0; border-radius: 4px; background: transparent; color: var(--muted);
   cursor: pointer; padding: 0; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center;
@@ -452,3 +454,10 @@ html[data-theme="dark"] dialog menu button.primary { background: var(--fg); bord
   border: 1px solid rgba(0, 0, 0, .12); cursor: pointer; }
 .ctx-menu .ctx-swatches button:hover { transform: scale(1.12); box-shadow: 2px 2px 0 rgba(26, 26, 26, .15); }
 .ctx-menu .ctx-swatches button.current { outline: 1.5px solid var(--ink); outline-offset: 1px; }
+
+/* ===== Páginas (js/paginas.js): huecos entre hojas sobre la hoja continua ===== */
+.pag-capa { position: absolute; left: 0; right: 0; top: 0; height: 0; pointer-events: none; z-index: 4; }
+.pag-salto { position: absolute; left: -2px; right: -2px; background: var(--canvas); border-top: 1px solid var(--page-line); border-bottom: 1px solid var(--page-line); }
+.pag-salto.dentro { height: 0; background: none; border-bottom: 0; border-top: 1px dashed var(--page-line); }
+.pag-num { position: absolute; right: 18px; transform: translateY(calc(-100% - 16px)); font: 500 11px var(--mono); letter-spacing: .04em; color: var(--muted-2); }
+.fb-paginas-n { font: 500 11px var(--mono); letter-spacing: .04em; color: var(--bb-fg); white-space: nowrap; }

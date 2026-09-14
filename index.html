@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guiones · Editor</title>
 <link rel="stylesheet" href="css/editor.css">
+<link rel="stylesheet" href="css/clapcraft-editor.css">
 </head>
 <body>
 <!-- Cinta superior: aparece al acercar el ratón al borde superior o queda fija con el pin -->
@@ -140,6 +141,8 @@
     <div class="fb-range"><i class="ico-narrow"></i><input type="range" id="fbWidth" min="20" max="100" value="60" title="Ancho de la hoja"><i class="ico-wide"></i></div>
     <span>Ancho de la hoja</span>
   </div>
+  <!-- cuántas páginas de guion lleva el documento (una página ≈ un minuto) -->
+  <div class="fb-item fb-paginas"><span id="fbPaginas" class="fb-paginas-n">1 página · ≈ 1 min</span></div>
   <span class="fb-sep"></span>
   <div class="fb-item row"><button data-action="script" id="fbScript" title="Modo guion: el menú / solo muestra elementos de guion">✎</button><span>Modo guion</span></div>
   <div class="fb-item row"><button data-action="typewriter" id="fbTypewriter" title="Typewriter">⌨</button><span>Typewriter</span></div>
@@ -237,6 +240,7 @@
 <script src="js/screenplay.js"></script>
 <script src="js/database.js"></script>
 <script src="js/blocks.js"></script>
+<script src="js/paginas.js"></script>
 <script src="js/slash.js"></script>
 <script src="js/characters.js"></script>
 <script src="js/vendor/typo.js"></script>

@@ -1,7 +1,7 @@
 {
   "name": "claquedraw",
-  "version": "0.1.0",
-  "description": "Guiones: editor de texto tipo hoja de Word con atajos Markdown, tablero de tramas y Claquedraw (esquema de pasos con una nota de texto por nodo), listo para empaquetar con Electron",
+  "version": "0.41.0",
+  "description": "Guiones: editor de texto tipo hoja de Word con atajos Markdown, tablero de tramas y ClapCraft (esquema de pasos con una nota de texto por nodo), listo para empaquetar con Electron",
   "main": "electron/main.js",
   "private": true,
   "scripts": {
@@ -16,8 +16,8 @@
     "electron-builder": "^26.0.0"
   },
   "build": {
-    "appId": "dev.leo.claquedraw",
-    "productName": "Claquedraw",
+    "appId": "dev.leo.clapcraft",
+    "productName": "ClapCraft",
     "files": [
       "index.html",
       "tramas.html",
@@ -25,6 +25,7 @@
       "css/**",
       "js/**",
       "fonts/**",
+      "img/**",
       "electron/**"
     ],
     "mac": {
@@ -36,7 +37,8 @@
           ]
         }
       ],
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns"
     },
     "win": {
       "target": "nsis"
@@ -46,8 +48,8 @@
     },
     "fileAssociations": [
       {
-        "ext": "cld",
-        "name": "Guion de Claquedraw",
+        "ext": "clapcraft",
+        "name": "Guion de ClapCraft",
         "role": "Editor"
       }
     ],

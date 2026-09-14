@@ -9,7 +9,7 @@
   const editor = () => Ed.editor;
   const changed = () => { if (Ed.afterChange) Ed.afterChange(); };
 
-  let handle, drop, menu, marquee, current = null, hideTimer = null;
+  let handle, drop, menu, marquee, current = null;
   let selected = [];          /* bloques seleccionados en orden de documento */
   let dragging = false;
 
@@ -89,7 +89,6 @@
     document.body.appendChild(menu);
 
     handle.addEventListener('mousedown', e => e.preventDefault());
-    handle.addEventListener('mouseenter', () => clearTimeout(hideTimer));
     $('.blk-add', handle).addEventListener('click', () => { if (current) insertBelow(current); });
     setupGripDrag($('.blk-grip', handle));
 
@@ -111,8 +110,12 @@
     });
 
     const ws = $('#workspace');
-    ws.addEventListener('mousemove', onMove);
-    ws.addEventListener('mouseleave', () => scheduleHide());
+    /* el asa acompaña a la línea en la que se escribe (no al ratón) y se queda a la vista */
+    document.addEventListener('selectionchange', () => {
+      if (dragging || marqueeActive || anyMenuOpen()) return;
+      const b = blockFromSelection();
+      if (b && b.tagName !== 'HR') { current = b; place(b); }
+    });
     ws.addEventListener('scroll', () => { if (current) place(current); });
     editor().addEventListener('input', () => { if (current) requestAnimationFrame(() => current && current.isConnected ? place(current) : hide()); });
     window.addEventListener('resize', () => current && place(current));
@@ -143,20 +146,6 @@
     });
   }
 
-  function blockAtY(y) {
-    for (const k of kids()) { const r = k.getBoundingClientRect(); if (y >= r.top - 2 && y <= r.bottom + 2) return k; }
-    return null;
-  }
-  function onMove(e) {
-    if (dragging || marqueeActive) return;
-    if (e.target.closest && e.target.closest('.blk-handle, .blk-menu')) { clearTimeout(hideTimer); return; }
-    const er = editor().getBoundingClientRect();
-    if (e.clientY < er.top || e.clientY > er.bottom || e.clientX < er.left || e.clientX > er.right) { scheduleHide(); return; }
-    const b = blockAtY(e.clientY);
-    if (!b) { scheduleHide(); return; }
-    clearTimeout(hideTimer);
-    if (b !== current) { current = b; place(b); }
-  }
   function place(b) {
     if (!b || !b.isConnected) { hide(); return; }
     const r = rel(b.getBoundingClientRect());
@@ -169,7 +158,6 @@
     handle.style.left = Math.max(ed.left + 4, ed.left + padLeft - 52) + 'px';
     handle.style.top = (r.top + Math.max(0, (Math.min(lh, r.height) - 22) / 2)) + 'px';
   }
-  function scheduleHide() { clearTimeout(hideTimer); hideTimer = setTimeout(hide, 250); }
   function hide() { if (dragging) return; handle.hidden = true; current = null; }
 
   /* ---------- operaciones ---------- */
