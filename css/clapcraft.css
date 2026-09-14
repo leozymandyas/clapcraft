@@ -362,7 +362,9 @@ body.tablero-personajes #esquema .add-linea button::after { content: 'personaje'
 .gd-apariciones .gd-etq-head { background: var(--foco-suave); color: var(--foco); }
 .gd-aparicion { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 40px; padding: 4px 10px; border: 1px solid var(--borde); border-radius: 5px; background: var(--papel); cursor: pointer; }
 .gd-aparicion:hover, .gd-aparicion:focus-visible { border-color: var(--borde-fuerte); background: var(--lienzo); }
-.gd-aparicion-tit { font-size: 13px; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-aparicion-lin { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.gd-aparicion-lin .gd-nota-meta { margin-left: auto; flex: none; }
+.gd-aparicion-tit { font-size: 13px; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .gd-aparicion-ruta { font: 400 10px var(--mono); letter-spacing: .02em; color: var(--palido); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .per-vacio { margin: 0; padding: 24px; }
 /* el menú en modo Personajes: punto de color · nombre · ⋯, y «＋ personaje» */

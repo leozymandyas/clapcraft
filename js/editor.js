@@ -25,9 +25,17 @@
   /* ---------- comandos base ---------- */
   /* Negrita/cursiva/etc. generan etiquetas semánticas (<b>, <i>, <u>…); fuentes y colores usan CSS */
   const TAG_CMDS = new Set(['bold', 'italic', 'underline', 'strikeThrough', 'superscript', 'subscript']);
+  /* Insertar o borrar con execCommand hace lo mismo que una fusión de bloques (ver esFusion): Chrome envuelve
+     lo insertado en spans con el tamaño y el color calculados de alrededor (`code` o `mark` de un atajo
+     Markdown salían con font-size fijo). Con #editor.fusionando los estilos calculados coinciden y no lo hace;
+     no se aplica si lo insertado trae su propio tamaño de letra (el control de tamaño lo inserta así a propósito). */
+  const NEUTROS = new Set(['insertHTML', 'insertText', 'delete', 'forwardDelete']);
   Ed.cmd = function (name, value = null) {
     document.execCommand('styleWithCSS', false, !TAG_CMDS.has(name));
-    return document.execCommand(name, false, value);
+    const ed = document.getElementById('editor');
+    if (!ed || !NEUTROS.has(name) || /font-size/.test(value || '')) return document.execCommand(name, false, value);
+    ed.classList.add('fusionando');
+    try { return document.execCommand(name, false, value); } finally { ed.classList.remove('fusionando'); }
   };
 
   /* Devuelve el foco y la última selección al editor (tras usar selects, diálogos, etc.) */
@@ -157,6 +165,10 @@
       if (spk) tag = 'sp-' + spk;
     }
     $('#blockStyle').value = tag;
+    /* el encabezado de escena y los títulos van en negrita por su estilo: la B solo se enciende con negrita puesta a mano */
+    if (block && (tag === 'sp-scene' || /^h[1-6]$/.test(tag))) {
+      const bb = $('[data-cmd="bold"]'); if (bb) bb.classList.toggle('active', !!(el && el.closest && el.closest('b, strong')));
+    }
 
     const cs = getComputedStyle(el);
     const fam = cs.fontFamily.split(',')[0].replace(/["']/g, '').trim().toLowerCase();
@@ -208,7 +220,31 @@
   titleInput.addEventListener('input', () => { document.title = (titleInput.value || 'Sin título') + ' · Guiones'; autosave(); });
   titleInput.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); editor.focus(); if (lastRange) Ed.restoreSelection(lastRange); } });
 
+  /* Fusionar dos bloques distintos (Retroceso al principio de uno, Supr al final, borrar o escribir sobre
+     una selección de varios): Chrome «conserva» el aspecto del texto que cambia de bloque envolviéndolo en
+     <span style="background-color…; color…; font-size…"> (un diálogo unido a su personaje quedaba con
+     fondo blanco, también en modo oscuro). Mientras dura esa edición, #editor.fusionando iguala los estilos
+     calculados (editor.css) y Chrome no añade nada; el formato propio (negrita, color, resaltado) se queda. */
+  function esFusion(e) {
+    const t = e.inputType || '';
+    if (!/^(delete|insert)/.test(t)) return false;
+    const r = Ed.getRange(); if (!r || !editor.contains(r.startContainer)) return false;
+    const a = Ed.closestBlock(r.startContainer, editor);
+    if (!r.collapsed) return a !== Ed.closestBlock(r.endContainer, editor);
+    if (!a || !t.startsWith('delete')) return false;
+    const trozo = document.createRange();
+    if (t.includes('Backward')) { trozo.setStart(a, 0); trozo.setEnd(r.startContainer, r.startOffset); }
+    else if (t.includes('Forward')) { trozo.setStart(r.startContainer, r.startOffset); trozo.setEnd(a, a.childNodes.length); }
+    else return false;
+    return !trozo.toString().replace(/\u200B/g, '');
+  }
+  editor.addEventListener('beforeinput', e => {
+    if (e.target !== editor && e.target.closest && e.target.closest('.db')) return;
+    if (esFusion(e)) { editor.classList.add('fusionando'); setTimeout(() => editor.classList.remove('fusionando'), 0); }
+  });
+
   editor.addEventListener('input', e => {
+    editor.classList.remove('fusionando');
     if (e.target !== editor && e.target.closest && e.target.closest('.db')) { Ed.db.onInput(e); return; }
     if (Ed.slash) Ed.slash.onInput(e);
     if (Ed.characters) Ed.characters.onInput(e);
@@ -452,10 +488,34 @@
     findInput.focus({ preventScroll: true });
   }
 
+  /* «Todo» se deshace de una vez: se reemplaza en una copia del documento y la copia entra con un solo
+     insertHTML sobre todo el contenido (antes, un paso de Deshacer por coincidencia). Si alguna coincidencia
+     cruza nodos de texto (media palabra en negrita) o hay bases de datos, se reemplaza una a una. */
+  function reemplazarDeUnaVez(texto) {
+    /* una coincidencia que acaba justo donde empieza el nodo siguiente (offset 0) sigue siendo de un solo nodo */
+    const dentro = r => r.startContainer.nodeType === 3 && r.startOffset + r.toString().length <= r.startContainer.nodeValue.length;
+    if (!matches.length || editor.querySelector('.db') || !matches.every(dentro)) return false;
+    const textos = el => { const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), l = []; while (w.nextNode()) l.push(w.currentNode); return l; };
+    const originales = textos(editor), copia = editor.cloneNode(true), copias = textos(copia);
+    if (originales.length !== copias.length) return false;
+    const porNodo = new Map();
+    matches.forEach(r => { const i = originales.indexOf(r.startContainer); if (!porNodo.has(i)) porNodo.set(i, []); porNodo.get(i).push([r.startOffset, r.startOffset + r.toString().length]); });
+    porNodo.forEach((tramos, i) => {
+      let v = copias[i].nodeValue;
+      tramos.sort((x, y) => y[0] - x[0]).forEach(([a, z]) => { v = v.slice(0, a) + texto + v.slice(z); });
+      copias[i].nodeValue = v;
+    });
+    editor.focus({ preventScroll: true });
+    const todo = document.createRange(); todo.selectNodeContents(editor); Ed.restoreSelection(todo);
+    Ed.cmd('insertHTML', copia.innerHTML);
+    return true;
+  }
   function replaceAll() {
     collectMatches();
     const total = matches.length;
-    for (let i = matches.length - 1; i >= 0; i--) replaceRange(matches[i], replaceInput.value);
+    const desp = workspace.scrollTop;
+    if (reemplazarDeUnaVez(replaceInput.value)) { workspace.scrollTop = desp; window.getSelection().removeAllRanges(); afterChange(); }
+    else for (let i = matches.length - 1; i >= 0; i--) replaceRange(matches[i], replaceInput.value);
     collectMatches();
     matchIdx = -1;
     showMatch();
@@ -465,6 +525,9 @@
 
   function openFind() {
     findPanel.hidden = false;
+    /* en ClapCraft la cinta puede ocupar dos filas (ventana estrecha): el panel va justo debajo */
+    const cinta = document.querySelector('.ribbon');
+    if (document.documentElement.classList.contains('clapcraft') && cinta) findPanel.style.top = Math.round(cinta.getBoundingClientRect().bottom + 8) + 'px';
     const sel = window.getSelection();
     const selected = sel && !sel.isCollapsed && editor.contains(sel.anchorNode) ? sel.toString().trim() : '';
     if (selected && !selected.includes('\n')) findInput.value = selected;
@@ -834,6 +897,7 @@
     if (Ed.blocks && Ed.blocks.onKeydown(e)) return;
     if (Ed.characters && Ed.characters.onKeydown(e)) return;
     if (Ed.slash && Ed.slash.onKeydown(e)) return;
+    if (e.key === 'Tab' && !mod && !e.altKey && Ed.screenplay && Ed.screenplay.onTab(e)) return;
     if (e.key === 'Tab') { e.preventDefault(); if (!Ed.table.tab(e.shiftKey)) indent(e.shiftKey ? -1 : 1); return; }
     if (Ed.table.onKeydown(e)) return;
     /* Retroceso al inicio de un bloque con sangría (Tab): quita un nivel de sangría */

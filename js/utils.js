@@ -87,6 +87,26 @@ window.Ed = window.Ed || {};
   };
 
   /* Sanitiza HTML externo (pegado / abierto): quita scripts, eventos y etiquetas peligrosas */
+  /* Lo pegado (de una web, de Word o del propio editor, que Chrome copia con estilos calculados) no trae
+     tipografía propia: fuera fuente, tamaño, interlineado y márgenes, que chocaban con la hoja; y fuera los
+     colores neutros (negro, gris, blanco), que en modo oscuro dejaban el texto invisible. Los colores con
+     tono (un resaltado, un color elegido) y los del personaje (--chl/--chd) se quedan. */
+  const QUITAR = ['font-family', 'font-size', 'line-height', 'text-transform', 'letter-spacing', 'word-spacing', 'white-space', 'text-indent',
+    'font-variant', 'font-variant-ligatures', 'font-variant-caps', 'orphans', 'widows', 'text-align', 'margin', 'margin-top', 'margin-bottom',
+    'margin-left', 'margin-right', 'padding', 'padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'width', 'height', 'display', 'float', 'position'];
+  function neutro(v) {
+    const m = String(v || '').match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/);
+    if (!m) return /^(transparent|initial|inherit|black|white|windowtext|canvastext)$/i.test(String(v).trim());
+    const [r, g, b] = [+m[1], +m[2], +m[3]], a = m[4] === undefined ? 1 : +m[4];
+    return a === 0 || (Math.max(r, g, b) - Math.min(r, g, b) < 24);
+  }
+  function limpiarEstilo(el) {
+    const st = el.style; if (!st || !st.length) return;
+    QUITAR.forEach(p => st.removeProperty(p));
+    if (neutro(st.color)) st.removeProperty('color');
+    if (neutro(st.backgroundColor)) st.removeProperty('background-color');
+    if (!st.length) el.removeAttribute('style');
+  }
   Ed.sanitizeHtml = function (html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     doc.querySelectorAll('script, style, link, meta, iframe, object, embed, form, input, textarea, select, button, noscript, title').forEach(n => n.remove());
@@ -101,6 +121,7 @@ window.Ed = window.Ed || {};
         else if (name.startsWith('on') || name === 'id' || name === 'contenteditable') el.removeAttribute(attr.name);
         else if ((name === 'href' || name === 'src') && /^\s*javascript:/i.test(attr.value)) el.removeAttribute(attr.name);
       }
+      limpiarEstilo(el);
     });
     /* comentarios (p. ej. de Word) */
     const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);

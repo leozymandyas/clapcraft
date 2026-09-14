@@ -151,6 +151,12 @@ html[data-theme="dark"] .ico-moon { display: inline; }
 body:not(.show-top):not(.pin-top) .find-panel { top: 0; }
 .find-panel[hidden] { display: none; }
 .find-panel input { width: 180px; height: 26px; border: 1.5px solid var(--line); border-radius: 6px; background: var(--bar); color: var(--fg); padding: 0 8px; font: 13px var(--ui-font); }
+/* la casilla «Aa» no es un campo (salía como un cuadro de 180 px) y el panel no se sale por la izquierda en una
+   ventana estrecha: los campos encogen */
+.find-panel input[type="checkbox"] { width: auto; height: auto; padding: 0; margin: 0; }
+.find-panel { max-width: calc(100vw - 32px); box-sizing: border-box; }
+.find-panel input[type="text"] { flex: 1 1 180px; min-width: 90px; }
+#findStatus { white-space: nowrap; }
 .find-panel button { width: auto; min-width: 25px; padding: 0 7px; }
 .toggle { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; margin: 0 4px; }
 ::highlight(find-match) { background: #ffe58a; color: #000; }
@@ -215,6 +221,10 @@ body.pin-bottom .workspace { padding-bottom: 96px; }
 html[data-theme="dark"] .page mark { background: #6b5d16; color: #fff; }
 
 /* ===== Estilos del contenido del documento ===== */
+/* solo durante una fusión de bloques (editor.js, esFusion): estilos calculados iguales, para que Chrome
+   no envuelva el texto movido en spans con fondo, color y tamaño fijos */
+#editor.fusionando, #editor.fusionando * { background-color: transparent !important; color: #000 !important; font-size: 16px !important;
+  font-weight: 400 !important; font-style: normal !important; text-transform: none !important; text-decoration: none !important; letter-spacing: normal !important; }
 .page p, .page div { margin: 0 0 8pt; }
 .page h1 { font-size: 18pt; font-weight: 700; margin: 8pt 0 6pt; line-height: 1.2; }
 .page h2 { font-size: 15pt; font-weight: 700; margin: 6pt 0 4pt; line-height: 1.2; }

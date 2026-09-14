@@ -12,13 +12,14 @@
 
    Capacidad de una página: la de un guion en Carta (11 in con 1 in de margen arriba y abajo) en Courier
    12 pt, unas 54 líneas; se cuenta con el interlineado real de la hoja, así que con interlineado 1.5 la
-   hoja se ve más alta que un Carta pero cuenta lo mismo. El ancho también influye (más ancho, menos
-   renglones): con ~60 caracteres por línea se parece a la página de verdad. */
+   hoja se ve más alta que un Carta pero cuenta lo mismo. El ancho se compensa: la página mide 54 líneas
+   × (576 px / ancho de la columna), es decir, lo que ocuparía el texto a 60 caracteres por línea. */
 (function (Ed) {
   'use strict';
   const P = {};
   Ed.paginas = P;
   const LINEAS = 54;           // líneas por página de guion
+  const COLUMNA = 576;         // px de la columna de texto de una página real: 6 in a 12 pt Courier (60 caracteres × 9,6 px)
   const HUECO = 26;            // px de lienzo entre hoja y hoja
   let estilo, alto, capa, contador, pendiente = null, ancho = 0, total = 1;
 
@@ -36,37 +37,65 @@
     estilo.textContent = '';
     const cs = getComputedStyle(ed);
     const lh = num(cs.lineHeight) || num(cs.fontSize) * 1.5 || 24;
-    const H = Math.round(LINEAS * lh);
     const padT = num(cs.paddingTop), padB = num(cs.paddingBottom), bordeT = num(cs.borderTopWidth), bordeB = num(cs.borderBottomWidth);
-    const hijos = Array.from(ed.children);
+    /* Se cuenta en renglones de una página real, no en píxeles de la hoja en pantalla, que casi nunca tiene su
+       ancho (depende de la ventana y de ANCHO): con la columna más estrecha que los 60 caracteres de un guion,
+       un párrafo ocupa más renglones de los que ocuparía impreso. Cada bloque cuenta
+       · sus renglones de texto divididos por la escala (576 px / ancho de la columna; uno de un solo renglón,
+         como el nombre de un personaje, sigue siendo uno);
+       · una tabla, una base de datos o una imagen, su alto tal cual;
+       · y un renglón en blanco si lo separa un margen del anterior (en un guion impreso, la línea en blanco).
+       La página tiene 54 renglones. Así el número de páginas no cambia con el ancho (antes, con la hoja
+       estrecha, salía del doble o más). Cada hoja en pantalla mide al menos 54 líneas y crece si lo que cabe en
+       una página real ocupa más. */
+    const columna = ed.clientWidth - num(cs.paddingLeft) - num(cs.paddingRight);
+    const escala = columna > 0 ? Math.min(4, Math.max(0.5, COLUMNA / columna)) : 1;
+    const renglonesDe = k => {
+      const h = k.offsetHeight;
+      if (k.matches('table, hr, .db') || k.querySelector('img, table')) return h / lh;
+      const lhk = num(getComputedStyle(k).lineHeight) || lh;
+      const vis = Math.max(1, Math.round(h / lhk));
+      return Math.max(1, Math.ceil(vis / escala - 0.2)) * (lhk / lh);
+    };
+    const blancoEntre = (a, b) => (b.offsetTop - (a.offsetTop + a.offsetHeight)) > 2 ? 1 : 0;
+    const hijos = Array.from(ed.children).filter(k => k.offsetParent !== null);   // sin los ocultos
     const reglas = [], saltos = [], finales = [];   // finales: el borde inferior de cada hoja (para su número)
-    let desplaza = 0, inicio = padT, limite = padT + H, previo = null;
+    const minimoHoja = LINEAS * lh;
+    let desplaza = 0, inicio = padT, usados = 0, previo = null;
     hijos.forEach((k, i) => {
-      if (k.offsetParent === null) { return; }            // oculto
-      const arriba = k.offsetTop + desplaza, alto = k.offsetHeight;
+      const arriba = k.offsetTop + desplaza, altoK = k.offsetHeight;
+      const r = renglonesDe(k);
+      let blanco = previo && usados > 0 ? blancoEntre(previo, k) : 0;
       /* como en un guion impreso, el encabezado de escena, el personaje y el paréntico no se quedan solos al
-         pie: cuentan con lo que les sigue (el paréntico y el diálogo del personaje) */
-      let finGrupo = arriba + alto;
-      if (k.matches && k.matches('.sp-scene, .sp-character, .sp-paren')) {
+         pie: cuentan con lo que les sigue (el paréntico y el diálogo del personaje), que tampoco se parte */
+      let grupo = r;
+      if (k.matches('.sp-scene, .sp-character, .sp-paren')) {
         let j = i + 1;
         while (hijos[j] && hijos[j].matches('.sp-paren') && !k.matches('.sp-paren')) j++;
         const n = hijos[j];
-        if (n) finGrupo = Math.max(finGrupo, n.offsetTop + desplaza + Math.min(n.offsetHeight, H));   // lo que sigue tampoco se parte: va entero
+        if (n) grupo += blancoEntre(hijos[j - 1], n) + Math.min(renglonesDe(n), LINEAS);
       }
-      if (previo && finGrupo > limite && arriba > inicio + 1) {
+      if (previo && usados > 0 && usados + blanco + grupo > LINEAS) {
         /* no cabe: empieza en la hoja siguiente */
         const hueco = k.offsetTop - (previo.offsetTop + previo.offsetHeight);   // el hueco natural con el anterior (márgenes ya colapsados)
+        const limite = Math.max(previo.offsetTop + previo.offsetHeight + desplaza, inicio + minimoHoja);
         const nuevo = limite + padB + HUECO + padT;
         const extra = nuevo - arriba;
-        reglas.push(`#editor > :nth-child(${i + 1}) { margin-top: ${Math.max(0, hueco) + extra}px !important; }`);
+        reglas.push(`#editor > :nth-child(${Array.prototype.indexOf.call(ed.children, k) + 1}) { margin-top: ${Math.max(0, hueco) + extra}px !important; }`);
         saltos.push({ y: limite + padB }); finales.push(limite + padB);
-        desplaza += extra; inicio = nuevo; limite = nuevo + H;
+        desplaza += extra; inicio = nuevo; usados = 0; blanco = 0;
       }
-      /* un bloque más alto que la página: la corta por dentro */
-      let fin = k.offsetTop + desplaza + alto;
-      while (fin > limite) { saltos.push({ y: limite, dentro: true }); finales.push(limite); inicio = limite; limite = inicio + H; }
+      usados += blanco + r;
+      /* un bloque más largo que una página: la corta por dentro, donde se acaban sus 54 renglones */
+      while (usados > LINEAS) {
+        const sobra = usados - LINEAS;
+        const y = k.offsetTop + desplaza + altoK * Math.max(0, Math.min(1, 1 - sobra / r));
+        saltos.push({ y, dentro: true }); finales.push(y); inicio = y; usados = sobra;
+      }
       previo = k;
     });
+    const fin = previo ? previo.offsetTop + previo.offsetHeight + desplaza : padT;
+    const limite = Math.max(fin, inicio + minimoHoja);
     finales.push(limite + padB);                         // la última hoja, completa aunque esté casi vacía
     const nuevo = reglas.join('\n');
     estilo.textContent = nuevo;
@@ -76,6 +105,7 @@
     if (nuevo === antes && capa.childElementCount === saltos.length + finales.length) { actualizarContador(finales.length); return; }   // nada cambió
     pintar(saltos, finales, ed.offsetTop + bordeT);
     actualizarContador(finales.length);
+    if (Ed.blocks && Ed.blocks.reubicar) Ed.blocks.reubicar();   // los márgenes de salto movieron bloques: el asa los sigue
   }
   function actualizarContador(n) {
     total = n;

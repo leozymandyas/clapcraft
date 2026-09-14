@@ -68,8 +68,10 @@
   const comparar = (a, b) => a.localeCompare(b, 'es', { sensitivity: 'base', numeric: true });
   const texto = (v, defecto) => { const s = String(v ?? '').trim(); return s || defecto; };
   const color = v => { const n = Math.round(+v); return n >= 0 && n < PALETA.length ? n : 0; };
+  /* el documento de un nodo; `modificado` (cuándo se escribió por última vez) se conserva si viene */
   const docDe = n => n && typeof n === 'object' && typeof n.html === 'string'
-    ? { title: texto(n.title, ''), html: n.html, characters: n.characters && typeof n.characters === 'object' ? clonar(n.characters) : {} } : null;
+    ? { title: texto(n.title, ''), html: n.html, characters: n.characters && typeof n.characters === 'object' ? clonar(n.characters) : {}, ...(+n.modificado ? { modificado: +n.modificado } : {}) } : null;
+  const contenidoDe = n => n ? JSON.stringify([n.title, n.html, n.characters]) : '';
 
   /* Un esquema de un contenedor: un tablero (basta con que traiga `lineas`) y las notas de sus nodos. */
   function sanearEsquema(e, id, nombre) {
@@ -460,7 +462,9 @@
     guardarNotaEsquema(eid, puntoId, doc) {
       const r = this.esquema(eid); if (!r) return no('Ese esquema ya no existe');
       const n = docDe(doc); if (!n || !puntoId) return no('Eso no es un documento válido');
-      if (JSON.stringify(r.esquema.notas[puntoId]) === JSON.stringify(n)) return si({ nota: n, cambio: false });
+      const previa = r.esquema.notas[puntoId];
+      if (previa && contenidoDe(previa) === contenidoDe(n)) return si({ nota: previa, cambio: false });
+      n.modificado = this.ahora();
       r.esquema.notas[puntoId] = n; this._tocar(r.contenedor);
       this.sincronizarElenco(n.characters);
       return si({ nota: n, cambio: true });
@@ -616,11 +620,11 @@
     /* Cada documento con texto del guion: las notas de las bibliotecas (y de la papelera) y las de los nodos. */
     _documentosTexto(conPapelera) {
       const lista = [];
-      this.datos.notas.forEach(n => lista.push({ doc: n, tipo: 'nota', id: n.id, titulo: n.titulo, ruta: () => { const r = this.sub(n.subId); return r ? r.contenedor.nombre + ' › ' + r.sub.nombre : ''; } }));
+      this.datos.notas.forEach(n => lista.push({ doc: n, tipo: 'nota', id: n.id, titulo: n.titulo, modificado: n.modificado || null, ruta: () => { const r = this.sub(n.subId); return r ? r.contenedor.nombre + ' › ' + r.sub.nombre : ''; } }));
       if (conPapelera) this.datos.papelera.forEach(x => lista.push({ doc: x.nota, tipo: 'papelera', id: x.nota.id }));
       this.datos.contenedores.forEach(c => c.esquemas.forEach(e => Object.keys(e.notas).forEach(pid => {
         const n = e.notas[pid], p = (e.datos.puntos || []).find(q => q.id === pid);
-        lista.push({ doc: n, tipo: 'nodo', eid: e.id, id: pid, titulo: (p && p.titulo) || n.title || 'Sin título', ruta: () => c.nombre + ' › ' + e.nombre });
+        lista.push({ doc: n, tipo: 'nodo', eid: e.id, id: pid, titulo: (p && p.titulo) || n.title || 'Sin título', modificado: n.modificado || null, ruta: () => c.nombre + ' › ' + e.nombre });
       })));
       return lista;
     }
@@ -669,7 +673,7 @@
       const p = this.personaje(id); if (!p) return [];
       const k = clavePersonaje(p.nombre);
       return this._documentosTexto(false).filter(x => mencionaEn(x.doc.html, k))
-        .map(x => ({ tipo: x.tipo, id: x.id, eid: x.eid || null, titulo: x.titulo, ruta: x.ruta() }));
+        .map(x => ({ tipo: x.tipo, id: x.id, eid: x.eid || null, titulo: x.titulo, modificado: x.modificado, ruta: x.ruta() }));
     }
     renombrarPersonaje(id, nombre) {
       const p = this.personaje(id); if (!p) return no('Ese personaje ya no existe');

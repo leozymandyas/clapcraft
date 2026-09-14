@@ -53,7 +53,34 @@ La interfaz está en español; los comentarios del código también.
   y la interfaz de las bases de datos.
 - Interlineado, sangría y operaciones de bloques modifican el DOM fuera de `execCommand` y no entran en
   Ctrl+Z (limitación conocida).
-- **Páginas** (`js/paginas.js`, Leo 14-09-2026: saber cuántas hojas lleva y cuánto dura; 1 página ≈ 1 min):
+- **Fusiones y spans de estilo** (14-09-2026): al unir dos bloques distintos (Retroceso al principio, Supr al
+  final, escribir o borrar sobre una selección de varios) y en `insertHTML`/`insertText`/`delete` por
+  `execCommand`, Chrome envolvía el texto en `<span style="background-color; color; font-size">` con los
+  estilos calculados de su bloque de origen (un diálogo unido a su personaje salía con fondo blanco, también en
+  oscuro; los atajos `` `código` `` y `==resaltado==` dejaban `font-size` fijo). Mientras dura la edición,
+  `#editor.fusionando` (editor.css) iguala los estilos calculados y Chrome no añade nada: `esFusion()` en
+  `beforeinput` para las del teclado y `Ed.cmd` para las de `execCommand` (salvo si lo insertado trae su
+  `font-size`, el control de tamaño). El formato propio y el Deshacer se conservan. Quedan `<span>` sin
+  atributos, inofensivos.
+- **Pegar**: `Ed.sanitizeHtml` quita fuente, tamaño, interlineado, mayúsculas, márgenes y colores neutros
+  (negro, gris, blanco: en oscuro el texto no se veía); se quedan los colores con tono y `--chl/--chd`.
+- **Tab en un elemento de guion cambia de elemento** (Mayús+Tab al anterior: escena → acción → personaje →
+  paréntico → diálogo → transición → toma), sin mover el cursor; antes sangraba y deformaba el formato. En
+  texto normal, listas y tablas, Tab sigue igual.
+- **Reemplazar «Todo» se deshace de una vez**: se reemplaza en una copia y entra con un solo `insertHTML`
+  sobre todo el contenido; si una coincidencia cruza nodos de texto o hay bases de datos, una a una.
+- El corrector no marca los nombres de personajes ni las palabras de un nombre (`Ed.characters.has` mira el
+  registro y el elenco del guion). La B de la cinta no se enciende por la negrita de estilo de un encabezado.
+- El asa de bloque se recoloca cuando el documento cambia de alto (`ResizeObserver`) y tras cada cálculo de
+  páginas (`Ed.blocks.reubicar`): se quedaba a una línea del bloque.
+- En ClapCraft con la ventana estrecha la cinta y la barra inferior pasan a una segunda fila (antes cortaban
+  alineación, listas y Ortografía) y el panel de buscar se coloca bajo la cinta; la casilla «Aa» ya no mide 180 px.
+- **Páginas** (`js/paginas.js`, Leo 14-09-2026: saber cuántas hojas lleva y cuánto dura; 1 página ≈ 1 min).
+  **Se cuenta en renglones de página real** (revisión del 14-09-2026: con la hoja estrecha salía el doble):
+  cada bloque suma sus renglones de texto divididos por la escala 576 px / ancho de la columna (un renglón
+  sigue siendo uno), las tablas, bases de datos e imágenes su alto, y un renglón en blanco si hay margen con el
+  anterior; la página son 54 renglones y la hoja en pantalla mide al menos 54 líneas y crece si hace falta. El
+  número de páginas ya no cambia con el ancho. Lo que sigue describe la parte visual:
   la hoja sigue siendo continua, pero se ve partida en hojas. No toca el DOM del documento ni el Deshacer:
   mide `offsetTop` de los bloques (unidades sin zoom), y al bloque que no cabe le da margen con una hoja de
   estilos propia (`#pagEstilo`: `#editor > :nth-child(n) { margin-top }` = hueco natural + lo que falta
@@ -427,8 +454,15 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   cada tablero (`desplazamientos`, en memoria; uno nuevo empieza en 0,0): antes se heredaba el del
   anterior. **La app arranca en Contenedores** (Leo): si se cerró en Personajes, el arranque
   vuelve a `vista.modoPrevio` (Esquema o Documentos). El carrusel usa un desplazador horizontal normal
-  (`.per-carrusel::-webkit-scrollbar`, morado; ya no hay barra de avance «desliza…») y sus segmentos no
-  llevan el asa de mover (`tarjeta(e, notas, { sinAsa })`). El chip «Personaje» del título (`.per-chip`) y
+  (`.per-carrusel::-webkit-scrollbar`, morado; ya no hay barra de avance «desliza…»). **En el carrusel se
+  arrastra** (Leo, 14-09-2026) con el mismo mecanismo del gestor (el carrusel está en `zonas` de `oir`):
+  segmentos por su cabecera (con asa), notas dentro de su segmento para ordenarlas y entre segmentos o a la
+  bandeja; al acercar el puntero a un borde el carrusel se desplaza solo (`autodesplazar`, cada 16 ms) para
+  llegar a los que no se ven; mientras dura el arrastre `render()` no redibuja (`renderPendiente`: si no,
+  el persistir de fondo se llevaba lo arrastrado) y `.per-seg.arrastrando` quita la selección de texto. Las notas del
+  carrusel llevan la fecha como en Biblioteca, y también los documentos de la cronología y las apariciones
+  (Leo: todo lo que va dentro de un segmento). Las notas de los nodos guardan `modificado`
+  (`guardarNotaEsquema` lo pone solo si cambió el contenido; `docDe` lo conserva). El chip «Personaje» del título (`.per-chip`) y
   el punto del personaje en el menú (`.gd-per-punto`) llevan su par de la paleta en `--chl`/`--chd` y el
   CSS elige según el tema, como el bloque de personaje del editor (claro: fondo `--chl`, tinta `--chd`). **Los cuadros de un salto tienen nota,
   una sola para los dos** (`o.saltosConNota` en texto.js: `claveNota(id)` = `deId` del salto; doble clic y

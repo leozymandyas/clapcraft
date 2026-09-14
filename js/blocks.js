@@ -119,6 +119,9 @@
     ws.addEventListener('scroll', () => { if (current) place(current); });
     editor().addEventListener('input', () => { if (current) requestAnimationFrame(() => current && current.isConnected ? place(current) : hide()); });
     window.addEventListener('resize', () => current && place(current));
+    /* el asa se coloca por posición: si el documento se recoloca sin que cambie la selección (cambia el ancho de
+       la hoja, se cargan las fuentes, las páginas empujan un bloque), se quedaba a una línea de distancia */
+    if (window.ResizeObserver) new ResizeObserver(() => { if (current) place(current); }).observe(editor());
 
     setupMarquee(ws);
     setupBodyDrag();
@@ -159,6 +162,7 @@
     handle.style.top = (r.top + Math.max(0, (Math.min(lh, r.height) - 22) / 2)) + 'px';
   }
   function hide() { if (dragging) return; handle.hidden = true; current = null; }
+  B.reubicar = () => { if (current && !dragging) place(current); };
 
   /* ---------- operaciones ---------- */
   function insertBelow(b) {

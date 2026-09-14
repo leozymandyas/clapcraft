@@ -81,6 +81,24 @@
     if (Ed.updateToolbar) Ed.updateToolbar();
   };
 
+  /* Tab dentro de un elemento de guion cambia de elemento (Mayús+Tab, al anterior) en lugar de sangrar:
+     la sangría deformaba el formato. Orden: escena → acción → personaje → paréntico → diálogo →
+     transición → toma → escena. */
+  const ORDEN = ['scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'shot'];
+  S.onTab = function (e) {
+    const editor = Ed.editor, r = Ed.getRange();
+    if (!r || !editor.contains(r.startContainer)) return false;
+    const block = Ed.closestBlock(r.startContainer, editor), kind = S.kindOf(block);
+    if (!kind || block.closest('td, th, li')) return false;
+    e.preventDefault();
+    const i = ORDEN.indexOf(kind), sig = ORDEN[(i + (e.shiftKey ? -1 : 1) + ORDEN.length) % ORDEN.length];
+    const antes = r.cloneRange();
+    S.set(sig);
+    /* S.set deja el cursor al final: se devuelve a donde estaba (el párrafo es el mismo, solo cambia su clase) */
+    if (block.isConnected && editor.contains(antes.startContainer)) Ed.restoreSelection(antes);
+    return true;
+  };
+
   /* Enter dentro de un elemento de guion */
   S.onKeydown = function (e) {
     if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;

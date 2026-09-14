@@ -138,3 +138,8 @@ html.clapcraft .fb-item.row:last-child { margin-right: 0; }
 html.clapcraft .fb-item.cd-lado { width: 27px; padding: 0; margin-left: 6px; }
 html.clapcraft .fb-item.cd-lado button { position: static; opacity: 1; display: flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--bb-muted); }
 html.clapcraft .fb-item.cd-lado button svg { width: 15px; height: 15px; }
+
+/* Ventana estrecha (el marco mide menos que la cinta): la cinta y la barra inferior pasan a una segunda fila
+   en lugar de cortar los últimos botones (alineación, listas, Ortografía y el botón del menú quedaban fuera). */
+html.clapcraft .ribbon { height: auto; min-height: 44px; flex-wrap: wrap; row-gap: 2px; padding-top: 4px; padding-bottom: 4px; }
+html.clapcraft .focus-bar { height: auto; min-height: 42px; flex-wrap: wrap; row-gap: 2px; padding-top: 3px; padding-bottom: 3px; }

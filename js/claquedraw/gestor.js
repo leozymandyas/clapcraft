@@ -233,9 +233,9 @@
             <button type="button" class="gd-nota-acc" data-gd-menu="nota" title="Opciones de la nota">${ic('more', 13)}</button></div>`;
   }
   /* Una tarjeta: un segmento (o la bandeja, e = null) con sus notas. */
-  function tarjeta(e, notas, op) {
+  function tarjeta(e, notas) {
     const cuerpo = notas.map(n => notaHtml(n, fecha(n.modificado), false)).join('');
-    const cabecera = `<span class="gd-etq-nom">${e && !(op && op.sinAsa) ? '<span class="gd-asa" title="Arrastra para ordenar los segmentos">' + ic('drag', 13) + '</span>' : ''}<span ${e ? 'data-gd-etq-nombre' : ''}></span></span>
+    const cabecera = `<span class="gd-etq-nom">${e ? '<span class="gd-asa" title="Arrastra para ordenar los segmentos">' + ic('drag', 13) + '</span>' : ''}<span ${e ? 'data-gd-etq-nombre' : ''}></span></span>
          <span class="gd-etq-acc"><span class="gd-cuenta">${notas.length}</span>${e
            ? `<button type="button" data-gd-menu="etiqueta" title="Editar el segmento">${ic('edit', 13)}</button><button type="button" data-gd-eliminar-etq title="Eliminar el segmento">${ic('close', 13)}</button>` : ''}</span>`;
     const pie = `<button type="button" class="gd-nota-add" data-gd-crear-nota="${e ? esc(e.id) : ''}">${ic('plus', 13)}nota</button>`;
@@ -271,7 +271,7 @@
       card.style.setProperty('--acto-bg', f && f !== 'ninguno' ? `var(--f-${f})` : 'transparent');
       card.innerHTML = `<header class="gd-etq-head"><span class="gd-etq-nom"><span></span></span><span class="gd-etq-acc"><span class="gd-cuenta">${nodos.length}</span></span></header>
         <div class="gd-etq-body">${nodos.map(p => `<div class="gd-nota gd-nodo${p.cortado ? ' cortado' : ''}${p.id === notaSel ? ' sel' : ''}" role="button" tabindex="0" data-nodo="${esc(p.id)}" data-eid="${esc(eid)}" title="Doble clic: abrir documento">
-            <span></span><button type="button" class="gd-nota-acc" data-gd-menu="nodo" title="Opciones del documento">${ic('more', 13)}</button></div>`).join('')
+            <span></span><span class="gd-nota-meta">${esc(fecha((m.notaEsquema(eid, p.id) || {}).modificado))}</span><button type="button" class="gd-nota-acc" data-gd-menu="nodo" title="Opciones del documento">${ic('more', 13)}</button></div>`).join('')
           || '<div class="gd-etq-vacia">Sin nodos en este acto</div>'}</div>`;
       $('.gd-etq-nom > span', card).textContent = a.nombre;
       $$('.gd-nodo', card).forEach((b, k) => { b.firstElementChild.textContent = nodos[k].titulo || 'Sin título'; });
@@ -344,7 +344,10 @@
     $('[data-gd-miga-sub]', migas).textContent = r.sub.nombre;
     $('[data-gd-miga-nota]', migas).textContent = n.titulo;
   }
-  function render() { if (editando) return; renderLado(); renderMain(); renderMigas(); if (enPersonajes() && o.carrusel && actual && actual.cid === C.ID_PERSONAJES) renderPersonaje(o.carrusel.querySelector('[data-per-cuerpo]'), actual.id); }
+  let renderPendiente = false;
+  function render() {
+    if (pd && pd.activo) { renderPendiente = true; return; }   // durante un arrastre no se redibuja: se perdería lo que se arrastra
+    if (editando) return; renderLado(); renderMain(); renderMigas(); if (enPersonajes() && o.carrusel && actual && actual.cid === C.ID_PERSONAJES) renderPersonaje(o.carrusel.querySelector('[data-per-cuerpo]'), actual.id); }
   /* abrir una aparición: una nota de biblioteca en el editor, o el documento de un nodo */
   function abrirAparicion(el) {
     const tipo = el.dataset.apTipo, id = el.dataset.apId;
@@ -754,8 +757,24 @@
      al final del contenedor sobre el que se sueltan. */
   let pd = null, suprimirClic = 0;              // suprimirClic: marca de tiempo del último arrastre
   const bajo = (x, y) => document.elementFromPoint(x, y);
+  /* En el carrusel de Personajes los segmentos que no se ven se alcanzan acercando el puntero a un borde:
+     el carrusel se desplaza solo mientras el arrastre siga ahí. */
+  const BORDE_AUTO = 70;
+  function autodesplazar() {
+    if (!pd || !pd.activo || pd.px === undefined) return;
+    const car = o.carrusel && o.carrusel.querySelector('.per-carrusel'); if (!car) return;
+    const r = car.getBoundingClientRect();
+    if (pd.py < r.top || pd.py > r.bottom) return;
+    const izq = pd.px - r.left, der = r.right - pd.px;
+    const v = izq < BORDE_AUTO ? -Math.ceil((BORDE_AUTO - Math.max(izq, 0)) / 5) : der < BORDE_AUTO ? Math.ceil((BORDE_AUTO - Math.max(der, 0)) / 5) : 0;
+    if (!v) return;
+    const antes = car.scrollLeft; car.scrollLeft += v;
+    if (car.scrollLeft !== antes) moverArrastre({ clientX: pd.px, clientY: pd.py });   // lo que queda bajo el puntero cambió
+  }
   function iniciarArrastre() {
     pd.activo = true; seccion.classList.add('arrastrando'); lado.classList.add('arrastrando'); pd.el.classList.add('arrastrando');
+    if (o.carrusel) o.carrusel.classList.add('arrastrando');
+    pd.auto = setInterval(autodesplazar, 16);
     const f = (pd.tipo === 'seccion' ? pd.el.querySelector('.gd-seccion') : pd.el).cloneNode(true); f.className = 'gd-fantasma' + (pd.tipo === 'etq' ? ' gd-fantasma--etq' : ''); f.querySelectorAll('button').forEach(b => b.remove());
     f.style.width = Math.min(pd.el.offsetWidth, 260) + 'px'; document.body.appendChild(f); pd.fantasma = f;
     try { pd.el.setPointerCapture(pd.pid); } catch (_) {}
@@ -768,6 +787,7 @@
   }
   const mitadDe = (fila, y) => { const r = fila.getBoundingClientRect(); return y < r.top + r.height / 2 ? 'antes' : 'despues'; };
   function moverArrastre(e) {
+    pd.px = e.clientX; pd.py = e.clientY;
     pd.fantasma.style.left = (e.clientX + 12) + 'px'; pd.fantasma.style.top = (e.clientY + 8) + 'px';
     const el = bajo(e.clientX, e.clientY); if (!el || !el.closest) { marcar(null, null); return; }
     if (pd.tipo === 'etq') { const card = el.closest('.gd-etq[data-etq]'); marcar(card && card !== pd.el ? card : null, null); return; }
@@ -793,8 +813,10 @@
     marcar(zona, antes);
   }
   function terminarArrastre(soltar) {
-    const { activo, zona, antes, id, el, fantasma, tipo, mitad } = pd, hijo = pd.ref; pd = null;
+    const { activo, zona, antes, id, el, fantasma, tipo, mitad } = pd, hijo = pd.ref; clearInterval(pd.auto); pd = null;
     seccion.classList.remove('arrastrando'); lado.classList.remove('arrastrando'); el.classList.remove('arrastrando');
+    if (o.carrusel) o.carrusel.classList.remove('arrastrando');
+    if (renderPendiente) { renderPendiente = false; setTimeout(render, 0); }
     if (fantasma) fantasma.remove(); if (zona) zona.classList.remove('sobre', 'sobre-antes', 'sobre-despues'); if (antes) antes.classList.remove('antes');
     if (!activo) return;
     suprimirClic = Date.now();
@@ -1018,8 +1040,8 @@
     sec.className = 'gd-etq gd-apariciones';
     sec.innerHTML = `<header class="gd-etq-head"><span class="gd-etq-nom"><span>Apariciones</span></span><span class="gd-etq-acc"><span class="gd-cuenta">${lista.length}</span></span></header>
       <div class="gd-etq-body">${lista.map(x => `<div class="gd-aparicion" role="button" tabindex="0" data-ap-tipo="${esc(x.tipo)}" data-ap-id="${esc(x.id)}" data-ap-eid="${esc(x.eid || '')}" title="Doble clic: abrir la nota">
-          <span class="gd-aparicion-tit"></span><span class="gd-aparicion-ruta"></span></div>`).join('') || '<div class="gd-etq-vacia">Aún no aparece en ninguna nota</div>'}</div>`;
-    $$('.gd-aparicion', sec).forEach((b, i) => { b.firstElementChild.textContent = lista[i].titulo; b.lastElementChild.textContent = lista[i].ruta; });
+          <span class="gd-aparicion-lin"><span class="gd-aparicion-tit"></span><span class="gd-nota-meta">${esc(fecha(x.modificado))}</span></span><span class="gd-aparicion-ruta"></span></div>`).join('') || '<div class="gd-etq-vacia">Aún no aparece en ninguna nota</div>'}</div>`;
+    $$('.gd-aparicion', sec).forEach((b, i) => { $('.gd-aparicion-tit', b).textContent = lista[i].titulo; $('.gd-aparicion-ruta', b).textContent = lista[i].ruta; });
     return sec;
   }
   let personajeId = null;
@@ -1038,7 +1060,7 @@
     const car = $('.per-carrusel', el);
     if (personajeId) car.appendChild(tarjetaApariciones(m.menciones(personajeId)));   // Apariciones primero y luego la bandeja (Leo)
     car.appendChild(tarjeta(null, m.notasDe(subId, null)));
-    etqs.forEach(e => car.appendChild(tarjeta(e, m.notasDe(subId, e.id), { sinAsa: true })));   // en el carrusel no se ordenan
+    etqs.forEach(e => car.appendChild(tarjeta(e, m.notasDe(subId, e.id))));
     const nueva = document.createElement('button');
     nueva.type = 'button'; nueva.className = 'gd-etq-nueva'; nueva.dataset.gdMenu = 'paleta';
     nueva.innerHTML = '<span class="gd-etq-nueva-tit">' + ic('plus', 14) + 'nuevo segmento</span><span class="gd-muestras" aria-hidden="true">' + [0, 1, 4, 6, 5].map(i => `<i style="background:${colores(i)[0]}"></i>`).join('') + '</span>';

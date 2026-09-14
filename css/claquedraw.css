@@ -279,7 +279,11 @@ html[data-theme="dark"] .gd-etq-acc button:hover { background: rgba(0, 0, 0, .3)
 .gd-fantasma { position: fixed; z-index: 60; pointer-events: none; opacity: .85; display: flex; align-items: center; gap: 9px;
         padding: 7px 9px; border: 1.5px solid var(--tinta); border-radius: 6px; background: var(--papel); color: var(--tinta);
         box-shadow: 3px 3px 0 var(--sombra-dura); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#documentos.arrastrando, #documentos.arrastrando *, #gdSide.arrastrando, #gdSide.arrastrando * { user-select: none; cursor: grabbing; }
+#documentos.arrastrando, #documentos.arrastrando *, #gdSide.arrastrando, #gdSide.arrastrando *,
+.per-seg.arrastrando, .per-seg.arrastrando * { user-select: none; cursor: grabbing; }
+/* en el carrusel se arrastran notas y segmentos: sin seleccionar su texto al empezar */
+.per-carrusel .gd-nota, .per-carrusel .gd-etq-head { user-select: none; }
+.per-carrusel .gd-etq[data-etq] > .gd-etq-head { cursor: grab; }
 .gd-nota.arrastrando, .gd-nota-fila.arrastrando { opacity: .4; }
 .gd-nota.sel { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
 .gd-nota-fila.sel { background: var(--foco-suave); }

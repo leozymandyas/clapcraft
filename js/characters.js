@@ -51,7 +51,13 @@
     Object.values(global).concat(Object.values(registry)).forEach(r => { const k = key(r.name); if (!nombres.has(k)) nombres.set(k, r.name); });
     return Array.from(nombres.values()).sort((a, b) => a.localeCompare(b, 'es'));
   };
-  C.has = word => !!registry[key(word)];
+  /* ¿es el nombre (o una palabra del nombre) de un personaje del documento o del guion? El corrector no lo marca:
+     «Ana» en «INT. CASA DE ANA» o «Lioncourt» de «Lestat de Lioncourt» no son erratas. */
+  C.has = word => {
+    const k = key(word); if (!k) return false;
+    if (registry[k] || global[k]) return true;
+    return Object.values(global).concat(Object.values(registry)).some(r => key(r.name).split(/\s+/).includes(k));
+  };
   C.colorOf = name => { const r = registry[key(name)] || global[key(name)]; return r ? C.PALETTE[r.color] : null; };
   /* El personaje de un bloque (null si el bloque no es un personaje registrado). */
   C.entryOf = block => (block && block.classList && block.classList.contains('sp-character')) ? registry[key(block.textContent)] || null : null;

@@ -191,6 +191,8 @@ test('esquemas de un contenedor: varios, con nombre libre; crear, guardar, notas
   assert.equal(d.guardarEsquema(e1.id, t2).cambio, true);
   assert.equal(d.guardarNotaEsquema(e1.id, 'p1', { title: 'Inicio', html: '<p>a</p>' }).cambio, true);
   assert.equal(d.guardarNotaEsquema(e1.id, 'p1', { title: 'Inicio', html: '<p>a</p>' }).cambio, false);
+  assert.ok(d.notaEsquema(e1.id, 'p1').modificado > 0);                                  // cuándo se escribió (la fecha en la cronología)
+  assert.equal(nuevo(d.toJSON()).esquema(e1.id).esquema.notas.p1.modificado, d.notaEsquema(e1.id, 'p1').modificado);
   assert.equal(d.notaEsquema(e1.id, 'p1').html, '<p>a</p>'); assert.equal(d.notaEsquema(e2.id, 'p1'), null);
   d.guardarNotaEsquema(e1.id, 'p9', { html: 'x' });
   assert.equal(d.podarNotasEsquema(e1.id, ['p1', 'p2']).podadas, 1);
