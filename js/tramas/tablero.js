@@ -370,7 +370,8 @@
     // una nota se arrastra de tramo en tramo
     const nt0 = bajoNota || (e.target.closest && e.target.closest('#board [data-nota]'));   // solo las del tablero (en ClapCraft hay otras `data-nota` fuera)
     if (nt0 && !(e.target.classList && e.target.classList.contains('nota-edit'))) {
-      notaArr = { id: nt0.dataset.nota, movido: false };
+      const n0 = m.nota(nt0.dataset.nota);
+      notaArr = { id: nt0.dataset.nota, movido: false, origen: n0 ? [n0.deId, n0.aId] : null, desplazada: null };
       if (bajoNota) seleccionSuave('nota', nt0.dataset.nota, nt0);   // el clic cayó en el «+»: no llegará a la nota
       nt0.classList.add('arrastrando');
       e.preventDefault(); return;
@@ -398,8 +399,7 @@
       for (let i = 0; i < props.length - 1; i++)
         if (px >= xDe(props[i]) && px <= xDe(props[i + 1])) { par = [props[i], props[i + 1]]; break; }
       if (!par) return;                                       // fuera de todo tramo: no se mueve
-      const rr = m.moverNota(notaArr.id, par[0].id, par[1].id);
-      if (!rr.ok || !rr.movida) return;                       // el destino ya tiene nota, o es el mismo
+      if (!colocarNotaArrastrada(par)) return;                // el mismo tramo, o no cabe
       notaArr.movido = true; render();
       const vivo = document.querySelector(`[data-nota="${notaArr.id}"]`);
       if (vivo) vivo.classList.add('arrastrando');
@@ -459,6 +459,46 @@
     const pos = m.ubicarCelda((e.clientX - r.left) / G());
     arr.destino = destino; arr.pos = pos;
     arr.el.style.left = ((m.celdasAntes(pos.actoId) + pos.celda) * G()) + 'px';
+    previaIntercambio(arr.p, destino.dataset.linea, pos);
+  }
+
+  /* Una nota arrastrada sobre un tramo (Leo, 15-09-2026: como los nodos, se reordenan): si el tramo tiene otra nota, esa pasa
+     al tramo de donde salió la arrastrada; al seguir arrastrando, la que se apartó vuelve a su tramo. Devuelve si cambió algo. */
+  function colocarNotaArrastrada(par) {
+    const n = m.nota(notaArr.id); if (!n) return false;
+    const mismo = (x, a, b) => (x.deId === a && x.aId === b) || (x.deId === b && x.aId === a);
+    if (mismo(n, par[0].id, par[1].id)) return false;
+    const antes = JSON.stringify(m.datos.notas.map(x => [x.deId, x.aId]));
+    /* primero se deshace lo apartado y la nota vuelve a su tramo de origen */
+    if (notaArr.desplazada && m.nota(notaArr.desplazada)) m.intercambiarNotas(notaArr.id, notaArr.desplazada);
+    notaArr.desplazada = null;
+    if (notaArr.origen && !mismo(n, notaArr.origen[0], notaArr.origen[1])) m.moverNota(notaArr.id, notaArr.origen[0], notaArr.origen[1]);
+    if (!mismo(n, par[0].id, par[1].id)) {
+      const r = m.moverNota(notaArr.id, par[0].id, par[1].id, { intercambiar: true });
+      if (r.ok && r.intercambio) notaArr.desplazada = r.intercambio.id;
+    }
+    return JSON.stringify(m.datos.notas.map(x => [x.deId, x.aId])) !== antes;
+  }
+
+  /* Vista previa del intercambio de nodos: mientras se arrastra un nodo sobre otro, el de debajo (con su pareja de salto) se
+     desplaza al sitio del arrastrado, que es donde quedará al soltar. */
+  function previaIntercambio(p, lineaId, pos) {
+    (arr.previa || []).forEach(el => { el.style.transform = ''; el.classList.remove('intercambio'); });
+    arr.previa = [];
+    if (!pos) return;
+    const pareja = m.parejaDe(p.id), salvo = [p.id].concat(pareja ? [pareja.id] : []);
+    let q = m.ocupante(lineaId, pos.actoId, pos.celda, salvo), va = p;
+    if (!q && pareja) { q = m.ocupante(pareja.lineaId, pos.actoId, pos.celda, salvo); va = pareja; }
+    if (!q) return;
+    const dx = (m.cg(va) - m.cg(q)) * G();
+    const fila = id => { const t = document.querySelector(`.track[data-linea="${id}"]`); return t ? t.getBoundingClientRect().top : 0; };
+    const dy = q.lineaId === lineaId && lineaId !== va.lineaId ? fila(va.lineaId) - fila(q.lineaId) : 0;   // cruzando de trama, baja o sube a la del arrastrado
+    const qp = m.parejaDe(q.id);
+    [[q, dy], [qp, 0]].forEach(([x, y]) => {
+      const el = x && document.querySelector(`.pt[data-punto="${x.id}"]`); if (!el) return;
+      el.classList.add('intercambio'); el.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${y}px))`;
+      arr.previa.push(el);
+    });
   }
 
   function onPointerUp() {
@@ -477,7 +517,7 @@
     }
     if (mov) {
       const { id, pos, movido } = mov; mov = null;
-      if (movido && pos) { const r = m.moverSalto(id, pos.actoId, pos.celda); if (!r.ok) avisar(r.aviso); }
+      if (movido && pos) { const r = m.moverSalto(id, pos.actoId, pos.celda, { intercambiar: true }); if (!r.ok || r.intercambio) avisar(r.aviso); }
       render(); return;                                       // con rechazo, el dibujo vuelve a su celda
     }
     if (res) {
@@ -491,8 +531,9 @@
     if (!movido) { arr = null; return; }                      // clic seco: nada que recolocar
     if (pos) {
       const nueva = destino.dataset.linea;
-      const r = m.moverPunto(p.id, { actoId: pos.actoId, celda: pos.celda, lineaId: nueva });
-      if (!r.ok) avisar(r.aviso);
+      /* encima de otro nodo, se cambian de lugar (Leo, 15-09-2026) */
+      const r = m.moverPunto(p.id, { actoId: pos.actoId, celda: pos.celda, lineaId: nueva }, { intercambiar: true });
+      if (!r.ok || r.intercambio) avisar(r.aviso);
       else if (r.cambioTrama) avisar(`«${p.titulo}» pasó a ${m.linea(nueva).nombre}`);
     }
     arr = null; render();

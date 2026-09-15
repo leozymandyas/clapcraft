@@ -164,6 +164,59 @@ test('13. arrastrar una nota a un tramo que ya tiene otra la deja donde estaba',
   assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId], ['x', 'y']);
 });
 
+test('soltar una nota sobre otra las intercambia (Leo, 15-09-2026), también entre tramas', () => {
+  const m = base();
+  P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12); P(m, 'c', 'l1', 20); P(m, 'x', 'l2', 1); P(m, 'y', 'l2', 9);
+  m.datos.notas.push({ id: 'n1', deId: 'a', aId: 'b', texto: '1' }, { id: 'n2', deId: 'b', aId: 'c', texto: '2' }, { id: 'n3', deId: 'x', aId: 'y', texto: '3' });
+  const r = m.moverNota('n1', 'b', 'c', { intercambiar: true });
+  assert.equal(r.ok, true); assert.equal(r.intercambio.id, 'n2');
+  assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId, m.nota('n2').deId, m.nota('n2').aId], ['b', 'c', 'a', 'b']);
+  assert.equal(m.moverNota('n1', 'x', 'y', { intercambiar: true }).ok, true);
+  assert.deepEqual([m.nota('n1').deId, m.nota('n3').deId], ['x', 'b']);
+});
+
+test('soltar un nodo sobre otro los intercambia (Leo, 15-09-2026)', () => {
+  const m = base();
+  P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12); P(m, 'c', 'l2', 20);
+  let r = m.moverPunto('a', { actoId: 'a1', celda: 12 }, { intercambiar: true });   // misma trama
+  assert.equal(r.ok, true); assert.equal(r.intercambio.id, 'b');
+  assert.deepEqual([m.punto('a').celda, m.punto('b').celda], [12, 4]);
+  r = m.moverPunto('a', { actoId: 'a1', celda: 20, lineaId: 'l2' }, { intercambiar: true });   // otra trama: cada uno a la del otro
+  assert.equal(r.ok, true);
+  assert.deepEqual([m.punto('a').lineaId, m.punto('a').celda, m.punto('c').lineaId, m.punto('c').celda], ['l2', 20, 'l1', 12]);
+  assert.equal(m.moverPunto('b', { actoId: 'a1', celda: 12 }).ok, false);                 // sin intercambiar, sigue sin poder
+});
+
+test('al intercambiar dos nodos las notas se quedan en su tramo', () => {
+  const m = base();
+  P(m, 'a', 'l1', 2); P(m, 'b', 'l1', 6); P(m, 'c', 'l1', 10);
+  m.datos.notas.push({ id: 'n1', deId: 'a', aId: 'b', texto: '1' }, { id: 'n2', deId: 'b', aId: 'c', texto: '2' });
+  assert.equal(m.moverPunto('a', { actoId: 'a1', celda: 6 }, { intercambiar: true }).ok, true);   // a ↔ b
+  assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId], ['b', 'a']);                   // sigue en 2–6
+  assert.deepEqual([m.nota('n2').deId, m.nota('n2').aId], ['a', 'c']);                   // sigue en 6–10
+  assert.equal(m._tramoValido('a', 'c', 'n2'), null);
+});
+
+test('intercambio con un salto: sus dos extremos van juntos y cada uno sigue en su trama', () => {
+  const m = base();
+  P(m, 'q', 'l1', 10); m.crearSalto('q', 'l2');                              // extremos en 10 (l1 y l2)
+  const s = m.datos.saltos[0], otro = s.aId;
+  P(m, 'x', 'l1', 30); P(m, 'y', 'l2', 30); P(m, 'z', 'l2', 40);
+  /* el extremo de l1 sobre x: y está en la otra trama en la misma celda, así que no caben los dos */
+  assert.equal(m.moverPunto('q', { actoId: 'a1', celda: 30 }, { intercambiar: true }).ok, false);
+  /* el salto sobre z (en la trama de la pareja): el salto va a 40 y z a 10 */
+  const r = m.moverSalto(s.id, 'a1', 40, { intercambiar: true });
+  assert.equal(r.ok, true);
+  assert.deepEqual([m.punto('q').celda, m.punto(otro).celda, m.punto('z').celda, m.punto('z').lineaId], [40, 40, 10, 'l2']);
+  /* un nodo suelto sobre un extremo: el salto entero se va a su celda (si la pareja cabe allí) */
+  assert.equal(m.moverPunto('x', { actoId: 'a1', celda: 40 }, { intercambiar: true }).ok, false);   // la pareja caería sobre y (l2, 30)
+  P(m, 'w', 'l1', 50);
+  assert.equal(m.moverPunto('w', { actoId: 'a1', celda: 40 }, { intercambiar: true }).ok, true);
+  assert.deepEqual([m.punto('w').celda, m.punto('q').celda, m.punto(otro).celda], [40, 50, 50]);
+  /* los dos extremos del mismo salto no se intercambian */
+  assert.equal(m.intercambiarPuntos('q', otro).ok, false);
+});
+
 test('una nota solo va entre dos nodos consecutivos de la misma trama', () => {
   const m = base();
   P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12); P(m, 'c', 'l1', 20); P(m, 'z', 'l2', 5);

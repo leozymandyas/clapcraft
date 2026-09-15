@@ -202,7 +202,16 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   salto borra sus dos nodos; una nota va entre dos nodos consecutivos y solo cabe una por tramo.
   **Una celda es de un solo nodo** (Leo, 13-09-2026): `nuevoPunto`, `moverPunto` y `moverSalto`
   rechazan caer sobre otro nodo (`ocupante()`), y `crearSalto` no convierte un nodo existente en
-  cuadro o rombo: el otro extremo necesita la celda libre. La vista previa del arrastre del «+» tampoco
+  cuadro o rombo: el otro extremo necesita la celda libre. **Soltar un nodo encima de otro los intercambia** (Leo,
+  15-09-2026, también en Personajes): el tablero llama a `moverPunto`/`moverSalto` con `{ intercambiar: true }` y, si lo que hay
+  en la celda es un solo nodo, `intercambiarPuntos(p, q)`: cada uno a la celda y la trama del otro; un extremo de salto se
+  lleva a su pareja a la misma celda (la pareja sigue en su trama); si algo caería sobre un tercero, dos en la misma celda o un
+  salto quedaría mal (en la trama de su pareja, un cuadro en una alternativa), no se hace y avisa. Las notas se quedan en su
+  tramo (sus extremos pasan al nodo que ocupa ese lugar). Mientras se arrastra, el de debajo (y su pareja) se aparta a su sitio
+  (`previaIntercambio`, `.pt.intercambio` con transición). **Las notas también** (`moverNota(…, { intercambiar })`,
+  `intercambiarNotas`): arrastrada sobre un tramo con otra nota, esa pasa al tramo de origen de la arrastrada, y al seguir
+  arrastrando vuelve a su tramo (`colocarNotaArrastrada` en tablero.js). Sin la opción, el modelo sigue rechazando (criterio 13
+  de la spec, que Leo cambió para la interfaz). La vista previa del arrastre del «+» tampoco
   enciende una pista ocupada; al soltar un nodo sobre otro el tablero avisa y lo devuelve. El arrastre
   del trazo de un salto (`mov`) es solo visual hasta soltar: desplaza los dos extremos (`transform`) y
   el grupo `<g data-salto-g>` del SVG, y `moverSalto` se llama en `pointerup`; así se ve el intento

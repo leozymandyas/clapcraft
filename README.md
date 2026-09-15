@@ -5,7 +5,7 @@ nodos), escribes el texto de cada paso en un **editor de guion** y organizas el 
 **bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
 navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-**Versión 1.0.1**
+**Versión 1.0.34**
 
 ## Instalar
 
@@ -45,11 +45,13 @@ El tablero donde se estructura la historia.
 - **Tramas**: carriles. Una **principal**, las **secundarias** que hagan falta y las **alternativas**
   (exploraciones, punteadas).
 - **Nodos**: pasa el cursor por una celda y pulsa el «+». Clic selecciona e ilumina el camino que siguió la
-  historia hasta ahí; arrastrar cambia de celda o de trama. En el panel se escriben título y descripción.
+  historia hasta ahí; arrastrar cambia de celda o de trama, y **soltarlo sobre otro nodo los intercambia** (también en
+  Personajes). En el panel se escriben título y descripción.
   **Doble clic abre su documento** en el editor.
 - **Saltos**: el cambio de escena (cuadro) y el salto a una alternativa (rombo) unen dos tramas en la misma
   celda. Lo que queda fuera del hilo de la historia se ve apagado.
-- **Notas** en post-it entre dos nodos; con clic derecho se les da uno de los 24 colores de la paleta. Al pasar el
+- **Notas** en post-it entre dos nodos; se arrastran de tramo en tramo y, sobre otra nota, se cambian de lugar con ella;
+  con clic derecho se les da uno de los 24 colores de la paleta. Al pasar el
   ratón por una nota corrida a un lado se marca la guía que la une a su trama.
 - Abajo: **escala horizontal y vertical**, restablecer, deshacer y rehacer (`Cmd/Ctrl+Z`,
   `Cmd/Ctrl+Shift+Z`). **«Ver biblioteca»** abre la biblioteca enlazada.

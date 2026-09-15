@@ -230,28 +230,81 @@
     }
 
     /* Mueve un nodo de celda y, si se pide, de trama. Los socios de salto lo siguen (misma celda).
-       Ni el nodo ni su pareja pueden caer sobre otro nodo: necesitan la celda libre. */
-    moverPunto(id, destino) {
+       Ni el nodo ni su pareja pueden caer sobre otro nodo: necesitan la celda libre, salvo con
+       `op.intercambiar` (el tablero al soltar un nodo encima de otro, Leo 15-09-2026): si lo que hay es un
+       solo nodo, los dos se cambian de lugar (`intercambiarPuntos`). */
+    moverPunto(id, destino, op) {
       const p = this.punto(id); if (!p) return no('Ese nodo no existe');
       const a = this.acto(destino.actoId); if (!a) return no('Ese acto no existe');
       const nueva = destino.lineaId || p.lineaId;
       const pareja = this.parejaDe(p.id);
-      if (nueva !== p.lineaId) {
-        const l = this.linea(nueva); if (!l) return no('Esa trama no existe');
-        if (pareja && pareja.lineaId === nueva)
-          return no('Un cambio de escena no puede terminar en la misma trama de la que sale');
-        if (pareja && this.formaDe(p.id) === 'cuadro' && l.tipo === 'alterna')
-          return no('Un cuadro no llega a una trama alternativa. Para eso está el rombo.');
-      }
+      const cambio = this._puedeCambiarTrama(p, nueva); if (!cambio.ok) return cambio;
       const celda = clamp(Math.round(destino.celda), 0, a.celdas - 1);
       const salvo = [p.id].concat(pareja ? [pareja.id] : []);
       const ocupada = this.ocupante(nueva, a.id, celda, salvo) || (pareja && this.ocupante(pareja.lineaId, a.id, celda, salvo));
+      if (ocupada && op && op.intercambiar) {
+        const otra = pareja && this.ocupante(pareja.lineaId, a.id, celda, salvo);
+        const enMia = this.ocupante(nueva, a.id, celda, salvo);
+        if (enMia && otra && enMia !== otra) return no(`Ahí ya están «${enMia.titulo || 'un nodo'}» y «${otra.titulo || 'un nodo'}»: no se puede intercambiar con los dos`);
+        /* el que cae encima de otro es el nodo arrastrado, o su pareja si lo que hay está en la trama de la pareja */
+        return enMia ? this.intercambiarPuntos(p.id, enMia.id, nueva) : this.intercambiarPuntos(pareja.id, otra.id);
+      }
       if (ocupada) return no(`Ahí ya está «${ocupada.titulo || 'un nodo'}»: necesita una celda libre`);
       p.actoId = a.id; p.celda = celda;
       this._sincronizarSalto(p);
       const cambioTrama = nueva !== p.lineaId;
       if (cambioTrama) p.lineaId = nueva;
       return si({ punto: p, cambioTrama });
+    }
+
+    /* ¿Puede el nodo pasar a la trama `nueva`? Un extremo de salto no termina en la trama de su pareja y un cuadro no llega a
+       una alternativa. */
+    _puedeCambiarTrama(p, nueva) {
+      if (nueva === p.lineaId) return si({});
+      const l = this.linea(nueva); if (!l) return no('Esa trama no existe');
+      const pareja = this.parejaDe(p.id);
+      if (pareja && pareja.lineaId === nueva)
+        return no('Un cambio de escena no puede terminar en la misma trama de la que sale');
+      if (pareja && this.formaDe(p.id) === 'cuadro' && l.tipo === 'alterna')
+        return no('Un cuadro no llega a una trama alternativa. Para eso está el rombo.');
+      return si({});
+    }
+
+    /* Intercambia el lugar de dos nodos (Leo, 15-09-2026: arrastrar un nodo encima de otro): cada uno pasa a la celda y a la
+       trama del otro. Un extremo de salto se lleva a su pareja a la misma celda (su pareja se queda en su trama). Si al
+       cambiarse algo caería sobre un tercer nodo, o un salto quedaría mal (en la trama de su pareja, un cuadro en una
+       alternativa), no se hace. `lineaP`: la trama a la que va `idP` (de partida, la de `idQ`). */
+    intercambiarPuntos(idP, idQ, lineaP) {
+      const P = this.punto(idP), Q = this.punto(idQ);
+      if (!P || !Q) return no('Ese nodo no existe');
+      if (P === Q) return si({ punto: P, intercambio: null });
+      const Pp = this.parejaDe(P.id), Qp = this.parejaDe(Q.id);
+      if (Pp === Q) return no('Son los dos extremos del mismo salto');
+      const destP = { lineaId: lineaP || Q.lineaId, actoId: Q.actoId, celda: Q.celda };
+      const destQ = { lineaId: destP.lineaId === Q.lineaId ? P.lineaId : Q.lineaId, actoId: P.actoId, celda: P.celda };
+      const cP = this._puedeCambiarTrama(P, destP.lineaId); if (!cP.ok) return cP;
+      const cQ = this._puedeCambiarTrama(Q, destQ.lineaId); if (!cQ.ok) return cQ;
+      /* dónde queda cada uno de los que se mueven; nadie puede caer sobre un nodo que no se mueve, ni dos en la misma celda */
+      const mueven = [[P, destP], [Q, destQ]];
+      if (Pp) mueven.push([Pp, { lineaId: Pp.lineaId, actoId: destP.actoId, celda: destP.celda }]);
+      if (Qp) mueven.push([Qp, { lineaId: Qp.lineaId, actoId: destQ.actoId, celda: destQ.celda }]);
+      const ids = mueven.map(([x]) => x.id), vistas = new Set();
+      for (const [x, d] of mueven) {
+        const clave = d.lineaId + '|' + d.actoId + '|' + d.celda;
+        const tercero = this.ocupante(d.lineaId, d.actoId, d.celda, ids);
+        if (tercero || vistas.has(clave)) return no(`No caben: «${x.titulo || 'un nodo'}» caería sobre ${tercero ? '«' + (tercero.titulo || 'un nodo') + '»' : 'otro nodo'}`);
+        vistas.add(clave);
+      }
+      mueven.forEach(([x, d]) => { x.lineaId = d.lineaId; x.actoId = d.actoId; x.celda = d.celda; });
+      /* las notas se quedan en su sitio: la que iba de P a otro nodo va ahora del que ocupa el lugar de P (Q), y al revés */
+      const cambia = id => id === P.id ? Q.id : id === Q.id ? P.id : id;
+      this.datos.notas.forEach(n => {
+        if (![n.deId, n.aId].some(id => id === P.id || id === Q.id)) return;
+        n.deId = cambia(n.deId); n.aId = cambia(n.aId);
+        const de = this.punto(n.deId), a = this.punto(n.aId);
+        if (de && a && this.cg(de) > this.cg(a)) [n.deId, n.aId] = [n.aId, n.deId];
+      });
+      return si({ punto: P, cambioTrama: false, intercambio: Q, aviso: `«${P.titulo || 'Nodo'}» y «${Q.titulo || 'Nodo'}» intercambiaron su lugar` });
     }
 
     editarPunto(id, cambios) {
@@ -443,10 +496,10 @@
     }
 
     /* Mueve el salto completo (sus dos extremos) a otro momento. */
-    moverSalto(id, actoId, celda) {
+    moverSalto(id, actoId, celda, op) {
       const s = this.salto(id); if (!s) return no('Ese salto no existe');
       const a = this.punto(s.deId); if (!a) return no('Ese salto está roto');
-      return this.moverPunto(a.id, { actoId, celda });
+      return this.moverPunto(a.id, { actoId, celda }, op);
     }
 
     /* Un cuadro o un rombo existe para ser un salto: sin la unión, sus dos extremos se van. */
@@ -497,16 +550,28 @@
       return si({ nota: n });
     }
 
-    /* Salta de tramo en tramo; si el destino ya tiene nota, se queda donde estaba. */
-    moverNota(id, deId, aId) {
+    /* Salta de tramo en tramo; si el destino ya tiene nota, se queda donde estaba, salvo con `op.intercambiar` (Leo,
+       15-09-2026: como los nodos, soltar una nota sobre otra las cambia de lugar). */
+    moverNota(id, deId, aId, op) {
       const n = this.nota(id); if (!n) return no('Esa nota no existe');
       if ((n.deId === deId && n.aId === aId) || (n.deId === aId && n.aId === deId)) return si({ nota: n, movida: false });
+      const otra = this.notaDe(deId, aId);
+      if (otra && otra.id !== id && op && op.intercambiar) return this.intercambiarNotas(id, otra.id);
       const problema = this._tramoValido(deId, aId, id);
       if (problema) return no(problema);
       const a = this.punto(deId), b = this.punto(aId);
       const [de, hasta] = this.cg(a) <= this.cg(b) ? [a, b] : [b, a];
       n.deId = de.id; n.aId = hasta.id;
       return si({ nota: n, movida: true });
+    }
+
+    /* Dos notas se cambian de tramo (de la misma trama o de tramas distintas). */
+    intercambiarNotas(idA, idB) {
+      const A = this.nota(idA), B = this.nota(idB);
+      if (!A || !B) return no('Esa nota no existe');
+      if (A === B) return si({ nota: A, movida: false });
+      [A.deId, B.deId] = [B.deId, A.deId]; [A.aId, B.aId] = [B.aId, A.aId];
+      return si({ nota: A, movida: true, intercambio: B });
     }
 
     borrarNota(id) {

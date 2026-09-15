@@ -319,3 +319,6 @@ html[data-theme="dark"] #dlg::backdrop { background: rgba(0, 0, 0, .55); }
 #dlg .btn.danger { border-color: var(--peligro); color: var(--peligro); }
 #dlg .btn.danger:hover { background: var(--peligro-bg); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* el nodo que se cambiará de lugar con el arrastrado: se aparta a su sitio (Leo, 15-09-2026) */
+.pt.intercambio { transition: transform .16s ease; z-index: 4; }
+.pt.intercambio .dot { box-shadow: 0 0 0 3px var(--foco-halo); }
