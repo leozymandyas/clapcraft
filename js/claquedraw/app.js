@@ -77,7 +77,17 @@
   function volcar() {
     clearTimeout(temporizador); temporizador = null;
     if (abiertoId && biblioteca.guion(abiertoId)) {
-      if (esquemaId && refEsquema(esquemaId)) { const r = docs().guardarEsquema(esquemaId, modelo.toJSON()); if (r.ok && r.cambio) biblioteca.marcar(abiertoId); }
+      if (esquemaId && refEsquema(esquemaId)) {
+        /* en el tablero de un personaje, sus relaciones con otros se reflejan al final del tablero de cada uno (js/claquedraw/relaciones.js);
+           antes de guardar, porque marca las relaciones de este tablero */
+        if (esPersonajes(esquemaId) && C.relaciones) {
+          const duenio = esquemaId.slice((C.ID_PERSONAJES + ':esquema:').length);
+          const borradas = C.relaciones.borrarReflejos(docs(), T, modelo, duenio).length;   // lo borrado aquí, fuera de los demás tableros
+          const renombradas = C.relaciones.renombrarReflejos(docs(), T, modelo, duenio).length;   // y el nombre que se le puso, en los reflejos
+          if (borradas + renombradas + C.relaciones.reflejar(docs(), T, modelo, duenio, datosPersonajes).length) biblioteca.marcar(abiertoId);
+        }
+        const r = docs().guardarEsquema(esquemaId, modelo.toJSON()); if (r.ok && r.cambio) biblioteca.marcar(abiertoId);
+      }
     }
     persistir();
   }
@@ -232,6 +242,18 @@
     modelo.editarLinea(r.linea.id, { personaje: p.id, nombre: p.nombre });
     T.tablero.render(); volcar();
   }
+  /* Eliminar un carril del tablero de un personaje (Leo, 15-09-2026: no había forma; el panel de la trama no se abre ahí): con
+     eventos pide confirmación; se va con ellos y con sus notas. El carril del dueño no tiene selector y no se elimina. */
+  async function eliminarCarril(lineaId) {
+    const l = modelo.linea(lineaId); if (!l || l.tipo === 'principal') return;
+    const n = modelo.datos.puntos.filter(p => p.lineaId === lineaId).length;
+    const quien = l.personaje && docs().personaje(l.personaje), nombre = quien ? quien.nombre : 'Sin personaje';
+    if (!await T.tablero.confirmar('¿Eliminar el carril de «' + nombre + '»?' + (!n ? '' : n === 1 ? ' Se borra su evento en este tablero y lo escrito en él.' : ' Se borran sus ' + n + ' eventos en este tablero y lo escrito en ellos.'), 'Eliminar')) return;   // siempre con confirmación (Leo)
+    const r = modelo.borrarLinea(lineaId); if (!r.ok) { T.tablero.avisar(r.aviso); return; }
+    T.tablero.render(); volcar();
+    T.tablero.avisar('Carril de «' + nombre + '» eliminado');
+    if (vista.modo === 'personajes') C.gestor.render();
+  }
   /* los carriles del tablero montado siguen al elenco (nombre); el modelo de documentos ya cambió sus datos guardados */
   function carrilesDe(id, fn) {
     if (!esPersonajes(esquemaId)) return;
@@ -307,7 +329,7 @@
       if (etq) { etq.style.setProperty('--chl', par[1]); etq.style.setProperty('--chd', par[2]); }
       combo.innerHTML = '<span class="per-combo-nom"></span>' + (fijo ? '' : '<svg width="12" height="12"><use href="#ic-chev-d"></use></svg>');
       combo.firstElementChild.textContent = p ? p.nombre : 'Sin personaje';
-      combo.title = fijo ? 'El personaje de este tablero' : p ? 'Personaje del carril · clic para cambiarlo' : 'Elegir el personaje de este carril';
+      combo.title = fijo ? 'El personaje de este tablero' : p ? 'Personaje del carril · clic para cambiarlo · doble clic: ir a «' + p.nombre + '»' : 'Elegir el personaje de este carril';
     });
     if (corregido) alCambiar();
   }
@@ -894,7 +916,7 @@
     verBiblioteca: () => { const x = esquemaId && docs() && docs().enlace(esquemaId); if (x) C.gestor.abrirSub(x.sub.id); },
     /* el chip del acto: el segmento expandido de ese acto en la biblioteca enlazada (o, en Personajes, del momento
        en la biblioteca del personaje), con el documento abierto marcado */
-    puedeVerSegmento: () => esPersonajes(esquemaId) && !!bibliotecaDelEsquema(),   // las bibliotecas ya no tienen cronología (Leo): solo los momentos de un personaje
+    puedeVerSegmento: () => false,   // ni las bibliotecas tienen cronología ni los personajes segmentos de momentos (Leo): el chip del acto no abre nada
     /* el chip del esquema en la cabecera del editor: su nombre, o el personaje con su color */
     esquemaChip: () => {
       const r = refEsquema(esquemaId); if (!r) return null;
@@ -1136,7 +1158,20 @@
   /* tras cada render del tablero, los selectores de personaje (solo en el tablero de Personajes) */
   new MutationObserver(() => marcarPersonaje()).observe($('rows'), { childList: true });
   /* el selector del carril: su clic y su puntero no llegan al tablero (lo tomaría por elegir o arrastrar la trama) */
-  ['pointerdown', 'mousedown', 'dblclick'].forEach(t => $('rows').addEventListener(t, e => {
+  ['pointerdown', 'mousedown', 'click', 'dblclick'].forEach(t => $('rows').addEventListener(t, e => {
+    /* doble clic en un carril de otro personaje (su nombre, su etiqueta o el hueco de la columna): a ese personaje (Leo, 15-09-2026).
+       También el segundo clic de un doble clic (`detail` 2): si el primero abrió el menú del selector, el `dblclick` no siempre llega */
+    if ((t === 'dblclick' || (t === 'click' && e.detail >= 2)) && esPersonajes(esquemaId) && !T.tablero.acabaDeReordenar()) {
+      const label = e.target.closest('.label'), row = label && label.closest('.row[data-linea]');
+      const l = row && !e.target.closest('.per-color, input') && modelo.linea(row.dataset.linea);
+      const p = l && l.tipo !== 'principal' && l.personaje && docs().personaje(l.personaje);
+      if (p) { e.stopImmediatePropagation(); e.preventDefault(); C.gestor.cerrarPop(); abrirPersonaje(p.id); return; }   // inmediata: el oyente del selector (mismo elemento) no reabre su menú
+    }
+    if (t === 'click') return;                                 // el clic sencillo del selector lo lleva su propio oyente
+    /* desde el selector, la etiqueta o el color también se arrastra el carril para reordenarlo (el tablero no ve ese puntero) */
+    if (t === 'pointerdown' && esPersonajes(esquemaId) && e.target.closest('.per-combo:not(.fijo), .per-etq, .per-color')) {
+      const row = e.target.closest('.row[data-linea]'); if (row) T.tablero.arrastrarFila(e, row.dataset.linea);
+    }
     const b = e.target.closest('.per-combo'); if (b && (t === 'dblclick' || !b.classList.contains('fijo'))) e.stopPropagation();   // el nombre fijo no se renombra con doble clic
     if (e.target.closest('.per-color, .per-etq')) e.stopPropagation();
   }));
@@ -1144,14 +1179,16 @@
   $('rows').addEventListener('click', e => {
     const b = e.target.closest('.per-color'); if (!b) return;
     e.stopPropagation();
+    if (T.tablero.acabaDeReordenar()) return;                  // el clic con que acaba un arrastre del carril
     const lid = b.dataset.linea, l = modelo.linea(lid); if (!l) return;
     C.gestor.paletaTrama(b, l.color, c => { modelo.editarLinea(lid, { color: c }); T.tablero.render(); alCambiar(); if (vista.modo === 'personajes') C.gestor.render(); });
   });
   $('rows').addEventListener('click', e => {
     const b = e.target.closest('.per-combo:not(.fijo)'); if (!b) return;
     e.stopPropagation();
+    if (T.tablero.acabaDeReordenar()) return;
     const lid = b.dataset.linea, l = modelo.linea(lid); if (!l) return;
-    C.gestor.menuCarril(b, { actual: l.personaje || null, salvo: conCarril(lid), alElegir: pid => asignarCarril(lid, pid), alQuitar: () => asignarCarril(lid, null) });
+    C.gestor.menuCarril(b, { actual: l.personaje || null, salvo: conCarril(lid), alElegir: pid => asignarCarril(lid, pid), alQuitar: () => asignarCarril(lid, null), alEliminar: () => eliminarCarril(lid), alIr: () => { if (l.personaje) abrirPersonaje(l.personaje); } });
   });
   /* «＋ personaje» (el «Nueva trama» del tablero): sin elegir tipo, se elige un personaje y nace su carril */
   $('rows').addEventListener('click', e => {

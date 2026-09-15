@@ -52,6 +52,7 @@
      bibliotecas (`carpetaId`); en Personajes agrupan el elenco (`datos.carpetasElenco`, `personaje.carpetaId`).
      Su color es uno de los de las tramas (`var(--t-…)`). */
   const COLORES_CARPETA = ['azul', 'violeta', 'verde', 'ambar', 'rojo', 'gris'];
+  const HOJA_PERSONAJE = 'Hoja de personaje';                   // el segmento con que estrena su biblioteca un personaje
   const ELENCO = 'elenco';                                     // el ámbito de las carpetas de Personajes
 
   /* ---------- personajes del editor: nombres y bloques `p.sp-character` en el HTML de las notas ---------- */
@@ -166,7 +167,7 @@
       (Array.isArray(c.subs) ? c.subs : []).forEach(s => {
         const sid = s && String(s.id || ''); if (!sid || ids.has(sid)) return; ids.add(sid);
         subs.push({ id: sid, nombre: texto(s.nombre, NOMBRE_SUB), creado: +s.creado || creado, modificado: +s.modificado || +s.creado || creado,
-                    ...(s.segmentosPrimero ? { segmentosPrimero: true } : {}), ...(s.lineaId ? { lineaId: String(s.lineaId) } : {}), ...enCarpeta(s),
+                    ...(s.segmentosPrimero ? { segmentosPrimero: true } : {}), ...(s.lineaId ? { lineaId: String(s.lineaId) } : {}), ...(s.hoja ? { hoja: true } : {}), ...enCarpeta(s),
                     ...(ordenValido(s.ordenActos) ? { ordenActos: ordenValido(s.ordenActos) } : {}),
                     ...(Array.isArray(s.ordenSegmentos || s.ordenCarrusel) ? { ordenSegmentos: (s.ordenSegmentos || s.ordenCarrusel).filter(x => typeof x === 'string' && x) } : {}),
                     ...(Array.isArray(s.ordenGuiones) ? { ordenGuiones: s.ordenGuiones.filter(x => typeof x === 'string' && x) } : {}) });   // por defecto los guiones generados van arriba
@@ -574,7 +575,9 @@
       });
       return e;
     }
-    /* La biblioteca de un personaje (una trama del tablero de Personajes); la crea con su nombre si no la hay. */
+    /* La biblioteca de un personaje (una trama del tablero de Personajes); la crea con su nombre si no la hay. Estrena el
+       segmento «Hoja de personaje» (Leo, 15-09-2026), con el color del personaje, una sola vez (`hoja`): si se renombra o se
+       borra, no vuelve; las bibliotecas de antes lo reciben la primera vez que se abren. */
     bibliotecaPersonaje(personajeId, nombre) {
       const c = this.contenedor(ID_PERSONAJES); if (!c || !personajeId) return null;
       let s = c.subs.find(x => x.lineaId === personajeId);        // (`lineaId` guarda el id del personaje del elenco)
@@ -583,6 +586,11 @@
         s = { id: this.idNuevo(), nombre: texto(nombre, 'Personaje'), creado: t, modificado: t, lineaId: personajeId };
         c.subs.push(s); this._tocar(c);
       } else if (nombre && texto(nombre, '') && s.nombre !== texto(nombre, '')) s.nombre = texto(nombre, '');   // sigue al nombre del personaje
+      if (!s.hoja) {
+        s.hoja = true;
+        const p = this.personaje(personajeId);
+        if (!this.etiquetasDe(s.id).some(e => plano(e.nombre) === plano(HOJA_PERSONAJE))) this.crearEtiqueta(s.id, HOJA_PERSONAJE, p ? p.color : null);
+      }
       return s;
     }
 
@@ -1094,6 +1102,6 @@
     }
   }
 
-  Object.assign(C, { Documentos, ID_PERSONAJES, COLORES_CARPETA, TONOS_NOTA: TONOS, SEGMENTO_GUIONES: GUIONES, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
+  Object.assign(C, { Documentos, ID_PERSONAJES, COLORES_CARPETA, HOJA_PERSONAJE, TONOS_NOTA: TONOS, SEGMENTO_GUIONES: GUIONES, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -44,6 +44,7 @@
   let restaurando = false;
   const ganchos = { alCambiar: () => {} };
 
+  let $nombres;                          // capa con el nombre de cada salto sobre su trazo (Leo, 15-09-2026)
   let $axis, $rows, $cables, $canvas, $board, $panel, $menu, $tip, $aviso, $celda;
 
   /* ---------- geometría: celdas → píxeles (única capa que conoce píxeles) ---------- */
@@ -183,8 +184,11 @@
 
     cables();
     panel();
+    podarMulti();
     if (!restaurando && !arrastrando()) registrar();
   }
+
+  function podarMulti() { [...multi].forEach(id => { if (!m.punto(id)) multi.delete(id); }); pintarMulti(); }
 
   function nodo(p, l, i) {
     const el = document.createElement('div');
@@ -192,6 +196,7 @@
     el.className = 'pt'
       + (!forma && !p.cortado ? ' con-rotulo' : '')                   // el nombre en un rótulo de papel (los cuadros, rombos y descartados, texto suelto)
       + (esSel('punto', p.id) ? ' sel' : '')
+      + (multi.has(p.id) ? ' multi' : '')
       + (forma ? ' caja' + (forma === 'rombo' ? ' rombo' : '') : '')
       + (pres.fuera(p) ? ' fuera' : '')
       + (enRuta(p.lineaId, c, c) ? ' en-ruta' : '')
@@ -288,7 +293,7 @@
     $cables.setAttribute('width', GUTTER + totalW() + 46);
     $cables.setAttribute('height', H);
     $cables.style.height = H + 'px';
-    let d = '';
+    let d = '', nombres = '';
     m.datos.saltos.forEach(s => {
       const a = m.punto(s.deId), b = m.punto(s.aId);
       if (!a || !b || a.lineaId === b.lineaId) return;
@@ -305,15 +310,15 @@
             <line x1="${x}" y1="${ya}" x2="${x}" y2="${yb}" style="stroke:${col}" stroke-width="${grosor}" opacity="${op}" shape-rendering="crispEdges"/>
             ${simple ? '' : `<polygon points="${x},${yb + dir * 4.5} ${x - 5},${yb - dir * 5} ${x + 5},${yb - dir * 5}" style="fill:${col}" opacity="${op}"/>`}
             <path class="golpe" d="M ${x} ${ya + dir * 16} L ${x} ${yb - dir * 16}" stroke="transparent" stroke-width="14" fill="none" data-salto="${s.id}"/>`;
-      if (seleccionado) {
-        const my = (y1 + y2) / 2;
-        d += `<g class="badge" data-salto-del="${s.id}">
-                <circle cx="${x}" cy="${my}" r="9" style="fill:var(--papel);stroke:${col}" stroke-width="1.5"/>
-                <path d="M ${x - 3.5} ${my - 3.5} L ${x + 3.5} ${my + 3.5} M ${x + 3.5} ${my - 3.5} L ${x - 3.5} ${my + 3.5}" style="stroke:${col}" stroke-width="1.6"/></g>`;
-      }
+      /* sin la «×» en un círculo sobre el salto elegido (Leo, 15-09-2026): «Eliminar» ya está en su menú contextual y Supr */
       d += '</g>';
+      /* el nombre del salto (cuadro, rombo o relación) va en su trazo, no en sus extremos (Leo, 15-09-2026); se arrastra, abre
+         su menú y se renombra como el trazo (`data-salto`) */
+      const titulo = a.titulo || m.forma(s.tipo);
+      nombres += `<div class="salto-nombre${seleccionado ? ' sel' : ''}" data-salto="${s.id}" data-salto-nombre="${s.id}" style="left:${x}px;top:${(y1 + y2) / 2}px;opacity:${op};--c:${col}" title="${esc(titulo)}">${esc(titulo)}</div>`;
     });
     $cables.innerHTML = d;
+    if ($nombres) $nombres.innerHTML = nombres;
   }
 
   /* Enciende el recorrido sin reconstruir el tablero: solo clases y el SVG. */
@@ -335,18 +340,90 @@
      Arrastres
      ==================================================================== */
   let arr = null, res = null, mov = null, cel = null, notaArr = null, celArrastrado = false;
-  const arrastrando = () => !!(arr || res || mov || cel || notaArr);
+  /* Selección múltiple (Leo, 15-09-2026): arrastrando en un hueco del tablero se dibuja un rectángulo (`marq`) y los nodos,
+     cuadros y rombos que quedan dentro se eligen (`multi`); arrastrando uno de ellos se mueve el bloque entero (`bloque`,
+     `m.moverBloque`). */
+  const multi = new Set();
+  let marq = null, bloque = null, soltarClic = false;
+  /* Reordenar tramas (Leo, 15-09-2026): se arrastra su etiqueta en la columna; la fila sigue al puntero y una raya marca dónde cae.
+     En el tablero de un personaje (simple) su carril principal no se mueve y nada pasa por encima de él. */
+  let filaArr = null, finFila = 0;
+  const arrastrando = () => !!(arr || res || mov || cel || notaArr || (marq && marq.activo) || bloque || (filaArr && filaArr.activo));
+  function empezarArrastreFila(e, lineaId) {
+    const l = m.linea(lineaId), row = l && $rows.querySelector(`.row[data-linea="${CSS.escape(lineaId)}"]`);
+    if (!row || e.button !== 0 || (simple && l.tipo === 'principal')) return false;
+    filaArr = { id: lineaId, row, y0: e.clientY, activo: false, destino: null };
+    return true;
+  }
+  function moverFila(e) {
+    const dy = e.clientY - filaArr.y0;
+    if (!filaArr.activo) {
+      if (Math.abs(dy) < 6) return;
+      filaArr.activo = true; filaArr.row.classList.add('arrastrando-fila'); document.body.classList.add('moviendo-fila');
+      filaArr.marca = document.createElement('div'); filaArr.marca.className = 'fila-marca'; $canvas.appendChild(filaArr.marca);
+      $celda.classList.remove('show'); cerrarMenu(); $tip.classList.remove('show');
+      const sx = window.getSelection && window.getSelection(); if (sx) sx.removeAllRanges();
+    }
+    filaArr.row.style.transform = `translateY(${dy}px)`;
+    const filas = Array.from($rows.querySelectorAll(':scope > .row[data-linea]')).filter(r => r !== filaArr.row);
+    let k = filas.filter(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2 < e.clientY; }).length;
+    const pi = m.datos.lineas.findIndex(l => l.tipo === 'principal');
+    if (simple && pi === 0) k = Math.max(1, k);                        // el dueño del tablero de un personaje sigue arriba
+    filaArr.destino = k;
+    const rc = $canvas.getBoundingClientRect();
+    const ref = filas[k] ? filas[k].getBoundingClientRect().top : (filas.length ? filas[filas.length - 1].getBoundingClientRect().bottom : rc.top);
+    filaArr.marca.style.top = (ref - rc.top - 1) + 'px';
+  }
+  function pintarMulti() {
+    document.querySelectorAll('#board .pt').forEach(el => el.classList.toggle('multi', multi.has(el.dataset.punto)));
+    /* la barra de la selección: cuántos hay, eliminarlos y soltarlos (abajo, en el centro del tablero) */
+    let barra = document.getElementById('multiBarra');
+    const n = [...multi].filter(id => m.punto(id)).length;
+    if (!n || !$board) { if (barra) barra.remove(); return; }
+    if (!barra) { barra = document.createElement('div'); barra.id = 'multiBarra'; barra.className = 'multi-barra'; document.body.appendChild(barra); }
+    barra.innerHTML = `<span>${n === 1 ? '1 elegido' : n + ' elegidos'}</span><button type="button" class="peligro" data-multi-borrar>Eliminar</button><button type="button" data-multi-soltar title="Soltar la selección (Esc)">Soltar</button>`;
+    const r = $board.getBoundingClientRect();
+    barra.style.left = (r.left + r.width / 2) + 'px'; barra.style.top = (r.bottom - 52) + 'px';
+  }
+  function limpiarMulti() { if (!multi.size) return; multi.clear(); pintarMulti(); }
+  /* ¿empieza aquí un rectángulo? en un hueco de una trama (no sobre un nodo, una nota o un control) o, con Mayús, sobre el «+» */
+  function empiezaMarquesina(e) {
+    const cl = s => e.target.closest && e.target.closest(s);
+    /* el trazo de un salto (y su insignia) se arrastra para mover el salto: ahí no empieza un rectángulo (pasó en la 1.0.37) */
+    if (e.button !== 0 || !cl('#board') || cl('.label, .axis, aside, #menu, .pt, .nota, .add-nota, .handle, [data-handle], [data-salto], input, button:not(#celda)')) return false;
+    if (e.clientX < zonaUtil()) return false;
+    return !!cl('#canvas') && (!cl('#celda') || e.shiftKey);
+  }
   const quitarHot = () => document.querySelectorAll('.track.hot').forEach(t => t.classList.remove('hot'));
 
   function onPointerDown(e) {
     $tip.classList.remove('show');
+
+    /* la etiqueta de una trama se arrastra para reordenar (un clic seco sigue eligiéndola; en un campo que se edita, no) */
+    const etiqueta = e.target.closest && e.target.closest('#board .row[data-linea] > .label');
+    if (etiqueta && !e.target.closest('.mini, button, input:not([readonly]), .per-combo, .per-color, .per-etq') && empezarArrastreFila(e, etiqueta.parentElement.dataset.linea)) return;
+
+    /* un nodo del bloque elegido: se arrastra el bloque entero */
+    const dotB = e.target.closest && e.target.closest('#board .dot');
+    if (dotB && e.button === 2 && multi.has(dotB.parentElement.dataset.punto)) return;   // clic derecho sobre lo elegido: su menú ofrece borrarlo todo
+    if (dotB && e.button === 0 && multi.size > 1 && multi.has(dotB.parentElement.dataset.punto)) {
+      bloque = { x0: e.clientX, y0: e.clientY, ids: [...multi], movido: false, dc: 0, dl: 0, id: dotB.parentElement.dataset.punto };
+      try { dotB.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault(); return;
+    }
+    if (empiezaMarquesina(e) && (e.shiftKey || !(e.target.closest && e.target.closest('#celda')))) {
+      marq = { x0: e.clientX, y0: e.clientY, activo: false, sumar: e.shiftKey && multi.size ? new Set(multi) : null };
+      e.preventDefault();                                      // sin seleccionar texto al arrastrar (el clic seco sigue llegando)
+      return;
+    }
+    if (multi.size && !(e.target.closest && e.target.closest('#menu, aside, .multi-barra, #dlg'))) limpiarMulti();
 
     // el "+" del cruce se sostiene y se arrastra hasta otra trama: crea un salto
     const marca = e.target.closest && e.target.closest('#celda');
     const bajoNota = marca && notaBajo(e);                     // debajo del «+» hay una nota: gana la nota
     if (bajoNota) { $celda.classList.remove('show'); celdaObj = null; }
     else if (marca && celdaObj) {
-      cel = Object.assign({}, celdaObj, { movido: false, destino: null, tmp: document.createElementNS('http://www.w3.org/2000/svg', 'path') });
+      cel = Object.assign({}, celdaObj, { movido: false, destino: null, x0: e.clientX, y0: e.clientY, tmp: document.createElementNS('http://www.w3.org/2000/svg', 'path') });
       cel.tmp.style.stroke = colorSalto('cuadro'); cel.tmp.setAttribute('stroke-width', '2.5');
       cel.tmp.setAttribute('stroke-dasharray', '5 4'); cel.tmp.setAttribute('fill', 'none');
       $cables.appendChild(cel.tmp);
@@ -357,7 +434,7 @@
     const sl = e.target.closest && e.target.closest('[data-salto]');
     if (sl) {
       const s = m.salto(sl.dataset.salto), a = s && m.punto(s.deId);
-      if (a) mov = { id: s.id, movido: false, c0: m.cg(a), pos: null };
+      if (a) mov = { id: s.id, movido: false, c0: m.cg(a), pos: null, x0: e.clientX };
       e.preventDefault(); return;
     }
     // divisor entre actos
@@ -389,6 +466,47 @@
   }
 
   function onPointerMove(e) {
+    if (filaArr) { moverFila(e); return; }
+    if (marq) {
+      if (!marq.activo) {
+        if (Math.abs(e.clientX - marq.x0) < 5 && Math.abs(e.clientY - marq.y0) < 5) return;
+        marq.activo = true; marq.el = document.createElement('div'); marq.el.className = 'marquesina'; $canvas.appendChild(marq.el);
+        const sx = window.getSelection && window.getSelection(); if (sx) sx.removeAllRanges();
+        $celda.classList.remove('show'); cerrarMenu();
+      }
+      const rc = $canvas.getBoundingClientRect();
+      const x1 = Math.min(marq.x0, e.clientX), x2 = Math.max(marq.x0, e.clientX), y1 = Math.min(marq.y0, e.clientY), y2 = Math.max(marq.y0, e.clientY);
+      Object.assign(marq.el.style, { left: (x1 - rc.left) + 'px', top: (y1 - rc.top) + 'px', width: (x2 - x1) + 'px', height: (y2 - y1) + 'px' });
+      multi.clear(); if (marq.sumar) marq.sumar.forEach(id => multi.add(id));
+      document.querySelectorAll('#board .pt').forEach(el => {
+        const r = el.querySelector('.dot').getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) multi.add(el.dataset.punto);
+      });
+      pintarMulti();
+      return;
+    }
+    if (bloque) {
+      const dx = e.clientX - bloque.x0, dy = e.clientY - bloque.y0;
+      if (!bloque.movido && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
+      bloque.movido = true;
+      bloque.dc = Math.round(dx / G()); bloque.dl = Math.round(dy / FILA);
+      /* vista previa: el bloque (con las parejas de sus saltos) y sus trazos se desplazan; el modelo se mueve al soltar */
+      const ids = new Set(bloque.ids); bloque.ids.forEach(id => { const q = m.parejaDe(id); if (q) ids.add(q.id); });
+      const tx = bloque.dc * G(), ty = bloque.dl * FILA;
+      ids.forEach(id => { const el = document.querySelector(`#board .pt[data-punto="${CSS.escape(id)}"]`); if (el) { el.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px))`; el.classList.add('arrastrando'); } });
+      m.datos.saltos.forEach(sa => {
+        if (!ids.has(sa.deId)) return;
+        const g = $cables.querySelector(`[data-salto-g="${sa.id}"]`); if (g) g.setAttribute('transform', `translate(${tx} ${ty})`);
+        const nom = $nombres && $nombres.querySelector(`[data-salto-nombre="${sa.id}"]`); if (nom) nom.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px))`;
+      });
+      return;
+    }
+    if (cel && !cel.destino && Math.abs(e.clientX - cel.x0) > G() * 0.75) {
+      /* desde el «+» en horizontal no hay salto posible: es un rectángulo de selección */
+      marq = { x0: cel.x0, y0: cel.y0, activo: false, sumar: null };
+      cel.tmp.remove(); quitarHot(); cel = null;
+      return onPointerMove(e);
+    }
     if (notaArr) {
       if (e.clientX < zonaUtil()) return;
       const bajo = document.elementFromPoint(e.clientX, e.clientY);
@@ -425,6 +543,7 @@
     }
     if (mov) {
       if (e.clientX < zonaUtil()) return;                     // sobre la columna de nombres: no se coloca
+      if (!mov.movido && Math.abs(e.clientX - mov.x0) <= 3) return;   // el temblor de un clic no es un arrastre
       mov.movido = true;
       const r = $canvas.getBoundingClientRect();
       const pos = m.ubicarCelda((e.clientX - r.left - GUTTER) / G());
@@ -439,6 +558,8 @@
       });
       const g = $cables.querySelector(`[data-salto-g="${mov.id}"]`);
       if (g) g.setAttribute('transform', `translate(${dx} 0)`);
+      const nom = $nombres && $nombres.querySelector(`[data-salto-nombre="${mov.id}"]`);
+      if (nom) nom.style.transform = `translate(calc(-50% + ${dx}px), -50%)`;
       return;
     }
     if (res) {
@@ -502,6 +623,27 @@
   }
 
   function onPointerUp() {
+    if (filaArr) {
+      const { id, activo, destino, row, marca } = filaArr; filaArr = null;
+      if (!activo) return;                                     // clic seco: lo elige el clic
+      row.style.transform = ''; row.classList.remove('arrastrando-fila'); document.body.classList.remove('moviendo-fila'); if (marca) marca.remove();
+      soltarClic = true; finFila = Date.now(); setTimeout(() => { soltarClic = false; }, 0);
+      const r = m.moverLinea(id, destino);
+      if (r.ok && r.movida) avisar(`«${r.linea.nombre}» ahora va en la posición ${destino + 1}`);
+      render(); return;
+    }
+    if (marq) {
+      const hubo = marq.activo; if (marq.el) marq.el.remove(); marq = null;
+      if (hubo) { soltarClic = true; setTimeout(() => { soltarClic = false; }, 0); if (multi.size) { sel = null; limpiarSelDOM(); panel(); pintarRuta(); } pintarMulti(); }
+      return;
+    }
+    if (bloque) {
+      const { ids, movido, dc, dl, id } = bloque; bloque = null;
+      if (!movido) { limpiarMulti(); const el = document.querySelector(`#board .pt[data-punto="${CSS.escape(id)}"]`); seleccionSuave('punto', id, el); return; }
+      soltarClic = true; setTimeout(() => { soltarClic = false; }, 0);
+      if (dc || dl) { const r = m.moverBloque(ids, dc, dl); if (r.aviso) avisar(r.aviso); }
+      render(); return;                                       // con rechazo, el dibujo vuelve a su sitio
+    }
     if (notaArr) {
       const movida = notaArr.movido; notaArr = null;
       document.querySelectorAll('.nota.arrastrando').forEach(x => x.classList.remove('arrastrando'));
@@ -517,7 +659,8 @@
     }
     if (mov) {
       const { id, pos, movido } = mov; mov = null;
-      if (movido && pos) { const r = m.moverSalto(id, pos.actoId, pos.celda, { intercambiar: true }); if (!r.ok || r.intercambio) avisar(r.aviso); }
+      if (!movido) return;                                    // clic seco: sin redibujar, o el clic no llega (lo elige el clic; el segundo renombra)
+      if (pos) { const r = m.moverSalto(id, pos.actoId, pos.celda, { intercambiar: true }); if (!r.ok || r.intercambio) avisar(r.aviso); }
       render(); return;                                       // con rechazo, el dibujo vuelve a su celda
     }
     if (res) {
@@ -554,7 +697,22 @@
   /* Un nodo recién creado: su nombre propuesto («Punto nuevo», «Evento», «Cambio de escena»…) queda escrito y
      seleccionado sobre el propio nodo, para escribir encima; en blanco se queda el propuesto. En un salto, el
      otro extremo toma el mismo nombre si seguía con el propuesto. */
+  /* Renombra un salto sobre su trazo: el nombre pasa a sus dos extremos. */
+  function renombrarSalto(sid, propuesto) {
+    const sa = m.salto(sid), el = sa && $nombres && $nombres.querySelector(`[data-salto-nombre="${sid}"]`); if (!el) return;
+    const a = m.punto(sa.deId), b = m.punto(sa.aId); if (!a) return;
+    const antes = a.titulo;
+    editarEnSitio(el, a.titulo, 'salto-nombre-edit', v => {
+      if (v && v !== antes) { m.editarPunto(a.id, { titulo: v }); if (b && (propuesto === undefined || b.titulo === antes)) m.editarPunto(b.id, { titulo: v }); }
+      const f = $panel.querySelector('#fTitulo'); if (f) f.value = a.titulo;
+      return a.titulo;
+    });
+    const inp = document.activeElement;
+    if (inp && inp.classList.contains('salto-nombre-edit')) { inp.style.left = el.style.left; inp.style.top = el.style.top; }
+  }
+
   function nombrarRecien(id) {
+    const sr = m.saltoDe(id); if (sr) { renombrarSalto(sr.id, m.punto(id).titulo); return; }   // un salto: su nombre va en el trazo
     const p = m.punto(id), el = p && document.querySelector(`.pt[data-punto="${id}"] .cap`); if (!el) return;
     const s = m.saltoDe(id), gemelo = s && m.parejaDe(id), propuesto = p.titulo;
     editarEnSitio(el, p.titulo, 'cap-edit', v => {
@@ -630,7 +788,7 @@
       };
       $panel.querySelector('#bCortar').onclick = () => { m.descartarLinea(l.id); render(); };
       const bb = $panel.querySelector('#bBorrar');
-      if (bb) bb.onclick = () => { if (aplicar(m.borrarLinea(l.id))) sel = null; render(); };
+      if (bb) bb.onclick = () => pedirBorrarLinea(l.id);
     }
 
     if (sel.tipo === 'acto') {
@@ -653,7 +811,7 @@
       };
       $panel.querySelector('#fAncho').oninput = e => { m.fijarAncho(a.id, +e.target.value); render(); };
       const bb = $panel.querySelector('#bBorrar');
-      if (bb) bb.onclick = () => { if (aplicar(m.borrarActo(a.id))) sel = null; render(); };
+      if (bb) bb.onclick = () => pedirBorrarActo(a.id);
     }
   }
 
@@ -705,6 +863,44 @@
     render();
   }
 
+  /* Todos los borrados de la línea del tiempo piden confirmación (Leo, 15-09-2026). */
+  const plural = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
+  async function pedirBorrarLinea(id) {
+    const l = m.linea(id); if (!l) return;
+    const n = m.datos.puntos.filter(p => p.lineaId === id).length;
+    const nodo = m.nombre('nodo').toLowerCase();
+    if (!await confirmar(`¿Eliminar «${l.nombre}»?` + (!n ? '' : n === 1 ? ` Se borra su ${nodo}, con los saltos y las notas que lo usan.` : ` Se borran sus ${n} ${nodo}s, con los saltos y las notas que los usan.`))) return;
+    if (aplicar(m.borrarLinea(id))) sel = null;
+    render();
+  }
+  async function pedirBorrarActo(id) {
+    const a = m.acto(id); if (!a) return;
+    const n = m.datos.puntos.filter(p => p.actoId === id).length;
+    const nodo = m.nombre('nodo').toLowerCase();
+    if (!await confirmar(`¿Eliminar «${a.nombre}»?` + (!n ? '' : n === 1 ? ` Su ${nodo} pasa al de al lado.` : ` Sus ${n} ${nodo}s pasan al de al lado.`))) return;
+    if (aplicar(m.borrarActo(id))) sel = null;
+    render();
+  }
+  async function pedirBorrarNota(id) {
+    const n = m.nota(id); if (!n) return;
+    if (!await confirmar(`¿Eliminar la nota «${String(n.texto || '').slice(0, 60)}»?`)) return;
+    if (aplicar(m.borrarNota(id))) sel = null;
+    render();
+  }
+  /* Borrado masivo de lo elegido con el rectángulo (Supr, la barra de la selección o el menú de uno de ellos). */
+  async function pedirBorrarVarios(ids) {
+    const r = m.resumenBorrado(ids); if (!r.total) return;
+    const partes = [];
+    if (r.nodos) partes.push(plural(r.nodos, m.nombre('nodo').toLowerCase(), m.nombre('nodo').toLowerCase() + 's'));
+    const relacion = m.nombres && m.nombres.cuadro === 'Relación';   // en el tablero de un personaje los saltos son relaciones
+    if (r.saltos) partes.push(plural(r.saltos, relacion ? 'relación' : 'salto', relacion ? 'relaciones' : 'saltos') + ' (con sus dos extremos)');
+    const detalle = partes.join(' y ') + (r.notas ? ` y ${plural(r.notas, 'nota', 'notas')} que ${r.notas === 1 ? 'cuelga' : 'cuelgan'} de ellos` : '');
+    if (!await confirmar(`¿Eliminar ${plural(r.total, 'elemento', 'elementos')}? Se borran ${detalle}.`, 'Eliminar ' + r.total)) return;
+    const res = m.borrarPuntos(ids);
+    if (aplicar(res)) { multi.clear(); sel = null; }
+    render();
+  }
+
   /* Ir a otro nodo del hilo: lo selecciona, ilumina su recorrido y lo trae a la vista. */
   function irANodo(id) {
     if (!m.punto(id)) return;
@@ -723,6 +919,7 @@
      ==================================================================== */
   function onClick(e) {
     const t = e.target, cl = s => t.closest && t.closest(s);
+    if (soltarClic) { soltarClic = false; return; }           // el clic que cierra un rectángulo o un bloque arrastrado
     if (cl('#dlg')) return;                                   // el diálogo modal no es el tablero
     if (!t.isConnected) return;   // un botón que ya redibujó (p. ej. Descartar) no es un clic en blanco
     if (t.classList && (t.classList.contains('cap-edit') || t.classList.contains('nota-edit'))) return;
@@ -783,6 +980,9 @@
     if (mk) { aplicar(m.descartarPunto(mk.dataset.mcortar)); cerrarMenu(); render(); return; }
     const mb = cl('[data-mborrar]');
     if (mb) { cerrarMenu(); pedirBorrarPunto(mb.dataset.mborrar); return; }
+    if (cl('[data-mborrar-varios]')) { cerrarMenu(); pedirBorrarVarios([...multi]); return; }
+    if (cl('[data-multi-borrar]')) { pedirBorrarVarios([...multi]); return; }
+    if (cl('[data-multi-soltar]')) { limpiarMulti(); return; }
     const ne = cl('[data-nota-editar]');
     if (ne) {
       const id = ne.dataset.notaEditar; cerrarMenu();
@@ -791,7 +991,7 @@
       return;
     }
     const nd = cl('[data-nota-del]');
-    if (nd) { if (aplicar(m.borrarNota(nd.dataset.notaDel))) sel = null; cerrarMenu(); render(); return; }
+    if (nd) { cerrarMenu(); pedirBorrarNota(nd.dataset.notaDel); return; }
     const sf = cl('[data-salto-forma]');
     if (sf) { const [id, forma] = sf.dataset.saltoForma.split('|'); aplicar(m.convertirSalto(id, forma)); cerrarMenu(); render(); return; }
     const si = cl('[data-salto-inv]');
@@ -799,6 +999,7 @@
     const sd = cl('[data-salto-del]');
     if (sd) { cerrarMenu(); pedirBorrarSalto(sd.dataset.saltoDel); return; }
     const sl = cl('[data-salto]');
+    if (sl && sl.dataset.saltoNombre && e.detail >= 2) { renombrarSalto(sl.dataset.saltoNombre); return; }
     if (sl) { elegir('salto', sl.dataset.salto); return; }
     const fo = cl('[data-fondo]');
     if (fo) { const [id, f] = fo.dataset.fondo.split('|'); m.editarActo(id, { fondo: f || null }); render(); return; }
@@ -811,9 +1012,9 @@
     const nt = cl('[data-nota]');
     if (nt) { seleccionSuave('nota', nt.dataset.nota, nt); return; }
     const ld = cl('[data-linea-del]');
-    if (ld) { if (aplicar(m.borrarLinea(ld.dataset.lineaDel))) sel = null; render(); return; }
+    if (ld) { pedirBorrarLinea(ld.dataset.lineaDel); return; }
     const ad = cl('[data-acto-del]');
-    if (ad) { if (aplicar(m.borrarActo(ad.dataset.actoDel))) sel = null; render(); return; }
+    if (ad) { pedirBorrarActo(ad.dataset.actoDel); return; }
     if (cl('[data-punto]')) return;                            // ya quedó seleccionado en pointerdown
     const lab = cl('.label');
     if (lab && lab.parentElement.dataset.linea && !cl('.mini') && !t.matches('.lname')) {
@@ -860,9 +1061,12 @@
     if (hu && hu.dataset.tramo && !cl('.add-nota')) { const [d, a] = hu.dataset.tramo.split('|'); ponerNota(d, a); return; }
     const nm = cl('.lname,.aname');
     if (nm) { nm.dataset.antes = nm.value; nm.readOnly = false; nm.focus(); nm.select(); return; }      // renombrar trama o acto (Enter guarda; Esc o un clic fuera, no)
+    const sn = cl('[data-salto-nombre]');
+    if (sn) { renombrarSalto(sn.dataset.saltoNombre); return; }
     const pt = cl('.pt');
     if (pt) {                                                               // renombrar el nodo ahí mismo
       const p = m.punto(pt.dataset.punto); if (!p) return;
+      const sp = m.saltoDe(p.id); if (sp) { renombrarSalto(sp.id); return; }   // el nombre de un cuadro o rombo está en su trazo
       const vivo = pt.querySelector('.cap');
       if (vivo) editarEnSitio(vivo, p.titulo, 'cap-edit', v => { if (v) m.editarPunto(p.id, { titulo: v }); const f = $panel.querySelector('#fTitulo'); if (f) f.value = p.titulo; return p.titulo; });
       return;
@@ -983,6 +1187,7 @@
            <button class="sw hereda${p.color ? '' : ' on'}" data-mcolor="${p.id}|" title="Hereda el color de la trama">trama</button>
          </div><div class="sep"></div>
          <button data-mcortar="${p.id}"><span class="ic" style="border:1.5px dashed var(--tenue);background:none"></span>${p.cortado ? 'Quitar el descarte' : 'Descartar'}</button>`)
+      + (multi.size > 1 && multi.has(p.id) ? `<button class="peligro" data-mborrar-varios>Eliminar los ${multi.size} elegidos</button>` : '')
       + `<button class="peligro" data-mborrar="${p.id}">Eliminar</button>`;
     const r = el.getBoundingClientRect();
     abrirMenuEn(r.left + r.width / 2 - 105, r.bottom + 16, html);
@@ -1079,15 +1284,16 @@
       if (id) { e.preventDefault(); irANodo(id); }
       return;
     }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && multi.size) { e.preventDefault(); return pedirBorrarVarios([...multi]); }
     if ((e.key === 'Delete' || e.key === 'Backspace') && sel) {
       e.preventDefault();
       if (sel.tipo === 'punto') return pedirBorrarPunto(sel.id);
       if (sel.tipo === 'salto') return pedirBorrarSalto(sel.id);
-      const r = { linea: m.borrarLinea, acto: m.borrarActo, nota: m.borrarNota }[sel.tipo];
-      if (r && aplicar(r.call(m, sel.id))) sel = null;
-      render();
+      if (sel.tipo === 'linea') return pedirBorrarLinea(sel.id);
+      if (sel.tipo === 'acto') return pedirBorrarActo(sel.id);
+      if (sel.tipo === 'nota') return pedirBorrarNota(sel.id);
     }
-    if (e.key === 'Escape') { cerrarMenu(); if (sel) { sel = null; render(); } }
+    if (e.key === 'Escape') { cerrarMenu(); limpiarMulti(); if (sel) { sel = null; render(); } }
   }
 
   /* ====================================================================
@@ -1137,6 +1343,8 @@
     if (opciones.zoom) zoom = opciones.zoom;
     $axis = document.getElementById('axis'); $rows = document.getElementById('rows');
     $cables = document.getElementById('cables'); $canvas = document.getElementById('canvas');
+    $nombres = document.getElementById('saltosNombres');
+    if (!$nombres) { $nombres = document.createElement('div'); $nombres.id = 'saltosNombres'; $cables.after($nombres); }
     $board = document.getElementById('board'); $panel = document.getElementById('panel');
     $menu = document.getElementById('menu'); $tip = document.getElementById('tip');
     $aviso = document.getElementById('aviso'); $celda = document.getElementById('celda');
@@ -1176,7 +1384,10 @@
     iniciar, render, cargar, deshacer, rehacer, avisar, confirmar,
     modelo: () => m,
     seleccion: () => sel,
-    zoom: v => { if (v !== undefined) { zoom = clamp(+v || 1.7, .5, 4); render(); } return zoom; },
+    /* para ClapCraft: sus controles del carril (selector, color, etiqueta) interceptan el puntero; desde ahí también se reordena */
+    arrastrarFila: (e, lineaId) => empezarArrastreFila(e, lineaId),
+    acabaDeReordenar: () => Date.now() - finFila < 350,
+    zoom: v => { if (v !== undefined) { zoom = clamp(+v || 1.7, .5, 6); render(); } return zoom; },   // máximo doblado (Leo, 15-09-2026: el de antes se quedaba corto)
     /* sin fuera de escena ni camino iluminado (true) o con ellos (false, lo normal) */
     simple: v => { if (v !== undefined && !!v !== simple) { simple = !!v; render(); } return simple; },
     /* Alto de carril (escala vertical), en px: lo escribe en --fila para que el CSS de las filas vaya a la par. */

@@ -54,6 +54,11 @@ app.whenReady().then(async () => {
   let win = null;
   for (let i = 0; i < 100 && !(win = BrowserWindow.getAllWindows()[0]); i++) await espera(50);
   if (win.webContents.isLoading()) await new Promise(r => win.webContents.once('did-finish-load', r));
+  /* los errores de la página salen en la consola de la prueba (si no, un fallo dentro de la página solo se ve como un cuelgue) */
+  win.webContents.on('console-message', (ev) => { const nivel = ev.level ?? ev.params?.level; if (nivel === 'error' || nivel === 3) console.log('    [página] ' + (ev.message ?? ev.params?.message)); });
+  /* con la ventana tapada o en segundo plano Chromium frena los temporizadores de la página y las esperas (W) se alargaban
+     tanto que la prueba parecía colgada (pasó el 15-09-2026): la ventana de la prueba no se frena */
+  win.webContents.setBackgroundThrottling(false);
   const js = code => win.webContents.executeJavaScript(`(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); ${code} })()`, true);
   /* sin proyectos abiertos (el primer arranque): se crea uno en blanco, sin carpeta (no escribe en la carpeta de verdad) */
   const listo = () => js(`for (let i = 0; i < 100 && !(window.Claquedraw && Claquedraw.app); i++) await W(50);

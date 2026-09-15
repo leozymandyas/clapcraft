@@ -124,8 +124,9 @@ test('archivo: se conserva lo nuevo (orden de segmentos, actos y documentos, per
   const pm = new T.Modelo((ep.esquema || ep).datos);
   assert.equal(pm.datos.lineas[0].personaje, lestat.id); assert.equal(pm.datos.lineas[1].personaje, louis.id);
   assert.equal(pm.datos.saltos.length, 1); assert.equal(pm.datos.actos[0].nombre, 'Momento 1');
-  const sp = per.subs.find(s => s.lineaId === lestat.id), nac = d2.etiquetasDe(sp.id)[0];
-  const claves = ['apariciones', 'bandeja', ...pm.datos.actos.map(a => 'acto:' + a.id), 'etq:' + nac.id];
+  const sp = per.subs.find(s => s.lineaId === lestat.id), nac = d2.etiquetasDe(sp.id).find(x => x.nombre === 'Nacimiento');
+  assert.ok(sp.hoja && d2.etiquetasDe(sp.id).some(x => x.nombre === C.HOJA_PERSONAJE), 'la «Hoja de personaje» viaja y no se vuelve a crear');
+  const claves = ['apariciones', 'bandeja', ...d2.etiquetasDe(sp.id).map(x => 'etq:' + x.id)];
   assert.equal(d2.ordenSegmentos(sp.id, claves)[0], 'etq:' + nac.id);
   const ev = pm.datos.puntos.find(p => !pm.saltoDe(p.id) || pm.saltoDe(p.id).deId === p.id);
   assert.ok(Object.values((ep.esquema || ep).notas).some(x => /Auvernia/.test(x.html)), 'la nota del evento sigue');

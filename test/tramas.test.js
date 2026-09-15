@@ -394,3 +394,82 @@ test('paleta de 24 tonos: las notas tienen color, que se guarda; los colores ant
   const l = m.nuevaLinea('secundaria').linea;                                // una trama nueva toma un tono libre
   assert.ok(!['azul', 'violeta', 'ambar'].includes(l.color));
 });
+
+test('mover un bloque de nodos: tiempo y tramas, con su salto entero (Leo, 15-09-2026)', () => {
+  const m = base();
+  P(m, 'a', 'l1', 2); P(m, 'b', 'l1', 4); P(m, 'q', 'l1', 6); m.crearSalto('q', 'l2');   // salto en 6 (l1 → l2)
+  const otro = m.parejaDe('q').id;
+  P(m, 'z', 'l2', 30);
+  const r = m.moverBloque(['a', 'b', 'q'], 10, 0);                          // la pareja entra sola
+  assert.equal(r.ok, true); assert.equal(r.movidos, 4);
+  assert.deepEqual(['a', 'b', 'q', otro].map(id => m.punto(id).celda), [12, 14, 16, 16]);
+  assert.equal(m.punto('z').celda, 30, 'sin choque nada más se mueve');
+  assert.equal(m.moverBloque(['a'], 0, -1).ok, false, 'no hay tramas por arriba');
+  assert.equal(m.moverBloque(['a'], -40, 0).ok, false, 'no cabe antes del principio');
+});
+
+test('bloque: si faltan tramas se añaden secundarias; si choca, lo de después se corre a la derecha', () => {
+  const m = base();                                                          // l1 principal, l2 secundaria, l3 alterna
+  P(m, 'a', 'l2', 2); P(m, 'b', 'l3', 3);
+  P(m, 'x', 'l1', 20); P(m, 'y', 'l1', 25); P(m, 'w', 'l2', 10);
+  m.datos.notas.push({ id: 'n1', deId: 'x', aId: 'y', texto: 'entre x e y' });
+  const r = m.moverBloque(['a', 'b'], 18, 1);                                // a → l3 (20), b → trama nueva (21)
+  assert.equal(r.ok, true); assert.equal(r.tramasNuevas, 1);
+  assert.equal(m.datos.lineas.length, 4); assert.equal(m.datos.lineas[3].tipo, 'secundaria');
+  assert.deepEqual([m.punto('a').lineaId, m.cg(m.punto('a')), m.punto('b').lineaId, m.cg(m.punto('b'))], ['l3', 20, m.datos.lineas[3].id, 21]);
+  assert.equal(m.cg(m.punto('x')), 20, 'sin choque (otra trama) no se corre');
+  /* ahora sobre x: el bloque cae en l1 20-21 → x e y se corren 2 */
+  const r2 = m.moverBloque(['a', 'b'], 0, -2);
+  assert.equal(r2.ok, true); assert.ok(r2.desplazados >= 2);
+  assert.deepEqual([m.cg(m.punto('x')), m.cg(m.punto('y')), m.cg(m.punto('w'))], [22, 27, 10]);
+  assert.equal(m.nota('n1').deId, 'x'); assert.equal(m.nota('n1').aId, 'y');
+  const ocupadas = m.datos.puntos.map(p => p.lineaId + '|' + m.cg(p));
+  assert.equal(new Set(ocupadas).size, ocupadas.length, 'nunca dos nodos en la misma celda');
+});
+
+test('bloque: si no cabe al final se alarga el último acto; un cuadro no baja a una alternativa', () => {
+  const m = base();                                                          // un acto de 60 celdas
+  P(m, 'a', 'l1', 55);
+  assert.equal(m.moverBloque(['a'], 20, 0).ok, true);
+  assert.equal(m.cg(m.punto('a')), 75); assert.ok(m.totalCeldas() >= 76);
+  P(m, 'q', 'l1', 5); m.crearSalto('q', 'l2');                              // cuadro l1 → l2
+  assert.equal(m.moverBloque(['q'], 0, 1).ok, false, 'l2 → l3 (alterna) con un cuadro');
+});
+
+test('bloque: una nota que queda entre nodos no consecutivos se recoloca', () => {
+  const m = base();
+  P(m, 'a', 'l1', 2); P(m, 'b', 'l1', 10); P(m, 'c', 'l2', 5);
+  m.datos.notas.push({ id: 'n', deId: 'a', aId: 'b', texto: 'nota' });
+  assert.equal(m.moverBloque(['c'], 0, -1).ok, true);                        // c cae en l1 5, entre a y b
+  const n = m.nota('n'); assert.ok(n);
+  assert.equal(m._tramoValido(n.deId, n.aId, n.id), null);
+});
+
+test('borrado masivo: lo elegido, con los extremos de sus saltos y sus notas', () => {
+  const m = base();
+  P(m, 'a', 'l1', 2); P(m, 'b', 'l1', 6); P(m, 'c', 'l1', 10); P(m, 'q', 'l1', 14); m.crearSalto('q', 'l2');
+  m.datos.notas.push({ id: 'n1', deId: 'a', aId: 'b', texto: 'x' }, { id: 'n2', deId: 'b', aId: 'c', texto: 'y' });
+  const r = m.resumenBorrado(['a', 'q']);
+  assert.deepEqual([r.nodos, r.saltos, r.notas, r.total], [1, 1, 1, 3]);
+  const b = m.borrarPuntos(['a', 'q']);
+  assert.equal(b.ok, true); assert.equal(b.borrados, 3);
+  assert.deepEqual(m.datos.puntos.map(p => p.id).sort(), ['b', 'c']);
+  assert.equal(m.datos.saltos.length, 0); assert.deepEqual(m.datos.notas.map(n => n.id), ['n2']);
+  assert.equal(m.borrarPuntos([]).ok, false);
+});
+
+test('reordenar tramas: cambia la posición y la flecha del salto se lee al revés (Leo, 15-09-2026)', () => {
+  const m = base();                                                          // l1, l2, l3
+  P(m, 'q', 'l1', 5); m.crearSalto('q', 'l2');
+  const fila = id => m.datos.lineas.findIndex(l => l.id === id);
+  const s = m.datos.saltos[0], sube = () => fila(m.punto(s.aId).lineaId) < fila(m.punto(s.deId).lineaId);
+  assert.equal(sube(), false, 'de l1 baja a l2');
+  const r = m.moverLinea('l2', 0);
+  assert.equal(r.ok, true); assert.equal(r.movida, true);
+  assert.deepEqual(m.datos.lineas.map(l => l.id), ['l2', 'l1', 'l3']);
+  assert.equal(sube(), true, 'ahora sube');
+  assert.deepEqual([s.deId, m.punto(s.deId).lineaId], ['q', 'l1'], 'el salto no cambia: sale de la misma trama');
+  assert.equal(m.moverLinea('l3', 99).movida, false, 'ya es la última');
+  assert.equal(m.moverLinea('nada', 0).ok, false);
+  assert.equal(m.lineaPrincipal().id, 'l1', 'la principal sigue siéndolo');
+});

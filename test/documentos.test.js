@@ -544,3 +544,20 @@ test('sección «Guiones generados»: segmentos negros con su bandeja y su orden
   d.eliminarEtiqueta(versiones.id);                                                 // sus documentos vuelven a la bandeja de guiones
   assert.deepEqual(nombres(d.notasDe(sub.id, C.SEGMENTO_GUIONES)).sort(), ['Guion a mano', 'Guion final v1']);
 });
+
+test('la biblioteca de un personaje estrena «Hoja de personaje» una sola vez (Leo, 15-09-2026)', () => {
+  const d = new C.Documentos(null);
+  d.personajes(true);
+  const p = d.crearPersonaje('Claudia', 5).personaje;
+  const b = d.bibliotecaPersonaje(p.id, 'Claudia');
+  const hojas = () => d.etiquetasDe(b.id).filter(e => e.nombre === C.HOJA_PERSONAJE);
+  assert.equal(hojas().length, 1); assert.equal(hojas()[0].color, 5, 'con el color del personaje');
+  d.bibliotecaPersonaje(p.id, 'Claudia');
+  assert.equal(hojas().length, 1, 'no se duplica');
+  d.eliminarEtiqueta(hojas()[0].id);
+  d.bibliotecaPersonaje(p.id, 'Claudia');
+  assert.equal(hojas().length, 0, 'borrada, no vuelve');
+  const j = new C.Documentos(JSON.parse(JSON.stringify(d.toJSON())));
+  j.bibliotecaPersonaje(p.id, 'Claudia');
+  assert.equal(j.etiquetasDe(b.id).filter(e => e.nombre === C.HOJA_PERSONAJE).length, 0, 'tampoco al abrir el archivo');
+});

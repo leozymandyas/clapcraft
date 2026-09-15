@@ -5,7 +5,7 @@ nodos), escribes el texto de cada paso en un **editor de guion** y organizas el 
 **bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
 navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-**Versión 1.0.34**
+**Versión 1.0.47**
 
 ## Instalar
 
@@ -43,13 +43,17 @@ El tablero donde se estructura la historia.
 - **Actos**: columnas con su color de fondo (automático o elegido). Clic en el encabezado abre su panel
   (nombre, ancho, fondo); el «+» del final añade uno.
 - **Tramas**: carriles. Una **principal**, las **secundarias** que hagan falta y las **alternativas**
-  (exploraciones, punteadas).
+  (exploraciones, punteadas). Se **reordenan arrastrando su etiqueta**; las flechas de los saltos se ajustan al nuevo orden.
 - **Nodos**: pasa el cursor por una celda y pulsa el «+». Clic selecciona e ilumina el camino que siguió la
   historia hasta ahí; arrastrar cambia de celda o de trama, y **soltarlo sobre otro nodo los intercambia** (también en
-  Personajes). En el panel se escriben título y descripción.
-  **Doble clic abre su documento** en el editor.
+  Personajes). En el panel se escriben título y descripción. **Doble clic abre su documento** en el editor.
+- **Varios a la vez**: arrastra desde un hueco del tablero para dibujar un rectángulo y elegir los nodos, cuadros y rombos que
+  quedan dentro (con Mayús se suman). Arrastrando uno de ellos se mueve el bloque entero: si hacen falta tramas se añaden
+  secundarias y, si cae sobre otros nodos, lo que había se corre a la derecha. Con la barra que aparece abajo (o Supr) se
+  eliminan todos a la vez. Esc suelta la selección. Todos los borrados piden confirmación.
 - **Saltos**: el cambio de escena (cuadro) y el salto a una alternativa (rombo) unen dos tramas en la misma
-  celda. Lo que queda fuera del hilo de la historia se ve apagado.
+  celda; su nombre va sobre su línea vertical (doble clic lo cambia) y se mueven arrastrándola. Lo que queda fuera del
+  hilo de la historia se ve apagado.
 - **Notas** en post-it entre dos nodos; se arrastran de tramo en tramo y, sobre otra nota, se cambian de lugar con ella;
   con clic derecho se les da uno de los 24 colores de la paleta. Al pasar el
   ratón por una nota corrida a un lado se marca la guía que la une a su trama.
@@ -128,11 +132,12 @@ Se entra desde el pie del menú lateral.
 - Desde su `⋯`: abrir, renombrar, cambiar de color o eliminar. **Renombrar o cambiar el color lo aplica en
   todas las notas** que lo nombran. No se puede eliminar un personaje mientras alguna nota lo nombre.
 - **Cada personaje tiene su tablero**: el primer carril es él (fijo) y «＋ personaje» añade un carril con otro
-  personaje existente, que se cambia con su selector. El círculo delante de cada carril cambia el color de su trama. Los actos se llaman **momentos**, los nodos
-  **eventos** y los cuadros **relaciones**; los dos cuadros de una relación comparten un mismo documento.
+  personaje existente, que se cambia con su selector (que también lo quita o elimina el carril); doble clic en un carril (o «Ir a…» en su selector) abre el tablero de ese personaje. El círculo delante de cada carril cambia el color de su trama. Los actos se llaman **momentos**, los nodos
+  **eventos** y los cuadros **relaciones**; los dos cuadros de una relación comparten un mismo documento. Una relación con
+  otro personaje aparece también al final de la línea del tiempo de ese personaje, con su nombre; si se renombra o se borra en uno, cambia también en el otro.
   El editor de estos documentos no lleva línea de tiempo.
 - Encima, el **carrusel**: **Apariciones** (las notas donde se le nombra, con su ruta; doble clic abre),
-  la **bandeja** y sus **segmentos**. Segmentos y notas se ordenan y se mueven arrastrando; al acercar lo
+  la **bandeja** y sus **segmentos**, que empiezan con **«Hoja de personaje»**; la sección se contrae desde su título «Segmentos». Segmentos y notas se ordenan y se mueven arrastrando; al acercar lo
   arrastrado a un borde, el carrusel se desplaza solo.
 
 ### Proyectos, archivos y pestañas
@@ -226,6 +231,7 @@ espacio global `window.Claquedraw`. Las decisiones de diseño y las reglas que c
 | `js/claquedraw/gestor.js` | Menú lateral, Biblioteca, carrusel de Personajes, menús y arrastres |
 | `js/claquedraw/texto.js` | Vista Texto: el editor en un marco, cabecera y línea de tiempo |
 | `js/claquedraw/biblioteca.js` | Modelo de las pestañas (proyectos abiertos) |
+| `js/claquedraw/relaciones.js` | Refleja las relaciones entre personajes en el tablero de cada uno |
 | `js/claquedraw/plantillas.js`, `js/claquedraw/proyectos.js` | Plantillas de proyecto; pantallas «Nuevo proyecto» y «Sin proyectos» |
 | `js/tramas/modelo.js`, `js/tramas/tablero.js` | Esquema de pasos: modelo puro y tablero |
 | `index.html`, `js/*.js` | El editor: formato, guion, personajes, páginas, bloques, tablas, bases de datos, corrector |

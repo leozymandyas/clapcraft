@@ -117,7 +117,8 @@
       usados.add(a.id); usados.add(b.id);
       const alterna = linea(a.lineaId).tipo === 'alterna' || linea(b.lineaId).tipo === 'alterna';
       d.saltos.push({ id: String(s.id), deId: s.deId, aId: s.aId,
-        tipo: (s.tipo === 'rombo' || alterna) ? 'rombo' : 'cuadro' });
+        tipo: (s.tipo === 'rombo' || alterna) ? 'rombo' : 'cuadro',
+        ...(typeof s.rel === 'string' && s.rel ? { rel: s.rel } : {}) });   // en ClapCraft, la relación entre personajes que refleja (misma `rel` en los dos tableros)
       b.actoId = a.actoId; b.celda = a.celda;                      // misma celda global, siempre
       a.cortado = false; b.cortado = false;                        // un extremo no se descarta
     });
@@ -307,6 +308,80 @@
       return si({ punto: P, cambioTrama: false, intercambio: Q, aviso: `«${P.titulo || 'Nodo'}» y «${Q.titulo || 'Nodo'}» intercambiaron su lugar` });
     }
 
+    /* Mueve un bloque de nodos (Leo, 15-09-2026: seleccionarlos arrastrando el cursor y llevarlos a otro sitio) `dc` celdas
+       en el tiempo y `dl` tramas hacia abajo (negativo: arriba). Los extremos de un salto van siempre juntos: si se elige uno,
+       entra su pareja. Si faltan tramas por abajo se añaden secundarias; si faltan celdas al final, se alarga el último acto
+       (y, si no basta, se añaden actos). Si el bloque cae sobre otros nodos, se abre sitio en el tiempo: todo lo que no va en
+       el bloque desde su primera celda de destino se corre a la derecha el ancho del bloque, en todas las tramas (así los
+       saltos y el orden de la historia se conservan). Las notas que quedan fuera de un tramo válido se recolocan. */
+    moverBloque(ids, dc, dl) {
+      const set = new Set((ids || []).filter(id => this.punto(id)));
+      [...set].forEach(id => { const q = this.parejaDe(id); if (q) set.add(q.id); });
+      if (!set.size) return no('No hay nada elegido');
+      dc = Math.round(+dc || 0); dl = Math.round(+dl || 0);
+      if (!dc && !dl) return si({ movidos: 0 });
+      const lineas = this.datos.lineas, fila = id => lineas.findIndex(l => l.id === id);
+      const bloque = [...set].map(id => this.punto(id));
+      const destino = new Map(bloque.map(p => [p.id, { fila: fila(p.lineaId) + dl, cg: this.cg(p) + dc }]));
+      const filas = [...destino.values()].map(x => x.fila), celdas = [...destino.values()].map(x => x.cg);
+      if (Math.min(...filas) < 0) return no('No hay más ' + this.nombre('linea').toLowerCase() + 's por arriba');
+      if (Math.min(...celdas) < 0) return no('El bloque no cabe antes del principio');
+      const nuevas = Math.max(0, Math.max(...filas) - (lineas.length - 1));
+      const tipoFila = i => i < lineas.length ? lineas[i].tipo : 'secundaria';
+      for (const sa of this.datos.saltos) {
+        if (!set.has(sa.deId) || sa.tipo !== 'cuadro') continue;
+        if ([sa.deId, sa.aId].some(id => tipoFila(destino.get(id).fila) === 'alterna'))
+          return no('Un cuadro no llega a una trama alternativa. Para eso está el rombo.');
+      }
+      /* ¿choca con algo que no va en el bloque? entonces se abre sitio desde la primera celda de destino */
+      const otros = this.datos.puntos.filter(p => !set.has(p.id)), cgOtro = new Map(otros.map(p => [p.id, this.cg(p)]));
+      const ocupadas = new Set([...destino.values()].map(x => x.fila + '|' + x.cg));
+      const choca = otros.some(p => ocupadas.has(fila(p.lineaId) + '|' + cgOtro.get(p.id)));
+      const desde = Math.min(...celdas), ancho = Math.max(...celdas) - desde + 1;
+      const final = new Map(otros.map(p => [p.id, cgOtro.get(p.id) + (choca && cgOtro.get(p.id) >= desde ? ancho : 0)]));
+      const ultima = Math.max(...celdas, ...final.values());
+      /* hacer sitio: tramas y celdas */
+      const creadas = [];
+      for (let i = 0; i < nuevas; i++) creadas.push(this.nuevaLinea('secundaria').linea);
+      this.asegurarCeldas(ultima);
+      const colocar = (p, c) => { const u = this.ubicarCelda(c); p.actoId = u.actoId; p.celda = u.celda; };
+      otros.forEach(p => colocar(p, final.get(p.id)));
+      bloque.forEach(p => { const d = destino.get(p.id); p.lineaId = lineas[d.fila].id; colocar(p, d.cg); });
+      this._repararNotas();
+      return si({ movidos: bloque.length, desplazados: choca ? otros.filter(p => cgOtro.get(p.id) >= desde).length : 0, tramasNuevas: creadas.length,
+        aviso: `${bloque.length} ${bloque.length === 1 ? 'nodo movido' : 'nodos movidos'}` + (choca ? ' · lo que había se corrió a la derecha' : '')
+          + (creadas.length ? ` · ${creadas.length} ${creadas.length === 1 ? 'trama nueva' : 'tramas nuevas'}` : '') });
+    }
+
+    /* Que exista la celda global `ultima`: alarga el último acto y, si no basta, añade actos. */
+    asegurarCeldas(ultima) {
+      let faltan = ultima - (this.totalCeldas() - 1);
+      while (faltan > 0) {
+        const ult = this.datos.actos[this.datos.actos.length - 1], cabe = Math.min(faltan, MAX_CELDAS - ult.celdas);
+        if (cabe > 0) { ult.celdas += cabe; faltan -= cabe; }
+        else { const na = this.nuevoActo().acto; na.celdas = clamp(faltan, MIN_CELDAS, MAX_CELDAS); faltan -= na.celdas; }
+      }
+      return si({});
+    }
+
+    /* Tras mover varios nodos: una nota cuyos extremos ya no son dos nodos consecutivos de la misma trama pasa al tramo que
+       empieza (o, si no, acaba) en su primer extremo; si no hay ninguno libre, se queda en el que tenga libre el otro extremo, y
+       si tampoco, se elimina (no se puede leer ni guardar). */
+    _repararNotas() {
+      const d = this.datos;
+      const vecinos = p => { const l = this.puntosDe(p.lineaId), i = l.findIndex(x => x.id === p.id); return [l[i + 1], l[i - 1]].filter(Boolean); };
+      d.notas = d.notas.filter(n => {
+        const a = this.punto(n.deId), b = this.punto(n.aId);
+        if (a && b && !this._tramoValido(n.deId, n.aId, n.id)) { if (this.cg(a) > this.cg(b)) [n.deId, n.aId] = [n.aId, n.deId]; return true; }
+        for (const x of [a, b].filter(Boolean)) {
+          for (const v of vecinos(x)) {
+            if (!this._tramoValido(x.id, v.id, n.id)) { [n.deId, n.aId] = this.cg(x) <= this.cg(v) ? [x.id, v.id] : [v.id, x.id]; return true; }
+          }
+        }
+        return false;
+      });
+    }
+
     editarPunto(id, cambios) {
       const p = this.punto(id); if (!p) return no('Ese nodo no existe');
       if ('titulo' in cambios) p.titulo = String(cambios.titulo);
@@ -329,6 +404,26 @@
       this.datos.saltos.filter(s => s.deId === id || s.aId === id).forEach(s => { juntos.add(s.deId); juntos.add(s.aId); });
       this._quitarPuntos(juntos);
       return si({ aviso: juntos.size > 1 ? 'Salto eliminado' : 'Nodo eliminado' });
+    }
+
+    /* Borra varios nodos a la vez (Leo, 15-09-2026: borrado masivo de lo elegido): con los extremos de sus saltos, los saltos y
+       las notas que los usaban. */
+    borrarPuntos(ids) {
+      const juntos = new Set((ids || []).filter(id => this.punto(id)));
+      if (!juntos.size) return no('No hay nada elegido');
+      const saltos = this.datos.saltos.filter(s => juntos.has(s.deId) || juntos.has(s.aId));
+      saltos.forEach(s => { juntos.add(s.deId); juntos.add(s.aId); });
+      this._quitarPuntos(juntos);
+      return si({ borrados: juntos.size, saltos: saltos.length, aviso: juntos.size === 1 ? 'Nodo eliminado' : juntos.size + ' elementos eliminados' });
+    }
+    /* Qué se llevaría borrar esos nodos: nodos sueltos, saltos (cada uno con sus dos extremos) y notas. */
+    resumenBorrado(ids) {
+      const juntos = new Set((ids || []).filter(id => this.punto(id)));
+      const saltos = this.datos.saltos.filter(s => juntos.has(s.deId) || juntos.has(s.aId));
+      saltos.forEach(s => { juntos.add(s.deId); juntos.add(s.aId); });
+      const enSalto = new Set(saltos.flatMap(s => [s.deId, s.aId]));
+      return { nodos: [...juntos].filter(id => !enSalto.has(id)).length, saltos: saltos.length,
+               notas: this.datos.notas.filter(n => juntos.has(n.deId) || juntos.has(n.aId)).length, total: juntos.size };
     }
 
     _quitarPuntos(ids) {
@@ -398,6 +493,18 @@
       const l = this.linea(id); if (!l) return no('Esa trama no existe');
       l.cortada = valor === undefined ? !l.cortada : !!valor;
       return si({ linea: l });
+    }
+
+    /* Cambia el orden de las tramas (Leo, 15-09-2026: reordenarlas arrastrando): la trama pasa a la posición `indice` (0 arriba).
+       Nada más cambia: los saltos siguen yendo de su trama de salida a la de llegada, así que la flecha que sube o baja se dibuja
+       según el nuevo orden. */
+    moverLinea(id, indice) {
+      const ls = this.datos.lineas, i = ls.findIndex(l => l.id === id);
+      if (i < 0) return no('Esa trama no existe');
+      const j = clamp(Math.round(+indice || 0), 0, ls.length - 1);
+      if (i === j) return si({ linea: ls[i], movida: false });
+      const [l] = ls.splice(i, 1); ls.splice(j, 0, l);
+      return si({ linea: l, movida: true });
     }
 
     borrarLinea(id) {

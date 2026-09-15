@@ -314,28 +314,6 @@
     return f && f !== 'ninguno' ? `var(--f-${f})` : 'transparent';
   }
   const BOTON_EXPANDIR = `<button type="button" data-gd-expandir title="Expandir el segmento">${ic('expand', 13)}</button>`;
-  function tarjetasActos(m, tm, eid, conSaltos, subId, op) {
-    const nodoNombre = (tm.nombre ? tm.nombre('nodo') : 'Nodo').toLowerCase(), actoNombre = (tm.nombre ? tm.nombre('acto') : 'Acto').toLowerCase();
-    /* el orden en que se ven los actos y sus documentos es el propio de la biblioteca (se cambia arrastrando);
-       sin orden guardado, el de la línea de tiempo, que no cambia */
-    const porId = new Map(tm.datos.actos.map(a => [a.id, a]));
-    const actos = subId && !(op && op.natural) ? m.ordenActos(subId, tm.datos.actos.map(a => a.id)) : tm.datos.actos.map(a => a.id);   // en el carrusel el orden de las tarjetas lo pone ordenSegmentos
-    return actos.map(aid => {
-      const a = porId.get(aid);
-      const nodos = nodosDeActo(m, tm, a, conSaltos, subId);
-      const card = document.createElement('section');
-      card.className = 'gd-etq gd-acto' + (nodos.length ? '' : ' vacia');
-      card.dataset.acto = a.id; if (subId) card.dataset.sub = subId;
-      card.style.setProperty('--acto-bg', fondoActo(tm, a));
-      card.innerHTML = `<header class="gd-etq-head"><span class="gd-etq-nom" data-globo="${esc(tm.nombre ? tm.nombre('acto') : 'Acto')}"><span class="gd-asa" title="Arrastra para cambiar su posición">${ic('drag', 13)}</span><span></span></span><span class="gd-etq-acc"><span class="gd-cuenta">${nodos.length}</span>${subId ? BOTON_EXPANDIR : ''}</span></header>
-        <div class="gd-etq-body">${nodos.map(p => `<div class="gd-nota gd-nodo${p.cortado ? ' cortado' : ''}${p.id === notaSel ? ' sel' : ''}" role="button" tabindex="0" data-nodo="${esc(p.id)}" data-eid="${esc(eid)}" title="Doble clic: ir a su sección del documento">
-            ${glifo(tm, p)}<span class="gd-nodo-tit"></span><span class="gd-nota-meta">${esc(fecha((m.notaEsquema(eid, p.id) || {}).modificado))}</span><button type="button" class="gd-nota-acc" data-gd-menu="nodo" title="Opciones del documento">${ic('more', 13)}</button></div>`).join('')
-          || `<div class="gd-etq-vacia">Sin ${esc(nodoNombre)}s en este ${esc(actoNombre)}</div>`}</div>`;
-      $('.gd-etq-nom > span:last-child', card).textContent = a.nombre;
-      $$('.gd-nodo', card).forEach((b, k) => { $('.gd-nodo-tit', b).textContent = nodos[k].titulo || 'Sin título'; });
-      return card;
-    });
-  }
   /* La cabecera de la vista (50 px): «CONTENEDOR [Documentos] Nombre», como la del esquema. */
   /* En las cabeceras cada lugar va en un chip con su nombre (el color dice qué es: esquema, biblioteca, segmento,
      personaje) y en negrita solo el documento abierto (Leo). `nombre` null: sin negrita. */
@@ -1108,10 +1086,14 @@
      el editor y el menú lateral. `salvo`: los que no se ofrecen (el dueño y los que ya tienen carril). */
   function menuCarril(trigger, op) {
     const f = frag(titulo(op.titulo || 'Personaje del carril'));
+    const actual = op.actual && d.personaje(op.actual);
+    if (op.alIr && actual) { f.appendChild(opcion('Ir a «' + actual.nombre + '»', op.alIr)); f.appendChild(separador()); }   // Leo: moverse al personaje desde su selector
     const lista = d.elenco().filter(p => !(op.salvo || []).includes(p.id));
     lista.forEach(p => f.appendChild(opcion(p.nombre, () => op.alElegir(p.id), { punto: colores(p.color)[0], clase: p.id === op.actual ? 'on' : '' })));
     if (!lista.length) f.appendChild(Object.assign(document.createElement('div'), { className: 'gd-pop-vacio', textContent: 'No hay más personajes: créalos en el menú lateral o en el editor con «/»' }));
-    if (op.alQuitar && op.actual) { f.appendChild(separador()); f.appendChild(opcion('Quitar el personaje', op.alQuitar, { clase: 'peligro' })); }
+    if ((op.alQuitar && op.actual) || op.alEliminar) f.appendChild(separador());
+    if (op.alQuitar && op.actual) f.appendChild(opcion('Quitar el personaje', op.alQuitar, { clase: 'peligro' }));
+    if (op.alEliminar) f.appendChild(opcion('Eliminar el carril', op.alEliminar, { clase: 'peligro' }));   // Leo: los carriles no se podían quitar
     abrirPop(trigger, f);
   }
   /* Renombrar un personaje en su fila del menú (cambia su nombre en las notas y en los carriles). */
@@ -1399,6 +1381,14 @@
       e.stopPropagation();                                   // y no llega al tablero (lo tomaría por un clic en blanco)
       if (Date.now() - suprimirClic < 400) return;           // el clic que cierra un arrastre no es un clic
       if (!e.target.closest('[data-nota]:not(.gd-nota-fila), [data-nodo]')) soltarSeleccion();   // un clic fuera de las notas quita la marca (Leo)
+      const pleg = e.target.closest('[data-per-plegar]');
+      if (pleg) {                                            // contraer o desplegar los segmentos del personaje
+        const v = !(o.vista && o.vista.segmentosPlegados);
+        if (o.vista) { o.vista.segmentosPlegados = v; if (o.guardarVista) o.guardarVista(); }
+        const sec = pleg.closest('.per-seg'); if (sec) sec.classList.toggle('plegada', v);
+        pleg.setAttribute('aria-expanded', String(!v)); pleg.title = v ? 'Desplegar los segmentos' : 'Contraer los segmentos';
+        return;
+      }
       const ex = e.target.closest('[data-gd-expandir]');
       if (ex) {                                              // el icono de expandir de una tarjeta de segmento
         const card = ex.closest('.gd-etq'), sub = card && (card.dataset.sub || (card.parentElement && card.parentElement.dataset.sub));
@@ -1677,17 +1667,17 @@
     const pista = previo && el.dataset.sub === subId ? previo.scrollLeft : !previo && carruselAntes && carruselAntes.sub === subId ? carruselAntes.left : 0;
     carruselAntes = null;
     el.dataset.sub = subId;
-    el.innerHTML = `<div class="per-seg-cab"><span class="gd-seccion-tit">Segmentos</span><span class="per-seg-n">${etqs.length}</span></div>
+    /* la sección se contrae desde su título (Leo, 15-09-2026): el tablero del personaje gana el sitio; se recuerda en la vista */
+    const plegada = !!(o.vista && o.vista.segmentosPlegados);
+    el.innerHTML = `<div class="per-seg-cab"><button type="button" class="per-seg-plegar" data-per-plegar aria-expanded="${!plegada}" title="${plegada ? 'Desplegar los segmentos' : 'Contraer los segmentos'}">${ic('chev-d', 13)}<span class="gd-seccion-tit">Segmentos</span></button><span class="per-seg-n">${etqs.length}</span></div>
       <div class="per-carrusel gd-tablero"></div>`;
+    const seccionSeg = el.closest('.per-seg'); if (seccionSeg) seccionSeg.classList.toggle('plegada', plegada);
     const car = $('.per-carrusel', el);
     car.dataset.orden = ''; car.dataset.sub = subId;
-    const piezas = new Map();                                // sin orden guardado: Apariciones, bandeja (Leo), momentos y segmentos
+    const piezas = new Map();                                // sin orden guardado: Apariciones, bandeja (Leo) y segmentos
     if (personajeId) piezas.set('apariciones', tarjetaApariciones(m.menciones(personajeId)));
     piezas.set('bandeja', tarjeta(null, m.notasDe(subId, null)));
-    /* un segmento por momento de su línea de tiempo, como los actos de la cronología, y los segmentos; unos y
-       otros en un solo orden que se cambia arrastrando (Leo), sin tocar la línea de tiempo */
-    const eid = personajeId && o.esquemaPersonaje && o.esquemaPersonaje(personajeId), tm = eid && o.modeloDe && o.modeloDe(eid);
-    if (tm) tarjetasActos(m, tm, eid, true, subId, { natural: true }).forEach(card => piezas.set('acto:' + card.dataset.acto, card));
+    /* sin segmentos de momentos (Leo, 15-09-2026): solo los segmentos de la biblioteca, que estrena «Hoja de personaje» */
     etqs.forEach(e => piezas.set('etq:' + e.id, tarjeta(e, m.notasDe(subId, e.id))));
     m.ordenSegmentos(subId, Array.from(piezas.keys())).forEach(k => { const card = piezas.get(k); card.dataset.clave = k; car.appendChild(card); });
     const nueva = document.createElement('button');
