@@ -1,77 +1,143 @@
-# Guiones
+# ClapCraft
 
-Dos herramientas en JavaScript puro (sin frameworks ni build), con el mismo lenguaje visual:
+Programa para escribir guiones: estructuras la historia en un **esquema de pasos** (actos, tramas y
+nodos), escribes el texto de cada paso en un **editor de guion** y organizas el material de apoyo en
+**bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
+navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-- **Editor** (`index.html`): editor de texto tipo hoja de Word con atajos Markdown y elementos de guion.
-  Por ahora solo cubre la edición y la vista de la hoja; guardar, abrir, exportar e imprimir quedan
-  para otra funcionalidad.
-- **Tramas** (`tramas.html`): tablero para estructurar la trama antes de escribirla. Ver la sección
-  [Tramas](#tramas) al final.
-- **Claquedraw** (`claquedraw.html`): un esquema de pasos más una nota de texto por nodo, con las dos vistas.
-  Ver [Claquedraw](#claquedraw-esquema-de-pasos--editor-de-texto) al final.
+**Versión 1.0.0**
 
-## Probar
+## Instalar
 
-```bash
-node serve.js 5173
-```
+Genera el instalador con `npm run dist` (ver [Desarrollo](#desarrollo)); queda en `dist/`.
+En macOS es un `.dmg` sin firmar: arrastra ClapCraft a Aplicaciones y, si Gatekeeper protesta la primera
+vez, clic derecho → Abrir. Los archivos `.clapcraft` quedan asociados: un doble clic en el Finder los abre.
 
-y abrir `http://localhost:5173/` (editor), `http://localhost:5173/tramas.html` (tramas) o
-`http://localhost:5173/claquedraw.html` (esquema + editor).
-También funciona abriendo `index.html`, `tramas.html` o `claquedraw.html` directamente en Chrome/Edge.
+## Cómo se usa
 
-## App de escritorio (Electron)
+### El menú lateral
 
-```bash
-npm install
-node node_modules/electron/install.js   # npm 11 no ejecuta los scripts de instalación: descarga Electron a mano (si con Node 26 deja node_modules/electron/dist a medias, descomprime el zip de ~/Library/Caches/electron ahí y escribe Electron.app/Contents/MacOS/Electron en node_modules/electron/path.txt)
-npm start        # abre la app (Claquedraw: esquema de pasos + editor)
-npm run dist     # genera el instalador (dmg / nsis / AppImage) en dist/
-```
+- Arriba, la marca y **«＋ Nuevo contenedor»**; debajo, el árbol de **contenedores**. Al pie,
+  **Contenedores · Personajes · Papelera** cambian lo que enseña el menú.
+- Se **pliega** a un riel estrecho con el botón junto a la marca o `Cmd/Ctrl+Shift+B`, y cambia de ancho
+  arrastrando su borde (si lo estrechas mucho, se pliega).
+- Un **contenedor** (por ejemplo, un capítulo) guarda **esquemas de pasos** y **bibliotecas**. Uno nuevo
+  trae un esquema enlazado a su biblioteca. Su `⋯` ofrece Nuevo esquema…, Nueva biblioteca…, Renombrar,
+  Fijar y Eliminar.
+- **Enlace esquema ↔ biblioteca**: un esquema y su biblioteca van unidos por una guía; se renombran por
+  separado, pero se mueven juntos. Clic derecho sobre la guía quita el enlace; sobre un esquema o una
+  biblioteca sueltos, permite enlazarlos con otro del mismo contenedor.
+- Todo el árbol se **ordena arrastrando**: contenedores, esquemas y bibliotecas, también de un contenedor
+  a otro. Doble clic renombra.
 
-La app se llama **ClapCraft** (antes Claquedraw; el código conserva ese nombre) y abre `claquedraw.html`; los archivos `.clapcraft` quedan asociados, así que
-un doble clic en el Finder los abre en la app y desde entonces se guardan ahí solos. El instalador de
-macOS es un `.dmg` sin firmar: se arrastra la app a Aplicaciones y, si Gatekeeper protesta la primera
-vez, clic derecho → Abrir.
+### Esquema de pasos
 
-## Estructura
+El tablero donde se estructura la historia.
 
-| Archivo | Qué hace |
+- **Actos**: columnas con su color de fondo (automático o elegido). Clic en el encabezado abre su panel
+  (nombre, ancho, fondo); el «+» del final añade uno.
+- **Tramas**: carriles. Una **principal**, las **secundarias** que hagan falta y las **alternativas**
+  (exploraciones, punteadas).
+- **Nodos**: pasa el cursor por una celda y pulsa el «+». Clic selecciona e ilumina el camino que siguió la
+  historia hasta ahí; arrastrar cambia de celda o de trama. En el panel se escriben título y descripción.
+  **Doble clic abre su documento** en el editor.
+- **Saltos**: el cambio de escena (cuadro) y el salto a una alternativa (rombo) unen dos tramas en la misma
+  celda. Lo que queda fuera del hilo de la historia se ve apagado.
+- **Notas** en post-it entre dos nodos.
+- Abajo: **escala horizontal y vertical**, restablecer, deshacer y rehacer (`Cmd/Ctrl+Z`,
+  `Cmd/Ctrl+Shift+Z`). **«Ver biblioteca»** abre la biblioteca enlazada.
+
+### Biblioteca
+
+- **Cronología** (si está enlazada a un esquema): una tarjeta por acto con sus nodos; cada nodo es un
+  documento. Desde aquí se abren, se renombran (también el nodo) y se eliminan (también el nodo).
+- **Segmentos**: la **bandeja** y un segmento por color con sus notas. «＋ nota» crea una arriba; las notas
+  se arrastran para ordenarlas o moverlas de segmento, y los segmentos se ordenan arrastrando su cabecera.
+  Cronología y segmentos se intercambian arrastrando su título.
+- Doble clic en una nota la abre en el editor, con las migas encima (contenedor › biblioteca › segmento).
+- **Papelera**: guarda lo que tiras con su origen; se restaura arrastrándolo a una biblioteca y se vacía
+  sola a los 30 días.
+
+### Texto: el editor
+
+- **Cabecera**: el título del nodo (cambiarlo renombra el nodo), «Ver biblioteca», «Ver en el esquema» y
+  ‹ › para ir a la nota anterior o siguiente (`Cmd/Ctrl+Alt+↑/↓`).
+- **Línea de tiempo**: la trama del nodo abierto, con sus nodos; los saltos llevan una flecha que indica si
+  suben o bajan a otra trama y, al pulsarlos, la línea pasa a esa trama.
+- **Elementos de guion**: encabezado de escena, acción, personaje, paréntico, diálogo, transición y toma,
+  con su sangría y mayúsculas. **Enter** pasa al elemento que suele seguir (escena → acción, personaje →
+  diálogo, diálogo → personaje…); en uno vacío lo convierte en acción. **Tab** cambia el elemento de la
+  línea (Mayús+Tab, al anterior).
+- **Menú «/»**: escribe `/` al principio de una línea para elegir elemento (con Modo guion activo) o
+  bloques de texto: títulos, listas, cita, código, tabla, base de datos, línea y enlace.
+- **Personajes**: cada nombre lleva su color, como un marcatextos; al escribir un personaje aparecen
+  sugerencias (`Tab` completa, `Enter` completa y pasa al diálogo). Clic derecho sobre el nombre cambia su
+  color en todo el guion.
+- **Páginas**: la hoja se ve partida en páginas numeradas y la barra inferior dice cuántas lleva y cuánto
+  duraría (una página ≈ un minuto). Se cuenta como una página de guion impresa (Carta, Courier 12 pt, unas
+  54 líneas de 60 caracteres), sea cual sea el ancho de la hoja en pantalla.
+- **Barra inferior**: tamaño del texto, ancho de la hoja, páginas, **Modo guion**, **Typewriter** (la línea
+  del cursor se queda centrada), **Ortografía** (español e inglés, sin conexión; no marca nombres de
+  personajes) y plegar el menú.
+- **Bloques**: el asa «+ ⋮⋮» junto a la línea en la que escribes inserta, arrastra, convierte, duplica o
+  elimina bloques; también se seleccionan varios a la vez.
+- **Buscar y reemplazar** con `Cmd/Ctrl+F` («Todo» se deshace de una vez).
+- **Pegar**: lo que viene de una web o de otro programa llega sin su fuente, tamaño ni colores neutros; las
+  imágenes se reducen (1600 px, WebP) para que el archivo no pese.
+- Tablas, bases de datos estilo Notion, colores de letra y resaltado, y [atajos Markdown](#atajos-markdown).
+
+### Personajes
+
+Se entra desde el pie del menú lateral.
+
+- **El elenco** son los personajes que escribes en el editor con «/» y los que creas aquí con
+  **«Nuevo personaje»** (nombre y color). Los creados aquí también se sugieren en el editor.
+- Desde su `⋯`: abrir, renombrar, cambiar de color o eliminar. **Renombrar o cambiar el color lo aplica en
+  todas las notas** que lo nombran. No se puede eliminar un personaje mientras alguna nota lo nombre.
+- **Cada personaje tiene su tablero**: el primer carril es él (fijo) y «＋ personaje» añade un carril con otro
+  personaje existente, que se cambia con su selector. Los actos se llaman **momentos**, los nodos
+  **eventos** y los cuadros **relaciones**; los dos cuadros de una relación comparten un mismo documento.
+  El editor de estos documentos no lleva línea de tiempo.
+- Encima, el **carrusel**: **Apariciones** (las notas donde se le nombra, con su ruta; doble clic abre),
+  la **bandeja** y sus **segmentos**. Segmentos y notas se ordenan y se mueven arrastrando; al acercar lo
+  arrastrado a un borde, el carrusel se desplaza solo.
+
+### Archivos y pestañas
+
+- Cada guion abierto es una **pestaña**; `Ctrl+Tab` pasa de una a otra.
+- El trabajo se guarda siempre en el navegador o en la app. **«Guardar como…»** (`Cmd/Ctrl+Shift+S`) lo
+  vincula a un archivo **`.clapcraft`** y desde entonces cada cambio se escribe ahí solo; **«Abrir…»**
+  (`Cmd/Ctrl+O`) toma uno existente; **«Guardar»** (`Cmd/Ctrl+S`) escribe en el acto. El indicador de la
+  cabecera dice si hay cambios sin escribir.
+- Un `.clapcraft` es JSON comprimido con gzip: un guion largo ocupa del orden de 100-150 KB.
+- En el navegador, Chrome y Edge escriben en el archivo (pueden pedir permiso al volver); en los demás solo
+  se descarga una copia.
+- En la app, las órdenes están en el menú: **Archivo** (Nueva pestaña, Abrir…, Guardar, Guardar como…,
+  Cerrar pestaña), **Edición** y **Ver** (modo oscuro).
+
+## Atajos de teclado
+
+| Atajo (Cmd en Mac, Ctrl en Windows/Linux) | Qué hace |
 |---|---|
-| `index.html` | Interfaz: cinta superior, hoja, barra inferior, menú contextual, buscar/reemplazar, diálogo |
-| `css/editor.css` | Tema de la interfaz, hoja tipo Word, estilos del documento, fuente Courier Prime |
-| `fonts/` | Courier Prime (documento) y Patrick Hand (interfaz), ambas con licencia OFL |
-| `js/utils.js` | Selección, bloques, sanitizado, helpers |
-| `js/markdown.js` | Atajos Markdown en vivo y conversión MD ↔ HTML (usada al pegar) |
-| `js/page.js` | Ancho de la hoja, tamaño del texto y typewriter |
-| `js/editor.js` | Comandos de formato, barras, menú contextual, buscar/reemplazar, autoguardado local, atajos |
-| `js/table.js` | Tablas: inserción directa, controles flotantes, mover/añadir/quitar filas y columnas |
-| `js/spell.js` | Corrector ortográfico: marcado, sugerencias, diccionario personal |
-| `js/screenplay.js` | Elementos de guion y saltos automáticos con Enter |
-| `js/slash.js` | Menú de comandos con «/» |
-| `js/characters.js` | Base de personajes, colores por personaje y sugerencias |
-| `js/database.js` | Bases de datos estilo Notion: tabla, propiedades, filtros, orden, ancho de columnas |
-| `js/blocks.js` | Asa de bloque: arrastrar, insertar, convertir, duplicar, mover, eliminar |
-| `js/vendor/typo.js`, `js/dict/*.js` | Typo.js (Hunspell en JS) y diccionarios de español e inglés empaquetados (licencias en `js/dict/`) |
-| `electron/` | Proceso principal y preload de Electron (los diálogos de archivo quedan listos para cuando se retome guardar/abrir) |
+| `Cmd+S` / `Cmd+Shift+S` / `Cmd+O` | Guardar / Guardar como… / Abrir… |
+| `Cmd+Shift+G` | Esquema ↔ Texto |
+| `Cmd+Shift+F` | Biblioteca |
+| `Cmd+Shift+B` | Plegar o desplegar el menú |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Pestaña siguiente / anterior |
+| `Cmd+Alt+↑` / `Cmd+Alt+↓` | Nota anterior / siguiente de la trama |
+| `Cmd+Z` / `Cmd+Shift+Z` | Deshacer / Rehacer |
+| `Cmd+F` | Buscar y reemplazar |
+| `Cmd+B` / `I` / `U` | Negrita / cursiva / subrayado |
+| `Cmd+Shift+X` / `Cmd+Shift+H` | Tachado / resaltar |
+| `Cmd+K` | Enlace |
+| `Cmd+Alt+0..4` | Texto normal / títulos |
+| `Cmd+Shift+↑` / `Cmd+Shift+↓` · `Cmd+D` | Mover bloque · duplicar bloque |
+| `Cmd` + `+` / `-` / `0` o `Cmd+rueda` | Tamaño del texto |
+| `Tab` / `Shift+Tab` | Elemento de guion siguiente / anterior (en tablas, celda; en listas, sangría) |
 
-## Integración con otros módulos
+## Atajos Markdown
 
-El editor expone `Ed.document`:
-
-```js
-Ed.document.get();            // { title, html, characters }  → lo que hay que guardar
-Ed.document.set(doc);         // carga un documento con esa misma forma
-Ed.document.isDirty();        // hay cambios desde la última carga
-Ed.document.onChange(fn);     // fn(doc) tras cada cambio (con retardo de 300 ms); devuelve función para cancelar
-```
-
-`html` es el contenido del editor sin la interfaz de las bases de datos (solo su estado en `data-db`), y
-`characters` es la base de personajes con sus colores. Un gestor de documentos solo necesita llamar a
-`set` al abrir y a `get` (o escuchar `onChange`) para guardar. Mientras no exista, el editor autoguarda un
-único documento en `localStorage` (`guiones.editor.doc`). Ver también `CLAUDE.md`.
-
-## Atajos Markdown (se convierten al escribir)
+Se convierten al escribir.
 
 | Escribe | Resultado |
 |---|---|
@@ -80,304 +146,56 @@ Ed.document.onChange(fn);     // fn(doc) tras cada cambio (con retardo de 300 ms
 | `1. ` | Lista numerada |
 | `> ` | Cita |
 | `---` + Enter | Línea horizontal |
-| ``` ``` ``` + Enter | Bloque de código (doble Enter para salir) |
+| ```` ``` ```` + Enter | Bloque de código (doble Enter para salir) |
 | `**texto**` / `__texto__` | **Negrita** |
 | `*texto*` / `_texto_` | *Cursiva* |
-| `***texto***` | ***Negrita cursiva*** |
 | `~~texto~~` | ~~Tachado~~ |
-| `==texto==` | Resaltado tipo marcatextos (extensión habitual de Markdown) |
+| `==texto==` | Resaltado |
 | `` `código` `` | `código` |
 | `[texto](url)` | Enlace |
 
-Los atajos Markdown están siempre activos.
+## Desarrollo
 
-## Diseño
+```bash
+node serve.js 5173     # y abrir http://localhost:5173/claquedraw.html
+npm test               # pruebas de los modelos (node:test)
+```
 
-La interfaz sigue el diseño «Gestor de guiones» de Claude Design: tipografía manuscrita Patrick Hand
-en la interfaz, bordes finos a tinta, sombras planas desplazadas, chips de color pastel, cinta blanca
-con botones de 25×24, barra inferior oscura con etiquetas en monoespaciada y paleta de modo oscuro
-(hoja gris carbón, tinta hueso, colores desaturados). Los tokens viven al inicio de `css/editor.css`.
-Las partes del diseño que aún no existen (barra lateral de contenedores, migas de pan, segmentos)
-no se han incluido.
+App de escritorio con Electron:
 
-## Vista
+```bash
+npm install
+node node_modules/electron/install.js   # con npm 11 los scripts de instalación vienen bloqueados
+npm start                               # abre ClapCraft
+npm run dist                            # instalador (dmg / nsis / AppImage) en dist/
+```
 
-El editor funciona siempre en modo Focus: la hoja centrada sobre un fondo oscuro, sin
-distracciones.
+El nombre interno del proyecto es **Claquedraw**: así se llaman `claquedraw.html`, `js/claquedraw/` y el
+espacio global `window.Claquedraw`. Las decisiones de diseño y las reglas que cuesta descubrir están en
+[`CLAUDE.md`](CLAUDE.md).
 
-- **Cinta superior**: aparece al acercar el ratón al borde superior. El pin de la derecha la
-  deja fija (se recuerda entre sesiones).
-- **Barra inferior**: aparece al acercar el ratón al borde inferior. Tiene tamaño del texto
-  (también `Ctrl+rueda` o `Ctrl` + `+`/`-`/`0`), ancho de la hoja, Typewriter (mantiene la línea
-  del cursor centrada; activado por defecto), modo oscuro y su propio pin.
-- **Clic derecho** sobre el texto: menú con cortar/copiar/pegar, negrita, cursiva, subrayado,
-  tachado, resaltar, estilos de párrafo, listas, alineación, enlace, insertar tabla y borrar formato.
-  Dentro de una tabla aparece además: insertar fila arriba/abajo, columna izquierda/derecha,
-  eliminar fila, columna o tabla.
-- **Tablas** (estilo Obsidian): el botón de la cinta o el menú contextual insertan directamente
-  una tabla de 2×2 con encabezado. Con el cursor dentro aparecen controles sobre la tabla: un
-  asa sobre la columna y otra junto a la fila (clic para insertar, mover o eliminar; arrastrar
-  para mover) y botones «+» para añadir columna o fila al final. `Tab` / `Shift+Tab` mueven entre
-  celdas y `Tab` en la última celda añade una fila. El ancho de las columnas se ajusta arrastrando
-  las asas verticales que aparecen entre columnas. `Retroceso` en una fila vacía borra la fila y,
-  si era la última, la tabla; seleccionar la tabla completa y borrar también la elimina.
-  Se exportan como tablas Markdown.
-- **Barras fijables**: tanto la cinta superior como la barra inferior tienen el mismo pin para dejarlas
-  fijas; si no, aparecen al acercar el ratón al borde.
-- **Colores**: los botones «A» (texto) y «ab» (resaltado) abren la paleta del proyecto (16 tonos:
-  los oscuros para la letra y los claros para el marcatextos), con «Automático» / «Quitar resaltado»
-  y «Más colores…» para el gotero del sistema. Resaltar también con `Ctrl+Shift+H` o escribiendo `==texto==`.
-- **Título**: bajo la cinta hay una barra con el título del documento (se guarda con el autoguardado).
-- **Comandos con «/»**: al escribir `/` al inicio de una línea o tras un espacio aparece un menú
-  (estilo Notion) que se filtra al seguir escribiendo: texto, títulos, listas, cita, código, tabla,
-  base de datos, línea, enlace y los elementos de guion. Flechas para moverse, Enter o Tab para elegir,
-  Esc para cerrar. Con **Modo guion** activo (barra inferior, activado por defecto) el menú solo
-  muestra los elementos de guion.
-- **Elementos de guion**: encabezado de escena, acción, personaje, paréntico, diálogo, transición y
-  toma, disponibles con `/`, en el selector de estilo y en el clic derecho. Cada uno tiene su sangría y
-  mayúsculas automáticas, una pista cuando está vacío, y Enter pasa al elemento que suele seguir
-  (escena → acción, personaje → diálogo, paréntico → diálogo, diálogo → personaje, transición →
-  escena). Enter en un elemento vacío lo convierte en acción, y en una acción vacía en texto normal.
-  Al exportar a Markdown se escriben con la convención de Fountain (mayúsculas, paréntesis, `>` en
-  transiciones).
-- **Personajes**: cada bloque «Personaje» alimenta una base interna del documento. A cada personaje
-  se le asigna un color fijo de la paleta de 16 tonos y su nombre aparece resaltado con ese color,
-  como un marcatextos (fondo claro y texto oscuro; al revés en modo oscuro); el mismo personaje
-  siempre lleva el mismo color (sufijos como «(V.O.)» no cuentan). Clic derecho sobre un bloque de
-  personaje abre en el menú contextual la paleta para elegirle otro color: se aplica a todas sus
-  menciones y se guarda con el documento.
-  Al escribir en un bloque Personaje aparecen sugerencias que coinciden con las primeras letras:
-  `Tab` completa el nombre, `Enter` lo completa y pasa al diálogo, `Esc` cierra; también se puede
-  escribir cualquier nombre nuevo.
-- **Bases de datos** (estilo Notion, `/int`, `/base` o clic derecho): un bloque en vista de tabla.
-  Propiedades de tipo título, texto, número, selección, selección múltiple, fecha,
-  casilla y URL; se añaden con «+», se renombran, cambian de tipo (convirtiendo los valores), se
-  reordenan arrastrando el encabezado y se eliminan desde su menú. Filas con «+ Nuevo», menú por
-  fila (duplicar, subir, bajar, eliminar) y arrastre. Filtros por propiedad, orden y búsqueda.
-  El ancho de cada columna se ajusta arrastrando el borde derecho de su encabezado.
-  Las opciones de selección se crean escribiendo en el selector y tienen color editable. El estado
-  se guarda en el propio documento (`data-db`). `Retroceso` junto al bloque lo selecciona y un
-  segundo `Retroceso` lo borra. Se exporta a Markdown como tabla.
-- **Bloques** (estilo Notion): al pasar el ratón por cualquier bloque aparece a su izquierda un asa
-  con «+» (inserta un bloque debajo y abre el menú «/») y «⋮⋮» (arrastrar para mover el bloque a
-  otra posición; clic para el menú: convertir en otro tipo, duplicar, mover arriba/abajo, eliminar).
-  Funciona con párrafos, títulos, listas, citas, código, tablas, bases de datos y líneas.
-  Atajos: `Ctrl+Shift+↑/↓` mueve el bloque (o el elemento de lista) actual y `Ctrl+D` lo duplica.
-  La hoja es solo visual: los bloques pueden colocarse en cualquier orden.
-- **Selección de varios bloques** (como en Notion): arrastra un rectángulo desde el fondo o los
-  márgenes de la hoja; selecciona texto de un bloque a otro; pulsa `Esc` con el cursor en un bloque
-  y extiende con `Shift+↑/↓` o `Shift+clic`; `Ctrl+A` sobre un bloque ya seleccionado selecciona
-  todos. Con bloques seleccionados: arrástralos (desde el asa o desde el propio bloque) a otra
-  posición, `Ctrl+Shift+↑/↓` los mueve, `Ctrl+D` duplica, `Ctrl+C`/`Ctrl+X` copia o corta,
-  `Supr`/`Retroceso` elimina, `↑/↓` cambia la selección, `Enter` vuelve a editar y `Esc` la quita.
-  El menú del asa actúa sobre todo el grupo.
-- **Modo oscuro**: oscurece la interfaz y la hoja (botón en ambas barras).
-- **Ortografía**: corrector Hunspell en JavaScript (Typo.js) con diccionarios de español e inglés,
-  sin conexión (una palabra vale si existe en cualquiera de los dos). Las faltas se subrayan en rojo ondulado; el clic derecho sobre una palabra marcada
-  muestra hasta cinco sugerencias, «Añadir al diccionario» (se recuerda) e «Ignorar esta vez».
-  Se activa o desactiva desde la barra inferior. No marca abreviaturas de guion (INT, EXT…),
-  siglas cortas, código ni enlaces.
-
-La configuración de la vista se recuerda entre sesiones.
-
-## Atajos de teclado
-
-Ctrl (o Cmd en Mac) + `B` negrita · `I` cursiva · `U` subrayado · `Shift+X` tachado · `Shift+H` resaltar · `K` enlace ·
-`Shift+L/E/R/J` alinear · `Shift+7/8` listas · `]` / `[` sangría · `Tab` / `Shift+Tab` sangría ·
-`Alt+0..4` estilo de párrafo · `Shift+.` / `Shift+,` tamaño de letra · `F` buscar ·
-`+` / `-` / `0` zoom · `Ctrl+rueda` zoom · `Z` / `Y` deshacer / rehacer.
-
-El contenido se autoguarda en el navegador (localStorage) y se recupera al volver a abrir.
-
-## Tramas
-
-Un tablero para **estructurar la trama de un guion antes de escribirlo**: los beats se colocan sobre un
-eje temporal dividido en actos, repartidos en varias tramas paralelas, y se marca en qué momentos la
-narración salta de una a otra. No es un editor de guion: la unidad mínima es un nodo con título y
-descripción. La especificación completa está en `docs/tramas/spec-tramas.md` y el mecanismo explicado
-en `docs/tramas/mecanismo.md`.
+### Estructura
 
 | Archivo | Qué hace |
 |---|---|
-| `tramas.html`, `css/tramas.css` | Página y aspecto (mismo lenguaje que el editor, fuentes locales) |
-| `js/tramas/modelo.js` | Modelo puro: colecciones, invariantes, presencia en escena y recorrido. Sin DOM |
-| `js/tramas/tablero.js` | Dibujo (celdas → píxeles), arrastres, menús, panel lateral, edición en sitio, historial |
-| `js/tramas/app.js` | Autoguardado local, abrir/guardar `.json`, `Tramas.document` |
-| `test/tramas.test.js` | Criterios de aceptación de la spec (`npm test`) |
+| `claquedraw.html` | La app: pestañas, menú lateral, vistas Esquema, Biblioteca, Texto y Personajes |
+| `js/claquedraw/app.js` | Arranque, pestañas, archivos `.clapcraft`, vistas, Personajes, ganchos con el tablero |
+| `js/claquedraw/documentos.js` | Modelo puro de un guion: contenedores, esquemas, bibliotecas, segmentos, notas, papelera y elenco |
+| `js/claquedraw/gestor.js` | Menú lateral, Biblioteca, carrusel de Personajes, menús y arrastres |
+| `js/claquedraw/texto.js` | Vista Texto: el editor en un marco, cabecera y línea de tiempo |
+| `js/claquedraw/biblioteca.js` | Modelo de las pestañas (guiones abiertos) |
+| `js/tramas/modelo.js`, `js/tramas/tablero.js` | Esquema de pasos: modelo puro y tablero |
+| `index.html`, `js/*.js` | El editor: formato, guion, personajes, páginas, bloques, tablas, bases de datos, corrector |
+| `css/clapcraft.css`, `css/clapcraft-editor.css` | La piel de ClapCraft sobre las hojas base (`claquedraw.css`, `tramas.css`, `editor.css`) |
+| `electron/` | Proceso principal (menú, diálogos, lectura y escritura de archivos) y preload |
+| `test/` | Pruebas de `documentos.js`, `modelo.js` y `biblioteca.js` |
+| `docs/` | Especificación del tablero de tramas y diseños de la interfaz |
 
-**Cómo se usa**
+El editor (`index.html`) y el tablero (`tramas.html`) también funcionan solos. Cada uno expone una API de
+documento con la misma forma (`get()`, `set(doc)`, `isDirty()`, `onChange(fn)`): `Ed.document` y
+`Tramas.document`.
 
-- **Actos**: columnas del eje. Clic en su encabezado abre el panel (nombre, ancho en celdas, fondo);
-  doble clic renombra; el divisor entre dos actos se arrastra; el «+» del final agrega uno.
-- **Tramas**: carriles. Una sola **principal** (no se elimina ni cambia de tipo), las **secundarias** que
-  hagan falta y las **alternativas** (exploraciones, punteadas). Clic en la etiqueta abre el panel
-  (nombre, tipo, color, descartar, eliminar); doble clic renombra; «+ Nueva trama» al final.
-- **Nodos**: pasa el cursor por una celda vacía y aparece un «+»; clic para el menú de creación, o doble
-  clic en la trama. Clic selecciona e ilumina el recorrido que siguió la historia hasta ahí; doble clic
-  renombra en sitio; clic secundario para color, descartar o eliminar; arrastrar cambia de celda y de
-  trama (soltar sobre la columna de nombres lo deja donde estaba). Título y descripción en el panel.
-  En el panel, las flechas «‹ ›» (o las teclas `←` `→`) recorren los nodos **según el hilo de la
-  historia**: principal, salto, trama secundaria, vuelta… con la posición «n de N». Si el nodo está
-  fuera del hilo (fuera de escena o en una trama sin saltos), recorren solo su trama. El panel también
-  tiene «Descartar» y «Eliminar punto». **Eliminar un punto o un salto pide siempre confirmación** en un
-  diálogo modal, venga del panel, del menú del nodo o de la tecla `Supr`.
-- **Saltos** (cambio de escena en **cuadro** beige, salto a una alternativa en **rombo** morado): arrastra
-  el «+» de una celda hasta otra trama, o elígela en el menú de creación. Sus dos extremos comparten
-  siempre la celda, y la celda de destino tiene que estar libre: un salto nunca convierte un nodo que
-  ya existe en cuadro o rombo (el tablero avisa y no lo crea). En general **una celda es de un solo
-  nodo**: ni al crear ni al arrastrar (nodos, cuadros o rombos) se ponen unos sobre otros; si sueltas
-  encima de otro, el tablero avisa y el nodo vuelve a su sitio; arrastrar el trazo vertical mueve el salto entero. Clic secundario en el trazo o en
-  un extremo: «Convertir a salto trama» (cuadro) / «Convertir a salto alternativo» (rombo), invertir el
-  sentido, eliminar (se van los dos extremos).
-- **Fuera de escena**: cada trama se lee por sus propios saltos. Lo que queda fuera del hilo se dibuja
-  apagado; se recalcula solo.
-- **Notas**: doble clic bajo la línea entre dos nodos (o el icono que aparece ahí). Doble clic edita,
-  clic secundario edita o elimina, y se arrastran de tramo en tramo. Una por tramo.
-- **Historial**: `Cmd/Ctrl+Z` y `Cmd/Ctrl+Shift+Z` (un arrastre entero es un paso). `Supr` elimina lo
-  seleccionado, `Esc` suelta la selección.
-- **Modo oscuro**: botón «◑ Oscuro» en la barra. Usa el mismo atributo que el editor
-  (`html[data-theme="dark"]`); si no se ha elegido nada toma la preferencia del editor y, si tampoco,
-  la del sistema.
-- **Panel lateral**: se abre al seleccionar un nodo, una trama o un acto; la «×» de su esquina (o `Esc`,
-  o un clic en un hueco del tablero) lo cierra y suelta la selección.
-- **Tablero de partida**: la primera vez, y con «Nuevo», aparece un tablero mínimo: Acto I, II y III,
-  la trama Principal con el nodo «Inicio» y una trama Secundaria.
-- **Archivos**: el tablero se autoguarda en el navegador (`localStorage`, `guiones.tramas.doc`);
-  «Guardar…» y «Abrir…» (o `Cmd/Ctrl+S` / `Cmd/Ctrl+O`) usan un `.json` con el modelo tal cual; en
-  Electron abren los diálogos nativos. «Nuevo» empieza un tablero vacío.
+## Licencia
 
-### Integración en el programa completo
-
-Tramas, igual que el editor, es una pieza que el gestor de documentos (barra lateral con contenedores y
-segmentos) integrará más adelante. Lo que ese gestor necesita saber:
-
-- **La API es `Tramas.document`**, con la misma forma que `Ed.document`: `get()` devuelve el tablero
-  como JSON puro (`{ actos, lineas, puntos, saltos, notas }`), `set(datos)` lo carga (con saneado: un
-  JSON incompleto o roto se corrige, no rompe la vista), `isDirty()` dice si hay cambios desde la
-  última carga y `onChange(fn)` avisa tras cada cambio (con retardo de 300 ms; devuelve la función
-  para cancelar). El gestor solo debe usar eso: nunca tocar `#board` ni el modelo directamente.
-- **El autoguardado en `localStorage`** (`guiones.tramas.doc`, con `formato: 1`) y los botones
-  «Nuevo / Abrir… / Guardar…» son provisionales, como en el editor: cuando exista el gestor, él decide
-  cuándo se guarda, con qué nombre y dónde, y esos botones desaparecen de la barra de Tramas.
-- **Un tablero por documento**: el modelo es serializable tal cual, así que un documento del gestor
-  puede ser un tablero igual que otro puede ser un guion del editor. Al cambiar de documento basta con
-  `Tramas.document.set(...)`; el historial de deshacer se reinicia con cada `set`.
-- **Tema**: lee `html[data-theme]`, el mismo atributo que el editor. Si el programa grande fija el
-  tema en el `<html>` antes de cargar, Tramas lo respeta sin más; su botón y su clave propia
-  (`guiones.tramas.theme`) pueden quitarse entonces.
-- **Archivos que hay que incluir**: `tramas.html` (o su `<main>` dentro de la pantalla del programa),
-  `css/tramas.css`, `js/tramas/modelo.js`, `js/tramas/tablero.js`, `js/tramas/app.js` y `fonts/`.
-  El tablero espera los `id` de `tramas.html` (`board`, `canvas`, `cables`, `axis`, `rows`, `celda`,
-  `panel`, `menu`, `tip`, `aviso`) y una barra con `zoom`, `undoBtn`, `redoBtn`, `temaBtn`.
-- **Espacios globales separados**: `window.Ed` (editor) y `window.Tramas` no se conocen; el gestor es
-  quien decide qué documento está abierto y con qué herramienta se muestra.
-
-**Pendiente** (decisiones de producto de la spec): varios tableros, exportar a imagen o PDF, gestos
-táctiles, accesibilidad por teclado y render incremental para guiones muy grandes.
-
-## Claquedraw (esquema de pasos + editor de texto)
-
-`claquedraw.html` junta Tramas con el editor: un guion es **un esquema de pasos más una nota de texto
-por nodo**, y se alterna entre las dos vistas. El editor y `tramas.html` quedan como estaban; esta
-página reutiliza `js/tramas/modelo.js` y `js/tramas/tablero.js` sin copiarlos ni tocarlos y mete el
-editor (`index.html`) en un marco.
-
-| Archivo | Qué hace |
-|---|---|
-| `claquedraw.html`, `css/claquedraw.css` | Página, vistas y aspecto de la tira (se carga sobre `css/tramas.css`) |
-| `js/claquedraw/biblioteca.js` | Modelo puro del guion guardado: tablero, notas por nodo, nota actual. Sin DOM |
-| `js/claquedraw/texto.js` | Vista Texto: el editor en un marco y la tira de la trama (una nota por nodo) |
-| `js/claquedraw/documentos.js` | Modelo puro del gestor: contenedores, segmentos, notas y bandeja. Sin DOM |
-| `js/claquedraw/gestor.js` | Vista Documentos: barra lateral, tablero de segmentos, menús, arrastre, notas en el editor |
-| `js/claquedraw/app.js` | Autoguardado, pestañas, Nuevo / Abrir… / Guardar…, el conmutador de vistas, ganchos con el tablero |
-| `test/documentos.test.js` | Reglas del gestor (`npm test`) |
-| `test/claquedraw.test.js` | Reglas del modelo (`npm test`) |
-
-**Cómo se usa**
-
-- **Pestañas**: cada guion abierto es una pestaña bajo la cabecera, con su propio archivo, como en
-  cualquier programa de dibujo. El «+» (o `Cmd/Ctrl+N` en la app) abre una «Sin título 1», «Sin título
-  2»… (el número más bajo libre); al guardarla toma el nombre del archivo. Un asterisco junto al nombre
-  (y en el título de la ventana) marca los cambios sin guardar: en una pestaña sin archivo, desde que se
-  toca; con archivo, hasta que el autoguardado escribe. La «×» la cierra (si tiene archivo, escribe lo
-  pendiente y cierra; si tiene contenido y no tiene archivo, pregunta). `Ctrl+Tab` / `Ctrl+Shift+Tab`
-  pasan de pestaña. Abrir un archivo que ya está en una pestaña salta a ella.
-- **En la app de escritorio** las órdenes viven en el menú: Archivo (Nueva pestaña, Abrir…, Guardar,
-  Guardar como…, Cerrar pestaña), Edición (Deshacer, Rehacer, Cortar, Copiar, Pegar) y Ver (Esquema /
-  Texto, Documentos, Línea de tiempo / Cinta, columna de tramas, Modo oscuro, pestañas). La barra deja solo el
-  conmutador Esquema / Documentos, la escala, Deshacer/Rehacer y el indicador de guardado.
-- **Aspecto**: el rediseño «sala de montaje» (`docs/diseno/rediseno/`): IBM Plex Sans en la interfaz y
-  Plex Mono en los rótulos (empaquetadas en `fonts/`), Courier Prime en el documento, tres planos de gris
-  y un solo acento lavanda del logo (Leo eligió el morado), bordes de 1 px, iconos de trazo y etiquetas
-  de tipo en el árbol; modo claro y oscuro con los mismos tokens (`css/clapcraft.css` y
-  `css/clapcraft-editor.css` van encima de las hojas base). La cabecera ya no lleva botones de vista: se navega desde la barra de
-  documentos (atajos: `Cmd/Ctrl+Shift+G` esquema/texto, `Cmd/Ctrl+Shift+F` documentos). El menú Ver de la
-  app solo tiene «Modo oscuro».
-- **Documentos** (`Cmd/Ctrl+Shift+F`): el gestor de documentos del proyecto. Su barra lateral está en
-  las tres vistas, también con el esquema de pasos abierto; con el pin de su cabecera (o
-  `Cmd/Ctrl+Shift+B`) se fija a la izquierda o se suelta: suelta se esconde y se asoma con el asa
-  «Documentos» del borde izquierdo (un clic fuera la cierra). Enseña los **contenedores** del proyecto
-  («＋ Nuevo contenedor» abre un diálogo para ponerle nombre); cada uno es una carpeta con hijos de dos
-  clases, que se crean con su «＋» (también con un diálogo para el nombre):
-  · **Esquema de pasos**: un tablero. Un contenedor puede tener varios; un clic en su fila lo monta en
-    la vista Esquema (un punto marca el que está montado).
-  · **Subcontenedor**: un tablero de documentos: la bandeja (notas sin segmento) primero, una tarjeta
-    por segmento (nombre y color de la paleta de 16) y «＋ nuevo segmento». Un contenedor nuevo trae uno
-    llamado «Documentos».
-  Nada es especial: contenedores, esquemas y subcontenedores se renombran (doble clic o menú `⋯`), se
-  ordenan y se eliminan. Un guion nuevo arranca con «Trama global» y su «Esquema de pasos»; si no queda
-  ningún esquema, el tablero avisa y el primero que se cree se monta solo. Los tableros no llevan botones
-  arriba: nueva nota y nuevo segmento van en el menú `⋯` del subcontenedor y en las tarjetas («＋ nota»,
-  «＋ nuevo segmento»). La cabecera de cada tablero son migas para navegar: «‹» vuelve al tablero
-  anterior, el nombre del contenedor abre su primer subcontenedor; con una nota abierta, las migas de
-  encima del editor hacen lo mismo. **El árbol se ordena arrastrando**: contenedores entre sí (con el
-  orden en Manual); esquemas y subcontenedores dentro de su contenedor o a otro contenedor (delante o
-  detrás de otro de su clase, o sobre el contenedor para dejarlo al final); también con Subir / Bajar en
-  sus menús. Cada nota se abre en el editor con doble clic (un clic la selecciona); arriba van las migas
-  (contenedor › subcontenedor › segmento › nota). El título del documento es el de la nota. Las notas se
-  mueven arrastrándolas con el clic sostenido: a otro segmento, dentro del suyo para ordenarlas, a un
-  subcontenedor o contenedor de la barra (a su bandeja) o a la papelera; también desde su menú `⋯`, que
-  está en la tarjeta y en el árbol. Los segmentos se ordenan arrastrándolos por su cabecera o desde su
-  menú. Con texto en «Buscar», bajo cada subcontenedor aparecen las notas que casan. La **Papelera**, al
-  final de la barra, guarda las notas que se tiran (desde su menú o arrastrándolas a ella) y las de un
-  contenedor o subcontenedor eliminado, con su origen y la fecha; desde ahí se restauran (menú, o
-  arrastrándolas a un subcontenedor) o se eliminan del todo; «Vaciar papelera» lo borra todo, y al
-  arrancar se eliminan solas las que lleven más de 30 días.
-- **Abrir el editor desde el esquema**: doble clic en un nodo (o «Abrir documento» en su panel) abre su
-  documento en el editor; «‹ Esquema» en la barra de título del editor, o `Cmd/Ctrl+Shift+G`, vuelve.
-  Renombrar un nodo se hace en el panel o desde el título del editor. Los cuadros y rombos conservan su
-  doble clic de renombrar, porque no tienen documento. La vista se recuerda. En el esquema, el panel de un nodo tiene «✎ Escribir la nota»; al volver
-  al esquema queda seleccionado el nodo de la nota abierta.
-- **La tira**: sobre la cinta del editor, enseña **una trama a la vez** con sus nodos dibujados igual que
-  en el esquema (título encima; nodo descartado tachado; fuera de escena apagado) y el chip de la trama a
-  la izquierda. Clic en un nodo abre su nota. Los **cuadros y rombos** (extremos de un salto) llevan su
-  título pero no tienen nota: al pulsarlos la tira **pasa a la trama del otro extremo**, que queda
-  resaltado; pulsar ese extremo gemelo vuelve. La nota abierta no cambia al saltar.
-- **Recorrer notas**: las flechas ‹ › de la barra de título del editor o `Cmd/Ctrl+Alt+↑/↓` van a la
-  nota anterior o siguiente de la trama de la tira.
-- **El trazo de los saltos** sale del cuadro o rombo hacia donde está la otra trama en el esquema: hacia
-  abajo si está más abajo, hacia arriba si está más arriba (entonces el título va debajo del nodo).
-- **Línea de tiempo o cinta**: sobre la hoja va una de las dos. El botón de la esquina de la tira
-  cambia a la cinta del editor; en la cinta, junto a su pin, otro botón vuelve a la línea de tiempo
-  (`Cmd/Ctrl+Shift+K`). La barra con el título y las flechas ‹ › se queda siempre. Se recuerda.
-- **Columna de tramas**: en el esquema, arrastra su borde derecho para cambiar el ancho (doble clic
-  vuelve al de partida). El botón «‹» del encabezado la contrae hasta dejar solo el punto de color de
-  cada trama (y «›» la despliega). Ambas cosas se recuerdan entre sesiones.
-- **Título**: el título de la nota es el del nodo; cambiarlo en el editor renombra el nodo en el esquema.
-- **Globo**: al pasar el ratón por un nodo de la tira aparece debajo su título y la descripción que se
-  escribió en el esquema (en los saltos, adónde llevan).
-- **Archivos `.clapcraft`**: el guion se guarda solo en el navegador siempre, y además en un
-  archivo `.clapcraft` (comprimido: un guion largo ocupa del orden de 100-150 KB) en cuanto lo eliges: «Guardar como…» (`Cmd/Ctrl+Shift+S`) lo crea y «Abrir…»
-  (`Cmd/Ctrl+O`) toma uno existente; desde entonces cada cambio se escribe ahí solo, sin pulsar nada.
-  «Guardar» (`Cmd/Ctrl+S`) escribe en el acto (o pide archivo si aún no hay). El indicador de la
-  cabecera dice dónde está el guion (nada si aún no tiene archivo): «✓ nombre.clapcraft» o «● nombre.clapcraft» si hay
-  cambios sin escribir; un clic en él también guarda. Al volver a abrir la página se retoma el mismo
-  archivo (en Chrome/Edge puede pedir permiso una vez: el indicador dice «reconectar» y «Guardar» lo
-  pide; en la app de escritorio no hace falta). En navegadores sin acceso a archivos solo se descarga.
-  «Nuevo» empieza otro guion sin archivo (pide confirmación). Los antiguos `.cld` ya no se abren. Las
-  imágenes que se pegan en el editor se reducen (1600 px, WebP) para que el archivo no pese. La primera vez hereda el tablero de
-  `tramas.html` si lo había. El editor abierto a solas (`index.html`) conserva su propio documento. La
-  nota de un nodo borrado se descarta al abrir otro guion.
-- **Integración**: `Claquedraw.biblioteca` y `Claquedraw.app` (`abrir(id)`, `nuevo()`, `exportar()`,
-  `abiertoId()`, `vista(modo, puntoId)`, `modo()`) son el punto de entrada para el gestor de
-  documentos que venga después (la lista lateral de guiones del prototipo se descartó).
+[MIT](LICENSE) © 2026 Leonardo Ruano. Las fuentes (Courier Prime, IBM Plex, Patrick Hand) tienen licencia
+OFL, y Typo.js y los diccionarios de español e inglés, las suyas (ver `js/dict/`).
