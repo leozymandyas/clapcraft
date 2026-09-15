@@ -40,11 +40,12 @@
 
   /* ---------- biblioteca: una pestaña por guion, el abierto es su activo ---------- */
   const biblioteca = new C.Biblioteca(leerJSON(CLAVE));
-  if (!biblioteca.total()) {
-    /* Primer arranque: si tramas.html dejó un tablero, se hereda (sin borrarlo). */
+  if (!biblioteca.total() && !vista.iniciada) {
+    /* Primer arranque: si tramas.html dejó un tablero, se hereda (sin borrarlo). Si no, «Sin proyectos» (Leo, 15-09-2026). */
     const previo = leerJSON(CLAVE_TRAMAS);
-    biblioteca.crear({ nombre: SIN_TITULO + ' 1', datos: C.esTablero(previo) && previo.formato === FORMATO_TABLERO ? previo : T.inicial() });
+    if (C.esTablero(previo) && previo.formato === FORMATO_TABLERO) biblioteca.crear({ nombre: SIN_TITULO + ' 1', datos: previo });
   }
+  vista.iniciada = true;
   /* «Sin título 1», «Sin título 2»…: el número más bajo que no esté en uso entre las pestañas. */
   function nombreSinTitulo() {
     const usados = new Set(biblioteca.datos.guiones.map(g => g.nombre));
@@ -99,13 +100,14 @@
     C.texto.cerrar();
     const board = $('board');
     if (esquemaId) desplazamientos.set(esquemaId, { left: board.scrollLeft, top: board.scrollTop });
-    if (esquemaId && refEsquema(esquemaId)) docs().podarNotasEsquema(esquemaId, modelo.datos.puntos.map(p => p.id));
+    if (esquemaId && refEsquema(esquemaId)) { const vivos = modelo.datos.puntos.map(p => p.id); docs().podarNotasEsquema(esquemaId, vivos); docs().podarGuion(esquemaId, vivos); }
+    if (C.revisar.abierto()) C.revisar.cerrar();
     esquemaId = eid;
     /* el tablero de Personajes: columna ancha con nombres, sin fuera de escena ni camino iluminado, y lo
        nuevo se llama «Momento», «Personaje», «Evento» (nodo) y «Relación» (cuadro) */
     const per = esPersonajes(eid);
     modelo.nombres = per ? { acto: 'Momento', linea: 'Personaje', punto: 'Evento', nodo: 'Evento', cuadro: 'Relación', femeninos: ['cuadro'] } : null;
-    T.tablero.simple(per); T.tablero.gutter(per ? 200 : 48);
+    T.tablero.simple(per); T.tablero.gutter(per ? 250 : 48);   // con el color, la etiqueta «Personaje» y el nombre
     document.body.classList.toggle('tablero-personajes', per);
     T.tablero.cargar(eid ? refEsquema(eid).esquema.datos : T.inicial());
     /* cada tablero vuelve a donde se dejó (uno nuevo, al principio): si se heredaba el desplazamiento del
@@ -127,15 +129,23 @@
       /* en Personajes: «PERSONAJES [Personaje] Nombre del personaje abierto» */
       const l = per && vista.personaje && docs().personaje(vista.personaje);
       b.querySelector('[data-chip-cont]').textContent = r.contenedor.nombre;
+      /* el chip lleva el nombre (Leo: como en la cabecera del editor) y el color dice qué es: el esquema en violeta;
+         en Personajes, el personaje con su color (el par claro/oscuro de la paleta, como en el editor) */
       const chip = b.querySelector('.gd-chip');
-      chip.textContent = per ? 'Personaje' : 'Esquema';
-      /* en Personajes el chip lleva el color del personaje (el par claro/oscuro de la paleta, como en el editor) */
-      const t = l && C.PALETA_ETIQUETAS[l.color];
-      chip.classList.toggle('per-chip', !!t);
+      const t = per && l && C.PALETA_ETIQUETAS[l.color];
+      chip.classList.toggle('per-chip', !!t); chip.classList.toggle('gd-chip--esquema', !t);
       if (t) { chip.style.setProperty('--chl', t[1]); chip.style.setProperty('--chd', t[2]); } else { chip.style.removeProperty('--chl'); chip.style.removeProperty('--chd'); }
-      b.querySelector('[data-chip-esq]').textContent = per ? (l ? l.nombre : '') : r.esquema.nombre;
+      const nombre = per ? (l ? l.nombre : '') : r.esquema.nombre;
+      b.querySelector('[data-chip-esq]').textContent = nombre;
+      chip.setAttribute('aria-label', (per ? 'Personaje' : 'Esquema') + ' «' + nombre + '»');   // cortado, sale el globo (texto.js)
     }
     $('verDocumentos').hidden = !x;
+  }
+  /* La biblioteca donde el esquema montado tiene sus actos como segmentos: la enlazada, o la del personaje. */
+  function bibliotecaDelEsquema() {
+    const d = docs(); if (!d || !esquemaId) return null;
+    if (esPersonajes(esquemaId)) { const p = vista.personaje && d.personaje(vista.personaje); return p ? d.bibliotecaPersonaje(p.id, p.nombre).id : null; }
+    const x = d.enlace(esquemaId); return x ? x.sub.id : null;
   }
   /* El primer esquema que haya en el guion (por orden de contenedores), o null. */
   function primerEsquema() {
@@ -184,7 +194,7 @@
     if (vista.modo !== 'personajes' || !document.body.classList.contains('vista-personajes')) verVista('personajes');
     const cuerpo = $('personajesSeg').querySelector('[data-per-cuerpo]');
     if (p) C.gestor.renderPersonaje(cuerpo, docs().bibliotecaPersonaje(id, p.nombre).id, id);
-    else cuerpo.innerHTML = '<div class="gd-nada per-vacio"><b>Aún no hay personajes</b><br>Escríbelos en el editor con «/» o créalos con «＋ Nuevo personaje».</div>';
+    else { C.gestor.contraer(); cuerpo.innerHTML = '<div class="gd-nada per-vacio"><b>Aún no hay personajes</b><br>Escríbelos en el editor con «/» o créalos con «＋ Nuevo personaje».</div>'; }
     C.gestor.render(); renderChipEsquema(); marcarPersonaje();
   }
   function verPersonajes() {
@@ -274,10 +284,7 @@
       const p = l.personaje && d.personaje(l.personaje);
       row.classList.toggle('abierto', fijo);
       row.classList.toggle('sin-personaje', !p);
-      /* el fondo del carril es el color del personaje (su par de la paleta; el CSS elige según el tema) */
-      const t = p && C.PALETA_ETIQUETAS[p.color];
-      row.classList.toggle('con-color', !!t);
-      if (t) { row.style.setProperty('--chl', t[1]); row.style.setProperty('--chd', t[2]); } else { row.style.removeProperty('--chl'); row.style.removeProperty('--chd'); }
+      /* el carril lleva el color de su trama, como en cualquier esquema (Leo, 15-09-2026: ya no el de la etiqueta del personaje) */
       const label = row.querySelector('.label');
       let combo = label.querySelector('.per-combo');
       if (combo && combo.classList.contains('fijo') !== fijo) { combo.remove(); combo = null; }
@@ -287,6 +294,17 @@
         label.insertBefore(combo, label.querySelector('.lbox'));
       }
       combo.dataset.linea = l.id;
+      /* delante: el color de la trama (se cambia pulsándolo) y la etiqueta «Personaje» con el color del personaje, como en el
+         menú lateral (Leo, 15-09-2026) */
+      let tono = label.querySelector('.per-color');
+      if (!tono) { tono = document.createElement('button'); tono.type = 'button'; tono.className = 'per-color'; label.insertBefore(tono, combo); }
+      tono.dataset.linea = l.id; tono.style.setProperty('--tc', `var(--t-${l.color})`);
+      tono.title = 'Color de la trama'; tono.setAttribute('aria-label', 'Color de la trama');
+      let etq = label.querySelector('.per-etq');
+      const par = p && C.PALETA_ETIQUETAS[p.color];
+      if (par && !etq) { etq = document.createElement('span'); etq.className = 'gd-chip per-chip per-etq'; etq.textContent = 'Personaje'; label.insertBefore(etq, combo); }
+      if (!par && etq) { etq.remove(); etq = null; }
+      if (etq) { etq.style.setProperty('--chl', par[1]); etq.style.setProperty('--chd', par[2]); }
       combo.innerHTML = '<span class="per-combo-nom"></span>' + (fijo ? '' : '<svg width="12" height="12"><use href="#ic-chev-d"></use></svg>');
       combo.firstElementChild.textContent = p ? p.nombre : 'Sin personaje';
       combo.title = fijo ? 'El personaje de este tablero' : p ? 'Personaje del carril · clic para cambiarlo' : 'Elegir el personaje de este carril';
@@ -320,6 +338,8 @@
     persistir();
     C.gestor.mostrar();                                        // la barra de documentos está en todas las vistas
     if (vista.modo === 'personajes') verPersonajes();          // la pestaña se abre en Personajes: su tablero
+    pantalla = 'proyecto'; aplicarPantalla();
+    if (g && estado(g.id).archivo) recordarReciente(g.id);
   }
 
   /* Un guion recién creado que nadie ha tocado: se puede reutilizar para abrir un archivo. */
@@ -340,8 +360,9 @@
     barraPestanas.innerHTML = '';
     biblioteca.datos.guiones.forEach(g => {
       const b = document.createElement('div');
-      b.className = 'pestana' + (g.id === abiertoId ? ' activa' : ''); b.dataset.id = g.id;
-      b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(g.id === abiertoId));
+      const activa = g.id === abiertoId && pantalla !== 'nuevo';
+      b.className = 'pestana' + (activa ? ' activa' : ''); b.dataset.id = g.id;
+      b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(activa));
       const est = estado(g.id);
       b.title = est.archivo ? (est.archivo.ruta || est.archivo.nombre) : 'Solo en este navegador';
       const mod = modificado(g.id);
@@ -350,26 +371,154 @@
         + '<button type="button" class="pestana-cerrar" data-cerrar title="Cerrar la pestaña"><svg width="12" height="12"><use href="#ic-close"></use></svg></button>';
       b.querySelector('.pestana-nom').textContent = g.nombre;
       barraPestanas.appendChild(b);
-      if (g.id === abiertoId) document.title = g.nombre + (mod ? ' *' : '') + ' · ClapCraft';
+      if (activa) document.title = g.nombre + (mod ? ' *' : '') + ' · ClapCraft';
     });
+    /* la pestaña de «Nuevo proyecto», mientras se está creando uno (se puede dejar a medias e ir a otra) */
+    if (C.proyectos.hay()) {
+      const b = document.createElement('div');
+      b.className = 'pestana pestana-proyecto' + (pantalla === 'nuevo' ? ' activa' : ''); b.dataset.proyectoNuevo = '1';
+      b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(pantalla === 'nuevo'));
+      b.innerHTML = '<span class="pestana-nom">Nuevo proyecto</span><span class="pestana-sucio" title="Sin crear"></span>'
+        + '<button type="button" class="pestana-cerrar" data-cerrar title="Cancelar el proyecto nuevo"><svg width="12" height="12"><use href="#ic-close"></use></svg></button>';
+      barraPestanas.appendChild(b);
+      if (pantalla === 'nuevo') document.title = 'Nuevo proyecto · ClapCraft';
+    }
+    if (!biblioteca.total() && pantalla !== 'nuevo') document.title = 'ClapCraft';
     const mas = document.createElement('button');
-    mas.type = 'button'; mas.className = 'pestana-nueva'; mas.dataset.nueva = '1'; mas.title = 'Nueva pestaña (Ctrl+N)'; mas.textContent = '+';
+    mas.type = 'button'; mas.className = 'pestana-nueva'; mas.dataset.nueva = '1'; mas.title = 'Nuevo proyecto (Ctrl+N)';
+    mas.innerHTML = '<svg width="14" height="14"><use href="#ic-plus"></use></svg>';
     barraPestanas.appendChild(mas);
   }
   if (barraPestanas) barraPestanas.addEventListener('click', e => {
     if (e.target.closest('[data-nueva]')) { nuevo(); return; }
     const p = e.target.closest('.pestana'); if (!p) return;
+    if (p.dataset.proyectoNuevo) { if (e.target.closest('[data-cerrar]')) cancelarProyecto(); else if (pantalla !== 'nuevo') { pantalla = 'nuevo'; aplicarPantalla(); C.proyectos.enfocar(); } return; }
     if (e.target.closest('[data-cerrar]')) { cerrarPestana(p.dataset.id); return; }
     if (p.dataset.id !== abiertoId) montar(p.dataset.id);
+    else if (pantalla === 'nuevo') { pantalla = 'proyecto'; aplicarPantalla(); }
   });
   if (barraPestanas) barraPestanas.addEventListener('auxclick', e => {     // botón central: cerrar
-    const p = e.target.closest('.pestana'); if (p && e.button === 1) { e.preventDefault(); cerrarPestana(p.dataset.id); }
+    const p = e.target.closest('.pestana'); if (p && e.button === 1) { e.preventDefault(); if (p.dataset.proyectoNuevo) cancelarProyecto(); else cerrarPestana(p.dataset.id); }
   });
 
+  /* ---------- proyectos: la pestaña «Nuevo proyecto» y «Sin proyectos» (js/claquedraw/proyectos.js) ---------- */
+  let pantalla = 'proyecto';                                   // 'nuevo': se ve la pestaña de creación
+  function aplicarPantalla() {
+    if (pantalla === 'nuevo' && !C.proyectos.hay()) pantalla = 'proyecto';
+    const nuevoVisible = pantalla === 'nuevo', vacio = !nuevoVisible && !biblioteca.total();
+    const eraNuevo = document.body.classList.contains('pantalla-nuevo');
+    document.body.classList.toggle('pantalla-nuevo', nuevoVisible);
+    document.body.classList.toggle('sin-proyectos', vacio);
+    if (nuevoVisible && !eraNuevo) { C.gestor.salir(); C.proyectos.render(); }
+    if (vacio) C.proyectos.renderVacio();
+    renderPestanas();
+  }
+  /* «Nuevo» (Ctrl+N, el «+» de las pestañas, Archivo › Nuevo proyecto…): la pestaña de creación, o vuelve a ella */
   function nuevo() {
-    const r = biblioteca.crear({ nombre: nombreSinTitulo(), datos: T.inicial() });
-    montar(r.guion.id);
-    return r;
+    if (temporizador) volcar();
+    C.texto.volcar();
+    C.proyectos.empezar();
+    pantalla = 'nuevo'; aplicarPantalla(); C.proyectos.enfocar();
+  }
+  function cancelarProyecto() {
+    C.proyectos.descartar(); pantalla = 'proyecto'; aplicarPantalla();
+  }
+  /* Crea el proyecto de la pestaña de creación: sus documentos salen de la plantilla y, con carpeta, nace con su archivo
+     (y desde entonces se guarda ahí solo). Devuelve el guion o null. */
+  async function crearProyecto({ nombre, plantilla, carpeta }) {
+    const pl = C.plantillas.plantilla(plantilla);
+    const r = biblioteca.crear({ nombre: String(nombre || '').trim() || nombreSinTitulo(), documentos: C.plantillas.documentos(pl.id) });
+    if (!r.ok) { T.tablero.avisar(r.aviso); return null; }
+    const g = r.guion;
+    tonos[g.id] = pl.tono;
+    C.proyectos.descartar();
+    montar(g.id);
+    if (carpeta) await archivoEnCarpeta(g.id, carpeta);
+    else T.tablero.avisar('Proyecto «' + g.nombre + '» creado · Guardar como… le da un archivo');
+    return g;
+  }
+  async function archivoEnCarpeta(id, carpeta) {
+    const g = biblioteca.guion(id); if (!g) return;
+    const contenido = serializar(g);
+    try {
+      if (carpeta.ruta && api && api.crearProyecto) {
+        const ruta = await api.crearProyecto({ carpeta: carpeta.ruta, nombre: g.nombre, content: await empaquetar(contenido) });
+        vista.carpetaProyectos = { ruta: carpeta.ruta, texto: carpeta.texto }; guardarVista();
+        vincular(id, { nombre: baseDe(ruta), ruta }); estado(id).ultimoEscrito = contenido;
+      } else if (carpeta.handle) {
+        const dir = carpeta.handle;
+        if (dir.requestPermission && await dir.requestPermission({ mode: 'readwrite' }) !== 'granted') throw new Error('sin permiso');
+        const base = g.nombre.replace(/[\\/:*?"<>|]/g, '-');
+        let nombre = base + '.' + EXT;
+        for (let n = 2; n < 1000; n++) { try { await dir.getFileHandle(nombre); nombre = base + ' ' + n + '.' + EXT; } catch (_) { break; } }
+        const h = await dir.getFileHandle(nombre, { create: true });
+        idb.set('carpetaProyectos', dir).catch(() => {});
+        vincular(id, { nombre: h.name, handle: h });
+        if (!await escribirArchivo(id)) { desvincular(id); throw new Error('no quedó escrito'); }
+      } else return;
+      await nombrarComoArchivo(id);                            // «Nombre 2» si ya había un archivo con ese nombre
+      recordarReciente(id); persistir();
+      T.tablero.avisar('Proyecto «' + g.nombre + '» creado en ' + estado(id).archivo.nombre + ' · se guarda ahí solo');
+    } catch (err) {
+      console.error('ClapCraft · no se pudo crear el archivo del proyecto', err);
+      T.tablero.avisar('Proyecto creado, pero no se pudo escribir en ' + carpeta.texto + ' · usa Guardar como…');
+    }
+  }
+  /* la carpeta de partida: la última elegida o ~/Documents/ClapCraft (Electron); en el navegador, la última elegida si
+     sigue con permiso (si no, el proyecto se queda en esta ventana hasta «Guardar como…») */
+  async function carpetaInicial() {
+    if (api && api.carpetaProyectos) return vista.carpetaProyectos || api.carpetaProyectos();
+    try { const h = await idb.get('carpetaProyectos'); if (h && await h.queryPermission({ mode: 'readwrite' }) === 'granted') return { texto: h.name, handle: h }; } catch (_) {}
+    return null;
+  }
+  async function elegirCarpeta(actual) {
+    if (api && api.elegirCarpeta) return api.elegirCarpeta({ actual: actual && actual.ruta });
+    if (window.showDirectoryPicker) {
+      try { const h = await window.showDirectoryPicker({ id: 'clapcraft-proyectos', mode: 'readwrite' }); return { texto: h.name, handle: h }; }
+      catch (err) { if (err.name !== 'AbortError') T.tablero.avisar('No se pudo elegir la carpeta'); return null; }
+    }
+    T.tablero.avisar('Este navegador no deja elegir carpeta: el proyecto se queda aquí y «Guardar como…» lo descarga');
+    return null;
+  }
+  /* Sin pestañas: nada montado; se ve «Sin proyectos». */
+  function quedarSinProyectos() {
+    C.texto.cerrar(); C.gestor.reiniciar();
+    abiertoId = null; esquemaId = null;
+    T.tablero.cargar(T.inicial()); document.body.classList.add('sin-esquema');
+    persistir(); aplicarPantalla();
+  }
+
+  /* ---------- recientes: los proyectos con archivo que se han abierto, para «Sin proyectos» ---------- */
+  const CLAVE_RECIENTES = 'guiones.claquedraw.recientes', MAX_RECIENTES = 8;
+  const tonos = {};                                            // guion → tono de su plantilla (al crearlo)
+  const TONOS_RECIENTE = ['violeta', 'cielo', 'esmeralda', 'magenta', 'cobre', 'teal', 'indigo', 'rosa'];
+  const recientes = () => (leerJSON(CLAVE_RECIENTES) || []).filter(r => r && r.clave && r.nombre);
+  function recordarReciente(id) {
+    const g = biblioteca.guion(id), a = estado(id).archivo; if (!g || !a) return;
+    const clave = a.ruta || 'h:' + a.nombre;
+    const lista = recientes(), previo = lista.find(r => r.clave === clave);
+    const tono = tonos[id] || (previo && previo.tono) || TONOS_RECIENTE[[...g.nombre].reduce((n, c) => n + c.charCodeAt(0), 0) % TONOS_RECIENTE.length];
+    const r = { clave, nombre: g.nombre, ruta: a.ruta || null, tono, estructura: C.plantillas.estructura(g.documentos), visto: Date.now() };
+    escribirJSON(CLAVE_RECIENTES, [r, ...lista.filter(x => x.clave !== clave)].slice(0, MAX_RECIENTES));
+    if (a.handle) idb.set('reciente:' + clave, a.handle).catch(() => {});
+  }
+  function olvidarReciente(clave) {
+    escribirJSON(CLAVE_RECIENTES, recientes().filter(r => r.clave !== clave));
+    idb.del('reciente:' + clave).catch(() => {});
+    if (document.body.classList.contains('sin-proyectos')) C.proyectos.renderVacio();
+  }
+  async function abrirReciente(clave) {
+    const r = recientes().find(x => x.clave === clave); if (!r) return;
+    const ya = biblioteca.datos.guiones.find(g => { const a = estado(g.id).archivo; return a && (a.ruta || 'h:' + a.nombre) === clave; });
+    if (ya) { montar(ya.id); return; }
+    if (r.ruta && api && api.readFile) {
+      if (!await abrirRuta(r.ruta)) { olvidarReciente(clave); T.tablero.avisar('«' + r.nombre + '» ya no está en ' + r.ruta); }
+      return;
+    }
+    let h = null; try { h = await idb.get('reciente:' + clave); } catch (_) {}
+    if (!h) { olvidarReciente(clave); T.tablero.avisar('No se pudo recuperar «' + r.nombre + '»: ábrelo con Abrir un proyecto'); return; }
+    try { if (await h.requestPermission({ mode: 'readwrite' }) !== 'granted') { T.tablero.avisar('Sin permiso para abrir ' + h.name); return; } } catch (_) {}
+    await abrirHandle(h);
   }
   function pasarPestana(salto) {
     const ids = biblioteca.datos.guiones.map(g => g.id), i = ids.indexOf(abiertoId);
@@ -385,9 +534,10 @@
     if (id === abiertoId) { if (temporizador) volcar(); C.texto.volcar(); }
     if (est.archivo) { if (!await escribirArchivo(id) && !await T.tablero.confirmar('No se pudo escribir en ' + est.archivo.nombre + '. ¿Cerrar «' + g.nombre + '» de todas formas? Se perderían los cambios.', 'Cerrar')) return; }
     else if (!esVirgen(g) && !await T.tablero.confirmar('¿Cerrar «' + g.nombre + '»? No está guardado en ningún archivo y se perderá.', 'Cerrar')) return;
+    if (est.archivo) recordarReciente(id);
     desvincular(id); delete estados[id];
     const r = biblioteca.eliminar(id);
-    if (id === abiertoId) { abiertoId = null; if (r.activo) montar(r.activo); else nuevo(); }
+    if (id === abiertoId) { abiertoId = null; if (r.activo) montar(r.activo); else quedarSinProyectos(); }   // sin pestañas: «Sin proyectos»
     else persistir();
   }
 
@@ -415,6 +565,17 @@
       return new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
     }
     return new TextDecoder().decode(b);
+  }
+  /* ¿Dos textos de archivo dicen lo mismo? Con los documentos normalizados y sin mirar el orden de las claves. El
+     guion se compara como texto (`ultimoEscrito`), pero el mismo contenido puede quedar con las claves en otro orden
+     (al abrir se normaliza; al montar un esquema el tablero vuelca sus datos a su manera): antes de escribir se mira
+     si de verdad cambió; si no, no se toca el archivo (se reescribía al volver a arrancar sin haber cambiado nada,
+     pasó el 15-09-2026). */
+  const ordenado = v => Array.isArray(v) ? v.map(ordenado) : v && typeof v === 'object' ? Object.keys(v).sort().reduce((o, k) => { o[k] = ordenado(v[k]); return o; }, {}) : v;
+  function mismoContenido(a, b) {
+    if (!a || !b) return false;
+    const plano = t => { const x = JSON.parse(t); if (x && x.documentos && typeof x.documentos === 'object') x.documentos = C.normalizarDocumentos(x.documentos); return JSON.stringify(ordenado(x)); };
+    try { return plano(a) === plano(b); } catch (_) { return false; }
   }
   const mismosBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -447,9 +608,10 @@
     let texto, pista, clase = '';
     if (!localOk) { texto = 'Sin guardar'; pista = 'No se pudo guardar en este navegador'; clase = 'sucio'; }
     else if (!a) { texto = ''; pista = 'Sin archivo: Guardar como… lo crea y a partir de ahí se guarda solo'; }
-    else if (a.permiso === false) { texto = a.nombre + ' · reconectar'; pista = 'Pulsa Guardar para volver a escribir en el archivo'; clase = 'sucio'; }
-    else if (sucio(abiertoId)) { texto = a.nombre; pista = 'Cambios sin escribir en el archivo (se guardan solos en un momento)'; clase = 'sucio'; }
-    else { texto = a.nombre; pista = 'Guardado en ' + (a.ruta || a.nombre); clase = 'ok'; }
+    /* sin el nombre del archivo (Leo): solo el estado; el nombre y la ruta van en el globo */
+    else if (a.permiso === false) { texto = 'Reconectar'; pista = a.nombre + ' · pulsa Guardar para volver a escribir en el archivo'; clase = 'sucio'; }
+    else if (sucio(abiertoId)) { texto = ''; pista = a.nombre + ' · cambios sin escribir (se guardan solos en un momento)'; clase = 'sucio'; }
+    else { texto = ''; pista = 'Guardado en ' + (a.ruta || a.nombre); clase = 'ok'; }
     e.innerHTML = (clase === 'sucio' ? '<span class="estado-punto"></span>' : clase === 'ok' ? '<svg width="13" height="13"><use href="#ic-check"></use></svg>' : '') + '<span></span>';
     e.lastElementChild.textContent = texto; e.title = pista; e.className = 'estado ' + clase;
   }
@@ -484,7 +646,7 @@
     clearTimeout(est.temporizador); est.temporizador = null;
     if (!est.archivo || !g || est.escribiendo) return false;
     const contenido = serializar(g);
-    if (contenido === est.ultimoEscrito) { indicador(); return true; }
+    if (contenido === est.ultimoEscrito || mismoContenido(contenido, est.ultimoEscrito)) { est.ultimoEscrito = contenido; indicador(); renderPestanas(); return true; }
     est.escribiendo = true;
     try {
       const bytes = await empaquetar(contenido);
@@ -561,13 +723,13 @@
       return;
     }
     await nombrarComoArchivo(id);
-    persistir();
+    recordarReciente(id); persistir();
     T.tablero.avisar('Guardado en ' + estado(id).archivo.nombre + ' · se seguirá guardando ahí solo');
   }
 
   /* «Guardar»: escribe ya en el archivo de la pestaña (reconectando si hace falta) o pide uno. */
   async function guardar() {
-    const id = abiertoId, est = estado(id);
+    const id = abiertoId, est = estado(id); if (!biblioteca.guion(id)) return;
     if (!est.archivo) return guardarComo();
     if (est.archivo.permiso === false && est.archivo.handle) {
       let p = 'denied';
@@ -610,25 +772,49 @@
       let h;
       try { [h] = await window.showOpenFilePicker({ types: TIPOS, multiple: false }); }
       catch (err) { if (err.name !== 'AbortError') T.tablero.avisar('No se pudo abrir el archivo'); return; }
-      const f = await h.getFile();
-      let texto; try { texto = await desempaquetar(await f.arrayBuffer()); } catch (_) { T.tablero.avisar('No se pudo leer ' + f.name); return; }
-      const g = abrirEnPestana(texto, f.name, h.name); if (!g) return;
-      vincular(g.id, { nombre: h.name, handle: h }); estado(g.id).ultimoEscrito = serializar(g); indicador(); renderPestanas();
-      T.tablero.avisar('Abierto ' + h.name + ' · se irá guardando ahí solo');
+      await abrirHandle(h);
       return;
     }
     $('archivo').value = ''; $('archivo').click();            // sin acceso a archivos: solo lectura
+  }
+  /* Un FileSystemFileHandle (navegador: Abrir…, un reciente o un archivo soltado): se abre y queda vinculado. */
+  async function abrirHandle(h) {
+    const f = await h.getFile();
+    let texto; try { texto = await desempaquetar(await f.arrayBuffer()); } catch (_) { T.tablero.avisar('No se pudo leer ' + f.name); return null; }
+    const g = abrirEnPestana(texto, f.name, h.name); if (!g) return null;
+    vincular(g.id, { nombre: h.name, handle: h }); estado(g.id).ultimoEscrito = serializar(g); indicador(); renderPestanas();
+    recordarReciente(g.id);
+    T.tablero.avisar('Abierto ' + h.name + ' · se irá guardando ahí solo');
+    return g;
   }
   /* Un archivo con ruta (Electron: diálogo o doble clic en el Finder). */
   async function abrirRuta(ruta, contenido) {
     let texto;
     try { texto = await desempaquetar(contenido !== undefined ? contenido : await api.readFile({ path: ruta, binario: true })); }
-    catch (_) { return T.tablero.avisar('No se pudo leer ' + ruta); }
+    catch (_) { T.tablero.avisar('No se pudo leer ' + ruta); return false; }
     const nombre = baseDe(ruta);
-    const g = abrirEnPestana(texto, nombre, ruta); if (!g) return;
+    const g = abrirEnPestana(texto, nombre, ruta); if (!g) return true;
     vincular(g.id, { nombre, ruta }); estado(g.id).ultimoEscrito = serializar(g); indicador(); renderPestanas();
+    recordarReciente(g.id);
     T.tablero.avisar('Abierto ' + nombre + ' · se irá guardando ahí solo');
+    return true;
   }
+  /* Un .clapcraft soltado en la ventana (sobre todo en «Sin proyectos», que lo anuncia): con su ruta en Electron, con su
+     handle en Chrome/Edge (queda vinculado) y, si no, solo leído. */
+  document.addEventListener('dragover', e => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+  document.addEventListener('drop', async e => {
+    const dt = e.dataTransfer; if (!dt || !dt.files || !dt.files.length) return;
+    e.preventDefault();
+    const f = Array.from(dt.files).find(x => /\.clapcraft$/i.test(x.name));
+    if (!f) { T.tablero.avisar('Solo se abren proyectos de ClapCraft (.clapcraft)'); return; }
+    const ruta = api && api.rutaDe && api.rutaDe(f);
+    if (ruta && api.readFile) { abrirRuta(ruta); return; }
+    const item = Array.from(dt.items || []).find(i => i.kind === 'file' && i.getAsFileSystemHandle);
+    let h = null; try { h = item && await item.getAsFileSystemHandle(); } catch (_) {}
+    if (h && h.kind === 'file' && /\.clapcraft$/i.test(h.name)) { await abrirHandle(h); return; }
+    f.arrayBuffer().then(desempaquetar).then(t => { const g = abrirEnPestana(t, f.name, null); if (g) T.tablero.avisar('Abierto ' + f.name + ' · este navegador no puede guardar ahí solo'); })
+      .catch(() => T.tablero.avisar('No se pudo leer ' + f.name));
+  });
   $('archivo').addEventListener('change', e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
     f.arrayBuffer().then(desempaquetar).then(t => { const g = abrirEnPestana(t, f.name, null); if (g) T.tablero.avisar('Abierto ' + f.name + ' · este navegador no puede guardar ahí solo'); })
@@ -669,7 +855,12 @@
   if (vista.alto) T.tablero.alto(vista.alto);
   abiertoId = biblioteca.activo() ? biblioteca.activo().id : null;
   document.title = (abiertoId ? biblioteca.activo().nombre + ' · ' : '') + 'ClapCraft';
+  C.proyectos.iniciar({ crear: crearProyecto, cancelar: cancelarProyecto, nuevo: () => nuevo(), abrir: () => abrirArchivo(), abrirReciente, recientes,
+    carpetaInicial, elegirCarpeta, sinCarpeta: api && api.crearProyecto ? 'Elige una carpeta' : 'Solo en este navegador',
+    version: () => api && api.version ? api.version() : fetch('package.json').then(r => r.json()).then(j => j.version) });
+  if (!abiertoId) document.body.classList.add('sin-esquema');
   persistir();
+  aplicarPantalla();
   retomarArchivos();
 
   /* ---------- tema (igual que tramas.html: mismo atributo y misma clave) ---------- */
@@ -701,13 +892,84 @@
     /* «Ver biblioteca» de la cabecera del editor: la biblioteca enlazada al esquema montado */
     tieneBiblioteca: () => !!(esquemaId && docs() && docs().enlace(esquemaId)),
     verBiblioteca: () => { const x = esquemaId && docs() && docs().enlace(esquemaId); if (x) C.gestor.abrirSub(x.sub.id); },
+    /* el chip del acto: el segmento expandido de ese acto en la biblioteca enlazada (o, en Personajes, del momento
+       en la biblioteca del personaje), con el documento abierto marcado */
+    puedeVerSegmento: () => esPersonajes(esquemaId) && !!bibliotecaDelEsquema(),   // las bibliotecas ya no tienen cronología (Leo): solo los momentos de un personaje
+    /* el chip del esquema en la cabecera del editor: su nombre, o el personaje con su color */
+    esquemaChip: () => {
+      const r = refEsquema(esquemaId); if (!r) return null;
+      if (!esPersonajes(esquemaId)) return { nombre: r.esquema.nombre };
+      const l = vista.personaje && docs().personaje(vista.personaje), t = l && C.PALETA_ETIQUETAS[l.color];
+      return l ? { nombre: l.nombre, chl: t && t[1], chd: t && t[2] } : null;
+    },
+    verSegmento: (actoId, nodoId) => { const sub = bibliotecaDelEsquema(); if (sub) C.gestor.expandir(sub, 'acto:' + actoId, nodoId); },
     modelo: () => modelo, guion: () => biblioteca.guion(abiertoId),
     guardar: persistir, alCambiarTablero: alCambiar, avisar: T.tablero.avisar, vista, guardarVista,
     alternar: () => verVista(vista.modo === 'texto' ? 'esquema' : 'texto'), alternarLado: () => alternarLado(),
-    volver: () => verVista(esPersonajes(esquemaId) ? 'personajes' : 'esquema'),
+    volver: () => { C.gestor.contraer(); verVista(esPersonajes(esquemaId) ? 'personajes' : 'esquema'); },
     /* el tablero de un personaje: sin tira en el editor, y los dos cuadros de un salto comparten nota */
     saltosConNota: () => esPersonajes(esquemaId), sinTira: () => esPersonajes(esquemaId),
+    /* el guion del esquema montado (Revisar guión): su estado, sacar/devolver/plegar secciones y la pantalla de revisión */
+    barraGuion: $('guionBarra'),
+    guionDe: () => (esquemaId && docs() && refEsquema(esquemaId) ? docs().guionEsquema(esquemaId) : null),
+    guionAccion: (accion, claves) => accionGuion(accion, claves),
+    revisar: () => { C.texto.volcar(); C.revisar.abrir(); C.texto.refrescarGuion(); },   // en Revisar guión la barra se ve aunque esté contraída
+    exportar: rect => exportarDesdeEditor(rect),
     alTema: oscuro => { if (oscuro !== esOscuro()) { aplicarTema(oscuro); guardarTema(); } }
+  });
+
+  /* ---------- Revisar guión: sacar y devolver secciones, su orden de lectura y el documento plano ---------- */
+  function accionGuion(accion, claves) {
+    const d = docs(); if (!d || !esquemaId || !claves.length) return;
+    const r = accion === 'sacar' ? d.sacarDelGuion(esquemaId, claves)
+      : accion === 'devolver' ? d.devolverAlGuion(esquemaId, claves)
+      : d.plegarSeccion(esquemaId, claves[0], accion === 'plegar');
+    if (r.ok && r.cambio) { biblioteca.marcar(abiertoId); persistir(); }
+  }
+  /* lo que Revisar guión necesita del esquema montado */
+  function datosGuion() {
+    const d = docs(), r = refEsquema(esquemaId); if (!d || !r) return null;
+    const subId = bibliotecaDelEsquema(), sub = subId && d.sub(subId);
+    return { d, eid: esquemaId, tm: modelo, conSaltos: esPersonajes(esquemaId), esquemaNombre: r.esquema.nombre,
+             bibliotecaId: esPersonajes(esquemaId) ? null : subId, bibliotecaNombre: sub ? sub.sub.nombre : '' };
+  }
+  const nombreProyecto = () => { const g = biblioteca.guion(abiertoId); return g ? g.nombre : ''; };
+  /* genera el documento plano en «Guiones» de la biblioteca enlazada y lo abre en el editor */
+  function generarGuion(titulo) {
+    C.texto.volcar();
+    const x = datosGuion(); if (!x || !x.bibliotecaId) { T.tablero.avisar('Este esquema no tiene biblioteca enlazada'); return; }
+    const doc = C.guion.componer(x.d, x.eid, x.tm, x.conSaltos, { proyecto: nombreProyecto(), titulo });
+    const r = x.d.crearGuion(x.bibliotecaId, x.eid, titulo, doc);
+    if (!r.ok) { T.tablero.avisar(r.aviso); return; }
+    biblioteca.marcar(abiertoId); persistir();
+    C.revisar.cerrar();
+    C.gestor.abrirNota(r.nota.id);
+    T.tablero.avisar(r.aviso);
+  }
+  /* El documento que exporta cada sitio: una nota abierta (un guion generado u otra), o lo que está dentro del guion del
+     esquema montado, en su orden de lectura. */
+  function documentoAExportar() {
+    const d = docs(); if (!d) return null;
+    const nid = C.gestor.notaAbierta();
+    if (nid && C.texto.enDocumento()) { C.texto.volcar(); const n = d.nota(nid); return n ? { titulo: n.titulo, html: n.html } : null; }
+    const x = datosGuion(); if (!x) return null;
+    C.texto.volcar();
+    const titulo = x.esquemaNombre + ' · guion';
+    return { titulo, html: C.guion.componer(x.d, x.eid, x.tm, x.conSaltos, { proyecto: nombreProyecto(), titulo: x.esquemaNombre }).html };
+  }
+  /* «Exportar» de la barra inferior del editor (dentro del marco): el menú se abre en la página, sobre el botón */
+  function exportarDesdeEditor(rect) {
+    const disparador = { getBoundingClientRect: () => rect, classList: { add() {}, remove() {} }, focus() {} };
+    C.exportar.menu(disparador, documentoAExportar, T.tablero.avisar);
+  }
+  C.revisar.iniciar({
+    seccion: $('texto'), cont: $('revisar'), cab: $('textoCab'), datos: datosGuion,
+    accion: (accion, claves) => { accionGuion(accion, claves); C.texto.refrescarGuion(); },
+    ordenar: claves => { const d = docs(); if (!d || !esquemaId) return; const r = d.ordenarGuion(esquemaId, claves); if (r.ok && r.cambio) { biblioteca.marcar(abiertoId); persistir(); } },
+    generar: generarGuion,
+    abrirGuion: id => { C.revisar.cerrar(); C.gestor.abrirNota(id); },
+    exportar: boton => C.exportar.menu(boton, documentoAExportar, T.tablero.avisar),
+    alCerrar: () => { C.texto.refrescarGuion(); C.texto.enfocar(); }
   });
 
   /* Doble clic en un nodo del tablero: abre su documento en el editor (en lugar de renombrarlo en
@@ -761,6 +1023,7 @@
     abrirEsquema: eid => { montarEsquema(eid || null); verVista('esquema'); },
     personajes, abrirPersonaje, verPersonajes, verContenedores, nuevoPersonaje: () => nuevoPersonaje(), renombrarPersonaje, eliminarPersonaje, colorPersonaje,
     carrusel: $('personajesSeg'),
+    esquemaPersonaje: pid => { const e = docs() && docs().esquemaPersonaje(pid); return e ? e.id : null; },
     personajesActivo: () => vista.modo === 'personajes' || (vista.modo === 'texto' && esPersonajes(esquemaId))
       || (vista.modo === 'documentos' && !!C.gestor.notaAbierta() && (C.gestor.subActual() || {}).cid === C.ID_PERSONAJES),
     /* lo elegido en la barra se enseña en la vista Documentos (la barra está en todas) */
@@ -775,7 +1038,7 @@
   montarPrimero(); persistir();                                // el gestor ya existe: migra y monta el primer esquema
   C.gestor.mostrar();
 
-  /* ---------- el menú: desplegado (ancho a gusto, arrastrando su borde) o plegado al riel de 56 px ----------
+  /* ---------- el menú: desplegado (ancho a gusto, arrastrando su borde) o plegado al riel de 44 px (solo el botón de panel) ----------
      Si al arrastrar se hace más estrecho que LADO_PLIEGA se pliega; tirando del riel se despliega. El
      árbol conserva su estado. Doble clic en el borde: ancho de partida. */
   const LADO = { partida: 280, min: 220, max: 480, pliega: 160 };
@@ -846,6 +1109,7 @@
     vista.modo = modo; guardarVista();
     if (cambia && anterior === 'documentos') C.gestor.salir();
     if (cambia && anterior === 'texto') C.texto.volcar();
+    if (modo !== 'texto' && C.revisar.abierto()) C.revisar.cerrar();
     document.body.classList.toggle('vista-texto', modo === 'texto');
     document.body.classList.toggle('vista-documentos', modo === 'documentos');
     document.body.classList.toggle('vista-personajes', modo === 'personajes');
@@ -874,7 +1138,15 @@
   /* el selector del carril: su clic y su puntero no llegan al tablero (lo tomaría por elegir o arrastrar la trama) */
   ['pointerdown', 'mousedown', 'dblclick'].forEach(t => $('rows').addEventListener(t, e => {
     const b = e.target.closest('.per-combo'); if (b && (t === 'dblclick' || !b.classList.contains('fijo'))) e.stopPropagation();   // el nombre fijo no se renombra con doble clic
+    if (e.target.closest('.per-color, .per-etq')) e.stopPropagation();
   }));
+  /* el color de la trama de un carril: los 24 tonos (en Personajes el panel de la trama no se abre) */
+  $('rows').addEventListener('click', e => {
+    const b = e.target.closest('.per-color'); if (!b) return;
+    e.stopPropagation();
+    const lid = b.dataset.linea, l = modelo.linea(lid); if (!l) return;
+    C.gestor.paletaTrama(b, l.color, c => { modelo.editarLinea(lid, { color: c }); T.tablero.render(); alCambiar(); if (vista.modo === 'personajes') C.gestor.render(); });
+  });
   $('rows').addEventListener('click', e => {
     const b = e.target.closest('.per-combo:not(.fijo)'); if (!b) return;
     e.stopPropagation();
@@ -939,7 +1211,7 @@
 
   /* Órdenes del menú de la aplicación (Electron): Archivo, Edición y Ver. */
   const ordenes = {
-    nuevo, abrir: abrirArchivo, guardar, guardarComo, cerrar: () => cerrarPestana(abiertoId),
+    nuevo, abrir: abrirArchivo, guardar, guardarComo, cerrar: () => { if (pantalla === 'nuevo') cancelarProyecto(); else if (abiertoId) cerrarPestana(abiertoId); },
     tema: alternarTema, vista: () => verVista(vista.modo === 'texto' ? 'esquema' : 'texto'),
     documentos: () => verVista(vista.modo === 'documentos' ? 'esquema' : 'documentos'),
     lado: () => alternarLado(), deshacer, rehacer,
@@ -954,6 +1226,7 @@
     const cmd = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
     if (cmd && k === 's') { e.preventDefault(); e.shiftKey ? guardarComo() : guardar(); }
     if (cmd && k === 'o') { e.preventDefault(); abrirArchivo(); }
+    if (cmd && !e.shiftKey && k === 'n') { e.preventDefault(); nuevo(); }   // donde el navegador lo deje (Electron lo lleva el menú)
     if (cmd && e.shiftKey && k === 'g') { e.preventDefault(); ordenes.vista(); }
     if (cmd && e.shiftKey && k === 'f') { e.preventDefault(); ordenes.documentos(); }
     if (cmd && e.shiftKey && k === 'b') { e.preventDefault(); ordenes.lado(); }
@@ -966,7 +1239,7 @@
 
   /* API para el gestor de documentos que venga después: la biblioteca, el guion abierto y la vista. */
   C.biblioteca = biblioteca;
-  C.app = { abrir: montar, nuevo, cerrar: cerrarPestana, guardar, guardarComo, abrirArchivo, montarEsquema, esquemaMontado: () => esquemaId,
+  C.app = { abrir: montar, nuevo, crearProyecto, cancelarProyecto, cerrar: cerrarPestana, abrirReciente, recientes, guardar, guardarComo, abrirArchivo, montarEsquema, esquemaMontado: () => esquemaId,
             archivo: id => { const a = estado(id || abiertoId).archivo; return a && { nombre: a.nombre, ruta: a.ruta || null, permiso: a.permiso }; },
             sucio: id => sucio(id || abiertoId), abiertoId: () => abiertoId, vista: verVista, modo: () => vista.modo };
 })(window.Claquedraw, window.Tramas);

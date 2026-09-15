@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="position:relative;width:1280px;height:820px;font-family:var(--sans);color:var(--tinta)">
+  <dc-import name="Pantalla Documentos" hint-size="1280px,820px"></dc-import>
+  <div style="position:absolute;inset:0;background:var(--backdrop);border-radius:6px"></div>
+  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:460px;box-sizing:border-box;padding:22px 24px 20px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra-modal)">
+    <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido)">NUEVO SUBCONTENEDOR EN «CAPÍTULO I»</div>
+    <div style="font-size:16px;font-weight:600;letter-spacing:-.01em;margin-top:9px">Crear subcontenedor</div>
+
+    <div style="margin-top:20px">
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--palido);margin-bottom:6px">NOMBRE</div>
+      <div style="height:34px;display:flex;align-items:center;padding:0 11px;background:var(--lienzo);border:1px solid var(--foco);border-radius:4px;box-shadow:0 0 0 3px var(--foco-halo);font-size:14px">Flashbacks<span style="width:1px;height:17px;background:var(--foco);margin-left:1px"></span></div>
+    </div>
+
+    <div style="margin-top:18px">
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--palido);margin-bottom:8px">TIPO</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <div style="padding:12px 13px;border:1px solid var(--foco);border-radius:5px;background:var(--sel-bg)">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.04em;background:var(--p-violeta-bg);color:var(--p-violeta-tinta)">Esquema</span>
+            <span style="width:15px;height:15px;border-radius:50%;background:var(--foco);display:flex;align-items:center;justify-content:center;color:var(--foco-sobre)"><svg width="11" height="11"><use href="#ic-check"></use></svg></span>
+          </div>
+          <div style="font-size:12.5px;color:var(--tenue);line-height:1.45;margin-top:9px">Un tablero de tramas, actos y nodos.</div>
+        </div>
+        <div style="padding:12px 13px;border:1px solid var(--borde);border-radius:5px;background:var(--lienzo)">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.04em;background:var(--p-azul-bg);color:var(--p-azul-tinta)">Biblioteca</span>
+            <span style="width:15px;height:15px;border-radius:50%;border:1px solid var(--borde-fuerte);box-sizing:border-box"></span>
+          </div>
+          <div style="font-size:12.5px;color:var(--tenue);line-height:1.45;margin-top:9px">Tarjetas por segmento con notas.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;margin-top:22px;padding-top:16px;border-top:1px solid var(--regla)">
+      <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;color:var(--palido)">ENTER CREA · ESC CANCELA</span>
+      <div style="flex:1"></div>
+      <div style="display:inline-flex;align-items:center;height:30px;padding:0 13px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);font-size:12.5px;font-weight:500">Cancelar</div>
+      <div style="display:inline-flex;align-items:center;height:30px;padding:0 14px;border-radius:4px;background:var(--foco);color:var(--foco-sobre);font-size:12.5px;font-weight:500">Crear</div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:820}}"></script>
+</body>
+</html>

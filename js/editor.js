@@ -417,6 +417,7 @@
     let prevBlock = null;
     while (walker.nextNode()) {
       const n = walker.currentNode;
+      if (n.parentElement && n.parentElement.closest('.ed-fijo')) continue;   // bloques fijos (fijos.js): no se buscan
       const block = Ed.closestBlock(n, editor);
       if (prevBlock && block !== prevBlock) text += '\n';
       prevBlock = block;
@@ -494,7 +495,7 @@
   function reemplazarDeUnaVez(texto) {
     /* una coincidencia que acaba justo donde empieza el nodo siguiente (offset 0) sigue siendo de un solo nodo */
     const dentro = r => r.startContainer.nodeType === 3 && r.startOffset + r.toString().length <= r.startContainer.nodeValue.length;
-    if (!matches.length || editor.querySelector('.db') || !matches.every(dentro)) return false;
+    if (!matches.length || editor.querySelector('.db, .ed-fijo') || !matches.every(dentro)) return false;
     const textos = el => { const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), l = []; while (w.nextNode()) l.push(w.currentNode); return l; };
     const originales = textos(editor), copia = editor.cloneNode(true), copias = textos(copia);
     if (originales.length !== copias.length) return false;
@@ -672,10 +673,10 @@
   /* ---------- selector de color (paleta pastel + gotero) ---------- */
   /* Paleta del proyecto: 16 tonos con par claro (marcatextos) y oscuro (letra) */
   const TONES = [
-    ['Azul', '#DFE8FF', '#26417F'], ['Verde', '#E2F0E0', '#2C5730'], ['Terracota', '#FBE6DA', '#8A4320'], ['Violeta', '#EDE0F7', '#563180'],
-    ['Ámbar', '#FBF0D2', '#7A5410'], ['Rosa', '#FBDFE6', '#8A2B47'], ['Teal', '#D8EFEE', '#1F5B58'], ['Oliva', '#E8EED3', '#4E5C1E'],
-    ['Índigo', '#DEE0F8', '#333B85'], ['Coral', '#FDE2DC', '#8F3A2C'], ['Ciruela', '#F3DCEF', '#71306A'], ['Arena', '#EFE7DA', '#6B5638'],
-    ['Cielo', '#D9ECFA', '#1F5476'], ['Lima', '#E6F2CF', '#4A6013'], ['Óxido', '#F8E3CD', '#835012'], ['Grafito', '#E4E4E2', '#3B3B39']
+    ['Azul', '#DBE8FF', '#1A4A86'], ['Verde', '#D8F2DF', '#11643D'], ['Terracota', '#FFE3D5', '#9C3F14'], ['Violeta', '#EAE0FF', '#5326AB'],
+    ['Ámbar', '#FFEEC9', '#875408'], ['Rosa', '#FFE0EA', '#A51A5A'], ['Teal', '#D2F0ED', '#0A6663'], ['Oliva', '#E8F4CD', '#4C6B0F'],
+    ['Índigo', '#E2E2FF', '#33359C'], ['Coral', '#FFE3DD', '#A83A26'], ['Ciruela', '#F9DCF6', '#8B2280'], ['Arena', '#F4E8CF', '#6F5722'],
+    ['Cielo', '#D6EEFF', '#05618F'], ['Lima', '#E9F8C8', '#4F7205'], ['Óxido', '#FFE0C4', '#94480A'], ['Grafito', '#E6E2EE', '#3C3648']
   ];
   /* en modo claro: letra con los tonos oscuros y marcatextos con los claros; en modo oscuro, al revés */
   const isDark = () => document.documentElement.dataset.theme === 'dark';

@@ -9,24 +9,47 @@
   const T = raiz.Tramas = raiz.Tramas || {};
 
   /* ---------- constantes de dominio ---------- */
+  /* Veinticuatro tonos para tramas, nodos y notas (Leo, 15-09-2026, docs/diseno/rediseno-9/), en el orden de la escala;
+     cada uno tiene su trazo `--t-<id>` y su fondo pálido `--f-<id>`. Los seis de antes conservan su id. */
   const PALETA = [
-    { id: 'azul',    label: 'Azul',    c: '#26417f' },
-    { id: 'violeta', label: 'Violeta', c: '#563180' },
-    { id: 'verde',   label: 'Verde',   c: '#2c5730' },
-    { id: 'ambar',   label: 'Ámbar',   c: '#7a5410' },
-    { id: 'rojo',    label: 'Rojo',    c: '#8f3a2c' },
-    { id: 'gris',    label: 'Gris',    c: '#5c584f' }
+    { id: 'rojo', label: 'Rojo', c: '#c62828' },
+    { id: 'ladrillo', label: 'Ladrillo', c: '#d14a1f' },
+    { id: 'cobre', label: 'Cobre', c: '#d2691e' },
+    { id: 'ambar', label: 'Ámbar', c: '#c98a00' },
+    { id: 'oro', label: 'Oro', c: '#9a7b0a' },
+    { id: 'lima', label: 'Lima', c: '#6e9a16' },
+    { id: 'oliva', label: 'Oliva', c: '#4f7a1e' },
+    { id: 'verde', label: 'Verde', c: '#16803c' },
+    { id: 'esmeralda', label: 'Esmeralda', c: '#0a8a5c' },
+    { id: 'teal', label: 'Teal', c: '#0b8b82' },
+    { id: 'turquesa', label: 'Turquesa', c: '#0e8aa8' },
+    { id: 'cielo', label: 'Cielo', c: '#0378c0' },
+    { id: 'azul', label: 'Azul', c: '#1a63d0' },
+    { id: 'marino', label: 'Marino', c: '#17417e' },
+    { id: 'pizarra', label: 'Pizarra', c: '#3e4a5c' },
+    { id: 'indigo', label: 'Índigo', c: '#4b34cc' },
+    { id: 'violeta', label: 'Violeta', c: '#6d28d9' },
+    { id: 'uva', label: 'Uva', c: '#8a2bc4' },
+    { id: 'ciruela', label: 'Ciruela', c: '#a21caf' },
+    { id: 'magenta', label: 'Magenta', c: '#bf1b8a' },
+    { id: 'rosa', label: 'Rosa', c: '#d31a6b' },
+    { id: 'vino', label: 'Vino', c: '#96153f' },
+    { id: 'salvia', label: 'Salvia', c: '#5a7a63' },
+    { id: 'gris', label: 'Gris', c: '#5d5d68' }
   ];
+  /* el color de una trama nueva: el primero libre de este orden (tonos separados entre sí) */
+  const ORDEN_NUEVAS = ['azul', 'violeta', 'verde', 'ambar', 'rojo', 'teal', 'rosa', 'cobre', 'indigo', 'oliva', 'cielo', 'ciruela',
+    'oro', 'esmeralda', 'magenta', 'ladrillo', 'marino', 'uva', 'lima', 'turquesa', 'vino', 'pizarra', 'salvia', 'gris'];
   /* Fondo de un acto: un color, «ninguno» (sin fondo, elegido a mano) o null: el automático por su
      posición (FONDOS_AUTO, en ciclo), como en el diseño de ClapCraft. */
   const FONDOS = [
     { id: 'ninguno', label: 'Sin fondo', c: 'transparent' },
-    { id: 'azul',    label: 'Azul',    c: '#dfe8ff' },
-    { id: 'violeta', label: 'Violeta', c: '#ede0f7' },
-    { id: 'verde',   label: 'Verde',   c: '#e2f0e0' },
-    { id: 'ambar',   label: 'Ámbar',   c: '#fbf0d2' },
-    { id: 'rojo',    label: 'Rojo',    c: '#fde2dc' },
-    { id: 'gris',    label: 'Gris',    c: '#e4e4e2' }
+    { id: 'azul',    label: 'Azul',    c: '#dfe9ff' },
+    { id: 'violeta', label: 'Violeta', c: '#ebe0ff' },
+    { id: 'verde',   label: 'Verde',   c: '#d9f5e2' },
+    { id: 'ambar',   label: 'Ámbar',   c: '#fff2d0' },
+    { id: 'rojo',    label: 'Rojo',    c: '#ffe2e2' },
+    { id: 'gris',    label: 'Gris',    c: '#e9e7ee' }
   ];
   const FONDOS_AUTO = ['azul', 'ambar', 'verde', 'violeta', 'rojo', 'gris'];
   const TIPOS = ['principal', 'secundaria', 'alterna'];
@@ -106,7 +129,7 @@
       const clave = [n.deId, n.aId].sort().join('|');
       if (vistos.has(clave)) return;                               // una nota por tramo
       vistos.add(clave);
-      d.notas.push({ id: String(n.id), deId: n.deId, aId: n.aId, texto: String(n.texto ?? '') });
+      d.notas.push({ id: String(n.id), deId: n.deId, aId: n.aId, texto: String(n.texto ?? ''), ...(PALETA.some(c => c.id === n.color) ? { color: n.color } : {}) });
     });
     return d;
   }
@@ -286,8 +309,8 @@
       tipo = TIPOS.includes(tipo) ? tipo : 'secundaria';
       if (tipo === 'principal' && this.lineaPrincipal()) tipo = 'secundaria';
       const usados = this.datos.lineas.map(l => l.color);
-      const libre = PALETA.find(c => !usados.includes(c.id)) || PALETA[this.datos.lineas.length % PALETA.length];
-      const l = { id: this._nid('l'), nombre: ((this.nombres && this.nombres.linea) || 'Trama') + ' ' + (this.datos.lineas.length + 1), tipo, color: libre.id, cortada: false };
+      const libre = ORDEN_NUEVAS.find(c => !usados.includes(c)) || ORDEN_NUEVAS[this.datos.lineas.length % ORDEN_NUEVAS.length];
+      const l = { id: this._nid('l'), nombre: ((this.nombres && this.nombres.linea) || 'Trama') + ' ' + (this.datos.lineas.length + 1), tipo, color: libre, cortada: false };
       this.datos.lineas.push(l);
       return si({ linea: l });
     }
@@ -464,6 +487,13 @@
     editarNota(id, texto) {
       const n = this.nota(id); if (!n) return no('Esa nota no existe');
       n.texto = String(texto ?? '');
+      return si({ nota: n });
+    }
+
+    /* El color de una nota: un tono de la paleta, o null para el papel de nota de siempre. */
+    colorearNota(id, color) {
+      const n = this.nota(id); if (!n) return no('Esa nota no existe');
+      if (color && PALETA.some(c => c.id === color)) n.color = color; else delete n.color;
       return si({ nota: n });
     }
 

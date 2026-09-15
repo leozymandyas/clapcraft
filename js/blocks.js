@@ -49,7 +49,7 @@
   function setSelection(blocks, keepCaret) {
     $$('.blk-selected', editor()).forEach(x => x.classList.remove('blk-selected'));
     const order = kids();
-    selected = order.filter(b => blocks.includes(b));
+    selected = order.filter(b => blocks.includes(b) && !b.classList.contains('ed-fijo'));   // los bloques fijos (fijos.js) no se seleccionan
     selected.forEach(b => b.classList.add('blk-selected'));
     if (selected.length && !keepCaret) {
       const sel = window.getSelection();

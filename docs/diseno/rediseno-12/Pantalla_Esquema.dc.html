@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="width:1280px;height:820px;display:flex;flex-direction:column;overflow:hidden;background:var(--chrome);color:var(--tinta);font-family:var(--sans);font-size:13px;border:1px solid var(--borde-fuerte);border-radius:6px">
+
+  <div style="height:38px;flex:none;display:flex;align-items:flex-end;padding-left:16px;background:var(--chrome)">
+    <div style="position:relative;z-index:2;margin-bottom:-1px;display:flex;align-items:center;gap:10px;height:33px;padding:0 13px;background:var(--panel);border:1px solid var(--borde);border-bottom:0;border-radius:7px 7px 0 0;font-size:13px;font-weight:500;white-space:nowrap">Sin título<span style="width:5px;height:5px;border-radius:50%;background:var(--foco)"></span><svg width="12" height="12" style="color:var(--palido)"><use href="#ic-close"></use></svg></div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <div style="width:320px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--borde);border-right:1px solid var(--borde-fuerte);box-shadow:var(--sombra-lado)">
+      <div style="display:flex;align-items:center;gap:11px;padding:20px 18px 16px">
+        <svg width="27" height="27" viewBox="0 0 16 16"><rect x="1.4" y="5.6" width="13.2" height="8.9" rx="1.3" fill="var(--logo-1)"></rect><path d="M1.6 5.6 2.9 2.4l12.3 1-.5 2.2z" fill="var(--logo-2)"></path><path d="M5.4 2.7 4.3 5.5M8.7 3 7.6 5.7M12 3.3 10.9 5.9" stroke="var(--logo-3)" stroke-width="1.1"></path></svg>
+        <span style="font-family:var(--marca);font-weight:700;font-size:23px;letter-spacing:-.02em">ClapCraft</span><div style="flex:1"></div><div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--tenue)"><svg width="16" height="16"><use href="#ic-panel"></use></svg></div>
+      </div>
+      <div style="padding:0 18px">
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;height:40px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;font-size:14px;box-shadow:var(--sombra)"><svg width="15" height="15" style="color:var(--tenue)"><use href="#ic-plus"></use></svg>Nuevo contenedor</div>
+      </div>
+      <div style="padding:22px 18px 8px;display:flex;align-items:center;gap:10px">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:.11em;color:var(--palido)">CONTENEDORES</span>
+      </div>
+
+      <div style="flex:1;min-height:0;padding:0 10px;display:flex;flex-direction:column;gap:2px;overflow:hidden">
+        <sc-for list="{{ filas }}" as="f" hint-placeholder-count="10">
+          <div style="display:flex;align-items:stretch;flex:none;height:{{ f.alto }}px;margin-top:{{ f.aire }}px">
+            <div style="flex:none;width:{{ f.sangria }}px;border-right:1px solid {{ f.guia }}"></div>
+            <sc-if value="{{ f.esContenedor }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ f.alternar }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:0 8px;border-radius:5px;cursor:pointer">
+                <svg width="13" height="13" style="color:var(--tenue);flex:none"><use href="{{ f.chev }}"></use></svg>
+                <span style="font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.02em;white-space:nowrap">{{ f.nombre }}</span>
+                <div style="flex:1"></div>
+                <svg width="15" height="15" style="color:var(--tenue);flex:none"><use href="#ic-plus"></use></svg>
+                <svg width="15" height="15" style="color:var(--tenue);flex:none"><use href="#ic-more"></use></svg>
+              </div>
+            </sc-if>
+            <sc-if value="{{ f.esCarpeta }}">
+              <div onClick="{{ f.alternar }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;margin-left:7px;padding:0 6px 0 9px;border-radius:5px;cursor:pointer;background:{{ f.fondo }};box-shadow:inset 2px 0 0 {{ f.color }}">
+                <svg width="12" height="12" style="color:var(--tenue);flex:none"><use href="{{ f.chev }}"></use></svg>
+                <svg width="15" height="15" style="flex:none;color:{{ f.color }}"><use href="#ic-folder"></use></svg>
+                <span style="font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.nombre }}</span>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--palido);flex:none">{{ f.cuenta }}</span>
+                <div style="flex:1"></div>
+                <svg width="14" height="14" style="color:var(--tenue);flex:none"><use href="#ic-more"></use></svg>
+              </div>
+            </sc-if>
+            <sc-if value="{{ f.esItem }}">
+              <div onClick="{{ f.elegir }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;margin-left:7px;padding:0 6px 0 9px;border-radius:5px;cursor:pointer;background:{{ f.fondo }};box-shadow:{{ f.barra }}">
+                <span style="width:5px;height:5px;border-radius:50%;flex:none;background:{{ f.punto }}"></span>
+                <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:500;white-space:nowrap;flex:none;background:{{ f.etBg }};border:1px solid {{ f.etLinea }};color:{{ f.etTinta }}">{{ f.clase }}</span>
+                <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono);font-size:12.5px;font-weight:{{ f.peso }}">{{ f.nombre }}</span>
+                <sc-if value="{{ f.sel }}"><svg width="14" height="14" style="color:var(--tenue);flex:none"><use href="#ic-more"></use></svg></sc-if>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="flex:none;padding:10px 10px 14px;border-top:1px solid var(--regla);display:flex;flex-direction:column;gap:2px">
+        <div style="display:flex;align-items:center;gap:11px;height:32px;padding:0 10px;border-radius:5px;font-family:var(--mono);font-size:13.5px;color:var(--tinta)"><svg width="16" height="16" style="color:var(--tenue)"><use href="#ic-person"></use></svg>Personajes</div>
+        <div style="display:flex;align-items:center;gap:11px;height:32px;padding:0 10px;border-radius:5px;font-family:var(--mono);font-size:13.5px;color:var(--tinta)"><svg width="16" height="16" style="color:var(--tenue)"><use href="#ic-trash"></use></svg>Papelera<div style="flex:1"></div><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-more"></use></svg></div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--lienzo);border-top:1px solid var(--borde)">
+
+      <div style="height:50px;flex:none;display:flex;align-items:center;gap:13px;padding:0 18px;background:var(--lienzo)">
+        <span style="font-family:var(--mono);font-size:14.5px;letter-spacing:.02em;color:var(--palido)">CAPÍTULO I</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:5px;font-family:var(--mono);font-size:11.5px;font-weight:500;background:var(--p-violeta-bg);border:1px solid var(--p-violeta-linea);color:var(--p-violeta-tinta);white-space:nowrap">Esquema</span>
+        <span style="font-family:var(--mono);font-size:15px;font-weight:600">Esquema 1</span>
+        <div style="flex:1"></div>
+        <div style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 11px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);color:var(--tinta);font-size:12.5px;font-weight:500;white-space:nowrap"><svg width="15" height="15" style="color:var(--foco)"><use href="#ic-docs"></use></svg>Ver documentos</div>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex">
+
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;position:relative;border-top:1px solid var(--regla)">
+          <div style="height:34px;flex:none;display:flex;border-bottom:1px solid var(--regla)">
+            <div style="width:48px;flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--palido)">TR</div>
+            <div style="flex:1;display:flex;min-width:0">
+              <div style="width:196px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-azul);border-right:1px solid var(--regla);font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--tenue)">ACTO I</div>
+              <div style="width:147px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-ambar);border-right:1px solid var(--regla);font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--tenue)">ACTO II</div>
+              <div style="flex:1;min-width:0;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-verde);font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--tenue);white-space:nowrap;overflow:hidden">ACTO III</div>
+            </div>
+          </div>
+
+          <div style="flex:1;display:flex;min-height:0">
+            <div style="width:48px;flex:none;position:relative;z-index:6;border-right:1px solid var(--regla);display:flex;flex-direction:column">
+              <div style="height:80px;flex:none;position:relative;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)"><span style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-violeta);border:1px solid var(--t-violeta);color:var(--t-violeta);font-family:var(--mono);font-size:12px;font-weight:600">P</span></div>
+              <div style="height:80px;flex:none;position:relative;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula)"><span style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-azul);border:1px solid var(--t-azul);color:var(--t-azul);font-family:var(--mono);font-size:12px;font-weight:600">S</span><div style="position:absolute;left:38px;top:50%;transform:translateY(-50%);z-index:7;display:flex;align-items:center;gap:9px;padding:7px 11px;background:var(--papel);border:1px solid var(--borde);border-radius:5px;box-shadow:var(--sombra-alta);white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:var(--t-azul);flex:none"></span><span style="font-size:13px;font-weight:600">Secundaria</span><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido)">SECUNDARIA</span></div></div>
+              <div style="height:80px;flex:none;position:relative;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula)"><span style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-verde);border:1px solid var(--t-verde);color:var(--t-verde);font-family:var(--mono);font-size:12px;font-weight:600">A</span></div>
+              <div style="height:32px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--palido)"><svg width="14" height="14"><use href="#ic-plus"></use></svg></div>
+            </div>
+
+            <div style="flex:1;min-width:0;position:relative;background:repeating-linear-gradient(90deg,var(--cuadricula) 0 1px,transparent 1px 49px)">
+              <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none"><path d="M196 40 L196 120" stroke="var(--rombo)" stroke-width="1.5" stroke-dasharray="3 3" fill="none"></path></svg>
+
+              <div style="position:absolute;left:0;top:0;right:0;height:80px;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)">
+                <div style="position:absolute;left:0;right:0;top:39px;height:2px;background:var(--t-violeta);opacity:.62"></div>
+                <div style="position:absolute;left:0;top:39px;width:196px;height:2px;background:var(--foco-linea)"></div>
+                <div style="position:absolute;left:49px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:49px;top:27px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:49px;top:5px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;font-weight:400;color:var(--tenue);white-space:nowrap;z-index:3">Inicio</div>
+                <div style="position:absolute;left:147px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--foco);border:2px solid var(--foco);box-shadow:0 0 0 4px var(--foco-halo)"></div>
+                <div style="position:absolute;left:147px;top:27px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:147px;top:5px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--foco-linea);border-radius:4px;box-shadow:var(--sombra-alta);font-size:11.5px;font-weight:600;color:var(--tinta);white-space:nowrap;z-index:3">Encuentro</div>
+                <div style="position:absolute;left:196px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:2px;background:var(--escena);border:2px solid var(--escena-trazo)"></div>
+                <div style="position:absolute;left:294px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:294px;top:27px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:294px;top:5px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;font-weight:400;color:var(--tenue);white-space:nowrap;z-index:3">Huida</div>
+                <div style="position:absolute;left:392px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:392px;top:27px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:392px;top:5px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;font-weight:400;color:var(--tenue);white-space:nowrap;z-index:3">Puerto</div>
+              </div>
+
+              <div style="position:absolute;left:0;top:80px;right:0;height:80px;border-bottom:1px solid var(--cuadricula)">
+                <div style="position:absolute;left:0;right:0;top:39px;height:2px;background:var(--t-azul);opacity:.62"></div>
+                <div style="position:absolute;left:196px;top:40px;transform:translate(-50%,-50%) rotate(45deg);width:10px;height:10px;border-radius:2px;background:var(--rombo);border:2px solid var(--rombo-trazo)"></div>
+                <div style="position:absolute;left:245px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-azul)"></div>
+                <div style="position:absolute;left:245px;top:27px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:245px;top:5px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;font-weight:400;color:var(--tenue);white-space:nowrap;z-index:3">Aviso</div>
+                <div style="position:absolute;left:343px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px dashed var(--t-gris);opacity:.6"></div>
+                <div style="position:absolute;left:343px;top:14px;transform:translateX(-50%);font-size:11.5px;color:var(--palido);text-decoration:line-through;white-space:nowrap">Descartada</div>
+                <div style="position:absolute;right:14px;top:48px;width:132px;box-sizing:border-box;padding:6px 8px;background:var(--nota);border:1px solid var(--nota-borde);border-radius:4px;font-size:11px;line-height:1.35;color:var(--nota-tinta);box-shadow:var(--sombra)">¿Aquí revela la carta?</div>
+              </div>
+
+              <div style="position:absolute;left:0;top:160px;right:0;height:80px;border-bottom:1px solid var(--cuadricula)">
+                <div style="position:absolute;left:0;right:0;top:39px;height:2px;background:repeating-linear-gradient(90deg,var(--t-verde) 0 6px,transparent 6px 11px);opacity:.6"></div>
+                <div style="position:absolute;left:98px;top:40px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-verde)"></div>
+                <div style="position:absolute;left:98px;top:27px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:98px;top:5px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;font-weight:400;color:var(--tenue);white-space:nowrap;z-index:3">Llega</div>
+                <div style="position:absolute;left:294px;top:40px;transform:translate(-50%,-50%);width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:4px;border:1px dashed var(--borde-fuerte);color:var(--palido);background:var(--papel)"><svg width="12" height="12"><use href="#ic-plus"></use></svg></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:6px;background:var(--toast-bg);color:var(--toast-fg);font-size:12.5px;line-height:1.4;max-width:330px;box-shadow:var(--sombra-alta)"><svg width="14" height="14" style="color:var(--toast-acento);flex:none"><use href="#ic-check"></use></svg>Esquema «Flashbacks» creado en «Investigación»</div>
+        </div>
+
+        <div style="width:330px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:14px 16px 16px;background:var(--papel);border-left:1px solid var(--borde-fuerte)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--regla)">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--palido)">NODO</span>
+            <div style="display:flex;gap:3px">
+              <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--tenue)"><svg width="13" height="13"><use href="#ic-arr-l"></use></svg></div>
+              <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--tenue)"><svg width="13" height="13"><use href="#ic-arr-r"></use></svg></div>
+              <div style="width:26px;height:26px;margin-left:5px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--tenue)"><svg width="14" height="14"><use href="#ic-close"></use></svg></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido);margin-bottom:6px">TÍTULO</div>
+            <div style="height:36px;display:flex;align-items:center;padding:0 11px;background:var(--lienzo);border:1px solid var(--foco);border-radius:5px;box-shadow:0 0 0 3px var(--foco-halo);font-size:14.5px">Encuentro</div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido);margin-bottom:6px">DESCRIPCIÓN</div>
+            <div style="flex:1;min-height:0;padding:11px 12px;background:var(--lienzo);border:1px solid var(--borde);border-radius:5px;font-size:13.5px;line-height:1.55;color:var(--tinta);text-wrap:pretty">Ana vuelve a la cafetería del puerto y reconoce a quien no esperaba. Primer punto de giro del acto: a partir de aquí ya no puede seguir fingiendo que el viaje era por trabajo.</div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido);margin-bottom:6px">ESTADO</div>
+            <div style="height:34px;display:flex;align-items:center;gap:8px;padding:0 11px;background:var(--lienzo);border:1px solid var(--borde);border-radius:5px;font-size:13.5px">En escena<div style="flex:1"></div><svg width="13" height="13" style="color:var(--palido)"><use href="#ic-chev-d"></use></svg></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tenue)"><span style="width:8px;height:8px;border-radius:50%;background:var(--t-violeta)"></span>Principal<span style="color:var(--palido)">·</span>Acto I</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:36px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:5px;background:var(--foco);color:var(--foco-sobre);font-size:13px;font-weight:500"><svg width="14" height="14"><use href="#ic-script"></use></svg>Abrir documento</div>
+            <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:5px;background:var(--lienzo);color:var(--peligro)"><svg width="14" height="14"><use href="#ic-trash"></use></svg></div>
+          </div>
+          <div style="display:flex;gap:14px;font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;color:var(--palido)"><span>SUPR ELIMINA</span><span>ESC CIERRA</span></div>
+        </div>
+      </div>
+
+      <div style="height:42px;flex:none;display:flex;align-items:center;gap:16px;padding:0 18px;background:var(--bb-bg);border-top:1px solid var(--bb-line);color:var(--bb-fg)">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--bb-muted)">ESCALA</span>
+        <div style="position:relative;width:130px;height:3px;border-radius:2px;background:var(--bb-line)">
+          <div style="position:absolute;left:0;top:0;height:3px;width:78px;border-radius:2px;background:var(--foco)"></div>
+          <div style="position:absolute;left:78px;top:-4px;margin-left:-5px;width:11px;height:11px;border-radius:50%;background:var(--papel);border:1px solid var(--borde-fuerte);box-shadow:var(--sombra)"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;margin-left:6px">
+          <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--bb-fg)"><svg width="16" height="16"><use href="#ic-undo"></use></svg></div>
+          <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--bb-muted)"><svg width="16" height="16"><use href="#ic-redo"></use></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:820}}">
+class Component extends DCLogic {
+  state = {
+    abiertas: { cap1: true, tmp: true, esc: true, cap2: true, arch: false },
+    sel: 'esq1'
+  };
+  alternar(id) { this.setState(s => ({ abiertas: Object.assign({}, s.abiertas, { [id]: !s.abiertas[id] }) })); }
+  renderVals() {
+    const et = {
+      Esquema: ['var(--p-violeta-bg)', 'var(--p-violeta-linea)', 'var(--p-violeta-tinta)'],
+      Biblioteca: ['var(--p-azul-bg)', 'var(--p-azul-linea)', 'var(--p-azul-tinta)']
+    };
+    const arbol = [
+      { id: 'cap1', tipo: 'contenedor', nombre: 'CAPÍTULO I', hijos: [
+        { id: 'tmp', tipo: 'carpeta', color: 'azul', nombre: 'Temporada 1', hijos: [
+          { id: 'esc', tipo: 'carpeta', color: 'violeta', nombre: 'Capítulo I', hijos: [
+            { id: 'esq1', clase: 'Esquema', nombre: 'Esquema 1' },
+            { id: 'bib1', clase: 'Biblioteca', nombre: 'Lugares de la isla' }
+          ] },
+          { id: 'esq2', clase: 'Esquema', nombre: 'Esquema 1' }
+        ] },
+        { id: 'doc1', clase: 'Biblioteca', nombre: 'Documentos 2' }
+      ] },
+      { id: 'cap2', tipo: 'contenedor', nombre: 'CAPÍTULO II', hijos: [
+        { id: 'arch', tipo: 'carpeta', color: 'ambar', nombre: 'Archivo', hijos: [
+          { id: 'esq3', clase: 'Esquema', nombre: 'Trama descartada' },
+          { id: 'bib2', clase: 'Biblioteca', nombre: 'Nombres' }
+        ] },
+        { id: 'esq4', clase: 'Esquema', nombre: 'Esquema 1' }
+      ] }
+    ];
+    const cuenta = n => n.hijos ? n.hijos.reduce((t, h) => t + (h.hijos ? cuenta(h) : 1), 0) : 1;
+    const filas = [];
+    const recorrer = (nodos, nivel, guia) => {
+      nodos.forEach(n => {
+        const sangria = 2 + nivel * 11;
+        const abierta = !!this.state.abiertas[n.id];
+        if (n.tipo === 'contenedor') {
+          filas.push({
+            esContenedor: true, sangria: 0, guia: 'transparent', alto: 34,
+            aire: filas.length ? 12 : 0, nombre: n.nombre,
+            chev: abierta ? '#ic-chev-d' : '#ic-chev-r',
+            alternar: () => this.alternar(n.id)
+          });
+          if (abierta) recorrer(n.hijos, 1, 'var(--borde-fuerte)');
+        } else if (n.tipo === 'carpeta') {
+          filas.push({
+            esCarpeta: true, sangria, guia, alto: 30, aire: 0,
+            color: 'var(--t-' + n.color + ')', nombre: n.nombre,
+            cuenta: String(cuenta(n)),
+            chev: abierta ? '#ic-chev-d' : '#ic-chev-r',
+            fondo: abierta ? 'var(--hover)' : 'transparent',
+            alternar: () => this.alternar(n.id)
+          });
+          if (abierta) recorrer(n.hijos, nivel + 1, 'var(--borde-fuerte)');
+        } else {
+          const sel = this.state.sel === n.id;
+          const p = et[n.clase];
+          filas.push({
+            esItem: true, sangria, guia, alto: 28, aire: 0,
+            clase: n.clase, nombre: n.nombre,
+            etBg: p[0], etLinea: p[1], etTinta: p[2],
+            sel: sel,
+            fondo: sel ? 'var(--sel-bg)' : 'transparent',
+            barra: sel ? 'inset 2px 0 0 var(--foco)' : 'none',
+            punto: sel ? 'var(--foco)' : 'var(--borde-fuerte)',
+            peso: sel ? 500 : 400,
+            elegir: () => this.setState({ sel: n.id })
+          });
+        }
+      });
+    };
+    recorrer(arbol, 0, 'transparent');
+    return { filas };
+  }
+}
+</script>
+</body>
+</html>

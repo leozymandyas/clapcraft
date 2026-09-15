@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="width:1280px;height:820px;display:flex;flex-direction:column;overflow:hidden;background:var(--chrome);color:var(--tinta);font-family:var(--sans);font-size:13px;border:1px solid var(--borde-fuerte);border-radius:6px">
+
+  <div style="height:38px;flex:none;display:flex;align-items:flex-end;gap:2px;padding-left:16px;background:var(--chrome)">
+    <div style="display:flex;align-items:center;gap:9px;height:29px;padding:0 12px;font-size:13px;color:var(--tenue);white-space:nowrap">Entrevista con el vampiro</div>
+    <div style="position:relative;z-index:2;margin-bottom:-1px;display:flex;align-items:center;gap:10px;height:33px;padding:0 13px;background:var(--panel);border:1px solid var(--borde);border-bottom:0;border-radius:7px 7px 0 0;font-size:13px;font-weight:500;white-space:nowrap">Nuevo proyecto<span style="width:5px;height:5px;border-radius:50%;background:var(--foco)"></span><svg width="12" height="12" style="color:var(--palido)"><use href="#ic-close"></use></svg></div>
+    <div style="display:flex;align-items:center;justify-content:center;width:26px;height:29px;color:var(--palido)"><svg width="14" height="14"><use href="#ic-plus"></use></svg></div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <div style="width:320px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--borde);border-right:1px solid var(--borde-fuerte);box-shadow:var(--sombra-lado)">
+      <div style="display:flex;align-items:center;gap:11px;padding:20px 18px 18px">
+        <svg width="27" height="27" viewBox="0 0 16 16"><rect x="1.4" y="5.6" width="13.2" height="8.9" rx="1.3" fill="var(--logo-1)"></rect><path d="M1.6 5.6 2.9 2.4l12.3 1-.5 2.2z" fill="var(--logo-2)"></path><path d="M5.4 2.7 4.3 5.5M8.7 3 7.6 5.7M12 3.3 10.9 5.9" stroke="var(--logo-3)" stroke-width="1.1"></path></svg>
+        <span style="font-family:var(--marca);font-weight:700;font-size:23px;letter-spacing:-.02em">ClapCraft</span><div style="flex:1"></div><div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--tenue)"><svg width="16" height="16"><use href="#ic-panel"></use></svg></div>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:20px;padding:0 18px">
+        <div>
+          <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido);margin-bottom:7px">NOMBRE DEL PROYECTO</div>
+          <div style="height:38px;display:flex;align-items:center;padding:0 11px;background:var(--papel);border:1px solid var(--foco);border-radius:5px;box-shadow:0 0 0 3px var(--foco-halo);font-size:14px">Lestat de Lioncourt<span style="display:inline-block;width:1px;height:17px;margin-left:2px;background:var(--tinta)"></span></div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido);margin-bottom:7px">DÓNDE SE GUARDA</div>
+          <div style="height:36px;display:flex;align-items:center;gap:9px;padding:0 11px;background:var(--papel);border:1px solid var(--borde);border-radius:5px;font-family:var(--mono);font-size:12px;color:var(--tenue)"><svg width="15" height="15" style="color:var(--tenue);flex:none"><use href="#ic-folder"></use></svg><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">~/ClapCraft/Proyectos</span><span style="font-family:var(--sans);font-size:12.5px;color:var(--foco);flex:none">Cambiar</span></div>
+        </div>
+      </div>
+
+      <div style="flex:none;padding:14px 18px 16px;border-top:1px solid var(--regla);font-size:12px;line-height:1.5;color:var(--tenue)">El proyecto se abre como una pestaña más. Todo lo que cree la plantilla se puede renombrar o borrar después.</div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--lienzo);border-top:1px solid var(--borde)">
+
+      <div style="height:50px;flex:none;display:flex;align-items:center;gap:13px;padding:0 20px">
+        <span style="font-family:var(--mono);font-size:14.5px;letter-spacing:.02em;color:var(--palido)">NUEVO PROYECTO</span>
+        <svg width="13" height="13" style="color:var(--palido)"><use href="#ic-chev-r"></use></svg>
+        <span style="font-family:var(--mono);font-size:15px;font-weight:600">Plantilla</span>
+        <div style="flex:1"></div>
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--palido)">6 PLANTILLAS</span>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;padding:4px 20px 0;overflow:hidden">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <sc-for list="{{ plantillas }}" as="p" hint-placeholder-count="6">
+            <div onClick="{{ p.elegir }}" style="box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:{{ p.fondo }};border:1px solid {{ p.borde }};border-radius:6px;box-shadow:{{ p.sombra }};cursor:pointer">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="width:9px;height:9px;border-radius:2px;flex:none;background:{{ p.tono }}"></span>
+                <span style="font-size:13.5px;font-weight:600">{{ p.nombre }}</span>
+                <div style="flex:1"></div>
+                <sc-if value="{{ p.activa }}"><svg width="14" height="14" style="color:var(--foco);flex:none"><use href="#ic-check"></use></svg></sc-if>
+              </div>
+              <div style="font-size:12px;line-height:1.45;color:var(--tenue)">{{ p.resumen }}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:2px">
+                <sc-for list="{{ p.chips }}" as="c" hint-placeholder-count="3">
+                  <span style="display:inline-flex;align-items:center;height:19px;padding:0 6px;border-radius:3px;background:var(--f-gris);font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--tenue)">{{ c }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="flex:1;min-height:0;display:flex;gap:16px;padding-bottom:16px">
+          <div style="width:330px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;gap:9px;padding:14px 15px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido)">ÁRBOL QUE CREA</div>
+            <sc-for list="{{ arbol }}" as="n" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;height:24px">
+                <div style="flex:none;width:{{ n.sangria }}px;align-self:stretch;border-right:1px solid {{ n.guia }}"></div>
+                <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;margin-left:7px">
+                  <sc-if value="{{ n.esCarpeta }}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" style="flex:none;color:{{ n.tono }}"><use href="#ic-folder"></use></svg></sc-if>
+                  <sc-if value="{{ n.esItem }}"><span style="display:inline-flex;align-items:center;height:19px;padding:0 6px;border-radius:4px;flex:none;font-family:var(--mono);font-size:9.5px;font-weight:500;background:{{ n.etBg }};border:1px solid {{ n.tono }};color:{{ n.tono }}">{{ n.etiqueta }}</span></sc-if>
+                  <span style="font-family:var(--mono);font-size:12px;font-weight:{{ n.peso }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.nombre }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="flex:1;min-width:0;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:14px 16px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido)">TRAMAS QUE CREA</span>
+              <div style="flex:1;height:1px;background:var(--regla)"></div>
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)">{{ resumenTramas }}</span>
+            </div>
+            <sc-for list="{{ tramas }}" as="t" hint-placeholder-count="3">
+              <div style="position:relative;height:40px">
+                <div style="position:absolute;left:0;right:0;top:25px;height:2px;background:{{ t.tono }};opacity:.62"></div>
+                <div style="position:absolute;left:0;top:0;display:flex;align-items:center;gap:8px">
+                  <span style="font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.02em">{{ t.nombre }}</span>
+                  <span style="font-family:var(--mono);font-size:9px;letter-spacing:.09em;color:{{ t.tono }}">{{ t.tipo }}</span>
+                </div>
+                <div style="position:absolute;left:40px;top:26px;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--papel);border:2px solid {{ t.tono }}"></div>
+                <div style="position:absolute;left:150px;top:26px;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--papel);border:2px solid {{ t.tono }}"></div>
+                <div style="position:absolute;left:280px;top:26px;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--papel);border:2px solid {{ t.tono }}"></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:60px;flex:none;display:flex;align-items:center;gap:14px;padding:0 20px;background:var(--papel);border-top:1px solid var(--borde)">
+        <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--palido)">ENTER CREA · ESC CANCELA</span>
+        <div style="flex:1"></div>
+        <div style="display:inline-flex;align-items:center;height:34px;padding:0 14px;border:1px solid var(--borde);border-radius:5px;background:var(--lienzo);font-size:13px;font-weight:500">Cancelar</div>
+        <div style="display:inline-flex;align-items:center;gap:9px;height:34px;padding:0 16px;border-radius:5px;background:var(--foco);color:var(--foco-sobre);font-size:13px;font-weight:500"><svg width="14" height="14"><use href="#ic-plus"></use></svg>Crear proyecto</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:820}}">
+class Component extends DCLogic {
+  state = { sel: 'serie' };
+  renderVals() {
+    const defs = [
+      { id: 'blanco', nombre: 'En blanco', tono: 'gris', resumen: 'Un contenedor vacío y nada más. Para empezar sin estructura impuesta.',
+        chips: ['1 CONTENEDOR'],
+        arbol: [['carpeta', 0, 'Proyecto'], ['item', 1, 'Esquema', 'Esquema 1']],
+        tramas: [['Trama', 'PRINCIPAL', 'violeta']] },
+      { id: 'largo', nombre: 'Largometraje', tono: 'violeta', resumen: 'Tres actos, sus secuencias y un guion por acto.',
+        chips: ['3 ACTOS', '1 ESQUEMA', '1 GUION'],
+        arbol: [['carpeta', 0, 'Película'], ['carpeta', 1, 'Acto I'], ['item', 2, 'Esquema', 'Secuencias'], ['item', 2, 'Biblioteca', 'Localizaciones'], ['carpeta', 1, 'Acto II'], ['carpeta', 1, 'Acto III']],
+        tramas: [['Protagonista', 'PRINCIPAL', 'violeta'], ['Antagonista', 'SECUNDARIA', 'rojo']] },
+      { id: 'serie', nombre: 'Serie de TV', tono: 'cielo', resumen: 'Una temporada con sus capítulos, cada uno con escaleta y guion.',
+        chips: ['1 TEMPORADA', '8 CAPÍTULOS', 'BIBLIOTECAS'],
+        arbol: [['carpeta', 0, 'Temporada 1'], ['carpeta', 1, 'Capítulo I'], ['item', 2, 'Esquema', 'Escaleta'], ['item', 2, 'Biblioteca', 'Lugares'], ['carpeta', 1, 'Capítulo II'], ['item', 1, 'Biblioteca', 'Reparto fijo']],
+        tramas: [['Arco de temporada', 'PRINCIPAL', 'cielo'], ['Trama del capítulo', 'SECUNDARIA', 'teal'], ['Final alternativo', 'ALTERNATIVA', 'verde']] },
+      { id: 'novela', nombre: 'Novela', tono: 'esmeralda', resumen: 'Partes y capítulos en prosa, con una biblioteca de personajes.',
+        chips: ['3 PARTES', '24 CAPÍTULOS'],
+        arbol: [['carpeta', 0, 'Novela'], ['carpeta', 1, 'Primera parte'], ['item', 2, 'Esquema', 'Capítulos'], ['item', 1, 'Biblioteca', 'Personajes'], ['carpeta', 1, 'Segunda parte']],
+        tramas: [['Narradora', 'PRINCIPAL', 'esmeralda'], ['Recuerdos', 'ALTERNATIVA', 'oliva']] },
+      { id: 'corto', nombre: 'Cortometraje', tono: 'cobre', resumen: 'Una sola secuencia, un guion y ocho momentos de personaje.',
+        chips: ['1 SECUENCIA', '8 MOMENTOS'],
+        arbol: [['carpeta', 0, 'Corto'], ['item', 1, 'Esquema', 'Secuencia'], ['item', 1, 'Biblioteca', 'Notas de rodaje']],
+        tramas: [['Protagonista', 'PRINCIPAL', 'cobre']] },
+      { id: 'teatro', nombre: 'Teatro', tono: 'magenta', resumen: 'Actos y cuadros, con acotaciones y reparto aparte.',
+        chips: ['2 ACTOS', 'REPARTO', 'ACOTACIONES'],
+        arbol: [['carpeta', 0, 'Obra'], ['carpeta', 1, 'Acto I'], ['item', 2, 'Esquema', 'Cuadros'], ['item', 1, 'Biblioteca', 'Reparto'], ['carpeta', 1, 'Acto II']],
+        tramas: [['Escena', 'PRINCIPAL', 'magenta'], ['Coro', 'SECUNDARIA', 'uva']] }
+    ];
+    const act = defs.find(d => d.id === this.state.sel) || defs[0];
+    const plantillas = defs.map(d => {
+      const a = d.id === this.state.sel;
+      return {
+        nombre: d.nombre, resumen: d.resumen, chips: d.chips, activa: a,
+        tono: 'var(--t-' + d.tono + ')',
+        fondo: a ? 'var(--sel-bg)' : 'var(--papel)',
+        borde: a ? 'var(--foco)' : 'var(--borde)',
+        sombra: a ? 'var(--sombra-alta)' : 'var(--sombra)',
+        elegir: () => this.setState({ sel: d.id })
+      };
+    });
+    const arbol = act.arbol.map(n => ({
+      esCarpeta: n[0] === 'carpeta', esItem: n[0] === 'item',
+      sangria: 2 + n[1] * 13,
+      guia: n[1] ? 'var(--borde-fuerte)' : 'transparent',
+      tono: 'var(--t-' + (n[0] === 'carpeta' ? act.tono : (n[2] === 'Esquema' ? 'violeta' : 'azul')) + ')',
+      etBg: n[0] === 'item' ? 'var(--f-' + (n[2] === 'Esquema' ? 'violeta' : 'azul') + ')' : 'transparent',
+      etiqueta: n[0] === 'item' ? n[2] : '',
+      nombre: n[0] === 'item' ? n[3] : n[2],
+      peso: n[0] === 'carpeta' ? 600 : 400
+    }));
+    const tramas = act.tramas.map(t => ({ nombre: t[0], tipo: t[1], tono: 'var(--t-' + t[2] + ')' }));
+    return {
+      plantillas, arbol, tramas,
+      resumenTramas: act.tramas.length + (act.tramas.length === 1 ? ' TRAMA' : ' TRAMAS')
+    };
+  }
+}
+</script>
+</body>
+</html>

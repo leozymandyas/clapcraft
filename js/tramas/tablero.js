@@ -136,8 +136,9 @@
         if (!a || !b || a.lineaId !== l.id) return;
         const x1 = Math.min(xDe(a), xDe(b)), x2 = Math.max(xDe(a), xDe(b));
         const el = document.createElement('div');
-        el.className = 'nota' + (esSel('nota', nt.id) ? ' sel' : '');
+        el.className = 'nota' + (esSel('nota', nt.id) ? ' sel' : '') + (nt.color ? ' con-color' : '');
         el.dataset.nota = nt.id;
+        if (nt.color) { el.style.setProperty('--tc', tono(nt.color)); el.style.setProperty('--tf', `var(--f-${nt.color})`); }   // su tono: trazo y fondo pálido
         el.style.left = x1 + 'px'; el.style.width = Math.max(30, x2 - x1) + 'px';
         const s = document.createElement('span'); s.textContent = nt.texto;
         el.appendChild(s); track.appendChild(el);
@@ -172,6 +173,7 @@
 
       props.forEach((p, i) => track.appendChild(nodo(p, l, i)));
       $rows.appendChild(row);
+      colocarRotulos(row);
     });
 
     const add = document.createElement('div');
@@ -187,17 +189,97 @@
   function nodo(p, l, i) {
     const el = document.createElement('div');
     const forma = m.formaDe(p.id), c = m.cg(p);
-    el.className = 'pt ' + (i % 2 ? 'alto' : '')
+    el.className = 'pt'
+      + (!forma && !p.cortado ? ' con-rotulo' : '')                   // el nombre en un rótulo de papel (los cuadros, rombos y descartados, texto suelto)
       + (esSel('punto', p.id) ? ' sel' : '')
       + (forma ? ' caja' + (forma === 'rombo' ? ' rombo' : '') : '')
       + (pres.fuera(p) ? ' fuera' : '')
       + (enRuta(p.lineaId, c, c) ? ' en-ruta' : '')
       + (p.cortado ? ' cortado' : '');
     el.style.left = xDe(p) + 'px';
+    el.style.setProperty('--c', tono(p.color || l.color));          // su color: elegido o al pasar el ratón se enciende con él
     el.dataset.punto = p.id;
-    el.innerHTML = `<span class="dot" style="background:${tono(p.color || l.color)}" tabindex="0"></span><span class="cap"></span>`;
+    el.innerHTML = `<span class="dot" style="background:${tono(p.color || l.color)};color:${tono(p.color || l.color)}" tabindex="0"></span><span class="cap"></span>`;
     el.querySelector('.cap').textContent = p.titulo;
     return el;
+  }
+
+  /* Rótulos de los nodos (rediseño «carpetas y tooltips», 15-09-2026): el nombre va encima del punto; si choca con
+     el del nodo anterior, se desdobla debajo del eje (`.abajo`) y, si tampoco cabe ahí, se queda arriba. Una nota
+     entre dos nodos cuyo rótulo baja, o demasiado estrecha para leerse, deja en el eje solo su marca y el papel se
+     corre a la derecha, unido por una guía discontinua (`.aparte`). Se mide en el DOM: va tras montar la fila. */
+  const HOLGURA_ROTULO = 6, NOTA_MINIMA = 48, HUECO_MINIMO = 26;
+  function colocarRotulos(row) {
+    const track = row.querySelector('.track'); if (!track) return;
+    let finArriba = -Infinity, finAbajo = -Infinity;
+    const bordes = new Map();                                   // id del nodo → borde derecho de su rótulo
+    track.querySelectorAll(':scope > .pt').forEach(el => el.classList.remove('abajo'));
+    const pts = Array.from(track.querySelectorAll(':scope > .pt')).map(el => ({ el, p: m.punto(el.dataset.punto) })).filter(x => x.p)
+      .sort((a, b) => xDe(a.p) - xDe(b.p));
+    pts.forEach(({ el, p }) => {
+      const cap = el.querySelector('.cap'), w = cap ? cap.offsetWidth : 0, x = xDe(p), izq = x - w / 2, der = x + w / 2;
+      if (!w) return;
+      if (izq >= finArriba + HOLGURA_ROTULO) finArriba = der;
+      else if (izq >= finAbajo + HOLGURA_ROTULO) { el.classList.add('abajo'); finAbajo = der; }
+      else finArriba = Math.max(finArriba, der);
+      bordes.set(p.id, der);
+    });
+    /* las notas: primero las que se quedan en su tramo (son obstáculo), luego las que se corren a un lado, con el
+       ancho que les deja libre lo siguiente de debajo del eje (un rótulo que bajó u otra nota) */
+    const abajo = [];                                           // [izq, der] de lo que ocupa debajo del eje
+    pts.forEach(({ el, p }) => { if (el.classList.contains('abajo')) { const w = el.querySelector('.cap').offsetWidth; abajo.push([xDe(p) - w / 2, xDe(p) + w / 2]); } });
+    const notas = Array.from(track.querySelectorAll(':scope > .nota')).map(el => {
+      const nt = m.nota(el.dataset.nota), a = nt && m.punto(nt.deId), b = nt && m.punto(nt.aId); if (!a || !b) return null;
+      const x1 = Math.min(xDe(a), xDe(b)), x2 = Math.max(xDe(a), xDe(b));
+      const bajan = [a, b].filter(q => { const e = track.querySelector(`:scope > .pt[data-punto="${q.id}"]`); return e && e.classList.contains('abajo'); });
+      el.querySelectorAll('.nota-guia').forEach(g => g.remove());
+      /* un rótulo que bajó de otro nodo recorta la nota por la derecha; si no le deja sitio para leerse, se corre */
+      const choca = Math.min(Infinity, ...abajo.filter(([i, d]) => d > x1 && i < x2).map(([i]) => i - 4));
+      const fin = Math.min(x2, choca);
+      return { el, x1, x2, fin, bajan, aparte: bajan.length > 0 || fin - x1 < NOTA_MINIMA };
+    }).filter(Boolean);
+    notas.forEach(n => {
+      n.el.classList.toggle('aparte', n.aparte);
+      n.el.style.maxWidth = '';
+      if (!n.aparte) { const w = Math.max(30, n.fin - n.x1); n.el.style.left = n.x1 + 'px'; n.el.style.width = w + 'px'; abajo.push([n.x1, n.x1 + w]); }
+    });
+    /* dos notas corridas seguidas no se pisan: cada una acaba antes de donde empieza la siguiente y empieza tras la anterior */
+    const apartes = notas.filter(n => n.aparte).sort((a, b) => a.x1 - b.x1);
+    apartes.forEach(n => { n.izq = Math.max(n.x2, ...n.bajan.map(q => bordes.get(q.id) || 0)) + 14; });   // a la derecha del rótulo que bajó
+    let finAnterior = -Infinity;
+    apartes.forEach((n, k) => {
+      const marca = (n.x1 + n.x2) / 2;
+      const izq = Math.max(n.izq, finAnterior + 8);
+      const siguiente = apartes[k + 1] ? apartes[k + 1].izq : Infinity;
+      const sig = Math.min(siguiente, ...abajo.filter(([i, d]) => d > izq && i >= izq - 1).map(([i]) => i));
+      const ancho = Math.max(44, Math.min(210, sig - izq - 8));
+      n.el.style.left = izq + 'px'; n.el.style.width = ''; n.el.style.maxWidth = ancho + 'px';
+      finAnterior = izq + Math.min(ancho, n.el.offsetWidth);
+      abajo.push([izq, finAnterior]);
+      n.el.insertAdjacentHTML('afterbegin', `<i class="nota-guia nota-marca" style="left:${marca - izq}px"></i>`
+        + `<i class="nota-guia nota-guia-v" style="left:${marca - izq}px"></i><i class="nota-guia nota-guia-h" style="left:${marca - izq}px;width:${izq - marca}px"></i>`);
+    });
+    /* los huecos para poner nota (debajo del eje): un rótulo que bajó o una nota corrida se pintaban encima y tapaban el
+       botón (Leo, 15-09-2026). Cada hueco ocupa el trozo libre más ancho de su tramo; si ninguno da para el botón, el
+       primer sitio libre a su derecha, sin pisar el hueco anterior. */
+    const tapan = abajo.map(([i, d]) => [i - 4, d + 4]).sort((a, b) => a[0] - b[0]);
+    let finHueco = -Infinity;
+    Array.from(track.querySelectorAll(':scope > .hueco')).map(h => {
+      const [d, a] = (h.dataset.tramo || '').split('|'), p = m.punto(d), q = m.punto(a);
+      return p && q ? { h, x1: xDe(p), x2: xDe(q) } : null;
+    }).filter(Boolean).sort((a, b) => a.x1 - b.x1).forEach(({ h, x1, x2 }) => {
+      let ini = Math.max(x1, finHueco), mejor = null;
+      const probar = (i, f) => { if (f - i > (mejor ? mejor[1] - mejor[0] : 0)) mejor = [i, f]; };
+      tapan.forEach(([i, f]) => { if (f <= ini || i >= x2) return; probar(ini, Math.min(i, x2)); ini = Math.max(ini, f); });
+      if (ini < x2) probar(ini, x2);
+      if (!mejor || mejor[1] - mejor[0] < HUECO_MINIMO) {
+        let pos = Math.max(x1, finHueco);
+        for (const [i, f] of tapan) { if (f <= pos) continue; if (i - pos >= HUECO_MINIMO) break; pos = f; }
+        mejor = [pos, pos + HUECO_MINIMO];
+      }
+      h.style.left = mejor[0] + 'px'; h.style.width = (mejor[1] - mejor[0]) + 'px';
+      finHueco = mejor[1];
+    });
   }
 
   /* Saltos: unión estrictamente vertical entre dos extremos en la misma celda. */
@@ -261,7 +343,9 @@
 
     // el "+" del cruce se sostiene y se arrastra hasta otra trama: crea un salto
     const marca = e.target.closest && e.target.closest('#celda');
-    if (marca && celdaObj) {
+    const bajoNota = marca && notaBajo(e);                     // debajo del «+» hay una nota: gana la nota
+    if (bajoNota) { $celda.classList.remove('show'); celdaObj = null; }
+    else if (marca && celdaObj) {
       cel = Object.assign({}, celdaObj, { movido: false, destino: null, tmp: document.createElementNS('http://www.w3.org/2000/svg', 'path') });
       cel.tmp.style.stroke = colorSalto('cuadro'); cel.tmp.setAttribute('stroke-width', '2.5');
       cel.tmp.setAttribute('stroke-dasharray', '5 4'); cel.tmp.setAttribute('fill', 'none');
@@ -284,9 +368,10 @@
       e.preventDefault(); return;
     }
     // una nota se arrastra de tramo en tramo
-    const nt0 = e.target.closest && e.target.closest('[data-nota]');
+    const nt0 = bajoNota || (e.target.closest && e.target.closest('#board [data-nota]'));   // solo las del tablero (en ClapCraft hay otras `data-nota` fuera)
     if (nt0 && !(e.target.classList && e.target.classList.contains('nota-edit'))) {
       notaArr = { id: nt0.dataset.nota, movido: false };
+      if (bajoNota) seleccionSuave('nota', nt0.dataset.nota, nt0);   // el clic cayó en el «+»: no llegará a la nota
       nt0.classList.add('arrastrando');
       e.preventDefault(); return;
     }
@@ -387,8 +472,8 @@
       const { lineaId, actoId, celda, destino, movido } = cel;
       cel.tmp.remove(); quitarHot();
       cel = null; celArrastrado = movido;
-      if (destino) saltoDesdeCruce({ lineaId, actoId, celda }, destino);
-      render(); return;
+      const nuevo = destino ? saltoDesdeCruce({ lineaId, actoId, celda }, destino) : null;
+      render(); if (nuevo) nombrarRecien(nuevo); return;
     }
     if (mov) {
       const { id, pos, movido } = mov; mov = null;
@@ -422,6 +507,26 @@
     if (!s.ok) { m.borrarPunto(r.punto.id); avisar(s.aviso); return; }
     sel = { tipo: 'salto', id: s.salto.id };
     avisar(s.aviso);
+    return r.punto.id;
+  }
+
+  /* Un nodo recién creado: su nombre propuesto («Punto nuevo», «Evento», «Cambio de escena»…) queda escrito y
+     seleccionado sobre el propio nodo, para escribir encima; en blanco se queda el propuesto. En un salto, el
+     otro extremo toma el mismo nombre si seguía con el propuesto. */
+  function nombrarRecien(id) {
+    const p = m.punto(id), el = p && document.querySelector(`.pt[data-punto="${id}"] .cap`); if (!el) return;
+    const s = m.saltoDe(id), gemelo = s && m.parejaDe(id), propuesto = p.titulo;
+    editarEnSitio(el, p.titulo, 'cap-edit', v => {
+      if (v && v !== propuesto) {
+        m.editarPunto(p.id, { titulo: v });
+        if (gemelo && gemelo.titulo === propuesto) {
+          m.editarPunto(gemelo.id, { titulo: v });
+          const cg = document.querySelector(`.pt[data-punto="${gemelo.id}"] .cap`); if (cg) cg.textContent = v;
+        }
+      }
+      const f = $panel.querySelector('#fTitulo'); if (f) f.value = p.titulo;
+      return p.titulo;
+    });
   }
 
   /* ====================================================================
@@ -569,7 +674,7 @@
 
   function rapido(p) {
     const el = document.querySelector(`[data-punto="${p.id}"] .cap`);
-    if (el) el.textContent = p.titulo;
+    if (el) { el.textContent = p.titulo; colocarRotulos(el.closest('.row')); }
   }
 
   /* ====================================================================
@@ -590,19 +695,20 @@
     if (cr) {
       const v = cr.dataset.crear, q = pendiente; cerrarMenu();
       if (!q) return;
+      let nuevo = null;
       if (v === 'nodo') {
         const r = m.nuevoPunto(q.lineaId, q.actoId, q.celda);
-        if (aplicar(r)) sel = { tipo: 'punto', id: r.punto.id };
+        if (aplicar(r)) { sel = { tipo: 'punto', id: r.punto.id }; nuevo = r.punto.id; }
       } else {
         const [forma, destino] = v.split('|');
         const r = m.nuevoPunto(q.lineaId, q.actoId, q.celda, { titulo: m.forma(forma) });
         if (aplicar(r)) {
           const s = m.crearSalto(r.punto.id, destino, forma);
-          if (s.ok) sel = { tipo: 'salto', id: s.salto.id }; else m.borrarPunto(r.punto.id);
+          if (s.ok) { sel = { tipo: 'salto', id: s.salto.id }; nuevo = r.punto.id; } else m.borrarPunto(r.punto.id);
           avisar(s.aviso);
         }
       }
-      render(); return;
+      render(); if (nuevo) nombrarRecien(nuevo); return;
     }
     if (!cl('#menu')) cerrarMenu();
 
@@ -620,6 +726,12 @@
     if (cl('[data-panel-cerrar]')) { sel = null; render(); return; }
     const hn = cl('[data-hilo]');
     if (hn) { if (hn.dataset.hilo) irANodo(hn.dataset.hilo); return; }
+    const nc = cl('[data-ncolor]');                            // el color de una nota (Leo, 15-09-2026)
+    if (nc) {
+      const [id, c] = nc.dataset.ncolor.split('|');
+      if (aplicar(m.colorearNota(id, c || null))) { render(); const n = m.nota(id), el = document.querySelector(`#board [data-nota="${CSS.escape(id)}"]`); if (n && el) menuNota(n, el); }
+      return;
+    }
     const mc = cl('[data-mcolor]');
     if (mc) {
       const [id, c] = mc.dataset.mcolor.split('|'); const q = m.punto(id);
@@ -706,7 +818,7 @@
     const hu = cl('.hueco');
     if (hu && hu.dataset.tramo && !cl('.add-nota')) { const [d, a] = hu.dataset.tramo.split('|'); ponerNota(d, a); return; }
     const nm = cl('.lname,.aname');
-    if (nm) { nm.readOnly = false; nm.focus(); nm.select(); return; }      // renombrar trama o acto
+    if (nm) { nm.dataset.antes = nm.value; nm.readOnly = false; nm.focus(); nm.select(); return; }      // renombrar trama o acto (Enter guarda; Esc o un clic fuera, no)
     const pt = cl('.pt');
     if (pt) {                                                               // renombrar el nodo ahí mismo
       const p = m.punto(pt.dataset.punto); if (!p) return;
@@ -753,7 +865,7 @@
       el.textContent = nuevo == null ? viejo : nuevo;
       registrar();
     };
-    inp.addEventListener('blur', () => fin(true));
+    inp.addEventListener('blur', () => fin(false));                       // un clic fuera sale sin cambiar (Leo): guarda solo Enter
     inp.addEventListener('keydown', ev => {
       ev.stopPropagation();
       if (ev.key === 'Enter' || ev.code === 'Enter' || ev.keyCode === 13) { ev.preventDefault(); fin(true); }
@@ -772,7 +884,18 @@
   }
   function onFocusOut(e) {
     const nm = e.target.closest && e.target.closest('.lname,.aname');
-    if (nm) nm.readOnly = true;
+    if (!nm) return;
+    if (nm.dataset.antes !== undefined && nm.value !== nm.dataset.antes) { nm.value = nm.dataset.antes; onInput({ target: nm }); }   // sin Enter: como estaba
+    delete nm.dataset.antes; nm.readOnly = true;
+    try { nm.setSelectionRange(0, 0); } catch (_) {}                         // sin texto marcado al salir
+  }
+  /* Enter guarda el nombre de una trama o un acto; Esc lo deja como estaba (lo deshace al salir) */
+  function onKeyNombre(e) {
+    const nm = e.target.closest && e.target.closest('.lname,.aname');
+    if (!nm || nm.readOnly) return;
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); if (!nm.value.trim()) { nm.blur(); return; } delete nm.dataset.antes; nm.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); nm.blur(); }
   }
   function onInput(e) {
     const ln = e.target.closest && e.target.closest('[data-linea-nombre]');
@@ -838,17 +961,25 @@
   }
   function menuNota(n, el) {
     const r = el.getBoundingClientRect();
-    abrirMenuEn(r.left + r.width / 2 - 100, r.bottom + 12, `<div class="mt">Nota</div>
+    abrirMenuEn(r.left + r.width / 2 - 105, r.bottom + 12, `<div class="mt">Nota</div>
+      <div class="colores">
+        ${PALETA.map(c => `<button class="sw${n.color === c.id ? ' on' : ''}" data-ncolor="${n.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
+        <button class="sw hereda${n.color ? '' : ' on'}" data-ncolor="${n.id}|" title="Sin color: el papel de nota">nota</button>
+      </div><div class="sep"></div>
       <button data-nota-editar="${n.id}">Editar el texto</button>
       <button class="peligro" data-nota-del="${n.id}">Eliminar nota</button>`);
   }
 
   /* ---------- marca de cruce entre trama y celda ---------- */
   let celdaObj = null;
+  /* ¿Hay una nota del tablero bajo el puntero? Una nota corrida a un lado (dos nodos muy juntos) cae sobre celdas
+     libres: el «+» de la celda se ponía encima y el clic creaba un nodo en lugar de elegir la nota (Leo). */
+  const notaBajo = e => { for (const x of document.elementsFromPoint(e.clientX, e.clientY)) { const n = x.closest && x.closest('#board .nota'); if (n) return n; } return null; };
   function onMouseMove(e) {
     if (cel) return;                                                       // se está arrastrando
-    if (e.target.closest && e.target.closest('#celda')) return;            // ya está encima de la marca
-    const tr = e.target.closest && e.target.closest('.track');
+    const sobreNota = notaBajo(e);
+    if (e.target.closest && e.target.closest('#celda') && !sobreNota) return;   // ya está encima de la marca
+    const tr = sobreNota ? null : e.target.closest && e.target.closest('.track');
     const libre = tr && !e.target.closest('.pt') && !e.target.closest('.nota')
       && e.clientX >= zonaUtil() && !arrastrando();
     if (!libre) { $celda.classList.remove('show'); celdaObj = null; return; }
@@ -887,12 +1018,7 @@
     if (arrastrando()) return;
     const n = e.target.closest && e.target.closest('.nota');
     if (n) { const nt = m.nota(n.dataset.nota); if (nt) mostrarTip(n, null, nt.texto, null); return; }
-    const pt = e.target.closest && e.target.closest('.pt');
-    if (pt) {
-      const p = m.punto(pt.dataset.punto); if (!p) return;
-      const forma = m.formaDe(p.id);
-      mostrarTip(pt, p.titulo, p.descripcion, forma ? colorSalto(forma) : tono(p.color || m.linea(p.lineaId).color));
-    }
+    /* los nodos no llevan globo (Leo, 15-09-2026): al pasar el ratón, su rótulo enseña el nombre entero (CSS, `.pt:hover .cap`) */
   }
   function onMouseOut(e) {
     const de = (e.target.closest && e.target.closest('.nota')) || (e.target.closest && e.target.closest('.pt'));
@@ -982,6 +1108,7 @@
     document.addEventListener('dblclick', onDblClick);
     document.addEventListener('focusin', onFocusIn);
     document.addEventListener('focusout', onFocusOut);
+    document.addEventListener('keydown', onKeyNombre, true);
     document.addEventListener('input', onInput);
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseover', onMouseOver);

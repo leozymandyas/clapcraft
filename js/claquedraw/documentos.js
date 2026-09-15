@@ -32,18 +32,27 @@
 (function (raiz) {
   const C = raiz.Claquedraw = raiz.Claquedraw || {};
 
+  /* Los 24 tonos de tramas, nodos y notas (los de js/tramas/modelo.js, Leo 15-09-2026): una nota de biblioteca puede llevar
+     uno (se pinta con var(--t-<tono>) y var(--f-<tono>)); sin él, papel. */
+  const TONOS = ['rojo', 'ladrillo', 'cobre', 'ambar', 'oro', 'lima', 'oliva', 'verde', 'esmeralda', 'teal', 'turquesa', 'cielo',
+    'azul', 'marino', 'pizarra', 'indigo', 'violeta', 'uva', 'ciruela', 'magenta', 'rosa', 'vino', 'salvia', 'gris'];
   /* Los 16 pares claro/oscuro del diseño (los mismos de los personajes del editor). */
   const PALETA = [
-    ['Azul', '#DFE8FF', '#26417F'], ['Verde', '#E2F0E0', '#2C5730'], ['Terracota', '#FBE6DA', '#8A4320'], ['Violeta', '#EDE0F7', '#563180'],
-    ['Ámbar', '#FBF0D2', '#7A5410'], ['Rosa', '#FBDFE6', '#8A2B47'], ['Teal', '#D8EFEE', '#1F5B58'], ['Oliva', '#E8EED3', '#4E5C1E'],
-    ['Índigo', '#DEE0F8', '#333B85'], ['Coral', '#FDE2DC', '#8F3A2C'], ['Ciruela', '#F3DCEF', '#71306A'], ['Arena', '#EFE7DA', '#6B5638'],
-    ['Cielo', '#D9ECFA', '#1F5476'], ['Lima', '#E6F2CF', '#4A6013'], ['Óxido', '#F8E3CD', '#835012'], ['Grafito', '#E4E4E2', '#3B3B39']
+    ['Azul', '#DBE8FF', '#1A4A86'], ['Verde', '#D8F2DF', '#11643D'], ['Terracota', '#FFE3D5', '#9C3F14'], ['Violeta', '#EAE0FF', '#5326AB'],
+    ['Ámbar', '#FFEEC9', '#875408'], ['Rosa', '#FFE0EA', '#A51A5A'], ['Teal', '#D2F0ED', '#0A6663'], ['Oliva', '#E8F4CD', '#4C6B0F'],
+    ['Índigo', '#E2E2FF', '#33359C'], ['Coral', '#FFE3DD', '#A83A26'], ['Ciruela', '#F9DCF6', '#8B2280'], ['Arena', '#F4E8CF', '#6F5722'],
+    ['Cielo', '#D6EEFF', '#05618F'], ['Lima', '#E9F8C8', '#4F7205'], ['Óxido', '#FFE0C4', '#94480A'], ['Grafito', '#E6E2EE', '#3C3648']
   ];
   const ORDENES = ['manual', 'az', 'za', 'modificado'];
   const NOMBRE_GLOBAL = 'Capítulo';                            // nombre del contenedor que estrena un guion
   const NOMBRE_SUB = 'Biblioteca';                             // nombre del subcontenedor (biblioteca) que estrena un contenedor
   const DIAS_PAPELERA = 30;
   const ID_PERSONAJES = 'personajes';                          // el contenedor oculto de Personajes
+  /* Carpetas (Leo, 15-09-2026): dentro de un contenedor anidan sin límite y de cualquier nivel cuelgan esquemas y
+     bibliotecas (`carpetaId`); en Personajes agrupan el elenco (`datos.carpetasElenco`, `personaje.carpetaId`).
+     Su color es uno de los de las tramas (`var(--t-…)`). */
+  const COLORES_CARPETA = ['azul', 'violeta', 'verde', 'ambar', 'rojo', 'gris'];
+  const ELENCO = 'elenco';                                     // el ámbito de las carpetas de Personajes
 
   /* ---------- personajes del editor: nombres y bloques `p.sp-character` en el HTML de las notas ---------- */
   /* «MARA (V.O.)» y «Mara» son el mismo personaje (la misma clave que js/characters.js) */
@@ -68,10 +77,59 @@
   const comparar = (a, b) => a.localeCompare(b, 'es', { sensitivity: 'base', numeric: true });
   const texto = (v, defecto) => { const s = String(v ?? '').trim(); return s || defecto; };
   const color = v => { const n = Math.round(+v); return n >= 0 && n < PALETA.length ? n : 0; };
+  /* El orden propio de las tarjetas de actos (o momentos) y de sus documentos en una biblioteca: solo cómo se
+     ven ahí, no cambia la línea de tiempo. `{ actos: [actoId…], nodos: { actoId: [puntoId…] } }`. */
+  function ordenValido(o) {
+    if (!o || typeof o !== 'object') return null;
+    const ids = v => Array.isArray(v) ? v.filter(x => typeof x === 'string' && x) : [];
+    const nodos = {};
+    if (o.nodos && typeof o.nodos === 'object') Object.keys(o.nodos).forEach(k => { const l = ids(o.nodos[k]); if (l.length) nodos[k] = l; });
+    const actos = ids(o.actos);
+    return actos.length || Object.keys(nodos).length ? { actos, nodos } : null;
+  }
+  /* Aplica un orden guardado a una lista natural de ids: los guardados van en su orden y los nuevos entran
+     detrás del último (en el orden guardado) de los que les preceden en el natural, o delante de todo. */
+  function aplicarOrden(natural, guardado) {
+    if (!guardado || !guardado.length) return natural.slice();
+    const res = guardado.filter(id => natural.includes(id));
+    natural.forEach((id, i) => {
+      if (res.includes(id)) return;
+      const tras = Math.max(-1, ...natural.slice(0, i).map(x => res.indexOf(x)));
+      res.splice(tras + 1, 0, id);
+    });
+    return res;
+  }
   /* el documento de un nodo; `modificado` (cuándo se escribió por última vez) se conserva si viene */
   const docDe = n => n && typeof n === 'object' && typeof n.html === 'string'
     ? { title: texto(n.title, ''), html: n.html, characters: n.characters && typeof n.characters === 'object' ? clonar(n.characters) : {}, ...(+n.modificado ? { modificado: +n.modificado } : {}) } : null;
   const contenidoDe = n => n ? JSON.stringify([n.title, n.html, n.characters]) : '';
+
+  /* Las carpetas de un ámbito: ids únicos, color válido, padre que exista (si no, a la raíz) y sin ciclos. */
+  function sanearCarpetas(lista, ids) {
+    const res = [];
+    (Array.isArray(lista) ? lista : []).forEach(k => {
+      const id = k && String(k.id || ''); if (!id || ids.has(id)) return; ids.add(id);
+      res.push({ id, nombre: texto(k.nombre, 'Carpeta'), color: COLORES_CARPETA.includes(k.color) ? k.color : 'gris', padreId: k.padreId ? String(k.padreId) : null, ...(k.plegada ? { plegada: true } : {}) });
+    });
+    const porId = new Map(res.map(k => [k.id, k]));
+    res.forEach(k => { if (k.padreId && !porId.has(k.padreId)) k.padreId = null; });
+    res.forEach(k => { const vistos = new Set([k.id]); let p = k.padreId; while (p) { if (vistos.has(p)) { k.padreId = null; break; } vistos.add(p); p = porId.get(p).padreId; } });
+    return res;
+  }
+
+  /* El guion de un esquema (Revisar guión, Leo 15-09-2026): claves de sección fuera del guion, su orden propio de lectura
+     y las plegadas en el editor. Solo se guarda lo que no está vacío (así lo abierto es idéntico a lo guardado). */
+  const claves = x => Array.isArray(x) ? [...new Set(x.filter(k => typeof k === 'string' && k))] : [];
+  function sanearGuion(g) {
+    if (!g || typeof g !== 'object') return null;
+    const r = {};
+    ['fuera', 'orden', 'plegadas'].forEach(k => { const l = claves(g[k]); if (l.length) r[k] = l; });
+    return Object.keys(r).length ? r : null;
+  }
+  /* El segmento del sistema de una biblioteca enlazada a un esquema: los guiones generados (notas con `guion`). */
+  const GUIONES = 'guiones';
+  /* `eid` null: un documento creado a mano en la sección de guiones (no sale de un esquema, no se regenera) */
+  const guionDe = g => g && typeof g === 'object' ? { guion: { eid: g.eid ? String(g.eid) : null, generado: +g.generado || 0 } } : {};
 
   /* Un esquema de un contenedor: un tablero (basta con que traiga `lineas`) y las notas de sus nodos. */
   function sanearEsquema(e, id, nombre) {
@@ -79,7 +137,7 @@
     const notas = {};
     if (e.notas && typeof e.notas === 'object') Object.keys(e.notas).forEach(k => { const n = docDe(e.notas[k]); if (n) notas[k] = n; });
     return { id, nombre: texto(nombre, 'Esquema'), datos: clonar(e.datos), notas, notaActual: typeof e.notaActual === 'string' ? e.notaActual : null,
-             subId: typeof e.subId === 'string' && e.subId ? e.subId : null };
+             subId: typeof e.subId === 'string' && e.subId ? e.subId : null, ...(sanearGuion(e.guion) ? { guion: sanearGuion(e.guion) } : {}) };
   }
 
   /* Sanea lo que venga guardado: ids repetidos y huérfanos se descartan, una nota cuya etiqueta ya no
@@ -87,7 +145,7 @@
      etiquetas y notas colgadas del contenedor (`contenedorId`) sin subcontenedor, que pasan a un
      subcontenedor «Documentos» creado para ese contenedor. */
   function normalizar(datos) {
-    const d = { contenedores: [], etiquetas: [], notas: [], papelera: [], elenco: [], migrado: !!(datos && datos.migrado) };
+    const d = { contenedores: [], etiquetas: [], notas: [], papelera: [], elenco: [], carpetasElenco: [], migrado: !!(datos && datos.migrado) };
     const src = datos && typeof datos === 'object' ? datos : {};
     const ids = new Set();
     const subDe = new Map();                                   // subId → contenedorId
@@ -95,24 +153,35 @@
     (Array.isArray(src.contenedores) ? src.contenedores : []).forEach(c => {
       const id = c && String(c.id || ''); if (!id || ids.has(id)) return; ids.add(id);
       const creado = +c.creado || 0;
+      const carpetas = sanearCarpetas(c.carpetas, ids);
+      const enCarpeta = x => x && x.carpetaId && carpetas.some(k => k.id === String(x.carpetaId)) ? { carpetaId: String(x.carpetaId) } : {};
       const esquemas = [];
       const fuente = Array.isArray(c.esquemas) ? c.esquemas : (c.esquema ? [Object.assign({ id: id + ':esquema' }, c.esquema)] : []);
       fuente.forEach((e, i) => {
         const eid = e && String(e.id || ''); if (!eid || ids.has(eid)) return;
         const s = sanearEsquema(e, eid, e.nombre || ('Esquema' + (i ? ' ' + (i + 1) : ''))); if (!s) return;
-        ids.add(eid); esquemas.push(s);
+        ids.add(eid); esquemas.push(Object.assign(s, enCarpeta(e)));
       });
       const subs = [];
       (Array.isArray(c.subs) ? c.subs : []).forEach(s => {
         const sid = s && String(s.id || ''); if (!sid || ids.has(sid)) return; ids.add(sid);
         subs.push({ id: sid, nombre: texto(s.nombre, NOMBRE_SUB), creado: +s.creado || creado, modificado: +s.modificado || +s.creado || creado,
-                    segmentosPrimero: !!s.segmentosPrimero, ...(s.lineaId ? { lineaId: String(s.lineaId) } : {}) });   // por defecto la cronología va arriba (Leo)
+                    ...(s.segmentosPrimero ? { segmentosPrimero: true } : {}), ...(s.lineaId ? { lineaId: String(s.lineaId) } : {}), ...enCarpeta(s),
+                    ...(ordenValido(s.ordenActos) ? { ordenActos: ordenValido(s.ordenActos) } : {}),
+                    ...(Array.isArray(s.ordenSegmentos || s.ordenCarrusel) ? { ordenSegmentos: (s.ordenSegmentos || s.ordenCarrusel).filter(x => typeof x === 'string' && x) } : {}),
+                    ...(Array.isArray(s.ordenGuiones) ? { ordenGuiones: s.ordenGuiones.filter(x => typeof x === 'string' && x) } : {}) });   // por defecto los guiones generados van arriba
         subDe.set(sid, id);
       });
       /* el enlace esquema ↔ documentos: a un subcontenedor del mismo contenedor, uno por esquema */
       const enlazados = new Set();
       esquemas.forEach(e => { if (!e.subId || enlazados.has(e.subId) || !subs.some(s => s.id === e.subId)) e.subId = null; else enlazados.add(e.subId); });
-      d.contenedores.push({ id, nombre: texto(c.nombre, 'Contenedor'), fijado: !!c.fijado, plegado: !!c.plegado, creado, modificado: +c.modificado || creado, esquemas, subs, ...(c.oculto ? { oculto: true } : {}) });
+      /* un esquema y su biblioteca enlazada van en la misma carpeta (la del esquema) */
+      esquemas.forEach(e => { const s = e.subId && subs.find(x => x.id === e.subId); if (!s) return; if (e.carpetaId) s.carpetaId = e.carpetaId; else delete s.carpetaId; });
+      /* el orden del árbol (carpetas, esquemas y bibliotecas mezclados, por niveles); los ids que ya no están aquí no
+         molestan (al aplicarlo se ignoran) y no se podan: así lo abierto es idéntico a lo guardado */
+      const ordenArbol = Array.isArray(c.ordenArbol) ? c.ordenArbol.filter(x => typeof x === 'string' && x) : [];
+      d.contenedores.push({ id, nombre: texto(c.nombre, 'Contenedor'), fijado: !!c.fijado, plegado: !!c.plegado, creado, modificado: +c.modificado || creado, carpetas, esquemas, subs,
+                            ...(ordenArbol.length ? { ordenArbol } : {}), ...(c.oculto ? { oculto: true } : {}) });
     });
     /* lo antiguo colgaba del contenedor: un «Documentos» por contenedor que lo necesite */
     const conts = new Map(d.contenedores.map(c => [c.id, c]));
@@ -130,18 +199,19 @@
       const id = e && String(e.id || ''); if (!id || ids.has(id)) return;
       if (e.personaje || e.ambito === 'personajes') return;                    // los «Personajes» de antes se descartan (sus notas van a la bandeja)
       const subId = subPara(e); if (!subId) return; ids.add(id);
-      d.etiquetas.push({ id, subId, nombre: texto(e.nombre, 'Segmento'), color: color(e.color) });
+      d.etiquetas.push({ id, subId, nombre: texto(e.nombre, 'Segmento'), color: color(e.color), ...(e.guiones ? { guiones: true } : {}) });
     });
     const etqs = new Map(d.etiquetas.map(e => [e.id, e]));
     const nota = (n, creado, subId) => ({ id: String(n.id), subId, etiquetaId: null,
       titulo: texto(n.titulo, 'Sin título'), html: typeof n.html === 'string' ? n.html : '',
-      characters: n.characters && typeof n.characters === 'object' ? clonar(n.characters) : {}, creado, modificado: +n.modificado || creado });
+      characters: n.characters && typeof n.characters === 'object' ? clonar(n.characters) : {}, creado, modificado: +n.modificado || creado,
+      ...(TONOS.includes(n.color) ? { color: n.color } : {}), ...guionDe(n.guion) });
     (Array.isArray(src.notas) ? src.notas : []).forEach(n => {
       const id = n && String(n.id || ''); if (!id || ids.has(id)) return;
       const subId = subPara(n); if (!subId) return; ids.add(id);
       const x = nota(n, +n.creado || 0, subId);
       const e = n.etiquetaId ? etqs.get(String(n.etiquetaId)) : null;
-      if (e && e.subId === subId) x.etiquetaId = e.id;
+      if (e && e.subId === subId && !!e.guiones === !!x.guion) x.etiquetaId = e.id;   // un guion solo en segmentos de guiones, y al revés
       d.notas.push(x);
     });
     (Array.isArray(src.papelera) ? src.papelera : []).forEach(x => {
@@ -150,9 +220,11 @@
     });
     /* el elenco: lo guardado y, además, los personajes de los registros de las notas que aún no estén */
     const claves = new Set();
+    d.carpetasElenco = sanearCarpetas(src.carpetasElenco, ids);
     (Array.isArray(src.elenco) ? src.elenco : []).forEach(p => {
       const id = p && String(p.id || ''), k = p && clavePersonaje(p.nombre); if (!id || !k || claves.has(k) || ids.has(id)) return;
-      ids.add(id); claves.add(k); d.elenco.push({ id, nombre: sinSufijo(p.nombre), color: color(p.color), ...(p.auto ? { auto: true } : {}) });
+      const enCarpeta = p.carpetaId && d.carpetasElenco.some(x => x.id === String(p.carpetaId)) ? { carpetaId: String(p.carpetaId) } : {};
+      ids.add(id); claves.add(k); d.elenco.push({ id, nombre: sinSufijo(p.nombre), color: color(p.color), ...(p.auto ? { auto: true } : {}), ...enCarpeta });
     });
     const deRegistro = ch => Object.values(ch || {}).forEach(r => {
       const k = r && clavePersonaje(r.name); if (!k || claves.has(k)) return;
@@ -160,6 +232,8 @@
     });
     d.notas.forEach(n => deRegistro(n.characters));
     d.contenedores.forEach(c => c.esquemas.forEach(e => Object.values(e.notas).forEach(n => deRegistro(n.characters))));
+    const ordenElenco = Array.isArray(src.ordenElenco) ? src.ordenElenco.filter(x => typeof x === 'string' && x) : [];
+    if (ordenElenco.length) d.ordenElenco = ordenElenco;
     return d;
   }
 
@@ -192,10 +266,15 @@
       }
       return null;
     }
-    etiquetasDe(subId) { return this.datos.etiquetas.filter(e => e.subId === subId); }
+    /* Los segmentos de una biblioteca; los de la sección «Guiones generados» van aparte (`guionesSegmentosDe`). */
+    etiquetasDe(subId) { return this.datos.etiquetas.filter(e => e.subId === subId && !e.guiones); }
+    guionesSegmentosDe(subId) { return this.datos.etiquetas.filter(e => e.subId === subId && e.guiones); }
     /* Notas de un subcontenedor: todas, o las de una etiqueta (null = la bandeja). */
+    /* `undefined` = todas; `null` = la bandeja; C.SEGMENTO_GUIONES = la bandeja de guiones generados; el id de un segmento
+       (normal o de guiones) = sus notas. */
     notasDe(subId, etiquetaId) {
-      return this.datos.notas.filter(n => n.subId === subId && (etiquetaId === undefined || n.etiquetaId === (etiquetaId || null)));
+      if (etiquetaId === GUIONES) return this.datos.notas.filter(n => n.subId === subId && n.guion && !n.etiquetaId);
+      return this.datos.notas.filter(n => n.subId === subId && (etiquetaId === undefined || (etiquetaId ? n.etiquetaId === etiquetaId : !n.guion && !n.etiquetaId)));
     }
     notasContenedor(cid) { const set = new Set(this.subsDe(cid).map(s => s.id)); return this.datos.notas.filter(n => set.has(n.subId)); }
     /* Las dos listas de la barra (fijados y el resto), filtradas por texto (nombre del contenedor, de
@@ -228,7 +307,7 @@
     crearContenedor(nombre, opciones) {
       const t = this.ahora();
       const c = { id: this.idNuevo(), nombre: this._libre(texto(nombre, 'Contenedor'), this.datos.contenedores.map(x => x.nombre)),
-                  fijado: false, plegado: false, creado: t, modificado: t, esquemas: [], subs: [] };
+                  fijado: false, plegado: false, creado: t, modificado: t, carpetas: [], esquemas: [], subs: [] };
       this.datos.contenedores.push(c);
       if (!(opciones && opciones.vacio)) c.subs.push({ id: this.idNuevo(), nombre: NOMBRE_SUB, creado: t, modificado: t });
       return si({ contenedor: c, sub: c.subs[0] || null });
@@ -282,6 +361,186 @@
       return si({ contenedor: c, notas, esquemas: c.esquemas.length, aviso: '«' + c.nombre + '» eliminado' + (notas ? ' · ' + notas + (notas === 1 ? ' nota va' : ' notas van') + ' a la papelera' : '') });
     }
 
+    /* ---------- carpetas ---------- */
+    /* `ambito`: el id de un contenedor, o ELENCO (las de Personajes). */
+    carpetasDe(ambito) { if (ambito === ELENCO) return this.datos.carpetasElenco; const c = this.contenedor(ambito); return c ? c.carpetas : []; }
+    /* Una carpeta con su ámbito y su contenedor (null en Personajes), o null. */
+    carpeta(id) {
+      if (!id) return null;
+      const k = this.datos.carpetasElenco.find(x => x.id === id); if (k) return { ambito: ELENCO, contenedor: null, carpeta: k };
+      for (const c of this.datos.contenedores) { const x = c.carpetas.find(y => y.id === id); if (x) return { ambito: c.id, contenedor: c, carpeta: x }; }
+      return null;
+    }
+    hijasDe(ambito, padreId) { return this.carpetasDe(ambito).filter(k => (k.padreId || null) === (padreId || null)); }
+    /* La carpeta y todas las que cuelgan de ella. */
+    _descendientes(ambito, id) {
+      const set = new Set([id]); let crece = true;
+      while (crece) { crece = false; this.carpetasDe(ambito).forEach(k => { if (k.padreId && set.has(k.padreId) && !set.has(k.id)) { set.add(k.id); crece = true; } }); }
+      return set;
+    }
+    /* Lo que cuelga de una carpeta, contando lo de sus subcarpetas: esquemas y bibliotecas, o personajes. */
+    cuentaCarpeta(id) {
+      const r = this.carpeta(id); if (!r) return 0;
+      const set = this._descendientes(r.ambito, id), dentro = x => x.carpetaId && set.has(x.carpetaId);
+      if (!r.contenedor) return this.datos.elenco.filter(dentro).length;
+      return r.contenedor.esquemas.filter(dentro).length + r.contenedor.subs.filter(dentro).length;
+    }
+    /* Pone un esquema o una biblioteca en una carpeta de su contenedor (null: la raíz); su pareja enlazada va con él. */
+    _enCarpeta(c, x, carpetaId) {
+      const k = carpetaId && c.carpetas.some(y => y.id === carpetaId) ? carpetaId : null;
+      const pareja = x.datos ? (x.subId && c.subs.find(s => s.id === x.subId)) : c.esquemas.find(e => e.subId === x.id);
+      [x, pareja].filter(Boolean).forEach(y => { if (k) y.carpetaId = k; else delete y.carpetaId; });
+    }
+    crearCarpeta(ambito, nombre, col, padreId) {
+      const c = ambito === ELENCO ? null : this.contenedor(ambito);
+      if (ambito !== ELENCO && !c) return no('Ese contenedor ya no existe');
+      const lista = this.carpetasDe(ambito);
+      if (padreId && !lista.some(k => k.id === padreId)) return no('Esa carpeta ya no existe');
+      const k = { id: this.idNuevo(), nombre: this._libre(texto(nombre, 'Carpeta'), this.hijasDe(ambito, padreId).map(x => x.nombre)),
+                  color: COLORES_CARPETA.includes(col) ? col : 'gris', padreId: padreId || null };
+      lista.push(k); this._tocar(c);
+      return si({ carpeta: k });
+    }
+    renombrarCarpeta(id, nombre) {
+      const r = this.carpeta(id); if (!r) return no('Esa carpeta ya no existe');
+      const n = texto(nombre, ''); if (!n) return no('El nombre no puede quedar vacío');
+      if (this.hijasDe(r.ambito, r.carpeta.padreId).some(k => k !== r.carpeta && plano(k.nombre) === plano(n))) return no('Ya hay una carpeta con ese nombre ahí');
+      r.carpeta.nombre = n; this._tocar(r.contenedor);
+      return si(r);
+    }
+    colorearCarpeta(id, col) {
+      const r = this.carpeta(id); if (!r) return no('Esa carpeta ya no existe');
+      if (!COLORES_CARPETA.includes(col)) return no('Ese color no existe');
+      r.carpeta.color = col; this._tocar(r.contenedor);
+      return si(r);
+    }
+    plegarCarpeta(id, plegada) {
+      const r = this.carpeta(id); if (!r) return no('Esa carpeta ya no existe');
+      const p = plegada === undefined ? !r.carpeta.plegada : !!plegada;
+      if (p) r.carpeta.plegada = true; else delete r.carpeta.plegada;
+      return si(r);
+    }
+    /* Lo que tenía (carpetas, esquemas, bibliotecas o personajes) sube a la carpeta de arriba; no se pierde nada. */
+    eliminarCarpeta(id) {
+      const r = this.carpeta(id); if (!r) return no('Esa carpeta ya no existe');
+      const arriba = r.carpeta.padreId || null;
+      const subir = x => { if (x.carpetaId !== id) return; if (arriba) x.carpetaId = arriba; else delete x.carpetaId; };
+      this.carpetasDe(r.ambito).forEach(k => { if (k.padreId === id) k.padreId = arriba; });
+      if (r.contenedor) { r.contenedor.esquemas.forEach(subir); r.contenedor.subs.forEach(subir); } else this.datos.elenco.forEach(subir);
+      if (r.contenedor) r.contenedor.carpetas = r.contenedor.carpetas.filter(k => k !== r.carpeta); else this.datos.carpetasElenco = this.datos.carpetasElenco.filter(k => k !== r.carpeta);
+      this._tocar(r.contenedor);
+      return si(Object.assign({ aviso: 'Carpeta «' + r.carpeta.nombre + '» eliminada' }, r));
+    }
+    /* Mete algo en una carpeta (null: la raíz de su ámbito). `tipo`: 'carpeta', 'esquema', 'sub' o 'personaje'. Un
+       esquema o una biblioteca que va a una carpeta de otro contenedor se muda con su pareja; una carpeta, con todo lo
+       suyo. Una carpeta no entra en sí misma ni en una de sus subcarpetas. */
+    moverACarpeta(tipo, id, carpetaId, cid) {
+      const dest = carpetaId ? this.carpeta(carpetaId) : null;
+      if (carpetaId && !dest) return no('Esa carpeta ya no existe');
+      if (tipo === 'personaje') {
+        const p = this.personaje(id); if (!p) return no('Ese personaje ya no existe');
+        if (dest && dest.ambito !== ELENCO) return no('Un personaje solo va en una carpeta de Personajes');
+        if (carpetaId) p.carpetaId = carpetaId; else delete p.carpetaId;
+        return si({ personaje: p });
+      }
+      if (tipo === 'carpeta') {
+        const r = this.carpeta(id); if (!r) return no('Esa carpeta ya no existe');
+        const ambito = dest ? dest.ambito : (cid || r.ambito);
+        if ((ambito === ELENCO) !== (r.ambito === ELENCO)) return no('Esa carpeta no puede ir ahí');
+        if (ambito !== r.ambito) { const x = this._trasladarCarpeta(r, this.contenedor(ambito)); if (!x.ok) return x; }
+        if (carpetaId && this._descendientes(ambito, id).has(carpetaId)) return no('Una carpeta no puede ir dentro de sí misma');
+        const lista = this.carpetasDe(ambito);
+        r.carpeta.padreId = carpetaId || null;
+        r.carpeta.nombre = this._libre(r.carpeta.nombre, this.hijasDe(ambito, carpetaId).filter(k => k !== r.carpeta).map(k => k.nombre));
+        lista.splice(lista.indexOf(r.carpeta), 1); lista.push(r.carpeta);   // al final de su nivel
+        this._tocar(this.contenedor(ambito));
+        return si({ carpeta: r.carpeta });
+      }
+      const r = tipo === 'esquema' ? this.esquema(id) : this.sub(id); if (!r) return no(tipo === 'esquema' ? 'Ese esquema ya no existe' : 'Esa biblioteca ya no existe');
+      if (dest && dest.ambito === ELENCO) return no('Ahí solo van personajes');
+      const destino = dest ? dest.contenedor : (cid ? this.contenedor(cid) : r.contenedor);
+      if (!destino) return no('Ese contenedor ya no existe');
+      if (destino !== r.contenedor) { const x = tipo === 'esquema' ? this.colocarEsquema(id, null, destino.id) : this.colocarSub(id, null, destino.id); if (!x.ok) return x; }
+      const item = tipo === 'esquema' ? this.esquema(id).esquema : this.sub(id).sub;
+      this._enCarpeta(destino, item, carpetaId || null); this._tocar(destino);
+      return si({ contenedor: destino });
+    }
+    /* ---------- orden del árbol ----------
+       En cada nivel (la raíz de un contenedor o una carpeta; lo mismo en Personajes) todo va en un solo orden: carpetas,
+       esquemas (con su biblioteca enlazada, que es una pieza con él) y bibliotecas sueltas, mezclados como se quiera.
+       Se guarda como una lista de ids por contenedor (`ordenArbol`) y otra para Personajes (`ordenElenco`); lo nuevo
+       entra detrás de su vecino natural (`aplicarOrden`). */
+    _miembrosArbol(ambito) {
+      if (ambito === ELENCO) return [...this.datos.carpetasElenco.map(k => k.id), ...this.datos.elenco.map(p => p.id)];
+      const c = this.contenedor(ambito); if (!c) return [];
+      const enlazadas = new Set(c.esquemas.map(e => e.subId).filter(Boolean));
+      return [...c.carpetas.map(k => k.id), ...c.esquemas.map(e => e.id), ...c.subs.filter(x => !enlazadas.has(x.id)).map(x => x.id)];
+    }
+    _ordenArbol(ambito) {
+      const guardado = ambito === ELENCO ? this.datos.ordenElenco : (this.contenedor(ambito) || {}).ordenArbol;
+      return aplicarOrden(this._miembrosArbol(ambito), guardado);
+    }
+    /* Lo de un nivel en su orden: [{ tipo: 'carpeta' | 'esquema' | 'sub' | 'personaje', id, obj }]. */
+    nivelArbol(ambito, carpetaId) {
+      const k = carpetaId || null, aqui = x => (x.carpetaId || null) === k, orden = this._ordenArbol(ambito);
+      const xs = this.hijasDe(ambito, k).map(obj => ({ tipo: 'carpeta', id: obj.id, obj }));
+      if (ambito === ELENCO) xs.push(...this.datos.elenco.filter(aqui).map(obj => ({ tipo: 'personaje', id: obj.id, obj })));
+      else {
+        const c = this.contenedor(ambito); if (!c) return [];
+        const enlazadas = new Set(c.esquemas.map(e => e.subId).filter(Boolean));
+        xs.push(...c.esquemas.filter(aqui).map(obj => ({ tipo: 'esquema', id: obj.id, obj })), ...c.subs.filter(x => aqui(x) && !enlazadas.has(x.id)).map(obj => ({ tipo: 'sub', id: obj.id, obj })));
+      }
+      return xs.sort((a, b) => orden.indexOf(a.id) - orden.indexOf(b.id));
+    }
+    /* Qué es un id del árbol y dónde está: una biblioteca enlazada cuenta como su esquema (van juntos). */
+    _piezaArbol(id) {
+      const k = this.carpeta(id); if (k) return { tipo: 'carpeta', id, ambito: k.ambito, carpetaId: k.carpeta.padreId || null };
+      const p = this.personaje(id); if (p) return { tipo: 'personaje', id, ambito: ELENCO, carpetaId: p.carpetaId || null };
+      const e = this.esquema(id); if (e) return { tipo: 'esquema', id, ambito: e.contenedor.id, carpetaId: e.esquema.carpetaId || null };
+      const x = this.enlace(id); if (x) return { tipo: 'esquema', id: x.esquema.id, ambito: x.contenedor.id, carpetaId: x.esquema.carpetaId || null };
+      const s = this.sub(id); if (s) return { tipo: 'sub', id, ambito: s.contenedor.id, carpetaId: s.sub.carpetaId || null };
+      return null;
+    }
+    /* Pone una pieza del árbol delante (o, con `despues`, detrás) de otra, en su nivel: si venía de otra carpeta u
+       otro contenedor, se muda (con su pareja o con todo lo suyo). */
+    colocarEnArbol(id, refId, despues) {
+      const yo = this._piezaArbol(id), ref = this._piezaArbol(refId);
+      if (!yo || !ref) return no('Eso ya no existe');
+      if (yo.id === ref.id) return si({});
+      if ((yo.ambito === ELENCO) !== (ref.ambito === ELENCO)) return no('Eso no puede ir ahí');   // personajes con personajes; lo demás, en los contenedores
+      if (yo.ambito !== ref.ambito || yo.carpetaId !== ref.carpetaId) {
+        const x = this.moverACarpeta(yo.tipo, yo.id, ref.carpetaId, ref.ambito); if (!x.ok) return x;
+      }
+      const lista = this._ordenArbol(ref.ambito).filter(x => x !== yo.id);
+      lista.splice(lista.indexOf(ref.id) + (despues ? 1 : 0), 0, yo.id);
+      if (ref.ambito === ELENCO) this.datos.ordenElenco = lista;
+      else { const c = this.contenedor(ref.ambito); c.ordenArbol = lista; this._tocar(c); }
+      return si({});
+    }
+    /* Delante de otra carpeta (en su nivel y su contenedor). */
+    colocarCarpeta(id, antesDe) {
+      const r = this.carpeta(id), ref = this.carpeta(antesDe); if (!r || !ref) return no('Esa carpeta ya no existe');
+      if (id === antesDe) return si(r);
+      const x = this.moverACarpeta('carpeta', id, ref.carpeta.padreId, ref.ambito); if (!x.ok) return x;
+      const lista = this.carpetasDe(ref.ambito);
+      lista.splice(lista.indexOf(r.carpeta), 1); lista.splice(lista.indexOf(ref.carpeta), 0, r.carpeta);
+      return si(r);
+    }
+    /* Muda una carpeta con sus subcarpetas, esquemas y bibliotecas a otro contenedor (a su raíz). */
+    _trasladarCarpeta(r, destino) {
+      if (!destino || destino.oculto) return no('Ese contenedor ya no existe');
+      const origen = r.contenedor, set = this._descendientes(r.ambito, r.carpeta.id);
+      const carpetas = origen.carpetas.filter(k => set.has(k.id));
+      origen.carpetas = origen.carpetas.filter(k => !set.has(k.id));
+      destino.carpetas.push(...carpetas);
+      r.carpeta.padreId = null;
+      const dentro = x => x.carpetaId && set.has(x.carpetaId);
+      origen.esquemas.filter(dentro).forEach(e => { const k = e.carpetaId; this.colocarEsquema(e.id, null, destino.id); this._enCarpeta(destino, e, k); });
+      origen.subs.filter(dentro).forEach(s => { const k = s.carpetaId; if (destino.subs.includes(s)) return; this.colocarSub(s.id, null, destino.id); this._enCarpeta(destino, s, k); });
+      this._tocar(origen); this._tocar(destino);
+      return si({});
+    }
+
     /* ---------- personajes: contenedor oculto con un tablero y una biblioteca por personaje ---------- */
     /* El contenedor de Personajes; con `crear` lo crea si no existe. El tablero único de antes
        (`personajes:esquema`, compartido por todos) se descarta: ahora cada personaje tiene el suyo. */
@@ -290,7 +549,7 @@
       if (!c) {
         if (!crear) return null;
         const t = this.ahora();
-        c = { id: ID_PERSONAJES, nombre: 'Personajes', fijado: false, plegado: false, creado: t, modificado: t, esquemas: [], subs: [], oculto: true };
+        c = { id: ID_PERSONAJES, nombre: 'Personajes', fijado: false, plegado: false, creado: t, modificado: t, carpetas: [], esquemas: [], subs: [], oculto: true };
         this.datos.contenedores.push(c);
       }
       c.esquemas = c.esquemas.filter(e => e.id !== ID_PERSONAJES + ':esquema');
@@ -358,6 +617,8 @@
       /* enlazado a un esquema: el esquema va con él (al final de los esquemas del destino) */
       const e = destino !== r.contenedor && r.contenedor.esquemas.find(x => x.subId === id);
       if (e) this._llevar(r.contenedor, destino, 'esquemas', e, null);
+      /* la carpeta: la de aquel delante del que se suelta; soltada sobre un contenedor, su raíz */
+      if (ref) this._enCarpeta(destino, r.sub, ref.sub.carpetaId); else if (cid || destino !== r.contenedor) this._enCarpeta(destino, r.sub, null);
       return si({ contenedor: destino, sub: r.sub, movido: destino !== r.contenedor });
     }
     /* Pasa `x` de la lista `clave` de un contenedor a la del otro (delante de `antesDe` o al final),
@@ -370,9 +631,62 @@
       destino[clave] = lista;
     }
     /* En la vista de una biblioteca enlazada, qué sección va arriba: la cronología (por defecto) o los segmentos. */
+    /* ---------- orden propio de actos y documentos en una biblioteca (cronología, momentos) ---------- */
+    ordenActos(subId, actosNaturales) {
+      const r = this.sub(subId), o = r && r.sub.ordenActos;
+      return aplicarOrden(actosNaturales, o && o.actos);
+    }
+    ordenNodos(subId, actoId, nodosNaturales) {
+      const r = this.sub(subId), o = r && r.sub.ordenActos;
+      return aplicarOrden(nodosNaturales, o && o.nodos[actoId]);
+    }
+    /* `visibles`: la lista tal como se ve ahora; el acto (o el documento) queda delante de `antesDe` (al final con null) */
+    colocarActo(subId, actoId, antesDe, visibles) {
+      const r = this.sub(subId); if (!r) return no('Esa biblioteca ya no existe');
+      const l = visibles.filter(x => x !== actoId), i = antesDe ? l.indexOf(antesDe) : -1;
+      l.splice(i < 0 ? l.length : i, 0, actoId);
+      r.sub.ordenActos = r.sub.ordenActos || { actos: [], nodos: {} };
+      r.sub.ordenActos.actos = l; this._tocarSub(subId);
+      return si(r);
+    }
+    colocarNodoActo(subId, actoId, puntoId, antesDe, visibles) {
+      const r = this.sub(subId); if (!r) return no('Esa biblioteca ya no existe');
+      if (!visibles.includes(puntoId)) return no('Ese documento es de otro segmento');
+      const l = visibles.filter(x => x !== puntoId), i = antesDe ? l.indexOf(antesDe) : -1;
+      l.splice(i < 0 ? l.length : i, 0, puntoId);
+      r.sub.ordenActos = r.sub.ordenActos || { actos: [], nodos: {} };
+      r.sub.ordenActos.nodos[actoId] = l; this._tocarSub(subId);
+      return si(r);
+    }
+    /* El orden de las tarjetas de segmentos de una biblioteca, que se cambia arrastrando (Leo): claves `bandeja`,
+       `etq:<id>` y, en el carrusel de un personaje, también `apariciones` y `acto:<id>` (sus momentos). Sin orden
+       guardado, el natural (bandeja, segmentos; en el carrusel: apariciones, bandeja, momentos, segmentos). */
+    ordenSegmentos(subId, naturales) {
+      const r = this.sub(subId);
+      return aplicarOrden(naturales, r && r.sub.ordenSegmentos);
+    }
+    colocarSegmento(subId, clave, antesDe, visibles) {
+      const r = this.sub(subId); if (!r) return no('Esa biblioteca ya no existe');
+      const l = visibles.filter(x => x !== clave), i = antesDe ? l.indexOf(antesDe) : -1;
+      l.splice(i < 0 ? l.length : i, 0, clave);
+      r.sub.ordenSegmentos = l; this._tocarSub(subId);
+      return si(r);
+    }
+    /* el orden de las tarjetas de la sección de guiones (claves `bandeja` y `etq:<id>`) */
+    ordenGuiones(subId, naturales) { const r = this.sub(subId); return aplicarOrden(naturales, r && r.sub.ordenGuiones); }
+    colocarSegmentoGuiones(subId, clave, antesDe, visibles) {
+      const r = this.sub(subId); if (!r) return no('Esa biblioteca ya no existe');
+      const l = visibles.filter(x => x !== clave), i = antesDe ? l.indexOf(antesDe) : -1;
+      l.splice(i < 0 ? l.length : i, 0, clave);
+      r.sub.ordenGuiones = l; this._tocarSub(subId);
+      return si(r);
+    }
+    /* `guionesPrimero`: la sección de guiones generados delante de la de segmentos (así de partida); se guarda al revés */
     ordenarSecciones(id, cronologiaPrimero) {
       const r = this.sub(id); if (!r) return no('Esa biblioteca ya no existe');
-      r.sub.segmentosPrimero = !cronologiaPrimero;
+      /* solo se guarda si es true: una biblioteca recién creada no lo lleva y, al abrir el archivo, normalizar no debe
+         añadirlo (el guion abierto dejaría de ser idéntico al archivo y se reescribiría al volver a arrancar) */
+      if (cronologiaPrimero) delete r.sub.segmentosPrimero; else r.sub.segmentosPrimero = true;
       return si(r);
     }
     /* Sus etiquetas se van; sus notas, a la papelera. */
@@ -426,6 +740,7 @@
       /* su documentos enlazado va con él (al final de los subcontenedores del destino) */
       const s = destino !== r.contenedor && r.esquema.subId && r.contenedor.subs.find(x => x.id === r.esquema.subId);
       if (s) this._llevar(r.contenedor, destino, 'subs', s, null);
+      if (ref) this._enCarpeta(destino, r.esquema, ref.esquema.carpetaId); else if (cid || destino !== r.contenedor) this._enCarpeta(destino, r.esquema, null);
       return si({ contenedor: destino, esquema: r.esquema, movido: destino !== r.contenedor });
     }
     /* Enlaza un esquema suelto con un documentos suelto del mismo contenedor (uno con uno). */
@@ -480,19 +795,20 @@
     }
 
     /* ---------- etiquetas (los segmentos de un subcontenedor) ---------- */
-    crearEtiqueta(subId, nombre, col) {
+    crearEtiqueta(subId, nombre, col, op) {
       const r = this.sub(subId); if (!r) return no('Esa biblioteca ya no existe');
-      const mias = this.etiquetasDe(subId);
+      const guiones = !!(op && op.guiones);
+      const mias = guiones ? this.guionesSegmentosDe(subId) : this.etiquetasDe(subId);
       const usados = mias.map(e => e.color);
       const libre = col !== undefined && col !== null ? color(col) : (PALETA.findIndex((_, i) => !usados.includes(i)) + 1 || 1) - 1;
-      const e = { id: this.idNuevo(), subId, nombre: this._libre(texto(nombre, 'Segmento'), mias.map(x => x.nombre)), color: libre };
+      const e = { id: this.idNuevo(), subId, nombre: this._libre(texto(nombre, 'Segmento'), mias.map(x => x.nombre)), color: guiones ? 0 : libre, ...(guiones ? { guiones: true } : {}) };
       this.datos.etiquetas.push(e); this._tocarSub(subId);
       return si({ etiqueta: e });
     }
     renombrarEtiqueta(id, nombre) {
       const e = this.etiqueta(id); if (!e) return no('Ese segmento ya no existe');
       const n = texto(nombre, ''); if (!n) return no('El nombre no puede quedar vacío');
-      if (this.etiquetasDe(e.subId).some(x => x !== e && plano(x.nombre) === plano(n))) return no('Ya hay un segmento con ese nombre');
+      if ((e.guiones ? this.guionesSegmentosDe(e.subId) : this.etiquetasDe(e.subId)).some(x => x !== e && plano(x.nombre) === plano(n))) return no('Ya hay un segmento con ese nombre');
       e.nombre = n; this._tocarSub(e.subId);
       return si({ etiqueta: e });
     }
@@ -530,12 +846,16 @@
     }
 
     /* ---------- notas ---------- */
-    crearNota(subId, etiquetaId, titulo) {
+    /* Con `op.guiones` (o en un segmento de guiones) es un documento de la sección de guiones generados, hecho a mano. */
+    crearNota(subId, etiquetaId, titulo, op) {
       const r = this.sub(subId); if (!r) return no('Esa biblioteca ya no existe');
-      if (etiquetaId) { const e = this.etiqueta(etiquetaId); if (!e || e.subId !== subId) return no('Ese segmento no es de esta biblioteca'); }
+      const e = etiquetaId ? this.etiqueta(etiquetaId) : null;
+      if (etiquetaId && (!e || e.subId !== subId)) return no('Ese segmento no es de esta biblioteca');
+      const guiones = e ? !!e.guiones : !!(op && op.guiones);
       const t = this.ahora();
       const n = { id: this.idNuevo(), subId, etiquetaId: etiquetaId || null,
-                  titulo: this._libre(texto(titulo, 'Sin título'), this.notasDe(subId).map(x => x.titulo)), html: '', characters: {}, creado: t, modificado: t };
+                  titulo: this._libre(texto(titulo, 'Sin título'), this.notasDe(subId).map(x => x.titulo)), html: '', characters: {}, creado: t, modificado: t,
+                  ...(guiones ? { guion: { eid: null, generado: 0 } } : {}) };
       this.datos.notas.push(n); this._tocarSub(subId);
       return si({ nota: n });
     }
@@ -546,13 +866,72 @@
       n.titulo = t; n.modificado = this.ahora(); this._tocarSub(n.subId);
       return si({ nota: n });
     }
+    /* ---------- el guion de un esquema (Revisar guión) ---------- */
+    guionEsquema(eid) {
+      const r = this.esquema(eid), g = (r && r.esquema.guion) || {};
+      return { fuera: (g.fuera || []).slice(), orden: (g.orden || []).slice(), plegadas: (g.plegadas || []).slice() };
+    }
+    _cambiarGuion(eid, fn) {
+      const r = this.esquema(eid); if (!r) return no('Ese esquema ya no existe');
+      const antes = JSON.stringify(this.guionEsquema(eid)), g = this.guionEsquema(eid);
+      fn(g);
+      const limpio = sanearGuion(g);
+      if (limpio) r.esquema.guion = limpio; else delete r.esquema.guion;
+      const cambio = antes !== JSON.stringify(this.guionEsquema(eid));
+      if (cambio) this._tocar(r.contenedor);
+      return si({ guion: this.guionEsquema(eid), cambio });
+    }
+    /* Sacar secciones del guion: se quedan en su sitio del documento, pero no se copian al generar. */
+    sacarDelGuion(eid, lista) { return this._cambiarGuion(eid, g => { g.fuera = g.fuera.concat(claves(lista)); }); }
+    devolverAlGuion(eid, lista) { const q = new Set(claves(lista)); return this._cambiarGuion(eid, g => { g.fuera = g.fuera.filter(k => !q.has(k)); }); }
+    plegarSeccion(eid, clave, plegada) {
+      return this._cambiarGuion(eid, g => { g.plegadas = g.plegadas.filter(k => k !== clave); if (plegada) g.plegadas.push(clave); });
+    }
+    /* El orden de lectura del documento generado; el esquema y la línea del tiempo no cambian. `natural`: las claves en el
+       orden del tiempo. Lo nuevo entra detrás de su vecino natural. */
+    ordenGuion(eid, natural) { return aplicarOrden(natural, this.guionEsquema(eid).orden); }
+    ordenarGuion(eid, lista) { return this._cambiarGuion(eid, g => { g.orden = claves(lista); }); }
+    /* Poda de lo que ya no es sección (nodos borrados): fuera, orden y plegadas. */
+    podarGuion(eid, vivas) {
+      const set = new Set(vivas || []);
+      return this._cambiarGuion(eid, g => { ['fuera', 'orden', 'plegadas'].forEach(k => { g[k] = g[k].filter(x => set.has(x)); }); });
+    }
+
+    /* ---------- guiones generados: notas del segmento del sistema de la biblioteca ---------- */
+    guionesDe(subId) { return this.datos.notas.filter(n => n.subId === subId && n.guion); }   // todos, en cualquier segmento de guiones
+    crearGuion(subId, eid, titulo, doc) {
+      const r = this.sub(subId); if (!r) return no('Esa biblioteca ya no existe');
+      if (!this.esquema(eid)) return no('Ese esquema ya no existe');
+      const t = this.ahora();
+      const n = { id: this.idNuevo(), subId, etiquetaId: null, titulo: this._libre(texto(titulo, 'Guion'), this.notasDe(subId).map(x => x.titulo)),
+                  html: doc && typeof doc.html === 'string' ? doc.html : '', characters: doc && doc.characters ? clonar(doc.characters) : {},
+                  creado: t, modificado: t, guion: { eid, generado: t } };
+      this.datos.notas.push(n); this._tocarSub(subId);
+      this.sincronizarElenco(n.characters);
+      return si({ nota: n, aviso: '«' + n.titulo + '» generado en «' + r.sub.nombre + '»' });
+    }
+    /* El color de una nota: un tono de TONOS, o null (sin color). No cambia su fecha: no es contenido. */
+    colorearNota(id, tono) {
+      const n = this.nota(id); if (!n) return no('Esa nota ya no existe');
+      if (tono && !TONOS.includes(tono)) return no('Ese color no es de la paleta');
+      if ((n.color || null) === (tono || null)) return si({ nota: n, cambio: false });
+      if (tono) n.color = tono; else delete n.color;
+      this._tocarSub(n.subId);
+      return si({ nota: n, cambio: true });
+    }
     /* Cambia de etiqueta (null = bandeja) y, si se pide, de subcontenedor; con `antesDe` (una nota del
        mismo sitio) queda delante de ella, si no al final: así se ordenan a mano. */
     moverNota(id, etiquetaId, subId, antesDe) {
       const n = this.nota(id); if (!n) return no('Esa nota ya no existe');
       const destino = subId || n.subId;
       if (!this.sub(destino)) return no('Esa biblioteca ya no existe');
-      if (etiquetaId) { const e = this.etiqueta(etiquetaId); if (!e || e.subId !== destino) return no('Ese segmento no es de esa biblioteca'); }
+      const e = etiquetaId ? this.etiqueta(etiquetaId) : null;
+      if (etiquetaId && (!e || e.subId !== destino)) return no('Ese segmento no es de esa biblioteca');
+      /* los guiones generados solo se mueven entre los segmentos de su sección (y su bandeja), en su biblioteca; las notas,
+         nunca a esa sección */
+      if (n.guion && destino !== n.subId) return no('Un guion generado se queda en su biblioteca');
+      if (n.guion && e && !e.guiones) return no('Un guion generado solo va a segmentos de «Guiones generados»');
+      if (!n.guion && e && e.guiones) return no('Ese segmento es de guiones generados');
       n.subId = destino; n.etiquetaId = etiquetaId || null;
       const resto = this.datos.notas.filter(x => x !== n);
       const ref = antesDe && antesDe !== id ? resto.find(x => x.id === antesDe && x.subId === destino && x.etiquetaId === n.etiquetaId) : null;
@@ -715,6 +1094,6 @@
     }
   }
 
-  Object.assign(C, { Documentos, ID_PERSONAJES, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
+  Object.assign(C, { Documentos, ID_PERSONAJES, COLORES_CARPETA, TONOS_NOTA: TONOS, SEGMENTO_GUIONES: GUIONES, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

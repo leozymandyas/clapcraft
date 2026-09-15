@@ -1,6 +1,6 @@
 {
   "name": "claquedraw",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Guiones: editor de texto tipo hoja de Word con atajos Markdown, tablero de tramas y ClapCraft (esquema de pasos con una nota de texto por nodo), listo para empaquetar con Electron",
   "main": "electron/main.js",
   "private": true,
@@ -9,6 +9,7 @@
     "web": "node serve.js 5173",
     "dist": "electron-builder",
     "test": "node --test",
+    "test:archivos": "electron pruebas/archivos-electron.js",
     "tramas": "node serve.js 5173"
   },
   "devDependencies": {

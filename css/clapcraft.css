@@ -2,7 +2,7 @@
    Se carga la última en claquedraw.html y pone la apariencia definitiva encima de css/tramas.css y
    css/claquedraw.css. Viene del rediseño que entregó Leo (docs/diseno/rediseno/): IBM Plex Sans en la
    interfaz y Plex Mono en los rótulos (empaquetadas en fonts/), tres planos de gris (panel, lienzo,
-   papel), un solo acento lavanda sacado del logo (#6B5B8E claro · #BFAED8 oscuro), bordes de 1 px,
+   papel), un solo acento violeta (#6141c9 claro · #b3a6f7 oscuro; paleta de docs/diseno/rediseno-12/), bordes de 1 px,
    radios de 4/6 px, sombras suaves y un juego de iconos de trazo (el sprite de claquedraw.html).
    Los tokens conservan los nombres del código; los nuevos (--lienzo, --sel-bg, --drop-bg, --p-*)
    vienen del rediseño. La marca «ClapCraft» sigue en Courier New negrita (requisito fijo de Leo). */
@@ -19,29 +19,29 @@
   --marca: "Courier New", Courier, monospace;
   --doc: "Courier Prime", "Courier New", monospace;
   /* tres planos de gris */
-  --chrome: #e9e9ec; --panel: #e0e0e5; --papel: #ffffff; --lienzo: #f6f6f8;
-  --hover: #d6d6dd; --hover-fuerte: #d6d6dd; --pista-hot: #f0f0f3;
-  --regla: #d4d4db; --regla-fuerte: #c7c7d0; --borde: #c7c7d0; --borde-fuerte: #b0b0bb; --linea-menu: #d4d4db; --cuadricula: #e3e3e8;
-  --tinta: #1e1e22; --tenue: #61616b; --palido: #8d8d97; --inverso: #f4f4f6;
+  --chrome: #e8e9ec; --panel: #dfe1e6; --papel: #ffffff; --lienzo: #f5f6f8;
+  --hover: #d8dae0; --hover-fuerte: #d8dae0; --pista-hot: #eff0f3;
+  --regla: #d7d9df; --regla-fuerte: #c5c8d0; --borde: #c5c8d0; --borde-fuerte: #aab0bb; --linea-menu: #d7d9df; --cuadricula: #e2e4e9;
+  --tinta: #1b1d22; --tenue: #5a5f68; --palido: #878d97; --inverso: #f4f4f6;
   /* acento */
-  --foco: #6b5b8e; --foco-sobre: #ffffff; --foco-suave: #eae6f1; --foco-halo: rgba(107, 91, 142, .2); --foco-linea: rgba(107, 91, 142, .42); --foco-banda: rgba(107, 91, 142, .055);
-  --sel-bg: #e8e4f0; --drop-bg: rgba(107, 91, 142, .09);
-  --peligro: #a04236; --peligro-bg: #f3e3e0; --ok: #3f7048;
+  --foco: #6141c9; --foco-sobre: #ffffff; --foco-suave: #e9e6f8; --foco-halo: rgba(97, 65, 201, .2); --foco-linea: rgba(97, 65, 201, .42); --foco-banda: rgba(97, 65, 201, .055);
+  --sel-bg: #dfd9f4; --drop-bg: rgba(97, 65, 201, .09);
+  --peligro: #c4291c; --peligro-bg: #f9e2df; --ok: #12803f;
   --nota: #f7efd9; --nota-borde: #ddcda2; --nota-tinta: #6b5321; --nota-edit: #fbf6e8; --nota-tenue: #8a7340;
   --sombra: 0 1px 1px rgba(24, 24, 32, .05); --sombra-alta: 0 1px 2px rgba(24, 24, 32, .07), 0 10px 24px rgba(24, 24, 32, .1);
   --sombra-lado: 1px 0 0 rgba(24, 24, 32, .04); --sombra-modal: 0 4px 10px rgba(24, 24, 32, .14), 0 24px 60px rgba(24, 24, 32, .22);
   --sombra-dura: rgba(24, 24, 32, .1); --sombra-suave: rgba(24, 24, 32, .06);
   --backdrop: rgba(24, 24, 32, .34);
-  --toast-bg: #2b2b31; --toast-fg: #ececef; --toast-acento: #bfaed8;
-  /* tablero */
-  --t-azul: #3d5a86; --t-violeta: #6b5b8e; --t-verde: #3f6b4a; --t-ambar: #86682c; --t-rojo: #96473c; --t-gris: #5d5d68;
-  --f-azul: #e7ebf2; --f-violeta: #ebe7f1; --f-verde: #e7eee8; --f-ambar: #f1ece0; --f-rojo: #f1e6e4; --f-gris: #eaeaee;
-  --escena: #d9cba8; --escena-trazo: #a99361; --rombo: #8b7aad; --rombo-trazo: #6b5b8e;
+  --toast-bg: #2b2b31; --toast-fg: #ececef; --toast-acento: #b3a6f7;
+  /* tablero: 24 tonos de trama, nodo y nota (--t-*) y su fondo pálido (--f-*, también fondo de acto), rediseño 9 */
+  --t-rojo: #c62828; --t-ladrillo: #d14a1f; --t-cobre: #d2691e; --t-ambar: #c98a00; --t-oro: #9a7b0a; --t-lima: #6e9a16; --t-oliva: #4f7a1e; --t-verde: #16803c; --t-esmeralda: #0a8a5c; --t-teal: #0b8b82; --t-turquesa: #0e8aa8; --t-cielo: #0378c0; --t-azul: #1a63d0; --t-marino: #17417e; --t-pizarra: #3e4a5c; --t-indigo: #4b34cc; --t-violeta: #6d28d9; --t-uva: #8a2bc4; --t-ciruela: #a21caf; --t-magenta: #bf1b8a; --t-rosa: #d31a6b; --t-vino: #96153f; --t-salvia: #5a7a63; --t-gris: #5d5d68;
+  --f-rojo: #ffe2e2; --f-ladrillo: #ffe6dc; --f-cobre: #ffeddb; --f-ambar: #fff2d0; --f-oro: #f7eecb; --f-lima: #eef8d4; --f-oliva: #e6f5d5; --f-verde: #d9f5e2; --f-esmeralda: #d5f5e7; --f-teal: #d3f4f1; --f-turquesa: #d4f2fa; --f-cielo: #d7eefe; --f-azul: #dfe9ff; --f-marino: #dde6f7; --f-pizarra: #e4e9f0; --f-indigo: #e5e1ff; --f-violeta: #ebe0ff; --f-uva: #f2e0ff; --f-ciruela: #fbe0fb; --f-magenta: #ffe0f4; --f-rosa: #ffe0ec; --f-vino: #ffdfe8; --f-salvia: #e4f0e8; --f-gris: #e9e7ee;
+  --escena: #f5dc9a; --escena-trazo: #c98a00; --rombo: #ddc7f8; --rombo-trazo: #6d28d9;
   /* etiquetas de tipo del árbol */
-  --p-grafito-bg: #e4e4e6; --p-grafito-tinta: #414146; --p-violeta-bg: #e7e2ef; --p-violeta-tinta: #524268; --p-azul-bg: #e1e7f1; --p-azul-tinta: #3a4f6e;
-  --p-violeta-linea: rgba(82, 66, 104, .4); --p-azul-linea: rgba(58, 79, 110, .4);
+  --p-grafito-bg: #e6e2ee; --p-grafito-tinta: #3c3648; --p-violeta-bg: #eae0ff; --p-violeta-tinta: #5326ab; --p-azul-bg: #dbe8ff; --p-azul-tinta: #1a4a86;
+  --p-violeta-linea: rgba(83, 38, 171, .4); --p-azul-linea: rgba(26, 74, 134, .4);
   /* barra inferior */
-  --bb-bg: #e9e9ec; --bb-line: #c7c7d0; --bb-fg: #1e1e22; --bb-muted: #61616b;
+  --bb-bg: #e8e9ec; --bb-line: #c5c8d0; --bb-fg: #1b1d22; --bb-muted: #5a5f68;
   --fila: 80px; --eje: 34px;                                 /* carriles de 80 px y eje de 34 (tablero.js los lee) */
 }
 html[data-theme="dark"] {
@@ -49,18 +49,19 @@ html[data-theme="dark"] {
   --hover: #2c2c32; --hover-fuerte: #2c2c32; --pista-hot: #1d1d22;
   --regla: #2f2f36; --regla-fuerte: #3a3a42; --borde: #3a3a42; --borde-fuerte: #4a4a54; --linea-menu: #2f2f36; --cuadricula: #26262c;
   --tinta: #e8e8ec; --tenue: #9a9aa4; --palido: #75757f; --inverso: #14141a;
-  --foco: #bfaed8; --foco-sobre: #221d2b; --foco-suave: #2e2839; --foco-halo: rgba(191, 174, 216, .22); --foco-linea: rgba(191, 174, 216, .4); --foco-banda: rgba(191, 174, 216, .06);
-  --sel-bg: #2f2a3b; --drop-bg: rgba(191, 174, 216, .1);
+  --foco: #b3a6f7; --foco-sobre: #221d2b; --foco-suave: #2a2742; --foco-halo: rgba(179, 166, 247, .22); --foco-linea: rgba(179, 166, 247, .4); --foco-banda: rgba(179, 166, 247, .06);
+  --sel-bg: #2f2a3b; --drop-bg: rgba(179, 166, 247, .1);
   --peligro: #d98a7e; --peligro-bg: #3a2522; --ok: #7fb489;
   --nota: #38311f; --nota-borde: #635230; --nota-tinta: #dcc48d; --nota-edit: #3f3724; --nota-tenue: #b39a5c;
   --sombra: 0 1px 1px rgba(0, 0, 0, .3); --sombra-alta: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 28px rgba(0, 0, 0, .45);
   --sombra-lado: 1px 0 0 rgba(0, 0, 0, .25); --sombra-modal: 0 4px 12px rgba(0, 0, 0, .5), 0 28px 64px rgba(0, 0, 0, .6);
   --sombra-dura: rgba(0, 0, 0, .5); --sombra-suave: rgba(0, 0, 0, .35);
   --backdrop: rgba(0, 0, 0, .6);
-  --toast-bg: #2e2e34; --toast-fg: #e8e8ec; --toast-acento: #bfaed8;
-  --t-azul: #89a4d4; --t-violeta: #b9a5da; --t-verde: #82b78e; --t-ambar: #cfa957; --t-rojo: #d48b80; --t-gris: #a8a8b3;
-  --f-azul: #1d2432; --f-violeta: #25202f; --f-verde: #1c2620; --f-ambar: #2a2419; --f-rojo: #2a1e1c; --f-gris: #232329;
-  --escena: #8a7852; --escena-trazo: #c0aa79; --rombo: #8d7cb0; --rombo-trazo: #b9a5da;
+  --toast-bg: #2e2e34; --toast-fg: #e8e8ec; --toast-acento: #b3a6f7;
+  /* 24 tonos de trama, nodo y nota (--t-*) y su fondo pálido (--f-*, también fondo de acto), rediseño 9 */
+  --t-rojo: #f28b82; --t-ladrillo: #f59a72; --t-cobre: #f5a35c; --t-ambar: #f0c04d; --t-oro: #dcb544; --t-lima: #bcd95f; --t-oliva: #a8cc70; --t-verde: #6bd68c; --t-esmeralda: #4fd1a5; --t-teal: #48cfc4; --t-turquesa: #4fc9e6; --t-cielo: #5fbcf0; --t-azul: #8fb2ff; --t-marino: #7fa8d6; --t-pizarra: #9aa8bd; --t-indigo: #a39bf7; --t-violeta: #b99bf5; --t-uva: #cf9bf0; --t-ciruela: #e396f0; --t-magenta: #f090d4; --t-rosa: #f58ab5; --t-vino: #e08195; --t-salvia: #a3c2aa; --t-gris: #a8a8b3;
+  --f-rojo: #3a282a; --f-ladrillo: #3a2b27; --f-cobre: #3a2c24; --f-ambar: #393121; --f-oro: #362f1f; --f-lima: #313524; --f-oliva: #2d3327; --f-verde: #23352c; --f-esmeralda: #1e3430; --f-teal: #1d3435; --f-turquesa: #1e333b; --f-cielo: #21313d; --f-azul: #292f3f; --f-marino: #262d38; --f-pizarra: #2b2d34; --f-indigo: #2c2b3e; --f-violeta: #302b3e; --f-uva: #342b3d; --f-ciruela: #372a3d; --f-magenta: #392938; --f-rosa: #3a2833; --f-vino: #37272d; --f-salvia: #2c3231; --f-gris: #2d2d32;
+  --escena: #8a6f28; --escena-trazo: #f0c04d; --rombo: #4a3a6e; --rombo-trazo: #b99bf5;
   --p-grafito-bg: #2b2b30; --p-grafito-tinta: #cfcfd4; --p-violeta-bg: #332a42; --p-violeta-tinta: #d5c9e4; --p-azul-bg: #2a3547; --p-azul-tinta: #c3d2e6;
   --p-violeta-linea: rgba(213, 201, 228, .42); --p-azul-linea: rgba(195, 210, 230, .4);
   --bb-bg: #0f0f11; --bb-line: #2a2a30; --bb-fg: #e8e8ec; --bb-muted: #84848e;
@@ -123,6 +124,7 @@ main { border-top: 1px solid var(--borde); }
 .historia { display: flex; gap: 4px; }
 .estado, button.estado { display: inline-flex; align-items: center; gap: 7px; font: 500 10.5px var(--mono); letter-spacing: .04em; text-transform: none; color: var(--tenue); padding: 4px 6px; }
 .estado.sucio { color: var(--tenue); } .estado.ok svg { color: var(--ok); }
+.estado > span:last-child:empty { display: none; }   /* sin nombre de archivo: solo el punto o el ✓ */
 .estado-punto { width: 6px; height: 6px; border-radius: 50%; background: var(--foco); }
 .btn { border: 1px solid var(--borde); border-radius: 4px; height: 28px; padding: 0 11px; font-size: 12.5px; font-weight: 500; background: var(--papel); box-shadow: var(--sombra); color: var(--tinta); display: inline-flex; align-items: center; gap: 7px; }
 .btn:hover { background: var(--hover); border-color: var(--borde-fuerte); }
@@ -179,9 +181,9 @@ main { border-top: 1px solid var(--borde); }
 .banda:not(.sel) { background: transparent !important; }                       /* la banda de acto no tiñe los carriles */
 .banda.sel { background: var(--foco-banda); box-shadow: none; }
 .row.sel-linea, .row:has(> .label.sel) .track { background-color: var(--foco-banda); }
-.rail { height: 2px; opacity: .35; border-radius: 1px; }
-.row.principal .rail { height: 2px; opacity: .45; }
-.row.alterna .rail { opacity: .4; }
+.rail { height: 2px; opacity: .62; border-radius: 1px; }            /* rediseño 9: con la paleta nueva la raya se lee más */
+.row.principal .rail { height: 2px; opacity: .62; }
+.row.alterna .rail { opacity: .6; }
 .sep { background: var(--cuadricula); }
 /* cables de los saltos: trazo discontinuo de 1.5 px, por debajo de los nodos; el aspa de borrar en papel */
 #cables line { stroke-width: 1.5; stroke-dasharray: 3 3; opacity: 1; }
@@ -211,6 +213,17 @@ main { border-top: 1px solid var(--borde); }
 .pt.sel .cap { color: var(--tinta); font-weight: 600; font-size: 11.5px; }
 .pt.alto .cap { bottom: 26px; }
 .pt.cortado .cap { color: var(--palido); }
+/* rótulo perpetuo (rediseño «carpetas y tooltips», 15-09-2026): el nombre de un nodo redondo va en papel con borde,
+   sombra y una guía de 7 px hasta el punto; el del nodo seleccionado, con borde de acento. Si choca con el anterior
+   baja al otro lado del eje (`.abajo`). Cuadros, rombos y descartados siguen con su texto suelto. */
+.pt.con-rotulo::before { content: ''; position: absolute; left: 50%; top: -7.5px; width: 1px; height: 7px; background: var(--borde-fuerte); pointer-events: none; }
+.pt.con-rotulo.abajo::before { top: 11.5px; }
+.pt.con-rotulo .cap { bottom: 18.5px; padding: 2px 7px; background: var(--papel); border: 1px solid var(--borde); border-radius: 4px; box-shadow: var(--sombra);
+  font-size: 11.5px; line-height: 16px; font-weight: 400; color: var(--tenue); }
+.pt.con-rotulo.sel .cap { border-color: var(--foco-linea); box-shadow: var(--sombra-alta); font-weight: 600; color: var(--tinta); }
+.pt.con-rotulo.abajo .cap { bottom: auto; top: 18.5px; }
+.pt.abajo:not(.con-rotulo) .cap { bottom: auto; top: 16px; }
+.pt.abajo .cap-edit { bottom: auto; top: 17px; }
 .cadena { height: 2px; }
 .cadena.ruta { height: 2px; box-shadow: none; background: var(--foco-linea) !important; }
 body.con-ruta .rail { opacity: .15; }
@@ -220,6 +233,20 @@ body.con-ruta .rail { opacity: .15; }
 .nota span { font: 400 10.5px var(--sans); font-style: normal; color: var(--nota-tinta); }
 .nota:hover { border-color: var(--nota-tinta); }
 .nota.sel { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.nota.aparte { height: 24px; margin-top: 10px; }
+.nota.aparte span { line-height: 22px; padding: 0 8px; font-size: 11px; }
+/* Una nota con color (rediseño 9): fondo pálido y borde de su tono (--tf/--tc, tablero.js), texto en tinta. Al pasar el
+   ratón se marca la guía que la une a la trama: raya continua de su tono, marca con halo y sombra alta. */
+.nota { --nc: var(--nota-tinta); --nh: var(--nota); }
+.nota.con-color { --nc: var(--tc); --nh: var(--tf); background: var(--tf); border-color: var(--tc); }
+.nota.con-color span, .nota.con-color.sel span { color: var(--tinta); }
+.nota.con-color:hover { border-color: var(--tc); }
+.nota.con-color .nota-marca { background: var(--tc); box-shadow: 0 0 0 2px var(--papel); }
+.nota.con-color .nota-guia-v { background: repeating-linear-gradient(180deg, var(--borde-fuerte) 0 3px, transparent 3px 6px); }
+.nota.con-color .nota-guia-h { background: repeating-linear-gradient(90deg, var(--borde-fuerte) 0 3px, transparent 3px 6px); }
+.nota:hover { box-shadow: var(--sombra-alta); }
+.nota:hover .nota-guia-v, .nota:hover .nota-guia-h { background: var(--nc); }
+.nota:hover .nota-marca { background: var(--nc); box-shadow: 0 0 0 4px var(--nh); }
 .nota-edit { font: 400 10.5px var(--sans); font-style: normal; border: 1px solid var(--foco); border-radius: 3px; box-shadow: 0 0 0 3px var(--foco-halo); }
 .hueco:hover { border-radius: 3px; }
 .add-nota { border: 1px dashed var(--nota-borde); border-radius: 3px; }
@@ -251,6 +278,11 @@ aside h2 { font: 500 10px var(--mono); letter-spacing: .09em; color: var(--palid
 .sw.on { border-color: var(--tinta); box-shadow: inset 0 0 0 2px var(--papel); }
 .sw.hereda { border: 1px solid var(--borde); background: var(--lienzo); font-size: 11.5px; height: 22px; }
 .sw.hereda.on { border-color: var(--foco); color: var(--foco); }
+/* 24 tonos: en el menú, rejilla de 8 */
+#menu .colores { display: grid; grid-template-columns: repeat(8, 18px); gap: 5px; padding: 4px 10px 8px; }
+#menu .colores .sw { width: 18px; height: 18px; border-radius: 4px; }
+#menu .colores .sw.hereda { grid-column: 1 / -1; width: auto; height: 22px; border-radius: 4px; }
+.swatches { gap: 5px; }
 .chips .btn { height: 24px; padding: 0 8px; font-size: 12px; }
 .act-btn { height: 30px; justify-content: center; text-align: center; margin-bottom: 7px; background: var(--lienzo); border-color: var(--borde); box-shadow: none; }
 .act-btn:hover { background: var(--hover); border-color: var(--borde-fuerte); }
@@ -275,11 +307,10 @@ aside h2 { font: 500 10px var(--mono); letter-spacing: .09em; color: var(--palid
 /* la trama: círculo de 24 px con su inicial, fondo pálido y aro del color de la trama */
 #esquema .chip, .hilo-trama .chip { position: relative; width: 24px; height: 24px; flex: 0 0 24px; box-sizing: border-box; border: 1px solid currentColor; box-shadow: none;
         background: color-mix(in srgb, currentColor 13%, var(--papel)) !important; }
-/* la columna de tramas: fondo sólido teñido con el color de cada trama (--tc lo pone tablero.js), para que
-   el tablero no se vea por debajo al desplazarse */
-#esquema .row > .label { background: color-mix(in srgb, var(--tc, var(--t-gris)) 18%, var(--papel)); }
-#esquema .row > .label.sel { background: color-mix(in srgb, var(--tc, var(--t-gris)) 30%, var(--papel)); box-shadow: inset 2px 0 0 var(--tc, var(--foco)); }
-#esquema .row > .label .chip { background: var(--papel) !important; }
+/* la columna de tramas: sin color (Leo, 15-09-2026, como el diseño: el color va solo en el círculo), pero opaca, para que el
+   tablero no se vea por debajo al desplazarse; la elegida, con la banda del acento */
+#esquema .row > .label { background: var(--lienzo); }
+#esquema .row > .label.sel { background: color-mix(in srgb, var(--foco) 6%, var(--lienzo)); box-shadow: inset 2px 0 0 var(--foco); }
 #esquema .add-linea > .label, #esquema .axis .gutter { background: var(--lienzo); }
 .hilo-trama .chip::after, #esquema .chip::after { content: attr(data-inicial); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
         font: 600 12px/1 var(--mono); color: currentColor; }
@@ -343,13 +374,7 @@ body.tablero-personajes #esquema .per-combo:hover { border-color: var(--borde); 
 .per-combo svg { color: var(--palido); flex: none; }
 body.tablero-personajes #esquema .per-combo.fijo { cursor: default; border-color: transparent; background: none; }
 body.tablero-personajes #esquema .row.sin-personaje .per-combo { color: var(--palido); }
-body.tablero-personajes #esquema .row.abierto > .label { background: color-mix(in srgb, var(--tc, var(--t-gris)) 30%, var(--papel)); box-shadow: inset 2px 0 0 var(--foco); }
-/* el carril con personaje lleva su color, sólido (claro: --chl; oscuro: --chd), como su bloque en el editor */
-body.tablero-personajes #esquema .row.con-color > .label { background: var(--chl); }
-html[data-theme="dark"] body.tablero-personajes #esquema .row.con-color > .label { background: var(--chd); }
-body.tablero-personajes #esquema .row.con-color > .label .per-combo { color: var(--chd); }
-html[data-theme="dark"] body.tablero-personajes #esquema .row.con-color > .label .per-combo { color: var(--chl); }
-body.tablero-personajes #esquema .row.con-color > .label .per-combo:hover { background: color-mix(in srgb, var(--papel) 50%, transparent); }
+body.tablero-personajes #esquema .row.abierto > .label { background: color-mix(in srgb, var(--foco) 6%, var(--lienzo)); box-shadow: inset 2px 0 0 var(--foco); }
 body.tablero-personajes #esquema .row.abierto > .label .per-combo { font-weight: 500; }
 body.tablero-personajes #esquema .row.abierto .track { background-color: var(--foco-banda); }
 body.tablero-personajes #esquema .axis .gutter { justify-content: flex-start; padding-left: 12px; }
@@ -387,11 +412,21 @@ body.tablero-personajes #esquema .add-linea button::after { content: 'personaje'
 /* ---------- Pantalla Texto (rediseño 3): cabecera de 50 px, tira de 92 px, cinta y hoja (en el marco) ---------- */
 #texto { background: var(--lienzo); }
 .texto-cab { gap: 13px; padding: 0 16px 0 18px; }
-.texto-cab .esq-titulo { min-width: 0; }
+.texto-cab .esq-titulo { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+/* los botones no encogen: con un título largo se aplastaban (texto en dos líneas) y al acortarlo volvían a su
+   tamaño de golpe en cada tecla, un parpadeo; encoge el título, que se corta */
+.texto-cab .btn, .texto-cab .par-nav { flex: none; white-space: nowrap; }
+.texto-cab .spacer { flex: 0 0 0; }
+.texto-cab .esq-cont { flex: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.texto-cab [data-texto-acto] { flex: none; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.texto-cab .texto-nom { flex: 0 1 auto; min-width: 60px; }   /* lo que encoge es el título: lo de su izquierda no se mueve al escribir */
 .texto-cab [data-texto-acto] { height: 24px; padding: 0 9px; font-size: 11.5px; border-radius: 5px; min-width: 0; }
 .texto-nom { min-width: 6ch; max-width: 420px; field-sizing: content; height: 30px; padding: 0 6px; margin-left: -6px; border: 1px solid transparent; border-radius: 4px;
              background: none; color: var(--tinta); font: 600 15px var(--sans); outline: none; }
-.texto-nom:hover:not(:disabled) { border-color: var(--borde); }
+.texto-nom:hover:not(:disabled):not([readonly]) { border-color: var(--borde); }
+/* de solo lectura hasta el doble clic: se corta con «…» y no parece un campo */
+.texto-nom[readonly] { cursor: default; text-overflow: ellipsis; user-select: none; }
+.texto-nom[readonly]:focus { border-color: transparent; background: none; box-shadow: none; }
 .texto-nom:focus { border-color: var(--foco); background: var(--papel); box-shadow: 0 0 0 3px var(--foco-halo); }
 .texto-cab .btn { height: 28px; gap: 8px; margin-right: 4px; box-shadow: none; }
 .texto-cab .btn svg { color: var(--foco); }
@@ -410,15 +445,14 @@ body.tablero-personajes #esquema .add-linea button::after { content: 'personaje'
 .hilo::-webkit-scrollbar-track { background: var(--panel); border-top: 1px solid var(--regla); }
 .hilo::-webkit-scrollbar-thumb { background: var(--foco); border-radius: 6px; border: 3px solid var(--panel); min-width: 40px; }
 .hilo::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--foco) 85%, var(--tinta)); }
-/* la trama: fondo sólido teñido con su color (como la columna del tablero); los nodos pasan por debajo */
+/* la trama: fondo opaco sin color (como la columna del tablero); los nodos pasan por debajo */
 .hilo-trama { position: sticky; left: 0; z-index: 3; width: 48px; flex: 0 0 48px; margin: 0; padding: 0; justify-content: center; border-right: 1px solid var(--regla);
-              background: color-mix(in srgb, var(--tc, var(--t-gris)) 18%, var(--papel)); }
-.hilo-trama .chip { background: var(--papel) !important; }
+              background: var(--lienzo); }
 .hilo-pista { flex: 1 0 auto; padding: 0 24px; }                /* tan ancha como sus nodos: la raya llega al último */
-.hilo-pista::before { left: 24px; right: 24px; bottom: 45px; height: 2px; opacity: .4; }
+.hilo-pista::before { left: 24px; right: 24px; bottom: 45px; height: 2px; opacity: .62; }
 .hilo-pista.alterna::before { opacity: .45; }
 .hilo-nodo { min-width: 112px; font-size: 12px; border-radius: 4px; color: var(--tenue); }
-.hilo-nodo:hover { background: var(--hover); }
+.hilo-nodo:hover { background: color-mix(in srgb, var(--hover) 38%, transparent); }   /* translúcido: la línea de tiempo se sigue viendo (Leo) */
 .hilo-tit { top: 18px; bottom: auto; font-size: 12px; max-width: 150px; }
 .hilo-nodo.actual .hilo-tit, .hilo-nodo.pos .hilo-tit { top: 16px; color: var(--tinta); font-weight: 600; }
 .hilo-punto { width: 12px; height: 12px; bottom: 40px; border: 0; box-shadow: none; box-sizing: border-box; background: var(--c, var(--t-azul)); }
@@ -429,6 +463,14 @@ body.tablero-personajes #esquema .add-linea button::after { content: 'personaje'
 .hilo-nodo.cortado .hilo-punto { background: var(--papel) !important; border: 2px dashed var(--t-gris); box-shadow: none; opacity: .6; }
 .hilo-nodo.cortado .hilo-punto::after { display: none; }
 .hilo-nodo.cortado .hilo-tit { color: var(--palido); }
+/* rótulo perpetuo en la tira, como en el tablero: papel, borde, sombra y guía de 7 px hasta el punto (el del nodo
+   abierto con borde de acento); si choca con el anterior, debajo del eje */
+.hilo-nodo.con-rotulo::before { content: ''; position: absolute; left: 50%; top: 33px; width: 1px; height: 7px; background: var(--borde-fuerte); pointer-events: none; }
+.hilo-nodo.con-rotulo .hilo-tit, .hilo-nodo.con-rotulo.actual .hilo-tit, .hilo-nodo.con-rotulo.pos .hilo-tit { top: 11px; padding: 2px 7px; box-sizing: border-box;
+  background: var(--papel); border: 1px solid var(--borde); border-radius: 4px; box-shadow: var(--sombra); font-size: 11.5px; line-height: 16px; font-weight: 400; color: var(--tenue); }
+.hilo-nodo.con-rotulo.actual .hilo-tit, .hilo-nodo.con-rotulo.pos .hilo-tit { border-color: var(--foco-linea); box-shadow: var(--sombra-alta); font-weight: 600; color: var(--tinta); }
+.hilo-nodo.con-rotulo.rotulo-abajo::before { top: 53px; }
+.hilo-nodo.con-rotulo.rotulo-abajo .hilo-tit { top: 60px; }
 .hilo-nodo.caja .hilo-punto::after, .hilo-nodo.rombo .hilo-punto::after { display: none; }
 .hilo-nodo.caja .hilo-punto { width: 12px; height: 12px; bottom: 40px; border-radius: 2px; border: 2px solid var(--escena-trazo); background: var(--escena) !important; box-shadow: none; }
 .hilo-nodo.rombo .hilo-punto { width: 11px; height: 11px; bottom: 40.5px; border-radius: 2px; border: 2px solid var(--rombo-trazo); background: var(--rombo) !important; box-shadow: none; }
@@ -467,16 +509,11 @@ html[data-theme="dark"] .logo .logo-oscuro { display: block; }
 .gd-borde::after { content: ''; position: absolute; left: 3px; top: 0; bottom: 0; width: 2px; background: var(--foco); opacity: 0; transition: opacity .15s; }
 .gd-borde:hover::after, .gd-borde.activa::after { opacity: 1; }
 body.redimensionando, body.redimensionando * { cursor: col-resize !important; user-select: none; }
-/* plegado (56 px): logo, nuevo contenedor, desplegar y, al pie, la papelera */
-body.lado-plegado .gd-side { width: 56px; flex: 0 0 56px; }
-.gd-riel { gap: 10px; padding: 12px 0 14px; }
-.gd-riel > .logo { margin-bottom: 2px; }
-.gd-riel button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--tenue); }
+/* plegado (44 px, rediseño «agregando carpetas»): nada más que el botón de panel para desplegarlo */
+body.lado-plegado .gd-side { width: 44px; flex: 0 0 44px; }
+.gd-riel { padding: 11px 0; }
+.gd-riel button { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--tenue); cursor: pointer; }
 .gd-riel button:hover { background: var(--hover); color: var(--tinta); }
-.gd-riel .gd-riel-nuevo { border-color: var(--borde); background: var(--papel); }
-.gd-riel .gd-riel-abrir { color: var(--foco); background: var(--foco-suave); }
-.gd-riel .gd-riel-btn.activo { color: var(--foco); background: var(--sel-bg); }
-.gd-riel .sobre { background: var(--drop-bg); box-shadow: inset 0 0 0 1px var(--foco-linea); }
 .gd-nuevo { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; width: auto; height: 40px; margin: 0 18px; padding: 0 12px;
             border: 1px solid var(--borde); border-radius: 6px; background: var(--papel); color: var(--tinta); font: inherit; font-size: 14px; font-weight: 400;
             cursor: pointer; box-shadow: var(--sombra); }
@@ -546,9 +583,10 @@ html[data-theme="dark"] .gd-per-punto { background: var(--chd); box-shadow: inse
 .gd-cont.papelera:hover { background: var(--hover); }
 .gd-cont.papelera.activo { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--foco); }
 /* arrastre en el árbol: destino con fondo al 9 %; la línea marca delante o detrás */
-.gd-cont.sobre, .gd-sub.sobre, .gd-par.sobre { outline: 0; background: var(--drop-bg); box-shadow: inset 0 0 0 1px var(--foco-linea); border-radius: 5px; }
-.gd-cont.sobre-antes, .gd-sub.sobre-antes, .gd-par.sobre-antes { box-shadow: 0 -2px 0 0 var(--foco); background: none; }
-.gd-cont.sobre-despues, .gd-sub.sobre-despues, .gd-par.sobre-despues { box-shadow: 0 2px 0 0 var(--foco); background: none; }
+.gd-cont.sobre:not(.sobre-antes):not(.sobre-despues), .gd-sub.sobre:not(.sobre-antes):not(.sobre-despues), .gd-par.sobre:not(.sobre-antes):not(.sobre-despues) { outline: 0; background: var(--drop-bg); box-shadow: inset 0 0 0 1px var(--foco-linea); border-radius: 5px; }
+/* delante o detrás: solo una raya de acento; el fondo (el de la fila activa, la carpeta abierta…) se queda */
+.gd-cont.sobre-antes, .gd-sub.sobre-antes, .gd-par.sobre-antes { box-shadow: 0 -2px 0 0 var(--foco); }
+.gd-cont.sobre-despues, .gd-sub.sobre-despues, .gd-par.sobre-despues { box-shadow: 0 2px 0 0 var(--foco); }
 .gd-cont.arrastrando, .gd-sub.arrastrando, .gd-par.arrastrando { opacity: .4; }
 .gd-fantasma .gd-enlace { display: none; }
 
@@ -625,7 +663,15 @@ html[data-theme="dark"] .gd-per-punto { background: var(--chd); box-shadow: inse
 .gd-acto .gd-etq-head { height: 36px; background: var(--acto-bg); color: var(--tenue); font-weight: 400; }
 .gd-acto .gd-etq-nom { font: 400 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
 .gd-nodo { cursor: pointer; }
-.gd-nodo.cortado > span:first-child { text-decoration: line-through; color: var(--palido); }
+/* el símbolo de un nodo de línea de tiempo en su nota: como en el tablero */
+.gd-glifo { flex: none; display: inline-block; box-sizing: border-box; width: 11px; height: 11px; margin-right: 2px; }
+.gd-glifo--punto { border-radius: 50%; border: 2.5px solid var(--gc, var(--t-gris)); background: var(--papel); }
+.gd-glifo--cuadro { border-radius: 2px; border: 2px solid var(--escena-trazo); background: var(--escena); }
+.gd-glifo--rombo { width: 9px; height: 9px; margin: 0 3px 0 1px; border-radius: 2px; border: 2px solid var(--rombo-trazo); background: var(--rombo); transform: rotate(45deg); }
+.gd-glifo.cortado { opacity: .45; }
+.gd-nodo .gd-nodo-tit { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-aparicion-lin .gd-glifo { align-self: center; }
+.gd-nodo.cortado .gd-nodo-tit { text-decoration: line-through; color: var(--palido); }
 .gd-nada { border: 1px dashed var(--borde-fuerte); border-radius: 6px; color: var(--tenue); font-size: 13px; background: var(--papel); }
 .gd-fantasma { border: 1px solid var(--borde); border-radius: 4px; box-shadow: var(--sombra-alta); font-size: 12.5px; background: var(--papel); transform: rotate(-1.2deg); }
 .gd-edit { border: 1px solid var(--foco); border-radius: 4px; box-shadow: 0 0 0 3px var(--foco-halo); font-weight: 500; font-size: inherit; background: var(--papel); }
@@ -677,3 +723,462 @@ body.tablero-personajes #esquema .label .chip { display: none; }
 #aviso::before { content: ''; position: absolute; left: 13px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); background: var(--toast-acento);
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.4 8.4 6.5 11.5 12.8 4.8'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.4 8.4 6.5 11.5 12.8 4.8'/%3E%3C/svg%3E") center / contain no-repeat; }
+
+/* ---------- arrastrar segmentos, actos, momentos y notas: que se note ----------
+   Lo que se puede arrastrar enseña la mano; al pulsar se levanta un poco («agarrado»); al moverlo, su sitio
+   queda en hueco punteado, ya colocado donde caería (los vecinos se apartan con animación, gestor.js) y lo
+   sigue un fantasma con forma de tarjeta. */
+.gd-etq[data-etq] > .gd-etq-head, .gd-acto[data-sub] > .gd-etq-head { cursor: grab; }
+.gd-acto[data-sub] .gd-nodo { cursor: grab; }
+body.gd-agarrando, body.gd-agarrando * { cursor: grabbing !important; }
+.gd-etq, .gd-nota { transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease; }
+.gd-etq.agarrado:not(.arrastrando) { transform: translateY(-2px); box-shadow: var(--sombra-alta); }
+.gd-nota.agarrado:not(.arrastrando) { transform: translateY(-1px); box-shadow: var(--sombra-alta); border-color: var(--foco-linea); }
+.gd-etq.arrastrando { opacity: .45; box-shadow: none; outline: 2px dashed var(--foco); outline-offset: -2px; transform: none; }
+.gd-nota.arrastrando { opacity: .35; border-style: dashed; border-color: var(--foco); }
+.gd-nota.antes { box-shadow: 0 -7px 0 -4px var(--foco); }
+.gd-fantasma--tarjeta { display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 210px; padding: 0; overflow: hidden;
+  border: 1px solid var(--foco-linea); border-radius: 6px; background: var(--papel); box-shadow: var(--sombra-modal); transform: rotate(-2.5deg) scale(1.02); opacity: .95; }
+.gd-fantasma-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 11px; background: var(--fc-bg, var(--panel)); color: var(--fc-fg, var(--tinta)); font-weight: 600; font-size: 12.5px; }
+.gd-fantasma-cab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-fantasma-cab b { font: 400 10px var(--mono); opacity: .7; }
+.gd-fantasma-lista { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 10px; }
+.gd-fantasma-lista span { padding: 4px 8px; border: 1px solid var(--borde); border-radius: 4px; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-fantasma-lista i { font: 400 10px var(--mono); color: var(--palido); padding-left: 2px; }
+.gd-fantasma-lista:empty { display: none; }
+
+/* ---------- segmento expandido (rediseño «Segmento expandido») ----------
+   Cada cabecera de segmento lleva el icono de expandir; el segmento ocupa el lienzo (el menú no cambia), con la
+   banda de su color, «Contraer» y sus notas en rejilla con sus primeras líneas. Estructura en gestor.js. */
+.gd-exp { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--lienzo); }
+.gd-exp-cab .esq-titulo { flex: 1 1 auto; gap: 11px; overflow: hidden; }
+.gd-exp-cab .gd-miga { padding: 0; border: 0; background: none; cursor: pointer; }
+.gd-exp-cab .esq-cont.gd-miga:hover, .gd-exp-cab .gd-exp-miga:hover { color: var(--tinta); }
+.gd-exp-cab .esq-cont { flex: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.gd-exp-miga { font-weight: 400; color: var(--tenue); flex: 0 1 auto; min-width: 40px; }
+.gd-exp-sep { display: inline-flex; color: var(--palido); flex: none; }
+.gd-exp-nom { flex: 0 1 auto; min-width: 40px; }
+.gd-exp-cuerpo { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 18px 0; border-top: 1px solid var(--regla); }
+.gd-exp-banda { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 14px;
+  background: var(--sbg, var(--papel)); color: var(--sink, var(--tinta)); border: 1px solid var(--regla); border-radius: 6px; }
+.gd-exp-banda--bandeja { background: var(--papel); color: var(--tinta); border-color: var(--borde); }
+.gd-exp-banda--apariciones { background: var(--foco-suave); color: var(--foco); }
+.gd-exp-banda-nom { font-size: 16px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-exp-banda-n { font: 400 11.5px var(--mono); opacity: .85; white-space: nowrap; flex: none; }
+.gd-exp-banda-sep { width: 1px; height: 20px; background: currentColor; opacity: .22; flex: none; }
+.gd-exp-banda-acc { display: flex; align-items: center; gap: 4px; flex: none; }
+.gd-exp-banda-acc button { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 4px;
+  background: none; color: inherit; opacity: .85; cursor: pointer; }
+.gd-exp-banda-acc button:hover { opacity: 1; background: rgba(0, 0, 0, .07); }
+html[data-theme="dark"] .gd-exp-banda-acc button:hover { background: rgba(255, 255, 255, .1); }
+.gd-exp-banda .spacer { flex: 1; }
+.gd-exp-banda .btn { flex: none; height: 30px; gap: 8px; padding: 0 12px; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel); color: var(--tinta);
+  font-size: 12.5px; font-weight: 500; white-space: nowrap; box-shadow: var(--sombra); }
+.gd-exp-banda .btn svg { color: var(--foco); }
+.gd-exp-rot { flex: none; display: flex; align-items: center; gap: 12px; padding: 18px 2px 10px; font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); }
+.gd-exp-rot i { flex: 1; height: 1px; background: var(--regla); }
+.gd-exp-rot span + span { letter-spacing: .08em; }
+.gd-exp-rot svg { color: var(--tenue); flex: none; }
+.gd-exp-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); grid-auto-rows: 168px;
+  align-content: start; gap: 14px; padding: 2px 2px 18px; }
+.gd-exp-nota { position: relative; min-width: 0; min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 13px 14px;
+  background: var(--papel); border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra); overflow: hidden; cursor: pointer; user-select: none;
+  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease, border-color .12s ease; }
+.gd-exp-nota:hover { border-color: var(--borde-fuerte); }
+.gd-exp-nota.sel, .gd-exp-nota.activa { background: var(--sel-bg); border-color: var(--foco); }
+.gd-exp-nota:focus-visible { outline: 2px solid var(--foco-halo); outline-offset: 1px; }
+.gd-exp-nota-cab { display: flex; align-items: center; gap: 8px; min-width: 0; flex: none; }
+.gd-exp-tit { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-exp-nota .gd-asa { color: var(--tenue); flex: none; }
+.gd-exp-nota .gd-nota-acc { display: none; flex: none; width: 22px; height: 22px; padding: 0; align-items: center; justify-content: center; color: var(--tenue); }
+.gd-exp-nota:hover .gd-nota-acc, .gd-exp-nota.sel .gd-nota-acc { display: inline-flex; }
+.gd-exp-nota:hover .gd-asa, .gd-exp-nota.sel .gd-asa { display: none; }
+.gd-exp-texto { flex: 1; min-height: 0; font-size: 12px; line-height: 1.5; color: var(--tenue); overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
+.gd-exp-texto.vacio { color: var(--palido); font-style: italic; }
+.gd-exp-pie { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.gd-exp-pie .gd-nota-meta, .gd-exp-nota-cab .gd-nota-meta { font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
+.gd-exp-ref { border-style: dashed; border-color: var(--borde-fuerte); box-shadow: none; }
+.gd-exp-ruta { font-size: 11.5px; font-style: italic; color: var(--palido); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-exp-nota.cortado .gd-exp-tit { color: var(--tenue); text-decoration: line-through; }
+.gd-exp-add { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 0; border: 1px dashed var(--borde); border-radius: 6px;
+  background: none; color: var(--palido); font: 400 13px var(--sans); cursor: pointer; }
+.gd-exp-add:hover { color: var(--tinta); border-color: var(--borde-fuerte); background: var(--papel); }
+.gd-exp-vacio { grid-column: 1 / -1; padding: 22px 4px; font-size: 13px; color: var(--palido); }
+/* arrastrar dentro de la rejilla */
+.gd-exp-nota.agarrado:not(.arrastrando) { transform: translateY(-2px); box-shadow: var(--sombra-alta); border-color: var(--foco-linea); }
+.gd-exp-nota.arrastrando { opacity: .4; border-style: dashed; border-color: var(--foco); box-shadow: none; }
+.gd-exp-grid .gd-nodo { cursor: grab; }
+/* en Personajes el segmento expandido ocupa el lienzo: sin cabecera del tablero, tablero, pie ni carrusel */
+body.vista-personajes.per-expandido #esquema > .esq-cab,
+body.vista-personajes.per-expandido .esq-cuerpo,
+body.vista-personajes.per-expandido .esq-pie { display: none; }
+body.vista-personajes.per-expandido .per-seg { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; border-top: 0; }
+body.vista-personajes.per-expandido .per-seg > [data-per-cuerpo] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* la etiqueta del segmento en la cabecera del editor (nota de biblioteca) y el acto de un documento de nodo: un chip
+   de la cabecera con el color del segmento; al pulsarlo, el segmento expandido */
+.esq-titulo .gd-seg-chip { gap: 7px; min-width: 0; max-width: 200px; cursor: pointer; }
+.gd-seg-chip:not(.gd-chip--esquema) { background: var(--sbg, var(--papel)); color: var(--sink, var(--tinta)); border-color: color-mix(in srgb, var(--sink, var(--tinta)) 22%, transparent); }
+.gd-seg-chip--bandeja { background: none; border: 1px dashed var(--borde-fuerte); color: var(--tenue); }
+.gd-seg-chip--apariciones { background: var(--foco-suave); color: var(--foco); border-color: var(--foco-linea); }
+.gd-seg-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-seg-chip > svg { flex: none; opacity: .7; }
+button.gd-seg-chip:hover:not(:disabled) { filter: brightness(.96); box-shadow: 0 0 0 2px var(--foco-halo); }
+button.gd-seg-chip:hover:not(:disabled) > svg { opacity: 1; }
+button.gd-seg-chip:disabled { cursor: default; opacity: 1; }
+button.gd-seg-chip:disabled > svg { display: none; }
+span.gd-seg-chip { cursor: default; }
+.migas .gd-seg-chip { flex: none; height: 24px; padding: 0 9px; font-size: 11.5px; border-radius: 5px; margin: 0; }
+
+/* ---------- cabeceras: cada lugar en un chip con su nombre (Leo, 15-09-2026) ----------
+   «CONTENEDOR [esquema o biblioteca] [segmento o acto] Documento»: el color del chip dice qué es (violeta esquema,
+   azul biblioteca, el del segmento o el fondo del acto, el del personaje) y solo el documento abierto va en negrita. */
+.esq-titulo .gd-chip-nom { flex: none; min-width: 0; max-width: 260px; height: 24px; padding: 0 9px; gap: 7px; font-size: 11.5px; border-radius: 5px; justify-content: flex-start; }
+.gd-seccion .gd-chip-nom { flex: 0 1 auto; min-width: 0; max-width: 320px; gap: 7px; justify-content: flex-start; }
+.gd-chip-nom > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-chip-nom > svg { flex: none; }
+button.gd-chip-nom { cursor: pointer; }
+button.gd-chip-nom:hover:not(:disabled) { box-shadow: 0 0 0 2px var(--foco-halo); }
+.texto-cab [data-texto-acto], .texto-cab [data-texto-esq] { flex: none; max-width: 220px; }   /* las etiquetas no encogen: encoge el título */
+.gd-chip[hidden] { display: none !important; }
+
+/* ---------- carpetas en el menú (rediseño «carpetas», 15-09-2026) ----------
+   Dentro de un contenedor (y en Personajes) las carpetas anidan sin límite. Cada fila lleva la sangría de su nivel
+   (`--sangria`, gestor.js) y, a su izquierda, la guía de 1 px de ese nivel. La carpeta: chevrón, icono y barra de 2 px
+   de su color, nombre y cuenta; pulsarla la despliega o la pliega. Si la jerarquía no cabe a lo ancho, el árbol se
+   desplaza en horizontal (las filas no bajan de 200 px). */
+.gd-arbol { overflow-x: auto; }
+.gd-arbol::-webkit-scrollbar { height: 10px; }
+.gd-hijos > .gd-sub, .gd-hijos > .gd-par, .gd-hijos > .gd-carpeta, .gd-hijos > .gd-per { position: relative; flex: none; box-sizing: border-box; margin-left: var(--sangria, 0px); min-width: 200px; }
+.gd-hijos > :not(.sin-guia)::before { content: ''; position: absolute; left: -8px; top: -3px; bottom: 0; width: 1px; background: var(--borde-fuerte); pointer-events: none; }
+.gd-hijos--elenco { gap: 2px; margin-top: 0; }
+.gd-carpeta { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 9px; border-radius: 5px; cursor: pointer; user-select: none;
+  box-shadow: inset 2px 0 0 var(--fc, var(--t-gris)); }
+.gd-carpeta:hover, .gd-carpeta.abierta { background: var(--hover); }
+.gd-carpeta .gd-chev { width: 12px; flex: none; }
+.gd-carpeta-ic { display: inline-flex; flex: none; color: var(--fc, var(--t-gris)); }
+.gd-carpeta-nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12.5px var(--mono); letter-spacing: .02em; color: var(--tinta); }
+.gd-carpeta .gd-cont-num { flex: none; }
+.gd-carpeta .gd-cont-acc { margin-left: auto; }
+.gd-carpeta .gd-cont-acc button { width: 22px; height: 22px; opacity: 0; }
+.gd-carpeta:hover .gd-cont-acc button, .gd-carpeta .gd-cont-acc button.is-active { opacity: 1; }
+.gd-carpeta .gd-edit { font: 600 12.5px var(--mono); min-width: 0; flex: 1; }
+.gd-carpeta.sobre:not(.sobre-antes), .gd-per.sobre:not(.sobre-antes):not(.sobre-despues) { background: var(--drop-bg); box-shadow: inset 0 0 0 1px var(--foco-linea), inset 2px 0 0 var(--fc, var(--foco)); }
+.gd-carpeta.arrastrando, .gd-per.arrastrando { opacity: .4; }
+/* el color de una carpeta: los seis de las tramas, en el diálogo y en el ⋯ */
+.gd-paleta--carpeta { grid-template-columns: repeat(6, 1fr); width: 196px; }
+#dlgNombre .dlg-paleta.dlg-paleta--carpeta { grid-template-columns: repeat(6, 1fr); }
+#dlgNombre .dlg-paleta.dlg-paleta--carpeta button { height: 30px; }
+/* delante o detrás de otra pieza del árbol (cualquiera de su nivel): la raya de acento */
+/* la raya va en la sombra de fuera, sumada a la barra de dentro de la fila (la de la activa o la del color de la carpeta) */
+.gd-per.sobre-antes { box-shadow: 0 -2px 0 0 var(--foco); }
+.gd-per.activo.sobre-antes { box-shadow: 0 -2px 0 0 var(--foco), inset 2px 0 0 var(--foco); }
+.gd-per.sobre-despues { box-shadow: 0 2px 0 0 var(--foco); }
+.gd-per.activo.sobre-despues { box-shadow: 0 2px 0 0 var(--foco), inset 2px 0 0 var(--foco); }
+.gd-carpeta.sobre-antes { box-shadow: 0 -2px 0 0 var(--foco), inset 2px 0 0 var(--fc, var(--t-gris)); }
+.gd-sub.activo.sobre-antes { box-shadow: 0 -2px 0 0 var(--foco), inset 2px 0 0 var(--foco); }
+.gd-sub.activo.sobre-despues { box-shadow: 0 2px 0 0 var(--foco), inset 2px 0 0 var(--foco); }
+/* en la cabecera del editor (nodo o nota) las etiquetas no encogen, pero no pasan de 180 px (cortadas, con globo): así
+   siempre queda sitio para el título, que es lo que encoge */
+.texto-cab .esq-titulo .gd-chip-nom, .migas .esq-titulo .gd-chip-nom { max-width: 180px; }
+/* primero encoge el título (hasta 80 px); solo si ya no queda sitio encogen las etiquetas (hasta 64 px): así el título
+   no desaparece en una ventana estrecha */
+.texto-cab .esq-titulo .gd-chip-nom, .migas .esq-titulo .gd-chip-nom, .texto-cab .esq-titulo .esq-cont, .migas .esq-titulo .esq-cont { flex: 0 1 auto; min-width: 64px; }
+.texto-cab .texto-nom, .migas .texto-nom { min-width: 80px; flex: 0 1000 auto; }
+/* cabecera estrecha: los botones se quedan en su icono (el nombre sale al pasar el ratón por su title) */
+.texto-cab, #texto.documento .migas { container-type: inline-size; }
+@container (max-width: 720px) {
+  .texto-cab .btn, .migas .btn { font-size: 0; gap: 0; padding: 0 7px; margin-right: 0; }
+  .texto-cab .btn svg, .migas .btn svg { margin: 0; }
+  .texto-cab .esq-titulo, .migas .esq-titulo { gap: 9px; }
+}
+/* soltar sobre «＋ personaje» o «＋ carpeta»: a la raíz de Personajes */
+.gd-per--nuevo.sobre { background: var(--drop-bg); box-shadow: inset 0 0 0 1px var(--foco-linea); color: var(--foco); }
+
+/* ---------- notas de biblioteca con color (Leo, 15-09-2026, rediseño 9) ----------
+   `.con-color` con --tc/--tf (gestor.js, colorNota): fondo pálido, borde y un punto de su tono delante del título. */
+.gd-nota.con-color, .gd-exp-nota.con-color { background: var(--tf); border-color: var(--tc); }
+.gd-nota.con-color:hover, .gd-exp-nota.con-color:hover { background: var(--tf); border-color: var(--tc); box-shadow: var(--sombra); }
+.gd-nota.con-color > span:first-child::before, .gd-exp-nota.con-color .gd-exp-tit::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--tc); vertical-align: 1px; }
+.gd-nota.con-color.sel, .gd-nota.con-color.activa, .gd-exp-nota.con-color.sel { background: var(--tf); border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
+.gd-paleta--nota { grid-template-columns: repeat(6, minmax(0, 1fr)); width: 196px; }
+.gd-paleta--nota button, .gd-paleta--carpeta button { min-width: 0; width: 100%; padding: 0; }   /* el relleno de los botones del menú ensanchaba unas columnas */
+.gd-paleta--nota button.on { box-shadow: inset 0 0 0 2px var(--papel); border-color: var(--tinta); }
+/* el árbol de Personajes: la etiqueta «Personaje» con el color del personaje, como las de los contenedores */
+.gd-per .gd-chip.per-chip { flex: none; }
+/* el carril de un personaje: el color de su trama (botón, abre los 24 tonos) y la etiqueta «Personaje» delante del nombre */
+.per-color, .per-etq { display: none; }
+body.tablero-personajes #esquema .per-color { display: block; flex: none; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid var(--tc); background: var(--papel); cursor: pointer; }
+body.tablero-personajes #esquema .per-color:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 25%, transparent); }
+body.tablero-personajes #esquema .per-etq { display: inline-flex; flex: none; min-width: 0; height: 20px; padding: 0 6px; font-size: 10.5px; }
+body.tablero-personajes #esquema .label { gap: 8px; }
+/* al pasar el ratón por un nodo (además del globo): se enciende, relleno de su color con halo, y su rótulo va en negrita (Leo, 15-09-2026);
+   en el tablero (`.dot` lleva su color en `color`) y en la tira del editor */
+.pt:not(.sel):not(.cortado):not(.arrastrando):hover .dot::after { background: currentColor; }
+.pt:not(.sel):not(.cortado):not(.caja):not(.arrastrando):hover .dot { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 24%, transparent); }
+.pt.caja:not(.sel):hover .dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--escena-trazo) 26%, transparent); }
+.pt.rombo:not(.sel):hover .dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--rombo-trazo) 26%, transparent); }
+.pt:not(.cortado):hover .cap { font-weight: 600; color: var(--tinta); }
+.pt.con-rotulo:not(.sel):hover .cap { border-color: var(--borde-fuerte); box-shadow: var(--sombra-alta); }
+.hilo-nodo:not(.actual):not(.pos):not(.cortado):hover .hilo-punto::after { background: var(--c, var(--t-azul)); }
+.hilo-nodo:not(.actual):not(.pos):not(.cortado):not(.caja):not(.rombo):hover .hilo-punto { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, var(--t-azul)) 24%, transparent); }
+.hilo-nodo.caja:not(.pos):hover .hilo-punto { box-shadow: 0 0 0 4px color-mix(in srgb, var(--escena-trazo) 26%, transparent); }
+.hilo-nodo.rombo:not(.pos):hover .hilo-punto { box-shadow: 0 0 0 4px color-mix(in srgb, var(--rombo-trazo) 26%, transparent); }
+.hilo-nodo:not(.cortado):hover .hilo-tit { font-weight: 600; color: var(--tinta); }
+.hilo-nodo.con-rotulo:not(.actual):not(.pos):hover .hilo-tit { border-color: var(--borde-fuerte); box-shadow: var(--sombra-alta); }
+
+/* Nodo elegido: con su propio color (Leo, 15-09-2026: el lavanda del acento parecía la paleta de antes); el camino
+   iluminado, del color de cada trama. Lo mismo en la tira del editor y en la cabecera de la sección activa. */
+.pt.sel .dot { background: var(--c) !important; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent); }
+.pt.sel .dot::after { background: var(--c); }
+.pt.sel.caja .dot { border-color: var(--escena-trazo); box-shadow: 0 0 0 4px color-mix(in srgb, var(--escena-trazo) 30%, transparent); }
+.pt.sel.rombo .dot { border-color: var(--rombo-trazo); box-shadow: 0 0 0 4px color-mix(in srgb, var(--rombo-trazo) 30%, transparent); }
+.pt.con-rotulo.sel .cap { border-color: color-mix(in srgb, var(--c) 60%, transparent); }
+.cadena.ruta { background: currentColor !important; }
+.hilo-nodo.actual .hilo-punto { background: var(--c, var(--t-azul)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, var(--t-azul)) 30%, transparent); }
+.hilo-nodo.actual .hilo-punto::after { background: var(--c, var(--t-azul)); }
+.hilo-nodo.con-rotulo.actual .hilo-tit { border-color: color-mix(in srgb, var(--c, var(--t-azul)) 60%, transparent); }
+.hilo-nodo.caja.pos .hilo-punto { border-color: var(--escena-trazo); box-shadow: 0 0 0 4px color-mix(in srgb, var(--escena-trazo) 30%, transparent); }
+.hilo-nodo.rombo.pos .hilo-punto { border-color: var(--rombo-trazo); box-shadow: 0 0 0 4px color-mix(in srgb, var(--rombo-trazo) 30%, transparent); }
+
+/* ===================== Revisar guión (Leo, 15-09-2026, docs/diseno/rediseno-11/) ===================== */
+/* la barra de guión, bajo la tira: cuenta, selección, sacar/devolver y «Revisar guión» */
+.guion-barra { height: 40px; flex: none; display: flex; align-items: center; gap: 9px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--borde); overflow: hidden; }
+.guion-barra[hidden] { display: none; }
+.guion-rot { font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); flex: none; }
+.guion-cuenta { font: 400 11.5px var(--mono); text-transform: uppercase; color: var(--tenue); white-space: nowrap; flex: none; }
+.guion-sep { width: 1px; height: 18px; background: var(--regla); flex: none; }
+.guion-sel { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 9px; border-radius: 4px; background: var(--sel-bg); box-shadow: inset 0 0 0 1px var(--foco-linea); font-size: 12px; font-weight: 500; white-space: nowrap; flex: none; }
+.guion-sel[hidden] { display: none; }
+.guion-sel button { width: 13px; height: 13px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 3px; background: var(--foco); color: var(--foco-sobre); cursor: pointer; }
+.guion-barra .btn, .revisar .btn { height: 26px; padding: 0 10px; gap: 7px; font-size: 12px; font-weight: 500; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel); color: var(--tinta); box-shadow: var(--sombra); white-space: nowrap; flex: none; }
+.guion-barra .btn svg, .revisar .btn svg { color: var(--tenue); }
+.guion-barra .btn.btn-foco, .revisar .btn.btn-foco { border-color: var(--foco-linea); background: var(--foco-suave); color: var(--foco); box-shadow: none; }
+.guion-barra .btn.btn-foco svg, .revisar .btn.btn-foco svg { color: var(--foco); }
+.guion-barra .btn[data-guion$="todo"] { font-weight: 400; }
+.guion-barra .btn.primario, .revisar .btn.primario { height: 28px; padding: 0 12px; border-color: var(--foco); background: var(--foco); color: var(--foco-sobre); font-size: 12.5px; box-shadow: none; }
+.guion-barra .btn.primario svg, .revisar .btn.primario svg { color: var(--foco-sobre); }
+.guion-barra .btn:disabled, .revisar .btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
+.guion-barra .spacer { flex: 1; }
+#texto.documento .guion-barra, #texto.sin-tira .guion-barra { display: none; }
+
+/* la tira: casilla en el rótulo, secciones fuera del guion en discontinuo y tachadas */
+.hilo-tit { display: inline-flex; align-items: center; gap: 6px; }
+.hilo-tit-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.hilo-casilla { flex: none; width: 9px; height: 9px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 2px; border: 1px solid var(--borde-fuerte); background: var(--papel); cursor: pointer; }
+.hilo-casilla svg { width: 7px; height: 7px; }
+.hilo-nodo.elegida .hilo-casilla { border-color: var(--foco); background: var(--foco); color: var(--foco-sobre); }
+.hilo-nodo.con-rotulo.elegida .hilo-tit { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); color: var(--tinta); }
+.hilo-nodo.sin-guion .hilo-punto { background: var(--papel) !important; border: 2px dashed var(--t-gris); box-shadow: none !important; opacity: .55; }
+.hilo-nodo.sin-guion .hilo-punto::after { display: none; }
+.hilo-nodo.con-rotulo.sin-guion .hilo-tit { border-style: dashed; border-color: var(--borde-fuerte); box-shadow: none; color: var(--palido); font-weight: 400; }
+.hilo-nodo.sin-guion .hilo-tit-txt { text-decoration: line-through; }
+.hilo-nodo.sin-guion .hilo-casilla { border-style: dashed; border-color: var(--t-gris); }
+.hilo-nodo.con-rotulo.sin-guion::before { background: var(--regla); }
+
+/* la cabecera de la vista en Revisar guión: el esquema, «Revisar guión» y «Volver al texto» */
+.solo-revisar { display: none !important; }
+#texto.revisando .solo-revisar { display: inline-flex !important; }
+#texto.revisando .texto-cab [data-texto-acto], #texto.revisando .texto-cab [data-texto-nom], #texto.revisando .texto-cab > .btn:not(.solo-revisar), #texto.revisando .texto-cab .par-nav { display: none !important; }
+#texto.revisando .texto-cab .esq-nom { font-size: 15px; font-weight: 600; white-space: nowrap; }
+#texto.revisando #hilo, #texto.revisando #editorMarco, #texto.revisando #migas { display: none !important; }
+.revisar { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--lienzo); }
+.revisar[hidden] { display: none; }
+.rv-cuerpo { flex: 1; min-height: 0; display: flex; gap: 18px; padding: 18px 18px 0; overflow: hidden; }
+.rv-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rv-rot { flex: none; display: flex; align-items: center; gap: 12px; padding: 0 2px 10px; font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); }
+.rv-rot i { flex: 1; height: 1px; background: var(--regla); }
+.rv-rot span:last-child:not(:first-child) { letter-spacing: .08em; }
+.rv-lista { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 1px 2px 16px; overflow-y: auto; }
+.rv-fila { flex: none; height: 54px; box-sizing: border-box; display: flex; align-items: center; gap: 11px; padding: 0 13px; background: var(--papel); border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra); cursor: grab; user-select: none; transition: transform .12s ease, box-shadow .12s ease; }
+.rv-fila:hover { border-color: var(--borde-fuerte); }
+.rv-asa { display: flex; color: var(--palido); flex: none; }
+.rv-casilla { width: 15px; height: 15px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 3px; background: var(--papel); border: 1px solid var(--borde-fuerte); color: var(--foco-sobre); cursor: pointer; }
+.rv-num { font: 400 12px var(--mono); color: var(--palido); width: 16px; flex: none; }
+.rv-glifo { flex: none; width: 9px; height: 9px; box-sizing: content-box; border-radius: 50%; background: var(--papel); border: 2px solid var(--c); }
+.rv-glifo.caja { border-radius: 2px; background: var(--escena); border-color: var(--escena-trazo); }
+.rv-glifo.rombo { width: 8px; height: 8px; border-radius: 1px; background: var(--rombo); border-color: var(--rombo-trazo); transform: rotate(45deg); }
+.rv-tit { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rv-trama { display: inline-flex; align-items: center; height: 21px; padding: 0 8px; border-radius: 5px; font: 400 10.5px var(--mono); background: var(--tf); color: var(--tc); white-space: nowrap; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rv-fuera { font: 400 9.5px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--t-gris); white-space: nowrap; flex: none; }
+.rv-hueco { flex: 1; }
+.rv-palabras { font: 400 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--palido); flex: none; white-space: nowrap; }
+.revisar .rv-accion { height: 24px; padding: 0 9px; gap: 6px; font-size: 11.5px; color: var(--tenue); box-shadow: none; }
+.rv-fila.sin-guion { background: var(--f-gris); border-style: dashed; border-color: var(--borde-fuerte); box-shadow: none; }
+.rv-fila.sin-guion .rv-glifo { background: var(--papel); border-style: dashed; border-color: var(--t-gris); opacity: .6; transform: none; border-radius: 50%; width: 9px; height: 9px; }
+.rv-fila.sin-guion .rv-tit { color: var(--palido); text-decoration: line-through; }
+.rv-fila.elegida { background: var(--sel-bg); border-color: var(--foco); border-style: solid; }
+.rv-fila.elegida .rv-casilla { background: var(--foco); border-color: var(--foco); }
+.rv-fila.elegida .rv-num, .rv-fila.elegida .rv-asa { color: var(--tenue); }
+.rv-fila.levantada { transform: rotate(-.5deg); box-shadow: var(--sombra-alta); border-color: var(--foco); background: var(--sel-bg); position: relative; z-index: 2; }
+.rv-fila.levantada .rv-asa { color: var(--foco); }
+body.rv-arrastrando, body.rv-arrastrando * { cursor: grabbing !important; }
+.rv-marca { position: absolute; left: 2px; right: 2px; height: 2px; border-radius: 2px; background: var(--foco); pointer-events: none; z-index: 3; }
+.rv-vacio { color: var(--tenue); font-size: 13px; }
+.rv-lado { width: 296px; flex: none; display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; overflow-y: auto; }
+.rv-ficha { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 15px 16px; background: var(--papel); border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra); }
+.rv-ficha .rv-rot { padding: 0; }
+.rv-nombre { height: 32px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel); color: var(--tinta); font: 400 13px var(--sans); outline: 0; }
+.rv-nombre:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.rv-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--regla); }
+.rv-chips span { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 3px; background: var(--lienzo); border: 1px solid var(--regla); font: 400 10.5px var(--mono); color: var(--tenue); white-space: nowrap; }
+.rv-orden { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rv-orden li { display: flex; gap: 9px; font: 400 11.5px var(--mono); color: var(--tinta); min-width: 0; }
+.rv-orden li span { color: var(--palido); width: 13px; flex: none; }
+.rv-no { margin: -4px 0 0; padding-bottom: 12px; border-bottom: 1px solid var(--regla); font: 400 11.5px var(--mono); color: var(--palido); }
+.rv-nada { margin: 0; font-size: 12px; color: var(--palido); line-height: 1.45; }
+.rv-rot-destino { letter-spacing: .06em; }
+.rv-destino { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--tenue); min-width: 0; }
+.rv-destino .gd-chip { height: 20px; min-width: 0; padding: 0 7px; font-size: 10px; flex: none; }
+.rv-destino-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.revisar .rv-generar { height: 34px; justify-content: center; font-size: 13px; }
+.rv-aviso { flex: none; margin: 0; padding: 13px 14px; background: var(--nota); border: 1px solid var(--nota-borde); border-radius: 6px; color: var(--nota-tinta); font-size: 12px; line-height: 1.5; }
+.rv-pie { height: 42px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 16px; background: var(--bb-bg); border-top: 1px solid var(--bb-line); color: var(--bb-fg); }
+.rv-pie-rot { font: 400 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bb-muted); }
+.rv-ultimo { border: 0; padding: 0; background: none; font: 400 12px var(--mono); color: var(--bb-fg); cursor: pointer; }
+.rv-ultimo:hover span { text-decoration: underline; }
+.rv-ultimo-nada { font: 400 12px var(--mono); color: var(--bb-muted); }
+.rv-pie .spacer { flex: 1; }
+.revisar .rv-pie .btn { height: 27px; padding: 0 11px; font-size: 12.5px; background: transparent; border-color: var(--bb-line); color: var(--bb-fg); box-shadow: none; }
+
+/* los guiones generados en la biblioteca: la marca «Generado» y la cuenta del árbol */
+.gd-generado { font: 400 9px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--t-verde); flex: none; margin-right: auto; margin-left: 8px; }
+.gd-guiones-cuenta { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 5px; border-radius: 4px; font: 400 9.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; background: var(--foco-suave); color: var(--foco); flex: none; white-space: nowrap; }
+.gd-sub.activo .gd-guiones-cuenta { background: var(--foco); color: var(--foco-sobre); }
+.gd-miga-origen { font: 400 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* el menú de Exportar */
+.gd-pop .ex-opcion { display: flex; align-items: center; gap: 10px; min-width: 220px; height: 30px; }
+.gd-pop .ex-opcion .ex-ext { margin-left: auto; font: 400 10.5px var(--mono); color: var(--palido); }
+#texto.revisando .guion-barra [data-guion="revisar"], #texto.revisando .guion-barra [data-guion="revisar"] + * { display: none; }
+#texto.revisando .guion-barra .guion-sep:last-of-type { display: none; }
+/* «Armar guión» en la cabecera abre y contrae la barra de guión (Leo, 15-09-2026); el chevrón apunta arriba con ella abierta */
+.texto-cab .guion-mostrar { gap: 7px; }
+.texto-cab .guion-mostrar svg:first-child { color: var(--foco); }
+.guion-mostrar-chev { color: var(--palido); transition: transform .15s ease; }
+.guion-mostrar.abierta .guion-mostrar-chev { transform: rotate(180deg); }
+.guion-plegado .hilo-casilla { display: none; }
+/* Al pasar el ratón por un nodo, su rótulo fijo enseña el nombre entero (Leo, 15-09-2026: en lugar del globo), por encima de los vecinos */
+.pt:hover { z-index: 6; }
+.pt:hover .cap { max-width: none; overflow: visible; }
+
+/* ===== «Guiones generados» en la biblioteca (Leo, 15-09-2026, docs/diseno/rediseno-12/): segmentos negros ===== */
+:root { --guion-cab: #111114; --guion-cab-tinta: #ffffff; }
+html[data-theme="dark"] { --guion-cab: #050506; --guion-cab-tinta: #ececef; }
+.gd-bloque > .gd-seccion { display: flex; align-items: center; gap: 10px; }
+.gd-muestra { width: 22px; height: 13px; flex: none; border-radius: 2px; border: 1px solid var(--borde-fuerte); background: var(--lienzo); }
+.gd-muestra--guiones { border-color: var(--guion-cab); background: var(--guion-cab); }
+html[data-theme="dark"] .gd-muestra--guiones { border-color: var(--borde-fuerte); }
+.gd-bloque > .gd-seccion .gd-seccion-tit { color: var(--tinta); font-weight: 500; }
+.gd-seccion-cuenta { font: 400 10px var(--mono); letter-spacing: .06em; color: var(--palido); }
+.gd-seccion-linea { flex: 1; height: 1px; background: var(--regla); }
+.gd-etq--guion { border-color: var(--borde) !important; }
+.gd-etq--guion > .gd-etq-head { background: var(--guion-cab) !important; border-bottom-color: var(--guion-cab) !important; color: var(--guion-cab-tinta) !important; }
+.gd-etq--guion > .gd-etq-head .gd-etq-nom, .gd-etq--guion > .gd-etq-head .gd-cuenta, .gd-etq--guion > .gd-etq-head button { color: var(--guion-cab-tinta) !important; }
+.gd-etq--guion > .gd-etq-head .gd-asa { color: var(--guion-cab-tinta); opacity: .75; }
+.gd-etq--guion > .gd-etq-head button:hover { background: rgba(255, 255, 255, .14); }
+.gd-guion-ico { display: inline-flex; margin-right: 2px; }
+.gd-etq--guion.gd-etq--bandeja .gd-asa { display: none; }
+.gd-etq--guion.gd-etq--bandeja:hover .gd-asa { display: inline-flex; }
+.gd-etq--guion.gd-etq--bandeja:hover .gd-guion-ico { display: none; }
+.gd-etq-nueva--guiones { flex-direction: column; gap: 6px; }
+.gd-seg-chip.gd-seg-chip--guiones { background: var(--guion-cab); border-color: var(--guion-cab); color: var(--guion-cab-tinta); }
+.gd-exp-banda.gd-exp-banda--guiones { background: var(--guion-cab) !important; border-color: var(--guion-cab) !important; color: var(--guion-cab-tinta) !important; }
+.gd-exp-banda.gd-exp-banda--guiones .gd-exp-banda-acc button { color: var(--guion-cab-tinta) !important; }
+
+/* ---------- Nuevo proyecto y Sin proyectos (Leo, 15-09-2026, docs/diseno/rediseno-13/, js/claquedraw/proyectos.js) ----------
+   Las dos tapan todo lo de <main> mientras se ven; sin proyecto tampoco hay nada que guardar en la franja. */
+#nuevoProyecto, #sinProyectos { display: none; }
+body.pantalla-nuevo main > :not(#nuevoProyecto), body.sin-proyectos main > :not(#sinProyectos) { display: none !important; }
+body.pantalla-nuevo #nuevoProyecto, body.sin-proyectos #sinProyectos { display: flex; flex: 1; min-width: 0; min-height: 0; }
+body.pantalla-nuevo .franja-acc :is(#estadoGuardado, #btnGuardar, #btnGuardarComo),
+body.sin-proyectos .franja-acc :is(#estadoGuardado, #btnGuardar, #btnGuardarComo) { display: none; }
+.np-rotulo { font: 400 9.5px var(--mono); letter-spacing: .09em; color: var(--palido); white-space: nowrap; }
+.np .spacer, .sinp .spacer { flex: 1; }
+.np-lado { width: 320px; flex: none; box-sizing: border-box; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--borde-fuerte); box-shadow: var(--sombra-lado); }
+.np-form { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 20px; padding: 0 18px; }
+.np-campo { display: flex; flex-direction: column; gap: 7px; }
+.np-nombre { height: 38px; box-sizing: border-box; padding: 0 11px; background: var(--papel); border: 1px solid var(--borde); border-radius: 5px; font: 400 14px var(--sans); color: var(--tinta); outline: 0; }
+.np-nombre:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.np-nombre::placeholder { color: var(--palido); }
+.np-nombre.falta { border-color: var(--peligro); box-shadow: 0 0 0 3px color-mix(in srgb, var(--peligro) 22%, transparent); animation: np-falta .28s; }
+@keyframes np-falta { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.np-destino { height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 9px; padding: 0 11px; background: var(--papel); border: 1px solid var(--borde); border-radius: 5px;
+  font: 400 12px var(--mono); color: var(--tenue); text-align: left; cursor: pointer; }
+.np-destino:hover { border-color: var(--borde-fuerte); }
+.np-destino:focus-visible { outline: 0; border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.np-destino svg { flex: none; }
+.np-destino-txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-cambiar { flex: none; font: 400 12.5px var(--sans); color: var(--foco); }
+.np-pie { flex: none; padding: 14px 18px 16px; border-top: 1px solid var(--regla); font-size: 12px; line-height: 1.5; color: var(--tenue); }
+.np-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--lienzo); }
+.np-cab { flex: none; gap: 13px; padding: 0 20px; }
+.np-cab svg { color: var(--palido); flex: none; }
+.np-miga { font: 400 14.5px var(--mono); letter-spacing: .02em; color: var(--palido); }
+.np-miga-nom { font: 600 15px var(--mono); color: var(--tinta); }
+.np-cuenta { font: 400 10px var(--mono); letter-spacing: .08em; color: var(--palido); }
+.np-contenido { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px; padding: 4px 20px 0; overflow: auto; }
+.np-plantillas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.np-plantilla { box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 13px 14px; background: var(--papel); border: 1px solid var(--borde); border-radius: 6px;
+  box-shadow: var(--sombra); font: inherit; color: var(--tinta); text-align: left; cursor: pointer; }
+.np-plantilla:hover { border-color: var(--borde-fuerte); }
+.np-plantilla:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--foco-halo); }
+.np-plantilla.activa { background: var(--sel-bg); border-color: var(--foco); box-shadow: var(--sombra-alta); }
+.np-plantilla-cab { display: flex; align-items: center; gap: 9px; }
+.np-plantilla-cab svg { margin-left: auto; flex: none; }
+.np-tono { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.np-plantilla-nom { font-size: 13.5px; font-weight: 600; }
+.np-plantilla-res { font-size: 12px; line-height: 1.45; color: var(--tenue); }
+.np-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.np-chip { display: inline-flex; align-items: center; height: 19px; padding: 0 6px; border-radius: 3px; background: var(--f-gris); font: 400 9.5px var(--mono); letter-spacing: .05em; color: var(--tenue); }
+.np-fichas { flex: 1; min-height: 190px; display: flex; gap: 16px; padding-bottom: 16px; }
+.np-ficha { box-sizing: border-box; display: flex; flex-direction: column; gap: 9px; padding: 14px 15px; background: var(--papel); border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra); overflow: hidden; }
+.np-arbol { width: 330px; flex: none; }
+.np-arbol-filas { flex: 1; min-height: 0; overflow: auto; }
+.np-fila { display: flex; align-items: center; gap: 8px; height: 24px; }
+.np-guia { flex: none; align-self: stretch; width: calc(2px + var(--nivel) * 13px); border-right: 1px solid var(--borde-fuerte); margin-right: -1px; }
+.np-fila.raiz .np-guia { border-right-color: transparent; }
+.np-guia + * { margin-left: 7px; }
+.np-fila > svg { flex: none; }
+.np-etq { display: inline-flex; align-items: center; height: 19px; padding: 0 6px; box-sizing: border-box; border-radius: 4px; flex: none; font: 500 9.5px var(--mono); background: var(--tf); border: 1px solid var(--tc); color: var(--tc); }
+.np-fila-nom { min-width: 0; font: 400 12px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-fila-nom.fuerte { font-weight: 500; }
+.np-fila.enlazada .np-fila-nom { color: var(--tenue); }
+.np-tramas { flex: 1; min-width: 0; gap: 12px; padding: 14px 16px; }
+.np-ficha-cab { display: flex; align-items: center; gap: 10px; }
+.np-ficha-cab i { flex: 1; height: 1px; background: var(--regla); }
+.np-trama { position: relative; height: 40px; display: flex; align-items: baseline; gap: 8px; }
+.np-trama-nom { font: 500 11px var(--mono); letter-spacing: .02em; }
+.np-trama-tipo { font: 400 9px var(--mono); letter-spacing: .09em; color: var(--tc); }
+.np-trama-raya { position: absolute; left: 0; right: 0; top: 25px; height: 2px; background: var(--tc); opacity: .62; }
+.np-trama-nodo { position: absolute; top: 26px; transform: translate(-50%, -50%); width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: var(--papel); border: 2px solid var(--tc); }
+.np-barra { height: 60px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 20px; background: var(--papel); border-top: 1px solid var(--borde); }
+.np-barra .btn { height: 34px; padding: 0 14px; border-radius: 5px; font-size: 13px; box-shadow: none; }
+.np-barra .np-cancelar { background: var(--lienzo); }
+.np-barra .np-crear { gap: 9px; padding: 0 16px; }
+
+.sinp-riel { width: 44px; flex: none; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; padding: 11px 0; background: var(--panel); border-right: 1px solid var(--borde-fuerte); }
+.sinp-panel { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--tenue); opacity: .6; }
+.sinp-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--lienzo); }
+.sinp-centro { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 24px 40px; overflow: auto; }
+.sinp-caja { width: 640px; max-width: 100%; display: flex; flex-direction: column; gap: 26px; margin: auto 0; }
+.sinp-intro { display: flex; flex-direction: column; gap: 10px; }
+.sinp-intro h1 { margin: 6px 0 0; font: 600 24px var(--sans); letter-spacing: -.015em; color: var(--tinta); }
+.sinp-intro p { margin: 0; max-width: 520px; font-size: 13.5px; line-height: 1.6; color: var(--tenue); text-wrap: pretty; }
+.sinp-botones { display: flex; gap: 9px; flex-wrap: wrap; }
+.sinp-botones .btn { height: 38px; gap: 9px; padding: 0 16px; border-radius: 5px; font-size: 13.5px; }
+.sinp-botones .btn:not(.primario) { padding: 0 15px; }
+.sinp-recientes { display: flex; flex-direction: column; gap: 2px; }
+.sinp-sep { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.sinp-sep i { flex: 1; height: 1px; background: var(--regla); }
+.sinp-soltar { gap: 10px; margin: 0; padding-top: 4px; }
+.sinp-soltar .np-rotulo { font-size: 10px; letter-spacing: .06em; }
+.sinp-reciente { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 13px; border-radius: 5px; background: transparent; border: 1px solid transparent; font: inherit; color: var(--tinta); text-align: left; cursor: pointer; }
+.sinp-reciente:hover, .sinp-reciente:focus-visible { background: var(--papel); border-color: var(--borde); box-shadow: var(--sombra); outline: 0; }
+.sinp-reciente svg { flex: none; color: var(--palido); }
+.sinp-reciente:hover svg, .sinp-reciente:focus-visible svg { color: var(--foco); }
+.sinp-rec-nom { min-width: 0; font: 500 13.5px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sinp-rec-dato { font: 400 10px var(--mono); letter-spacing: .05em; color: var(--palido); white-space: nowrap; }
+.sinp-pie { height: 42px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 18px; background: var(--bb-bg); border-top: 1px solid var(--bb-line); color: var(--bb-fg); }
+.sinp-pie span { font: 400 10px var(--mono); letter-spacing: .1em; color: var(--bb-muted); }
+@media (max-width: 1100px) { .np-plantillas { grid-template-columns: repeat(2, minmax(0, 1fr)); } .np-arbol { width: 260px; } }

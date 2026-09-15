@@ -324,3 +324,20 @@ test('un salto no se mueve a una celda donde cualquiera de sus dos extremos caer
   assert.equal(m.punto(s.deId).celda, 35); assert.equal(m.punto(s.aId).celda, 35);
   assert.equal(m.moverSalto(s.id, 'a1', 35).ok, true);                       // sobre sí mismo: no choca
 });
+
+test('paleta de 24 tonos: las notas tienen color, que se guarda; los colores antiguos siguen valiendo', () => {
+  assert.equal(T.PALETA.length, 24);
+  ['azul', 'violeta', 'verde', 'ambar', 'rojo', 'gris'].forEach(c => assert.ok(T.PALETA.some(p => p.id === c), c));
+  const m = base();
+  P(m, 'a', 'l1', 2); P(m, 'b', 'l1', 9);
+  const n = m.crearNota('a', 'b', 'Ojo').nota;
+  assert.equal(n.color, undefined);                                           // sin color: el papel de nota
+  assert.equal(m.colorearNota(n.id, 'cobre').ok, true);
+  assert.equal(m.nota(n.id).color, 'cobre');
+  const copia = new T.Modelo(JSON.parse(JSON.stringify(m.toJSON())));
+  assert.equal(copia.nota(n.id).color, 'cobre');
+  m.colorearNota(n.id, 'no-existe'); assert.equal('color' in m.nota(n.id), false);   // un color que no es de la paleta lo quita
+  assert.equal(m.colorearNota('zz', 'rojo').ok, false);
+  const l = m.nuevaLinea('secundaria').linea;                                // una trama nueva toma un tono libre
+  assert.ok(!['azul', 'violeta', 'ambar'].includes(l.color));
+});

@@ -55,13 +55,13 @@ function montarMenu() {
       { role: 'hide', label: 'Ocultar ClapCraft' }, { role: 'hideOthers', label: 'Ocultar otros' }, { role: 'unhide', label: 'Mostrar todo' },
       { type: 'separator' }, { role: 'quit', label: 'Salir de ClapCraft' }] }] : []),
     { label: 'Archivo', submenu: [
-      { label: 'Nueva pestaña', accelerator: 'CmdOrCtrl+N', click: () => enviar('nuevo') },
-      { label: 'Abrir…', accelerator: 'CmdOrCtrl+O', click: () => enviar('abrir') },
+      { label: 'Nuevo proyecto…', accelerator: 'CmdOrCtrl+N', click: () => enviar('nuevo') },
+      { label: 'Abrir proyecto…', accelerator: 'CmdOrCtrl+O', click: () => enviar('abrir') },
       { type: 'separator' },
       { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => enviar('guardar') },
       { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => enviar('guardarComo') },
       { type: 'separator' },
-      { label: 'Cerrar pestaña', accelerator: 'CmdOrCtrl+W', click: () => enviar('cerrar') },
+      { label: 'Cerrar proyecto', accelerator: 'CmdOrCtrl+W', click: () => enviar('cerrar') },
       ...(mac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Salir' }]) ] },
     { label: 'Edición', submenu: [
       { label: 'Deshacer', accelerator: 'CmdOrCtrl+Z', click: () => enviar('deshacer') },
@@ -106,6 +106,28 @@ ipcMain.handle('file:write', async (event, { path: p, content }) => {
 });
 ipcMain.handle('file:read', async (event, { path: p, binario }) => leer(p, binario));
 
+/* Exportar a PDF (Claquedraw): el HTML imprimible se carga en una ventana escondida y se imprime a un archivo. Las fuentes
+   (Courier Prime) se piden a la carpeta fonts/ de la app: el renderer escribe «FUENTES/» y aquí se cambia por su ruta. */
+ipcMain.handle('pdf:save', async (event, { html, defaultPath }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePath } = await dialog.showSaveDialog(win, { defaultPath, filters: [{ name: 'Documento PDF', extensions: ['pdf'] }] });
+  if (canceled || !filePath) return null;
+  const os = require('os'), { pathToFileURL } = require('url');
+  const fuentes = pathToFileURL(path.join(__dirname, '..', 'fonts') + path.sep).href;
+  const tmp = path.join(os.tmpdir(), 'clapcraft-exportar-' + Date.now() + '.html');
+  await fs.writeFile(tmp, String(html).split('FUENTES/').join(fuentes), 'utf8');
+  const oculta = new BrowserWindow({ show: false });
+  try {
+    await oculta.loadFile(tmp);
+    await oculta.webContents.executeJavaScript('document.fonts.ready.then(() => true)');   // que carguen las fuentes
+    const pdf = await oculta.webContents.printToPDF({ pageSize: 'Letter', printBackground: false, preferCSSPageSize: true });
+    await fs.writeFile(filePath, pdf);
+  } finally {
+    oculta.destroy(); fs.unlink(tmp).catch(() => {});
+  }
+  return filePath;
+});
+
 ipcMain.handle('file:open', async (event, { filters, binario }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const { canceled, filePaths } = await dialog.showOpenDialog(win, { properties: ['openFile'], filters });
@@ -113,3 +135,27 @@ ipcMain.handle('file:open', async (event, { filters, binario }) => {
   const p = filePaths[0];
   return { path: p, name: path.basename(p), content: await leer(p, binario) };
 });
+
+/* Nuevo proyecto (ClapCraft): dónde se guarda y el archivo que lo recibe. La carpeta de partida es ~/Documents/ClapCraft;
+   el renderer recuerda la última elegida. `proyecto:crear` no pisa nada: si ya hay un archivo con ese nombre, «Nombre 2». */
+const os = require('os');
+const casa = p => p && p.startsWith(os.homedir()) ? '~' + p.slice(os.homedir().length) : p;
+ipcMain.handle('proyecto:carpeta', async () => { const ruta = path.join(app.getPath('documents'), 'ClapCraft'); return { ruta, texto: casa(ruta) }; });
+ipcMain.handle('proyecto:elegirCarpeta', async (event, { actual } = {}) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Dónde se guarda el proyecto', defaultPath: actual || app.getPath('documents'),
+    properties: ['openDirectory', 'createDirectory'], buttonLabel: 'Elegir carpeta' });
+  if (canceled || !filePaths[0]) return null;
+  return { ruta: filePaths[0], texto: casa(filePaths[0]) };
+});
+ipcMain.handle('proyecto:crear', async (event, { carpeta, nombre, content }) => {
+  await fs.mkdir(carpeta, { recursive: true });
+  const base = String(nombre || 'Proyecto').replace(/[\\/:*?"<>|]/g, '-').trim() || 'Proyecto';
+  for (let n = 1; n < 1000; n++) {
+    const p = path.join(carpeta, (n === 1 ? base : base + ' ' + n) + '.clapcraft');
+    try { await fs.writeFile(p, Buffer.from(content), { flag: 'wx' }); return p; }
+    catch (err) { if (err.code !== 'EEXIST') throw err; }
+  }
+  throw new Error('No hay un nombre libre en ' + carpeta);
+});
+ipcMain.handle('app:version', () => app.getVersion());

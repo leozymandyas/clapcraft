@@ -66,7 +66,7 @@
     const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, {
       acceptNode: n => {
         const p = n.parentElement;
-        if (!p || p.closest('pre, code, a, .sp-character')) return NodeFilter.FILTER_REJECT;
+        if (!p || p.closest('pre, code, a, .sp-character, .ed-fijo')) return NodeFilter.FILTER_REJECT;
         /* en bases de datos solo se revisan las celdas de texto, no la interfaz */
         if (p.closest('.db') && !p.closest('.db-txt')) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
@@ -105,7 +105,7 @@
     const r = document.caretRangeFromPoint(x, y);
     if (!r || r.startContainer.nodeType !== 3 || !Ed.editor.contains(r.startContainer)) return null;
     const node = r.startContainer, off = r.startOffset, text = node.nodeValue;
-    if (node.parentElement.closest('pre, code, a, .sp-character')) return null;
+    if (node.parentElement.closest('pre, code, a, .sp-character, .ed-fijo')) return null;
     if (node.parentElement.closest('.db') && !node.parentElement.closest('.db-txt')) return null;
     WORD_RE.lastIndex = 0;
     let m;

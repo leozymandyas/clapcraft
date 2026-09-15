@@ -11,22 +11,22 @@
 :root {
   --ui-font: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
-  --bg: #e9e9ec; --canvas: #f6f6f8; --bar: #e9e9ec; --bar-2: #f6f6f8;
-  --ink: #c7c7d0; --line: #c7c7d0; --line-soft: #d4d4db;
-  --fg: #1e1e22; --muted: #61616b; --muted-2: #8d8d97; --icon: #61616b; --hover: #d6d6dd;
-  --accent-bg: #eae6f1; --accent-fg: #6b5b8e; --accent: #6b5b8e; --select-bg: rgba(232, 228, 240, .8); --star: #86682c;
-  --page-bg: #ffffff; --page-fg: #1e1e22; --page-muted: #61616b; --page-soft: #f6f6f8; --page-line: #d4d4db;
+  --bg: #e8e9ec; --canvas: #f5f6f8; --bar: #e8e9ec; --bar-2: #f5f6f8;
+  --ink: #c5c8d0; --line: #c5c8d0; --line-soft: #d7d9df;
+  --fg: #1b1d22; --muted: #5a5f68; --muted-2: #878d97; --icon: #5a5f68; --hover: #d8dae0;
+  --accent-bg: #e9e6f8; --accent-fg: #6141c9; --accent: #6141c9; --select-bg: rgba(223, 217, 244, .8); --star: #86682c;
+  --page-bg: #ffffff; --page-fg: #1b1d22; --page-muted: #5a5f68; --page-soft: #f5f6f8; --page-line: #d7d9df;
   --page-shadow: 0 1px 2px rgba(24, 24, 32, .07), 0 10px 24px rgba(24, 24, 32, .1);
-  --bb-bg: #2b2b31; --bb-fg: #ececef; --bb-muted: #9494a0; --bb-line: #42424b; --bb-border: #42424b; --bb-thumb: #ececef; --bb-active: #6b5b8e; --bb-active-fg: #ffffff; --bb-top: transparent;
+  --bb-bg: #2b2b31; --bb-fg: #ececef; --bb-muted: #9494a0; --bb-line: #42424b; --bb-border: #42424b; --bb-thumb: #ececef; --bb-active: #6141c9; --bb-active-fg: #ffffff; --bb-top: transparent;
 }
 html[data-theme="dark"] {
   --bg: #202024; --canvas: #141417; --bar: #202024; --bar-2: #191a1d;
   --ink: #3a3a42; --line: #3a3a42; --line-soft: #2f2f36;
   --fg: #e8e8ec; --muted: #9a9aa4; --muted-2: #75757f; --icon: #9a9aa4; --hover: #2c2c32;
-  --accent-bg: #2e2839; --accent-fg: #bfaed8; --accent: #bfaed8; --select-bg: rgba(47, 42, 59, .8); --star: #cfa957;
+  --accent-bg: #2a2742; --accent-fg: #b3a6f7; --accent: #b3a6f7; --select-bg: rgba(47, 42, 59, .8); --star: #cfa957;
   --page-bg: #26262a; --page-fg: #e8e8ec; --page-muted: #9a9aa4; --page-soft: #2c2c32; --page-line: #3a3a42;
   --page-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 28px rgba(0, 0, 0, .45);
-  --bb-bg: #0f0f11; --bb-fg: #e8e8ec; --bb-muted: #84848e; --bb-line: #2a2a30; --bb-border: #2a2a30; --bb-thumb: #e8e8ec; --bb-active: #bfaed8; --bb-active-fg: #221d2b; --bb-top: #2a2a30;
+  --bb-bg: #0f0f11; --bb-fg: #e8e8ec; --bb-muted: #84848e; --bb-line: #2a2a30; --bb-border: #2a2a30; --bb-thumb: #e8e8ec; --bb-active: #b3a6f7; --bb-active-fg: #221d2b; --bb-top: #2a2a30;
 }
 body { font-size: 13px; -webkit-font-smoothing: antialiased; }
 /* barra inferior: una fila de 36 px sobre grafito, rótulos mono y una sola pastilla encendida en lavanda */
@@ -69,12 +69,12 @@ body.pin-bottom .workspace { padding-bottom: 60px; }
    la barra inferior clara de 42 px, las dos siempre a la vista; la hoja sobre el lienzo con 26 px de aire.
    index.html abierto a solas no cambia. */
 html.clapcraft {
-  --bb-bg: #e9e9ec; --bb-fg: #1e1e22; --bb-muted: #61616b; --bb-line: #c7c7d0; --bb-border: #c7c7d0; --bb-thumb: #ffffff;
-  --bb-active: #6b5b8e; --bb-active-fg: #ffffff; --bb-top: #c7c7d0;
+  --bb-bg: #e8e9ec; --bb-fg: #1b1d22; --bb-muted: #5a5f68; --bb-line: #c5c8d0; --bb-border: #c5c8d0; --bb-thumb: #ffffff;
+  --bb-active: #6141c9; --bb-active-fg: #ffffff; --bb-top: #c5c8d0;
 }
 html.clapcraft[data-theme="dark"] {
   --bb-bg: #0f0f11; --bb-fg: #e8e8ec; --bb-muted: #84848e; --bb-line: #2a2a30; --bb-border: #2a2a30; --bb-thumb: #26262a;
-  --bb-active: #bfaed8; --bb-active-fg: #221d2b; --bb-top: #2a2a30;
+  --bb-active: #b3a6f7; --bb-active-fg: #221d2b; --bb-top: #2a2a30;
 }
 html.clapcraft body { height: 100vh; overflow: hidden; }   /* solo se desplaza la hoja */
 /* desplazadores morados, como en el resto de ClapCraft (la hoja, los menús y los desplegables) */
@@ -94,8 +94,8 @@ html.clapcraft .ribbon .group { gap: 1px; }
 html.clapcraft .topbar button { width: 27px; min-width: 27px; height: 27px; border: 1px solid transparent; border-radius: 4px; color: var(--fg); }
 html.clapcraft .topbar button.txt { width: 26px; min-width: 26px; height: 26px; color: var(--fg); }
 html.clapcraft .topbar button.txt:hover { background: var(--hover); }
-html.clapcraft .topbar button.active { border-color: rgba(107, 91, 142, .42); background: var(--accent-bg); color: var(--accent-fg); }
-html.clapcraft[data-theme="dark"] .topbar button.active { border-color: rgba(191, 174, 216, .4); }
+html.clapcraft .topbar button.active { border-color: rgba(97, 65, 201, .42); background: var(--accent-bg); color: var(--accent-fg); }
+html.clapcraft[data-theme="dark"] .topbar button.active { border-color: rgba(179, 166, 247, .4); }
 html.clapcraft .ribbon .group:has([data-cmd="justifyLeft"]) button, html.clapcraft .ribbon .group:has([data-cmd="insertUnorderedList"]) button:not(.active) { color: var(--muted); }
 html.clapcraft .topbar select, html.clapcraft .pill { height: 27px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 4px; background-color: var(--page-bg); font-size: 12.5px; }
 html.clapcraft #blockStyle { width: 132px; padding-left: 9px; }
@@ -143,3 +143,87 @@ html.clapcraft .fb-item.cd-lado button svg { width: 15px; height: 15px; }
    en lugar de cortar los últimos botones (alineación, listas, Ortografía y el botón del menú quedaban fuera). */
 html.clapcraft .ribbon { height: auto; min-height: 44px; flex-wrap: wrap; row-gap: 2px; padding-top: 4px; padding-bottom: 4px; }
 html.clapcraft .focus-bar { height: auto; min-height: 42px; flex-wrap: wrap; row-gap: 2px; padding-top: 3px; padding-bottom: 3px; }
+
+/* ===== El documento de un esquema (Leo, 15-09-2026, docs/diseno/rediseno-8/): una sección por nodo =====
+   js/claquedraw/texto.js compone el documento; cada sección empieza con su cabecera `.cd-seccion` (bloque fijo,
+   js/fijos.js): punto del nodo, nombre, trama y tipo, sobre el lienzo y de borde a borde de la hoja (`--cd-pad`, el
+   relleno de la hoja, lo pone texto.js); la activa (donde está el cursor) en lavanda con barra de 5 px. */
+html.clapcraft {
+  /* 24 tonos de trama, nodo y nota (--t-*) y su fondo pálido (--f-*, también fondo de acto), rediseño 9 */
+  --t-rojo: #c62828; --t-ladrillo: #d14a1f; --t-cobre: #d2691e; --t-ambar: #c98a00; --t-oro: #9a7b0a; --t-lima: #6e9a16; --t-oliva: #4f7a1e; --t-verde: #16803c; --t-esmeralda: #0a8a5c; --t-teal: #0b8b82; --t-turquesa: #0e8aa8; --t-cielo: #0378c0; --t-azul: #1a63d0; --t-marino: #17417e; --t-pizarra: #3e4a5c; --t-indigo: #4b34cc; --t-violeta: #6d28d9; --t-uva: #8a2bc4; --t-ciruela: #a21caf; --t-magenta: #bf1b8a; --t-rosa: #d31a6b; --t-vino: #96153f; --t-salvia: #5a7a63; --t-gris: #5d5d68;
+  --f-rojo: #ffe2e2; --f-ladrillo: #ffe6dc; --f-cobre: #ffeddb; --f-ambar: #fff2d0; --f-oro: #f7eecb; --f-lima: #eef8d4; --f-oliva: #e6f5d5; --f-verde: #d9f5e2; --f-esmeralda: #d5f5e7; --f-teal: #d3f4f1; --f-turquesa: #d4f2fa; --f-cielo: #d7eefe; --f-azul: #dfe9ff; --f-marino: #dde6f7; --f-pizarra: #e4e9f0; --f-indigo: #e5e1ff; --f-violeta: #ebe0ff; --f-uva: #f2e0ff; --f-ciruela: #fbe0fb; --f-magenta: #ffe0f4; --f-rosa: #ffe0ec; --f-vino: #ffdfe8; --f-salvia: #e4f0e8; --f-gris: #e9e7ee;
+  --escena: #f5dc9a; --escena-trazo: #c98a00; --rombo: #ddc7f8; --rombo-trazo: #6d28d9;
+  --cd-foco-linea: rgba(97, 65, 201, .42); --cd-foco-halo: rgba(97, 65, 201, .2); --cd-globo-bg: #2b2b31; --cd-globo-fg: #ececef;
+}
+html.clapcraft[data-theme="dark"] {
+  /* 24 tonos de trama, nodo y nota (--t-*) y su fondo pálido (--f-*, también fondo de acto), rediseño 9 */
+  --t-rojo: #f28b82; --t-ladrillo: #f59a72; --t-cobre: #f5a35c; --t-ambar: #f0c04d; --t-oro: #dcb544; --t-lima: #bcd95f; --t-oliva: #a8cc70; --t-verde: #6bd68c; --t-esmeralda: #4fd1a5; --t-teal: #48cfc4; --t-turquesa: #4fc9e6; --t-cielo: #5fbcf0; --t-azul: #8fb2ff; --t-marino: #7fa8d6; --t-pizarra: #9aa8bd; --t-indigo: #a39bf7; --t-violeta: #b99bf5; --t-uva: #cf9bf0; --t-ciruela: #e396f0; --t-magenta: #f090d4; --t-rosa: #f58ab5; --t-vino: #e08195; --t-salvia: #a3c2aa; --t-gris: #a8a8b3;
+  --f-rojo: #3a282a; --f-ladrillo: #3a2b27; --f-cobre: #3a2c24; --f-ambar: #393121; --f-oro: #362f1f; --f-lima: #313524; --f-oliva: #2d3327; --f-verde: #23352c; --f-esmeralda: #1e3430; --f-teal: #1d3435; --f-turquesa: #1e333b; --f-cielo: #21313d; --f-azul: #292f3f; --f-marino: #262d38; --f-pizarra: #2b2d34; --f-indigo: #2c2b3e; --f-violeta: #302b3e; --f-uva: #342b3d; --f-ciruela: #372a3d; --f-magenta: #392938; --f-rosa: #3a2833; --f-vino: #37272d; --f-salvia: #2c3231; --f-gris: #2d2d32;
+  --escena: #8a6f28; --escena-trazo: #f0c04d; --rombo: #4a3a6e; --rombo-trazo: #b99bf5;
+  --cd-foco-linea: rgba(179, 166, 247, .4); --cd-foco-halo: rgba(179, 166, 247, .22); --cd-globo-bg: #2e2e34; --cd-globo-fg: #e8e8ec;
+}
+html.clapcraft #editor.con-secciones { padding-top: 0; }
+html.clapcraft .page .cd-seccion { display: flex; align-items: center; gap: 11px; min-width: 0; box-sizing: border-box;
+  margin: 22px calc(-1 * var(--cd-pad, 1.6cm)) 18px; padding: 8px var(--cd-pad, 1.6cm);
+  background: var(--fl, var(--canvas)); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);   /* la banda, del fondo pálido de su trama (Leo, 15-09-2026) */
+  font: 600 12.5px/18px var(--ui-font); color: var(--muted); white-space: nowrap; cursor: default; user-select: none; -webkit-user-select: none; }
+html.clapcraft .page .cd-seccion:first-child { margin-top: 0; border-top-color: transparent; }
+html.clapcraft .page .cd-seccion.activa { background: var(--fl, var(--accent-bg)); border-color: var(--tl, var(--cd-foco-linea)); box-shadow: inset 5px 0 0 var(--tl, var(--accent)); color: var(--fg); }
+html.clapcraft .page .cd-seccion:first-child.activa { border-top-color: var(--tl, var(--cd-foco-linea)); }
+.cd-sec-punto { flex: none; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: var(--page-bg); border: 2px solid var(--c, var(--t-azul)); }
+.cd-seccion.activa .cd-sec-punto:not(.caja):not(.rombo) { width: 9px; height: 9px; border: 0; background: var(--c, var(--accent)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, var(--accent)) 30%, transparent); }   /* el nodo con su color */
+.cd-sec-punto.caja { border-radius: 2px; background: var(--escena); border-color: var(--escena-trazo); }
+.cd-sec-punto.rombo { width: 9px; height: 9px; border-radius: 1px; background: var(--rombo); border-color: var(--rombo-trazo); transform: rotate(45deg); }
+.cd-seccion.activa .cd-sec-punto.caja, .cd-seccion.activa .cd-sec-punto.rombo { box-shadow: 0 0 0 3px var(--cd-foco-halo); }
+.cd-sec-punto.cortado { border-style: dashed; border-color: var(--t-gris); opacity: .7; }
+.cd-sec-nom { flex: 0 1 auto; min-width: 24px; overflow: hidden; text-overflow: ellipsis; }
+.cd-sec-sep { flex: none; width: 1px; height: 13px; background: var(--line-soft); }
+.cd-sec-trama { flex: 0 100 auto; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; font: 400 11.5px var(--mono); color: var(--muted); }
+.cd-sec-tipo { flex: none; font: 400 9.5px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--tl, var(--muted)); }
+.cd-sec-trama:empty, .cd-sec-sep:has(+ .cd-sec-trama:empty) { display: none; }
+/* sin nodos no hay secciones ni dónde escribir */
+html.clapcraft #editor.sin-secciones > * { display: none; }
+html.clapcraft #editor.sin-secciones::before { content: 'Este esquema aún no tiene nodos: créalos en el esquema de pasos.'; font: 13px var(--ui-font); color: var(--muted); }
+/* renombrar: un campo encima del nombre (va en #pageWrap, fuera del documento) */
+html.clapcraft .cd-sec-renombrar { position: absolute; z-index: 30; height: 26px; box-sizing: border-box; padding: 0 6px; margin: 0;
+  border: 1px solid var(--accent); border-radius: 4px; background: var(--page-bg); color: var(--fg); font: 600 12.5px var(--ui-font);
+  outline: 0; box-shadow: 0 0 0 3px var(--cd-foco-halo); }
+/* el nombre entero de una cabecera cortada */
+.cd-globo { position: fixed; z-index: 70; max-width: 320px; padding: 6px 10px; border-radius: 5px; background: var(--cd-globo-bg, #2b2b31); color: var(--cd-globo-fg, #ececef);
+  font: 12.5px/1.4 var(--ui-font); box-shadow: 0 1px 2px rgba(24, 24, 32, .07), 0 10px 24px rgba(24, 24, 32, .1); pointer-events: none; overflow-wrap: anywhere; }
+.cd-globo[hidden] { display: none; }
+
+/* ===== Revisar guión en la hoja (rediseño 11): casilla, «Sacar del guión» / «Devolver al guión» y plegar ===== */
+html.clapcraft .page .cd-seccion { gap: 10px; }
+.cd-sec-casilla { flex: none; width: 14px; height: 14px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 3px; background: var(--page-bg); border: 1px solid var(--muted-2); color: #fff; cursor: pointer; }
+.cd-seccion.elegida .cd-sec-casilla { background: var(--accent); border-color: var(--accent); color: var(--page-bg); }
+.cd-sec-hueco { flex: 1; min-width: 8px; }
+.cd-sec-accion { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 4px; background: var(--page-bg); font: 500 11px var(--ui-font); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.cd-sec-accion:hover { border-color: var(--muted-2); color: var(--fg); }
+.cd-sec-accion.devolver { border-color: var(--cd-foco-linea); background: var(--accent-bg); color: var(--accent); }
+.cd-sec-plegar { flex: none; display: flex; align-items: center; justify-content: center; width: 18px; height: 22px; color: var(--muted); cursor: pointer; border-radius: 4px; }
+.cd-sec-plegar:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--fg); }
+html.clapcraft .page .cd-seccion.elegida { box-shadow: inset 0 0 0 1px var(--cd-foco-linea); }
+html.clapcraft .page .cd-seccion.elegida.activa { box-shadow: inset 5px 0 0 var(--tl, var(--accent)), inset 0 0 0 1px var(--cd-foco-linea); }
+/* fuera del guion: banda gris, punto discontinuo, nombre tachado; el texto apagado */
+html.clapcraft .page .cd-seccion.sin-guion { background: var(--f-gris); }   /* las variables van en línea: aquí se pinta directo */
+html.clapcraft .page .cd-seccion.sin-guion.activa { border-color: var(--t-gris); box-shadow: inset 5px 0 0 var(--t-gris); }
+html.clapcraft .page .cd-seccion.sin-guion.elegida.activa { box-shadow: inset 5px 0 0 var(--t-gris), inset 0 0 0 1px var(--cd-foco-linea); }
+.cd-seccion.sin-guion .cd-sec-punto { background: var(--page-bg) !important; border: 2px dashed var(--t-gris) !important; box-shadow: none !important; opacity: .6; width: 10px !important; height: 10px !important; transform: none; border-radius: 50%; }
+.cd-seccion.sin-guion .cd-sec-nom { color: var(--muted-2); text-decoration: line-through; }
+.cd-seccion.sin-guion .cd-sec-tipo { color: var(--t-gris); }
+html.clapcraft .page .cd-sin-guion { color: var(--muted-2); opacity: .75; }
+html.clapcraft .page .cd-oculto { display: none !important; }
+html.clapcraft .page .cd-seccion.plegada { margin-bottom: 0; }
+html.clapcraft .page .cd-seccion.plegada + .cd-oculto + .cd-seccion, html.clapcraft .page .cd-seccion.plegada + .cd-seccion { margin-top: 0; border-top-color: transparent; }
+/* «Exportar» en la barra inferior: con borde, sin relleno de color (Leo, 15-09-2026: nada de morado) */
+html.clapcraft .fb-item.cd-exportar { height: 27px; padding: 0; margin: 0 0 0 6px; border: 0; }
+html.clapcraft .fb-item.cd-exportar button { position: static; opacity: 1; display: inline-flex; align-items: center; gap: 7px; width: auto; height: 27px; padding: 0 11px; border: 1px solid var(--bb-line); border-radius: 5px; background: transparent; color: var(--bb-fg); font: 400 12.5px var(--ui-font); cursor: pointer; }
+html.clapcraft .fb-item.cd-exportar button svg { width: 14px; height: 14px; }
+html.clapcraft .fb-item.cd-exportar button:hover { background: var(--hover); }
+/* con la casilla y los botones, el nombre manda: encoge antes el tipo */
+.cd-seccion .cd-sec-nom { flex: 0 0.1 auto; min-width: 48px; }
+.cd-seccion .cd-sec-tipo { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* con «Armar guión» contraído (texto.js: html.cd-guion-plegado) las cabeceras no llevan casilla ni «Sacar / Devolver» */
+html.cd-guion-plegado .cd-sec-casilla, html.cd-guion-plegado .cd-sec-accion { display: none; }

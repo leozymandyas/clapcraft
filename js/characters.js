@@ -10,10 +10,10 @@
 
   /* paleta: [nombre, claro, oscuro] */
   C.PALETTE = [
-    ['Azul', '#DFE8FF', '#26417F'], ['Verde', '#E2F0E0', '#2C5730'], ['Terracota', '#FBE6DA', '#8A4320'], ['Violeta', '#EDE0F7', '#563180'],
-    ['Ámbar', '#FBF0D2', '#7A5410'], ['Rosa', '#FBDFE6', '#8A2B47'], ['Teal', '#D8EFEE', '#1F5B58'], ['Oliva', '#E8EED3', '#4E5C1E'],
-    ['Índigo', '#DEE0F8', '#333B85'], ['Coral', '#FDE2DC', '#8F3A2C'], ['Ciruela', '#F3DCEF', '#71306A'], ['Arena', '#EFE7DA', '#6B5638'],
-    ['Cielo', '#D9ECFA', '#1F5476'], ['Lima', '#E6F2CF', '#4A6013'], ['Óxido', '#F8E3CD', '#835012'], ['Grafito', '#E4E4E2', '#3B3B39']
+    ['Azul', '#DBE8FF', '#1A4A86'], ['Verde', '#D8F2DF', '#11643D'], ['Terracota', '#FFE3D5', '#9C3F14'], ['Violeta', '#EAE0FF', '#5326AB'],
+    ['Ámbar', '#FFEEC9', '#875408'], ['Rosa', '#FFE0EA', '#A51A5A'], ['Teal', '#D2F0ED', '#0A6663'], ['Oliva', '#E8F4CD', '#4C6B0F'],
+    ['Índigo', '#E2E2FF', '#33359C'], ['Coral', '#FFE3DD', '#A83A26'], ['Ciruela', '#F9DCF6', '#8B2280'], ['Arena', '#F4E8CF', '#6F5722'],
+    ['Cielo', '#D6EEFF', '#05618F'], ['Lima', '#E9F8C8', '#4F7205'], ['Óxido', '#FFE0C4', '#94480A'], ['Grafito', '#E6E2EE', '#3C3648']
   ];
 
   /* registro: clave normalizada → { name, color }. Viaja dentro del documento (ver Ed.document). */

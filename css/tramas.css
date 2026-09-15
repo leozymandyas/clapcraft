@@ -14,8 +14,7 @@
   --gutter: 190px;                        /* ancho de la columna de tramas; T.tablero.gutter() lo cambia */
   --fila: 120px; --eje: 44px;             /* alto de carril y del eje; tablero.js los lee para colocar los cables */
   --papel: #ffffff; --chrome: #f0eee9; --panel: #fbfaf8; --regla: #dcd7ce; --regla-fuerte: #c9c5bd;
-  --cuadricula: #ece8e0; --escena: #c9b287; --rombo: #6f4a9c;
-  --escena-trazo: #b7a179; --rombo-trazo: #6f4a9c;
+  --cuadricula: #ece8e0;
   --tinta: #1a1a1a; --tenue: #8d8880; --palido: #a8a29a; --foco: #26417f; --foco-suave: #dfe8ff;
   --foco-halo: rgba(38, 65, 127, .18); --foco-banda: rgba(38, 65, 127, .07); --foco-linea: rgba(38, 65, 127, .28);
   --nota: #fbf0d2; --nota-borde: #e0c88b; --nota-tinta: #7a5410; --nota-edit: #fdf6e2; --nota-tenue: #9a7a2a;
@@ -23,30 +22,27 @@
   --peligro: #8f3a2c; --peligro-bg: #fde2dc; --inverso: #f0eee9;
   --sombra-dura: rgba(26, 26, 26, .12); --sombra-suave: rgba(26, 26, 26, .07);
   --sombra: 3px 3px 0 var(--sombra-dura);
-  /* paleta de tramas y nodos */
-  --t-azul: #26417f; --t-violeta: #563180; --t-verde: #2c5730;
-  --t-ambar: #7a5410; --t-rojo: #8f3a2c; --t-gris: #5c584f;
-  /* fondos de acto */
-  --f-azul: #dfe8ff; --f-violeta: #ede0f7; --f-verde: #e2f0e0;
-  --f-ambar: #fbf0d2; --f-rojo: #fde2dc; --f-gris: #e4e4e2;
+  /* 24 tonos de trama, nodo y nota (--t-*) y su fondo pálido (--f-*, también fondo de acto), rediseño 9 */
+  --t-rojo: #c62828; --t-ladrillo: #d14a1f; --t-cobre: #d2691e; --t-ambar: #c98a00; --t-oro: #9a7b0a; --t-lima: #6e9a16; --t-oliva: #4f7a1e; --t-verde: #16803c; --t-esmeralda: #0a8a5c; --t-teal: #0b8b82; --t-turquesa: #0e8aa8; --t-cielo: #0378c0; --t-azul: #1a63d0; --t-marino: #17417e; --t-pizarra: #3e4a5c; --t-indigo: #4b34cc; --t-violeta: #6d28d9; --t-uva: #8a2bc4; --t-ciruela: #a21caf; --t-magenta: #bf1b8a; --t-rosa: #d31a6b; --t-vino: #96153f; --t-salvia: #5a7a63; --t-gris: #5d5d68;
+  --f-rojo: #ffe2e2; --f-ladrillo: #ffe6dc; --f-cobre: #ffeddb; --f-ambar: #fff2d0; --f-oro: #f7eecb; --f-lima: #eef8d4; --f-oliva: #e6f5d5; --f-verde: #d9f5e2; --f-esmeralda: #d5f5e7; --f-teal: #d3f4f1; --f-turquesa: #d4f2fa; --f-cielo: #d7eefe; --f-azul: #dfe9ff; --f-marino: #dde6f7; --f-pizarra: #e4e9f0; --f-indigo: #e5e1ff; --f-violeta: #ebe0ff; --f-uva: #f2e0ff; --f-ciruela: #fbe0fb; --f-magenta: #ffe0f4; --f-rosa: #ffe0ec; --f-vino: #ffdfe8; --f-salvia: #e4f0e8; --f-gris: #e9e7ee;
+  --escena: #f5dc9a; --escena-trazo: #c98a00; --rombo: #ddc7f8; --rombo-trazo: #6d28d9;
   --sans: "Patrick Hand", ui-rounded, "Segoe UI", Helvetica, Arial, sans-serif;
   --mono: "Courier Prime", ui-monospace, "SF Mono", "Courier New", Courier, monospace;
   color-scheme: light;
 }
 html[data-theme="dark"] {
   --papel: #1c1b19; --chrome: #131211; --panel: #232120; --regla: #3a3733; --regla-fuerte: #4e4a45;
-  --cuadricula: #292724; --escena: #cbb583; --rombo: #a982e0;
-  --escena-trazo: #cbb583; --rombo-trazo: #a982e0;
+  --cuadricula: #292724;
   --tinta: #ece8e0; --tenue: #948e85; --palido: #6f6a63; --foco: #8fb0f0; --foco-suave: #25324c;
   --foco-halo: rgba(143, 176, 240, .22); --foco-banda: rgba(143, 176, 240, .08); --foco-linea: rgba(143, 176, 240, .3);
   --nota: #3a3120; --nota-borde: #6b5729; --nota-tinta: #e3c98c; --nota-edit: #41361f; --nota-tenue: #c2a24e;
   --hover: #262422; --hover-fuerte: #2e2b28; --linea-menu: #3a3733; --pista-hot: #242220;
   --peligro: #e0796a; --peligro-bg: #3d2520; --inverso: #141312;
   --sombra-dura: rgba(0, 0, 0, .5); --sombra-suave: rgba(0, 0, 0, .35);
-  --t-azul: #7ea2e8; --t-violeta: #b28ae0; --t-verde: #6fbf7f;
-  --t-ambar: #d8a63f; --t-rojo: #e0796a; --t-gris: #b0aaa1;
-  --f-azul: #1e2b42; --f-violeta: #2c2340; --f-verde: #1d3324;
-  --f-ambar: #3a3020; --f-rojo: #3d2520; --f-gris: #2b2926;
+  /* 24 tonos de trama, nodo y nota (--t-*) y su fondo pálido (--f-*, también fondo de acto), rediseño 9 */
+  --t-rojo: #f28b82; --t-ladrillo: #f59a72; --t-cobre: #f5a35c; --t-ambar: #f0c04d; --t-oro: #dcb544; --t-lima: #bcd95f; --t-oliva: #a8cc70; --t-verde: #6bd68c; --t-esmeralda: #4fd1a5; --t-teal: #48cfc4; --t-turquesa: #4fc9e6; --t-cielo: #5fbcf0; --t-azul: #8fb2ff; --t-marino: #7fa8d6; --t-pizarra: #9aa8bd; --t-indigo: #a39bf7; --t-violeta: #b99bf5; --t-uva: #cf9bf0; --t-ciruela: #e396f0; --t-magenta: #f090d4; --t-rosa: #f58ab5; --t-vino: #e08195; --t-salvia: #a3c2aa; --t-gris: #a8a8b3;
+  --f-rojo: #3a282a; --f-ladrillo: #3a2b27; --f-cobre: #3a2c24; --f-ambar: #393121; --f-oro: #362f1f; --f-lima: #313524; --f-oliva: #2d3327; --f-verde: #23352c; --f-esmeralda: #1e3430; --f-teal: #1d3435; --f-turquesa: #1e333b; --f-cielo: #21313d; --f-azul: #292f3f; --f-marino: #262d38; --f-pizarra: #2b2d34; --f-indigo: #2c2b3e; --f-violeta: #302b3e; --f-uva: #342b3d; --f-ciruela: #372a3d; --f-magenta: #392938; --f-rosa: #3a2833; --f-vino: #37272d; --f-salvia: #2c3231; --f-gris: #2d2d32;
+  --escena: #8a6f28; --escena-trazo: #f0c04d; --rombo: #4a3a6e; --rombo-trazo: #b99bf5;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -176,6 +172,10 @@ body.con-ruta .nota { opacity: .2; }
        overflow: hidden; text-overflow: ellipsis; }
 .pt.alto .cap { bottom: 27px; }
 .pt.cortado .cap { text-decoration: line-through; color: var(--tenue); }
+.pt:hover .cap { max-width: none; overflow: visible; }                  /* sin globo: el rótulo enseña el nombre entero */
+/* si su nombre choca con el del nodo anterior, se desdobla debajo del eje (tablero.js, `colocarRotulos`) */
+.pt.abajo .cap { bottom: auto; top: 14px; }
+.pt.abajo .cap-edit { bottom: auto; top: 13px; }
 
 /* ---------- notas entre nodos ---------- */
 .nota { position: absolute; top: 50%; margin-top: 13px; height: 22px;
@@ -189,6 +189,14 @@ body.con-ruta .nota { opacity: .2; }
         font-family: var(--mono); font-size: 10.5px; font-style: italic;
         color: var(--nota-tinta); padding: 0 7px; }
 .nota.sel span { color: var(--foco); }
+/* una nota entre nodos pegados (o con un rótulo debajo): en el eje queda su marca y el papel se corre a la derecha,
+   unido por una guía discontinua; las guías cuelgan del papel con posiciones negativas (tablero.js) */
+.nota.aparte { width: auto; max-width: 210px; margin-top: 10px; z-index: 2; }   /* corrida sobre el tramo siguiente: por encima de su hueco (z 1), que se comía el clic y creaba otra nota (Leo) */
+.nota.aparte span { position: static; transform: none; display: block; line-height: 20px; }
+.nota-guia { position: absolute; pointer-events: none; }
+.nota-marca { top: -14.5px; width: 7px; height: 7px; margin-left: -4.5px; border-radius: 50%; background: var(--nota-borde); box-shadow: 0 0 0 2px var(--nota); }
+.nota-guia-v { top: -4px; width: 1px; height: 14px; margin-left: -1px; background: repeating-linear-gradient(180deg, var(--nota-borde) 0 3px, transparent 3px 6px); }
+.nota-guia-h { top: 10px; height: 1px; margin-left: -1px; background: repeating-linear-gradient(90deg, var(--nota-borde) 0 3px, transparent 3px 6px); }
 .cap-edit { position: absolute; left: 50%; bottom: 13px; transform: translateX(-50%); pointer-events: auto;
         width: 170px; font-family: var(--sans); font-size: 13.5px; text-align: center;
         color: var(--tinta); background: var(--papel); border: 1.5px solid var(--foco);
