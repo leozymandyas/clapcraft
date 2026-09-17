@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=Courier+Prime:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: #eeeef1; }
+a { color: #6141c9; text-decoration: none; }
+a:hover { color: #4d4068; text-decoration: underline; }
+</style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true"><defs>
+<symbol id="ic-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 6.6h6.4a3.4 3.4 0 0 1 0 6.8H6.4"></path><path d="M6.3 3.4 3.1 6.6l3.2 3.2"></path></symbol>
+<symbol id="ic-redo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 6.6H6.4a3.4 3.4 0 0 0 0 6.8h3.2"></path><path d="M9.7 3.4l3.2 3.2-3.2 3.2"></path></symbol>
+<symbol id="ic-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.9" cy="6.9" r="4.3"></circle><path d="M10.1 10.1 13.6 13.6"></path></symbol>
+<symbol id="ic-panel" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="3.2" width="11.6" height="9.6" rx="1.4"></rect><path d="M6.2 3.2v9.6"></path></symbol>
+<symbol id="ic-more" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.9" cy="8" r=".95"></circle><circle cx="8" cy="8" r=".95"></circle><circle cx="12.1" cy="8" r=".95"></circle></symbol>
+<symbol id="ic-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3.4v9.2M3.4 8h9.2"></path></symbol>
+<symbol id="ic-chev-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 4.2 10.2 8l-3.8 3.8"></path></symbol>
+<symbol id="ic-chev-d" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 6.4 8 10.2l3.8-3.8"></path></symbol>
+<symbol id="ic-board" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.2 5.2h11.6M2.2 10.8h11.6"></path><circle cx="5.2" cy="5.2" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="10.6" cy="10.8" r="1.5" fill="currentColor" stroke="none"></circle></symbol>
+<symbol id="ic-script" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 2.4h8.8v11.2H3.6z"></path><path d="M5.9 5.4h4.2M5.9 8h4.2M5.9 10.6h2.4"></path></symbol>
+<symbol id="ic-person" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.4"></circle><path d="M3.4 13.6c0-2.5 2.1-4 4.6-4s4.6 1.5 4.6 4"></path></symbol>
+<symbol id="ic-docs" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="3.4" width="11.2" height="9.2" rx="1.3"></rect><path d="M2.4 6.6h11.2M6.9 6.6v6"></path></symbol>
+<symbol id="ic-trash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 4.8h9.6M6.4 4.8V3.2h3.2v1.6"></path><path d="M4.8 4.8l.6 8.4h5.2l.6-8.4"></path></symbol>
+<symbol id="ic-close" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"></path></symbol>
+<symbol id="ic-drag" viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r=".95"></circle><circle cx="10" cy="4" r=".95"></circle><circle cx="6" cy="8" r=".95"></circle><circle cx="10" cy="8" r=".95"></circle><circle cx="6" cy="12" r=".95"></circle><circle cx="10" cy="12" r=".95"></circle></symbol>
+<symbol id="ic-edit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.6 13.4 4.7 5.9 12.2l-2.8.7.7-2.8z"></path></symbol>
+<symbol id="ic-filter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 3.6h11.2L9.2 8.8v4.4L6.8 11.8V8.8z"></path></symbol>
+<symbol id="ic-sort" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4.4h10M3 8h6.6M3 11.6h3.6"></path></symbol>
+<symbol id="ic-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8.4 6.5 11.5 12.8 4.8"></path></symbol>
+<symbol id="ic-arr-l" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 4.2 5.8 8l3.8 3.8"></path></symbol>
+<symbol id="ic-arr-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 4.2 10.2 8l-3.8 3.8"></path></symbol>
+<symbol id="ic-expand" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 2.9h3.5v3.5M6.4 13.1H2.9V9.6M13.1 2.9 9.3 6.7M2.9 13.1l3.8-3.8"></path></symbol>
+<symbol id="ic-collapse" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.1 6.4H9.6V2.9M2.9 9.6h3.5v3.5M9.6 6.4l3.5-3.5M6.4 9.6l-3.5 3.5"></path></symbol>
+<symbol id="ic-bold" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 3h3.9a2.4 2.4 0 0 1 0 4.8H4.8z"></path><path d="M4.8 7.8h4.4a2.6 2.6 0 0 1 0 5.2H4.8z"></path></symbol>
+<symbol id="ic-italic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6.6 3h4.6M4.8 13h4.6M9.6 3 6.4 13"></path></symbol>
+<symbol id="ic-underline" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.9 3v4.8a3.1 3.1 0 0 0 6.2 0V3"></path><path d="M4 13.4h8"></path></symbol>
+<symbol id="ic-align" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4.4h10M3 8h6.8M3 11.6h10"></path></symbol>
+<symbol id="ic-list" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 4.4h7M6 8h7M6 11.6h7"></path><circle cx="3.3" cy="4.4" r=".9" fill="currentColor" stroke="none"></circle><circle cx="3.3" cy="8" r=".9" fill="currentColor" stroke="none"></circle><circle cx="3.3" cy="11.6" r=".9" fill="currentColor" stroke="none"></circle></symbol>
+<symbol id="ic-folder" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 4.2h4l1.3 1.7h5.9v7.1H2.4z"></path></symbol>
+<symbol id="ic-minus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3.4 8h9.2"></path></symbol>
+<symbol id="ic-strike" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 8h10.4"></path><path d="M5 5.2c.5-1.5 1.9-2.3 3.3-2.3 1.7 0 2.8.7 3.2 1.9"></path><path d="M11.2 10.4c-.2 1.7-1.5 2.7-3.3 2.7-1.6 0-2.9-.6-3.4-1.8"></path></symbol>
+<symbol id="ic-tcolor" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 10.8 7.3 2.8h1.4l3.7 8"></path><path d="M5.1 8.2h5.8"></path><path d="M3.4 13.8h9.2" stroke-width="2"></path></symbol>
+<symbol id="ic-marker" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 2.4 13.2 5.2 7.1 11.3H4.3V8.5z"></path><path d="M3.2 13.8h9.6" stroke-width="2"></path></symbol>
+<symbol id="ic-align-l" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.6 3.2h10.8M2.6 6.4h7M2.6 9.6h10.8M2.6 12.8h7"></path></symbol>
+<symbol id="ic-align-c" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.6 3.2h10.8M4.5 6.4h7M2.6 9.6h10.8M4.5 12.8h7"></path></symbol>
+<symbol id="ic-align-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.6 3.2h10.8M6.4 6.4h7M2.6 9.6h10.8M6.4 12.8h7"></path></symbol>
+<symbol id="ic-align-j" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.6 3.2h10.8M2.6 6.4h10.8M2.6 9.6h10.8M2.6 12.8h10.8"></path></symbol>
+<symbol id="ic-list-num" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 4.4h7M6 8h7M6 11.6h7"></path><path d="M2.6 4.4h1M2.6 8h1.7M2.6 11.6h2.3"></path></symbol>
+<symbol id="ic-indent" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h10.8M6.6 7.2h6.8M6.6 10.4h6.8M2.6 14.2h10.8"></path><path d="m2.6 6.6 2 2.2-2 2.2"></path></symbol>
+<symbol id="ic-outdent" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h10.8M6.6 7.2h6.8M6.6 10.4h6.8M2.6 14.2h10.8"></path><path d="m4.6 6.6-2 2.2 2 2.2"></path></symbol>
+<symbol id="ic-out" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.4"></circle><path d="M4.2 11.8 11.8 4.2"></path></symbol>
+<symbol id="ic-export" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10.2V2.9"></path><path d="M5.3 5.6 8 2.9l2.7 2.7"></path><path d="M2.9 9.6v2.3c0 .7.5 1.2 1.2 1.2h7.8c.7 0 1.2-.5 1.2-1.2V9.6"></path></symbol>
+</defs></svg>
+
+<div style="width:1420px;padding:60px 60px 100px;font-family:'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;color:#1b1d22;background:#eeeef1;box-sizing:border-box">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;padding-bottom:26px;border-bottom:2px solid #1b1d22">
+    <div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#878d97">SISTEMA VISUAL · PROPUESTA</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+        <svg width="30" height="30" viewBox="0 0 16 16"><rect x="1.4" y="5.6" width="13.2" height="8.9" rx="1.3" fill="#2f2f2f"></rect><path d="M1.6 5.6 2.9 2.4l12.3 1-.5 2.2z" fill="#707070"></path><path d="M5.4 2.7 4.3 5.5M8.7 3 7.6 5.7M12 3.3 10.9 5.9" stroke="#d5b3ea" stroke-width="1.1"></path></svg>
+        <span style="font-family:'Courier New',Courier,monospace;font-weight:700;font-size:34px;letter-spacing:-.02em">ClapCraft</span>
+      </div>
+    </div>
+    <div style="max-width:560px;font-size:15px;line-height:1.55;color:#4c515a;text-wrap:pretty">Piel de sala de montaje: neutros tintados de violeta, un solo acento vivo derivado del logo, rótulos monoespaciados y un juego de iconos único. Claro primero, oscuro con los mismos tokens.</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:1px;background:#d7d9df;border:1px solid #d7d9df">
+    <div style="background:#fff;padding:18px 20px"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">TIPOGRAFÍA</div><div style="font-size:15px;font-weight:600;margin-top:8px">IBM Plex Sans + Plex Mono</div><div style="font-size:12.5px;color:#5a5f68;margin-top:5px;line-height:1.45">Empaquetada. Sustituye a la del sistema y a Patrick Hand.</div></div>
+    <div style="background:#fff;padding:18px 20px"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">ACENTO</div><div style="font-size:15px;font-weight:600;margin-top:8px">Violeta #6141C9</div><div style="font-size:12.5px;color:#5a5f68;margin-top:5px;line-height:1.45">El lavanda del logo llevado a un violeta saturado que aguanta texto en blanco.</div></div>
+    <div style="background:#fff;padding:18px 20px"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">SEPARACIÓN</div><div style="font-size:15px;font-weight:600;margin-top:8px">Tres planos de papel</div><div style="font-size:12.5px;color:#5a5f68;margin-top:5px;line-height:1.45">Barra en panel tintado, inspector en papel, lienzo en medio: cada columna es un plano distinto.</div></div>
+    <div style="background:#fff;padding:18px 20px"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">ICONOS</div><div style="font-size:15px;font-weight:600;margin-top:8px">36 trazos, rejilla de 16</div><div style="font-size:12.5px;color:#5a5f68;margin-top:5px;line-height:1.45">Solo en controles. En el árbol manda la etiqueta de tipo, no el icono.</div></div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:14px;margin:64px 0 22px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#878d97">01</span>
+    <span style="font-size:23px;font-weight:600;letter-spacing:-.015em">Tipografía</span>
+    <div style="flex:1;height:1px;background:#d7d9df"></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid #d7d9df;padding:24px 26px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">INTERFAZ · --sans</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5a5f68">IBM Plex Sans 400 · 500 · 600</span></div>
+      <div style="font-size:30px;margin:16px 0 6px;letter-spacing:-.02em">Trama global · Esquema de pasos</div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.6">Cuerpo 13 px · filas 13 px · contenedores 13/600 · títulos de tablero 20/600 · botones 12.5/500. Ligeramente más estrecha que la del sistema, así que a la misma medida entra más texto sin apretar.</div>
+    </div>
+    <div style="background:#fff;border:1px solid #d7d9df;padding:24px 26px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">RÓTULOS · --mono</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5a5f68">IBM Plex Mono 400 · 500</span></div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:.09em;margin:18px 0 8px;color:#5a5f68">CONTENEDORES · 2 &nbsp; SEGMENTOS &nbsp; ESCALA</div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.6">9.5–10 px en mayúsculas, tracking .09em, color <code style="font-family:'IBM Plex Mono',monospace;font-size:12px">--palido</code>. Rótulos de grupo, contadores, fechas, nombres de acto y tipo de trama.</div>
+    </div>
+    <div style="background:#fff;border:1px solid #d7d9df;padding:24px 26px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">MARCA · --marca</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5a5f68">Courier New 700 · fijo</span></div>
+      <div style="font-family:'Courier New',Courier,monospace;font-weight:700;font-size:30px;margin:14px 0 8px;letter-spacing:-.02em">ClapCraft</div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.6">15 px en la cabecera, tracking −.015em para cerrar el espaciado ancho del Courier.</div>
+    </div>
+    <div style="background:#fff;border:1px solid #d7d9df;padding:24px 26px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">DOCUMENTO · --doc-font</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5a5f68">Courier Prime · fijo</span></div>
+      <div style="font-family:'Courier Prime','Courier New',monospace;font-size:17px;line-height:1.45;margin:14px 0 8px">INT. CAFETERÍA DEL PUERTO – DÍA<br><b>ANA</b> &nbsp;No pensaba volver.</div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.6">12 pt en la hoja. Solo dentro de la página; el título del documento pasa a Plex Sans.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:14px;margin:64px 0 22px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#878d97">02</span>
+    <span style="font-size:23px;font-weight:600;letter-spacing:-.015em">Color</span>
+    <div style="flex:1;height:1px;background:#d7d9df"></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid #d7d9df;padding:22px 24px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97;margin-bottom:16px">TRES PLANOS DE GRIS · CLARO</div>
+      <div style="display:flex;gap:0;border:1px solid #c5c8d0">
+        <div style="width:96px;height:108px;background:#dfe1e6;border-right:1px solid #aab0bb;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#5a5f68">PANEL<br>#E0E0E5</div>
+        <div style="flex:1;height:108px;background:#f5f6f8;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#5a5f68">LIENZO #F6F6F8</div>
+        <div style="width:140px;height:108px;background:#fff;border-left:1px solid #d7d9df;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#5a5f68">PAPEL #FFFFFF</div>
+      </div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.6;margin-top:14px">La barra lateral y el panel del nodo bajan a <code style="font-family:'IBM Plex Mono',monospace;font-size:12px">--panel</code>, dos pasos por debajo del lienzo, y se separan con <code style="font-family:'IBM Plex Mono',monospace;font-size:12px">--borde-fuerte</code> de 1 px. Las tarjetas y la hoja se quedan en blanco puro, así que son lo único blanco de la pantalla.</div>
+    </div>
+    <div style="background:#1a1a1e;border:1px solid #3a3a42;padding:22px 24px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#75757f;margin-bottom:16px">TRES PLANOS DE GRIS · OSCURO</div>
+      <div style="display:flex;gap:0;border:1px solid #3a3a42">
+        <div style="width:96px;height:108px;background:#191a1d;border-right:1px solid #4a4a54;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#9a9aa4">PANEL<br>#191A1D</div>
+        <div style="flex:1;height:108px;background:#141417;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#9a9aa4">LIENZO #141417</div>
+        <div style="width:140px;height:108px;background:#26262a;border-left:1px solid #3a3a42;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#9a9aa4">PAPEL #26262A</div>
+      </div>
+      <div style="font-size:13px;color:#9a9aa4;line-height:1.6;margin-top:14px">En oscuro se invierte el orden: el papel es el plano más claro y el lienzo el más hundido. Misma jerarquía, mismos nombres de token.</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+    <div style="background:#fff;border:1px solid #d7d9df;padding:22px 24px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97;margin-bottom:16px">ACENTO</div>
+      <div style="display:flex;gap:10px;align-items:stretch">
+        <div style="flex:1;height:78px;background:#d5b3ea;border:1px solid #c5c8d0;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#4a3358">LOGO<br>#D5B3EA</div>
+        <div style="flex:1;height:78px;background:#6141c9;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#fff">--foco CLARO<br>#6141C9</div>
+        <div style="flex:1;height:78px;background:#e9e6f8;border:1px solid #c5c8d0;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6141c9">--foco-suave<br>#EAE6F1</div>
+        <div style="flex:1;height:78px;background:#b3a6f7;display:flex;align-items:flex-end;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#2a2336">--foco OSCURO<br>#B3A6F7</div>
+      </div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.6;margin-top:14px">El lavanda del logo no llega a 4.5:1 sobre blanco, así que el acento de interfaz es la misma familia subida de croma: un violeta que aguanta texto en blanco. Se usa en selección, foco de teclado, el punto de «montado» y un único botón primario por pantalla.</div>
+    </div>
+    <div style="background:#fff;border:1px solid #d7d9df;padding:22px 24px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97;margin-bottom:16px">TRAMAS Y NODOS</div>
+      <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px">
+        <sc-for list="{{ tramas }}" as="t" hint-placeholder-count="24">
+          <div><div style="height:30px;background:{{ t.l }}"></div><div style="height:18px;background:{{ t.f }};border:1px solid #d7d9df;border-top:0"></div><div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:#878d97;margin-top:5px">{{ t.n }}</div></div>
+        </sc-for>
+        <div><div style="height:30px;background:#f5dc9a;border:1px solid #c98a00;box-sizing:border-box"></div><div style="height:18px;background:#ddc7f8;border:1px solid #6d28d9;border-top:0;box-sizing:border-box"></div><div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:#878d97;margin-top:5px">SALTO</div></div>
+      </div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.6;margin-top:14px">Veinticuatro tonos de trama, nodo y nota, cada uno con su fondo pálido debajo. En claro van subidos de croma para que una línea de tiempo llena de puntos siga siendo legible de un vistazo; el cuadro de escena (ámbar sobre crema) y el rombo de salto (violeta sobre lila) se mantienen aparte para leerse como piezas distintas.</div>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:1px solid #d7d9df;padding:22px 24px;margin-top:16px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97">PALETA DE 16 · PERSONAJES Y SEGMENTOS</span>
+      <span style="font-size:12.5px;color:#5a5f68">Croma bajado y luminosidad igualada: todas las tintas pasan 4.5:1 sobre su fondo, en claro y en oscuro.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:10px">
+      <sc-for list="{{ paleta }}" as="t" hint-placeholder-count="16">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:center;height:40px;font-size:12.5px;font-weight:600;background:{{ t.bg }};color:{{ t.ink }}">{{ t.nombre }}</div>
+          <div style="display:flex;align-items:center;justify-content:center;height:40px;font-size:12.5px;font-weight:600;background:{{ t.dbg }};color:{{ t.dink }}">{{ t.nombre }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#878d97;margin-top:5px;line-height:1.5">{{ t.bg }}<br>{{ t.ink }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:14px;margin:64px 0 22px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#878d97">03</span>
+    <span style="font-size:23px;font-weight:600;letter-spacing:-.015em">Iconografía</span>
+    <div style="flex:1;height:1px;background:#d7d9df"></div>
+  </div>
+
+  <div style="background:#fff;border:1px solid #d7d9df;padding:24px 26px">
+    <div style="display:flex;align-items:flex-start;gap:40px">
+      <div style="flex:none;width:300px">
+        <div style="font-size:13px;color:#5a5f68;line-height:1.6">Un solo juego: rejilla de 16, trazo de 1.4 px, extremos redondeados, sin relleno salvo en los puntos. Sustituye los caracteres de texto que hoy se mezclan con emoji. Deshacer y rehacer pasan a ser el arco con punta de flecha estándar de las herramientas de edición, no una flecha curva de una sola línea.</div>
+        <div style="display:flex;align-items:center;gap:22px;margin-top:22px;padding:14px 16px;background:#f5f6f8;border:1px solid #d7d9df">
+          <div style="text-align:center"><div style="font-size:22px;color:#878d97;line-height:1">↶ ↷</div><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:#878d97;margin-top:8px">ANTES</div></div>
+          <svg width="16" height="16" style="color:#c5c8d0"><use href="#ic-arr-r"></use></svg>
+          <div style="text-align:center"><div style="display:flex;gap:10px;color:#1b1d22"><svg width="22" height="22"><use href="#ic-undo"></use></svg><svg width="22" height="22"><use href="#ic-redo"></use></svg></div><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:#878d97;margin-top:8px">AHORA</div></div>
+        </div>
+      </div>
+      <div style="flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#e2e4e9;border:1px solid #e2e4e9">
+        <sc-for list="{{ iconos }}" as="ic" hint-placeholder-count="28">
+          <div style="background:#fff;padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:9px">
+            <svg width="20" height="20" style="color:#1b1d22"><use href="{{ ic.ref }}"></use></svg>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.06em;color:#878d97;text-align:center">{{ ic.n }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:14px;margin:64px 0 22px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#878d97">04</span>
+    <span style="font-size:23px;font-weight:600;letter-spacing:-.015em">Etiquetas de enlace</span>
+    <div style="flex:1;height:1px;background:#d7d9df"></div>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">7 COLORES · NOMBRE LIBRE</span>
+  </div>
+
+  <div style="background:#fff;border:1px solid #d7d9df;padding:22px 24px;display:flex;flex-direction:column;gap:20px">
+    <div style="max-width:760px;font-size:13px;line-height:1.6;color:#5a5f68;text-wrap:pretty">Todo lo que cuelga de un contenedor o de una carpeta es un enlace, y todo enlace lleva etiqueta. El tipo decide el color de partida —esquema en violeta, guion en grafito, biblioteca en azul— pero tanto el nombre como el color se cambian desde el ⋯ del propio enlace: la etiqueta es del usuario, no del sistema. El nombre se escribe en mono y se recorta a 14 caracteres en el árbol; el color solo puede ser uno de estos siete.</div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:12px">
+      <div style="width:150px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:#eae0ff;border:1px solid rgba(83,38,171,.4);color:#5326ab">Esquema</span><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;color:#878d97">VIOLETA<br>#EAE0FF · #5326AB</div></div>
+      <div style="width:150px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:#e6e2ee;border:1px solid rgba(60,54,72,.42);color:#3c3648">Guion</span><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;color:#878d97">GRAFITO<br>#E6E2EE · #3C3648</div></div>
+      <div style="width:150px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:#dbe8ff;border:1px solid rgba(26,74,134,.4);color:#1a4a86">Biblioteca</span><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;color:#878d97">AZUL<br>#DBE8FF · #1A4A86</div></div>
+      <div style="width:150px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:#d8f2df;border:1px solid rgba(17,100,61,.4);color:#11643d">Escaleta</span><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;color:#878d97">VERDE<br>#D8F2DF · #11643D</div></div>
+      <div style="width:150px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:#d2f0ed;border:1px solid rgba(10,102,99,.4);color:#0a6663">Referencias</span><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;color:#878d97">TEAL<br>#D2F0ED · #0A6663</div></div>
+      <div style="width:150px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:#ffeec9;border:1px solid rgba(135,84,8,.42);color:#875408">Investigación</span><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;color:#878d97">ÁMBAR<br>#FFEEC9 · #875408</div></div>
+      <div style="width:150px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:#ffe0ea;border:1px solid rgba(165,26,90,.4);color:#a51a5a">Personajes</span><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;color:#878d97">ROSA<br>#FFE0EA · #A51A5A</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;padding-top:6px;border-top:1px solid #d7d9df;font-size:12.5px;color:#5a5f68;line-height:1.55">
+      <div><b style="color:#1b1d22;font-weight:600">Un color, tres valores.</b> Cada etiqueta usa <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">--p-&lt;color&gt;-bg</code>, <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">-linea</code> y <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">-tinta</code>; la tinta cumple 4.5:1 sobre su fondo en claro y en oscuro.</div>
+      <div><b style="color:#1b1d22;font-weight:600">Renombrar en masa.</b> El ⋯ del enlace abre el nombre y los siete colores; si la etiqueta se comparte con otros enlaces, una casilla los cambia todos a la vez en vez de dejar dos nombres para lo mismo.</div>
+      <div><b style="color:#1b1d22;font-weight:600">El enlace se ve en el árbol.</b> Varios elementos —esquemas, guiones, bibliotecas, personajes— se enlazan en un grupo: una espina de 2 px en el color del grupo, un punto de 8 px por elemento y el nombre del grupo en vertical sobre la espina. El ⋯ del grupo abre nombre, los siete colores y «Añadir elemento»; el <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">+</code> del extremo de la espina hace lo mismo sin abrir menú.</div>
+      <div><b style="color:#1b1d22;font-weight:600">El color no significa estado.</b> Las etiquetas solo clasifican; el acento violeta sigue siendo lo seleccionado y los estados de aviso o error no salen de esta paleta.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:14px;margin:64px 0 22px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#878d97">05</span>
+    <span style="font-size:23px;font-weight:600;letter-spacing:-.015em">Pantallas</span>
+    <div style="flex:1;height:1px;background:#d7d9df"></div>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">1280 × 820</span>
+  </div>
+
+  <div style="--sans:'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;--mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;--marca:'Courier New',Courier,monospace;--doc:'Courier Prime','Courier New',monospace;--chrome:#e8e9ec;--panel:#dfe1e6;--papel:#ffffff;--lienzo:#f5f6f8;--hover:#d8dae0;--tinta:#1b1d22;--tenue:#5a5f68;--palido:#878d97;--regla:#d7d9df;--borde:#c5c8d0;--borde-fuerte:#aab0bb;--cuadricula:#e2e4e9;--foco:#6141c9;--foco-claro:#6141c9;--foco-sobre:#ffffff;--foco-suave:#e9e6f8;--foco-halo:rgba(97,65,201,.2);--foco-linea:rgba(97,65,201,.42);--foco-banda:rgba(97,65,201,.055);--sel-bg:#dfd9f4;--drop-bg:rgba(97,65,201,.09);--peligro:#c4291c;--ok:#12803f;--nota:#f7efd9;--nota-borde:#ddcda2;--nota-tinta:#6b5321;--sombra:0 1px 1px rgba(24,24,32,.05);--sombra-alta:0 1px 2px rgba(24,24,32,.07),0 10px 24px rgba(24,24,32,.1);--sombra-lado:1px 0 0 rgba(24,24,32,.04);--inverso:#f4f4f6;--t-rojo:#c62828;--f-rojo:#ffe2e2;--t-ladrillo:#d14a1f;--f-ladrillo:#ffe6dc;--t-cobre:#d2691e;--f-cobre:#ffeddb;--t-ambar:#c98a00;--f-ambar:#fff2d0;--t-oro:#9a7b0a;--f-oro:#f7eecb;--t-lima:#6e9a16;--f-lima:#eef8d4;--t-oliva:#4f7a1e;--f-oliva:#e6f5d5;--t-verde:#16803c;--f-verde:#d9f5e2;--t-esmeralda:#0a8a5c;--f-esmeralda:#d5f5e7;--t-teal:#0b8b82;--f-teal:#d3f4f1;--t-turquesa:#0e8aa8;--f-turquesa:#d4f2fa;--t-cielo:#0378c0;--f-cielo:#d7eefe;--t-azul:#1a63d0;--f-azul:#dfe9ff;--t-marino:#17417e;--f-marino:#dde6f7;--t-pizarra:#3e4a5c;--f-pizarra:#e4e9f0;--t-indigo:#4b34cc;--f-indigo:#e5e1ff;--t-violeta:#6d28d9;--f-violeta:#ebe0ff;--t-uva:#8a2bc4;--f-uva:#f2e0ff;--t-ciruela:#a21caf;--f-ciruela:#fbe0fb;--t-magenta:#bf1b8a;--f-magenta:#ffe0f4;--t-rosa:#d31a6b;--f-rosa:#ffe0ec;--t-vino:#96153f;--f-vino:#ffdfe8;--t-salvia:#5a7a63;--f-salvia:#e4f0e8;--t-gris:#5d5d68;--f-gris:#e9e7ee;--escena:#f5dc9a;--escena-trazo:#c98a00;--rombo:#ddc7f8;--rombo-trazo:#6d28d9;--bb-bg:#e8e9ec;--bb-fg:#1b1d22;--bb-muted:#5a5f68;--bb-line:#c5c8d0;--bb-activo-tinta:#ffffff;--toast-bg:#2b2b31;--toast-fg:#ececef;--toast-acento:#b3a6f7;--backdrop:rgba(24,24,32,.34);--sombra-modal:0 4px 10px rgba(24,24,32,.14),0 24px 60px rgba(24,24,32,.22);--p-grafito-bg:#e6e2ee;--p-grafito-tinta:#3c3648;--logo-1:#2f2f2f;--logo-2:#707070;--logo-3:#d5b3ea;--p-azul-bg:#dbe8ff;--p-azul-tinta:#1a4a86;--p-verde-bg:#d8f2df;--p-verde-tinta:#11643d;--p-violeta-bg:#eae0ff;--p-violeta-tinta:#5326ab;--p-ambar-bg:#ffeec9;--p-ambar-tinta:#875408;--p-teal-bg:#d2f0ed;--p-teal-tinta:#0a6663;--p-rosa-bg:#ffe0ea;--p-rosa-tinta:#a51a5a;--p-violeta-linea:rgba(83,38,171,.4);--p-azul-linea:rgba(26,74,134,.4);--p-grafito-linea:rgba(60,54,72,.42);--p-verde-linea:rgba(17,100,61,.4);--p-ambar-linea:rgba(135,84,8,.42);--p-rosa-linea:rgba(165,26,90,.4);--p-teal-linea:rgba(10,102,99,.4)">
+    <div style="--foco:{{ aFoco }};--foco-claro:{{ aFoco }};--foco-suave:{{ aSuave }};--foco-halo:{{ aHalo }};--foco-linea:{{ aLinea }};--foco-banda:{{ aBanda }};--sel-bg:{{ aSel }};--drop-bg:{{ aDrop }}">
+      <sc-if value="{{ verClaro }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:44px">
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Esquema de pasos</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Esquema" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">El detalle del nodo, abajo.</b> Fuera el panel de 330 px: el lienzo recupera el ancho entero y la selección se lee en una barra de 116 px sobre la barra inferior —identidad y saltos a la izquierda, descripción en el centro, estado y acciones a la derecha—. El sitio no cambia al recorrer nodos con <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">TAB</code> y se pliega a 32 px. En <a href="#1a">1a</a> y <a href="#1c">1c</a> quedan las dos alternativas descartadas.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Carpetas dentro del contenedor.</b> El contenedor no cambia; dentro de él las carpetas anidan sin límite y los esquemas y bibliotecas cuelgan de cualquier nivel. Pulsar la carpeta la despliega o la pliega; su color vive en el ⋯ y se lee en el icono y en la barra de 2 px.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Eje de actos.</b> Los fondos de acto ya no tiñen el carril entero: solo la franja del eje, y la trama seleccionada recibe una banda del 5 %.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Rótulo perpetuo.</b> El nombre del nodo ya no es texto suelto sobre el trazo: es un rótulo en papel con borde, sombra y una guía de 7 px hasta el punto. Cuando dos puntos se pegan, el segundo rótulo se desdobla al otro lado del eje en vez de chocar; el del nodo abierto lleva borde de acento. Solo lo llevan los nodos redondos: los cuadrados de escena y los rombos siguen con su texto suelto. Si entre dos nodos pegados hay una nota, en el eje queda solo su marca y el papel se corre a un lado unido por una guía discontinua. Igual en esquemas, personajes y la tira del editor.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Guiones del esquema</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · VISTA DENTRO DEL ESQUEMA</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Guiones" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">Los guiones no se separan del esquema.</b> Ya no son un grupo de la biblioteca: son una vista del propio esquema, a la que se entra por el conmutador <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">ESQUEMA / GUIONES</code> de la cabecera. No hay forma de arrastrarlos a otra biblioteca ni de quedarse con uno sin su esquema.</div>
+                <div><b style="color:#1b1d22;font-weight:600">La biblioteca vuelve a ser solo notas.</b> «Documentos» conserva únicamente los segmentos de notas y fichas; el testigo negro y las cabeceras negras viven ahora en esta vista.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Misma cáscara, mismo sitio.</b> La lateral, la cabecera y la barra inferior no cambian al conmutar: solo se sustituye el lienzo, así que volver al esquema es un clic y no una navegación.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Texto</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · TIRA DE LA TRAMA + HOJA</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Texto" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">La tira sobre panel.</b> 92 px sobre <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">--panel</code>, con la trama aislada a la izquierda por una regla vertical: se lee como una pista de tiempo, no como otra barra de herramientas.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Migas y flechas.</b> Una sola fila de 36 px reúne la ruta y los saltos de nota; las flechas van pegadas como un par segmentado.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Un documento, secciones por nodo.</b> La hoja es un lienzo continuo: cada nodo abre una sección con una banda a sangre que dice su nombre y en qué línea está —principal, secundaria o alternativa, por color y por rótulo—, y el texto sigue corriendo debajo al hacer scroll. La sección donde está el cursor lleva el carril de acento.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Barra inferior.</b> Grafito #2B2B31 con rótulos mono y un único conmutador encendido en violeta claro. «Exportar» vive aquí, junto al modo.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Fuera del guión, no borrado.</b> Sacar una sección la deja en su sitio con el texto deshabilitado, el nombre tachado y la banda en gris; el punto del eje pasa a trazo discontinuo. Se puede plegar a mano si molesta, y nada se mueve al esquema ni a la papelera.</div>
+                <div><b style="color:#1b1d22;font-weight:600">La misma acción en tres sitios.</b> Casilla en cada banda de sección, cuadro dentro del rótulo de la tira, y en la barra de guión las acciones para la selección y para todo a la vez. El primario de la pantalla es «Revisar guión».</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Revisar guión</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · ORDEN Y ESTADO DE LAS SECCIONES</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Revisar Guion" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">Una pantalla, no un diálogo.</b> Se abre desde el botón de la barra de guión y ocupa el lienzo del editor con la misma lateral y la misma barra de guión; «Volver al texto» deja todo como estaba.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Reordenar sin mover el esquema.</b> La lista es el orden de lectura del documento: manija a la izquierda, marca de inserción de 2 px en acento y la fila levantada medio grado. El aviso de la derecha recuerda que el esquema y la línea del tiempo no se tocan.</div>
+                <div><b style="color:#1b1d22;font-weight:600">El documento se ve antes de existir.</b> La ficha cuenta secciones, palabras y páginas, nombra el destino en la biblioteca y dice en voz alta qué secciones no se van a copiar.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Guion generado</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · EDITOR SIN SECCIONES + EXPORTAR</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Documento Plano" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">Sin secciones no hay tira.</b> El editor plano se reconoce por lo que le falta: ni línea del tiempo ni barra de guión, así que la hoja empieza 132 px más arriba y el texto corre seguido.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Exportar es el primario de la barra.</b> PDF, DOCX y texto plano en un solo menú, con el rótulo del documento arriba. El mismo botón está en los editores con secciones, donde exporta solo lo que está dentro del guión.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Sigue atado al esquema.</b> La miga dice de dónde salió y cuándo; «Regenerar» lo reconstruye con el estado actual de las secciones en vez de crear otro documento.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Documentos</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · CON ESTADOS DE ARRASTRE</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              
+            <dc-import name="Pantalla Documentos" hint-size="1280px,820px"></dc-import></div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">Color solo en la cabecera.</b> El tono del segmento tiñe la cabecera de la tarjeta y nada más; el cuerpo queda en papel para que las notas se lean iguales en todos los segmentos.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Arrastre.</b> Marca de inserción de 2 px en acento, contenedor de destino con borde discontinuo y fondo al 9 %, tarjeta ajena discontinua con su origen en cursiva.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Un solo botón primario.</b> «Nota» en violeta sólido; «Segmento» y «⋯» quedan como botones de contorno.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Guiones generados.</b> Sin banda ni recuadro: cada grupo se anuncia con una fila de título con manija —el orden de los grupos se cambia arrastrando— y un testigo delante del nombre: un rectángulo negro para los guiones, uno vacío para los segmentos. Las tarjetas de guiones se distinguen por la cabecera negra, sin color propio; «Bandeja» es la del sistema (sin manija ni cerrar) y las creadas ahí llevan manija, editar y cerrar.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Crear subcontenedor</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · MODAL CON BACKDROP</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Documentos Modal" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">Se abre desde el ＋.</b> El mismo modal sirve para el ＋ de cualquier contenedor; el rótulo de arriba dice en cuál se va a crear.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Tipo como tarjeta.</b> Dos opciones con su etiqueta de color y una línea de lo que es cada una; al no haber más tipos no hace falta un desplegable.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Backdrop al 34 %.</b> Atenúa la aplicación sin apagarla: el contenedor de destino sigue visible detrás.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Personajes</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · BANDEJA EN CARRUSEL + MOMENTOS</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Personajes" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">Mitad de arriba: bandeja y segmentos.</b> Las mismas tarjetas de Documentos, pero el recorrido es un carrusel: el corte a la derecha y la barra de avance dicen que hay más, y el ＋ crea el segmento al final.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Mitad de abajo: el esquema con personajes.</b> Cada tramo es un personaje y las columnas son Momentos en lugar de actos; el personaje abierto ocupa el primer tramo con la banda del 5 % y su trazo en acento.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Uniones con cuadros.</b> Los puntos son nodos de la relación y solo los cuadros unen personajes, con el enlace vertical discontinuo entre tramos; el rol se lee por color funcional, nunca por acento.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Segmento expandido</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · UN SEGMENTO OCUPA EL LIENZO</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Segmento" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">Se entra por el icono de expandir.</b> Cada cabecera de segmento lo lleva junto a editar y cerrar; el mismo icono, en su forma de contraer, devuelve al carrusel desde la esquina derecha.</div>
+                <div><b style="color:#1b1d22;font-weight:600">La lateral no se mueve.</b> Expandir solo cambia el lienzo, así la misma vista sirve para los segmentos de un personaje y para los de un contenedor: cambia la miga de arriba, no el menú.</div>
+                <div><b style="color:#1b1d22;font-weight:600">La nota se ve entera.</b> Con espacio, cada nota muestra sus primeras líneas y de dónde viene; la nota abierta conserva el borde de acento que tenía en la tarjeta.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Nuevo proyecto</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · PLANTILLAS PREDEFINIDAS</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Nuevo Proyecto" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">El proyecto es la pestaña.</b> La creación vive dentro de una pestaña propia, junto a los proyectos ya abiertos: no hay diálogo flotante ni ventana aparte, así que se puede dejar a medias y volver.</div>
+                <div><b style="color:#1b1d22;font-weight:600">La plantilla se explica sola.</b> Cada tarjeta dice en una línea qué hace y lo cifra en tres chips; al elegirla, las dos fichas de abajo muestran el árbol y las tramas exactas que va a crear.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Formulario a la izquierda.</b> Nombre y destino son los dos únicos campos, en la lateral de 320 px: el mismo sitio donde luego estará el árbol del proyecto.</div>
+              </div>
+            </sc-if>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600">Sin proyectos abiertos</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">CLARO · ESTADO VACÍO</span></div>
+            <div style="box-shadow:0 2px 4px rgba(24,24,32,.06),0 18px 40px rgba(24,24,32,.1)">
+              <dc-import name="Pantalla Sin Proyectos" hint-size="1280px,820px"></dc-import>
+            </div>
+            <sc-if value="{{ verNotas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px;font-size:12.5px;color:#5a5f68;line-height:1.55">
+                <div><b style="color:#1b1d22;font-weight:600">La barra se pliega.</b> Sin proyecto no hay árbol que mostrar, así que la lateral queda en su riel de 44 px con el botón de panel y la franja de pestañas se queda solo con el ✚.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Recientes en una sola fila.</b> Cada proyecto se lee por nombre, estructura y última vez, con su tono a la izquierda; el fondo de papel y la flecha en acento aparecen al pasar el cursor.</div>
+                <div><b style="color:#1b1d22;font-weight:600">Dos salidas, no cinco.</b> Un primario para crear y un contorno para abrir; el arrastre de un .cld se menciona como texto, sin dibujar una zona de suelta vacía.</div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <div style="--sans:'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;--mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;--marca:'Courier New',Courier,monospace;--doc:'Courier Prime','Courier New',monospace;--chrome:#202024;--panel:#191a1d;--papel:#26262a;--lienzo:#141417;--hover:#2c2c32;--tinta:#e8e8ec;--tenue:#9a9aa4;--palido:#75757f;--regla:#2f2f36;--borde:#3a3a42;--borde-fuerte:#4a4a54;--cuadricula:#26262c;--foco:#b3a6f7;--foco-claro:#b3a6f7;--foco-sobre:#221d2b;--foco-suave:#2a2742;--foco-halo:rgba(179,166,247,.22);--foco-linea:rgba(179,166,247,.4);--foco-banda:rgba(179,166,247,.06);--sel-bg:#2f2a3b;--drop-bg:rgba(179,166,247,.1);--peligro:#d98a7e;--ok:#7fb489;--nota:#38311f;--nota-borde:#635230;--nota-tinta:#dcc48d;--sombra:0 1px 1px rgba(0,0,0,.3);--sombra-alta:0 1px 2px rgba(0,0,0,.4),0 12px 28px rgba(0,0,0,.45);--sombra-lado:1px 0 0 rgba(0,0,0,.25);--inverso:#14141a;--t-rojo:#f28b82;--f-rojo:#3a282a;--t-ladrillo:#f59a72;--f-ladrillo:#3a2b27;--t-cobre:#f5a35c;--f-cobre:#3a2c24;--t-ambar:#f0c04d;--f-ambar:#393121;--t-oro:#dcb544;--f-oro:#362f1f;--t-lima:#bcd95f;--f-lima:#313524;--t-oliva:#a8cc70;--f-oliva:#2d3327;--t-verde:#6bd68c;--f-verde:#23352c;--t-esmeralda:#4fd1a5;--f-esmeralda:#1e3430;--t-teal:#48cfc4;--f-teal:#1d3435;--t-turquesa:#4fc9e6;--f-turquesa:#1e333b;--t-cielo:#5fbcf0;--f-cielo:#21313d;--t-azul:#8fb2ff;--f-azul:#292f3f;--t-marino:#7fa8d6;--f-marino:#262d38;--t-pizarra:#9aa8bd;--f-pizarra:#2b2d34;--t-indigo:#a39bf7;--f-indigo:#2c2b3e;--t-violeta:#b99bf5;--f-violeta:#302b3e;--t-uva:#cf9bf0;--f-uva:#342b3d;--t-ciruela:#e396f0;--f-ciruela:#372a3d;--t-magenta:#f090d4;--f-magenta:#392938;--t-rosa:#f58ab5;--f-rosa:#3a2833;--t-vino:#e08195;--f-vino:#37272d;--t-salvia:#a3c2aa;--f-salvia:#2c3231;--t-gris:#a8a8b3;--f-gris:#2d2d32;--escena:#8a6f28;--escena-trazo:#f0c04d;--rombo:#4a3a6e;--rombo-trazo:#b99bf5;--bb-bg:#0f0f11;--bb-fg:#e8e8ec;--bb-muted:#84848e;--bb-line:#2a2a30;--bb-activo-tinta:#221d2b;--toast-bg:#2e2e34;--toast-fg:#e8e8ec;--toast-acento:#b3a6f7;--backdrop:rgba(0,0,0,.6);--sombra-modal:0 4px 12px rgba(0,0,0,.5),0 28px 64px rgba(0,0,0,.6);--p-grafito-bg:#2b2b30;--p-grafito-tinta:#cfcfd4;--logo-1:#d8d8dc;--logo-2:#8e8e96;--logo-3:#c8a6e0;--p-azul-bg:#2a3547;--p-azul-tinta:#c3d2e6;--p-verde-bg:#28372b;--p-verde-tinta:#c6dbc9;--p-violeta-bg:#332a42;--p-violeta-tinta:#d5c9e4;--p-ambar-bg:#3a3324;--p-ambar-tinta:#e4d6b4;--p-teal-bg:#22383a;--p-teal-tinta:#bcd4d6;--p-rosa-bg:#3a2a30;--p-rosa-tinta:#e3c7cf;--p-violeta-linea:rgba(213,201,228,.42);--p-azul-linea:rgba(195,210,230,.4);--p-grafito-linea:rgba(207,207,212,.4);--p-verde-linea:rgba(198,219,201,.4);--p-ambar-linea:rgba(228,214,180,.4);--p-rosa-linea:rgba(227,199,207,.4);--p-teal-linea:rgba(188,212,214,.4);margin-top:44px">
+    <div style="--foco:{{ dFoco }};--foco-suave:{{ dSuave }};--foco-halo:{{ dHalo }};--foco-linea:{{ dLinea }};--foco-banda:{{ dBanda }};--sel-bg:{{ dSel }};--drop-bg:{{ dDrop }};--foco-claro:{{ dFoco }}">
+      <sc-if value="{{ verOscuro }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:44px;padding:40px;background:#0c0c0e;border:1px solid #2f2f36">
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Esquema de pasos</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+            <dc-import name="Pantalla Esquema" hint-size="1280px,820px"></dc-import>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Guiones del esquema</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">OSCURO</span></div>
+            <dc-import name="Pantalla Guiones" hint-size="1280px,820px"></dc-import>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Texto</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+            <dc-import name="Pantalla Texto" hint-size="1280px,820px"></dc-import>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Revisar guión</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+            <dc-import name="Pantalla Revisar Guion" hint-size="1280px,820px"></dc-import>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Guion generado</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+            <dc-import name="Pantalla Documento Plano" hint-size="1280px,820px"></dc-import>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Documentos</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+            <dc-import name="Pantalla Documentos" hint-size="1280px,820px"></dc-import>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Personajes</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+            <dc-import name="Pantalla Personajes" hint-size="1280px,820px"></dc-import>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Segmento expandido</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Nuevo proyecto</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+            <dc-import name="Pantalla Nuevo Proyecto" hint-size="1280px,820px"></dc-import>
+          </div>
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><span style="font-size:15px;font-weight:600;color:#e8e8ec">Sin proyectos abiertos</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#75757f">OSCURO</span></div>
+            <dc-import name="Pantalla Sin Proyectos" hint-size="1280px,820px"></dc-import>
+          </div>
+        </div>
+      
+    </div>
+  </sc-if></div>
+
+  <div style="display:flex;align-items:baseline;gap:14px;margin:64px 0 22px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#878d97">05</span>
+    <span style="font-size:23px;font-weight:600;letter-spacing:-.015em">Componentes y estados</span>
+    <div style="flex:1;height:1px;background:#d7d9df"></div>
+  </div>
+
+  <div style="--sans:'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;--mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;--tinta:#1b1d22;--tenue:#5a5f68;--palido:#878d97;--papel:#fff;--panel:#dfe1e6;--lienzo:#f5f6f8;--regla:#d7d9df;--borde:#c5c8d0;--borde-fuerte:#aab0bb;--hover:#d8dae0;--foco:#6141c9;--foco-suave:#e9e6f8;--foco-halo:rgba(97,65,201,.2);--foco-linea:rgba(97,65,201,.42);--sel-bg:#dfd9f4;--foco-sobre:#fff;--peligro:#c4291c;--nota:#f7efd9;--nota-borde:#ddcda2;--nota-tinta:#6b5321;--sombra:0 1px 1px rgba(24,24,32,.05);--sombra-alta:0 1px 2px rgba(24,24,32,.07),0 10px 24px rgba(24,24,32,.1);--p-grafito-bg:#e6e2ee;--p-grafito-tinta:#3c3648;--p-violeta-bg:#eae0ff;--p-violeta-tinta:#5326ab;--p-azul-bg:#dbe8ff;--p-azul-tinta:#1a4a86;--p-violeta-linea:rgba(83,38,171,.4);--p-azul-linea:rgba(26,74,134,.4);--p-grafito-linea:rgba(60,54,72,.42);--p-verde-linea:rgba(17,100,61,.4);--p-ambar-linea:rgba(135,84,8,.42);--p-rosa-linea:rgba(165,26,90,.4);--t-rojo:#c62828;--f-rojo:#ffe2e2;--t-ladrillo:#d14a1f;--f-ladrillo:#ffe6dc;--t-cobre:#d2691e;--f-cobre:#ffeddb;--t-ambar:#c98a00;--f-ambar:#fff2d0;--t-oro:#9a7b0a;--f-oro:#f7eecb;--t-lima:#6e9a16;--f-lima:#eef8d4;--t-oliva:#4f7a1e;--f-oliva:#e6f5d5;--t-verde:#16803c;--f-verde:#d9f5e2;--t-esmeralda:#0a8a5c;--f-esmeralda:#d5f5e7;--t-teal:#0b8b82;--f-teal:#d3f4f1;--t-turquesa:#0e8aa8;--f-turquesa:#d4f2fa;--t-cielo:#0378c0;--f-cielo:#d7eefe;--t-azul:#1a63d0;--f-azul:#dfe9ff;--t-marino:#17417e;--f-marino:#dde6f7;--t-pizarra:#3e4a5c;--f-pizarra:#e4e9f0;--t-indigo:#4b34cc;--f-indigo:#e5e1ff;--t-violeta:#6d28d9;--f-violeta:#ebe0ff;--t-uva:#8a2bc4;--f-uva:#f2e0ff;--t-ciruela:#a21caf;--f-ciruela:#fbe0fb;--t-magenta:#bf1b8a;--f-magenta:#ffe0f4;--t-rosa:#d31a6b;--f-rosa:#ffe0ec;--t-vino:#96153f;--f-vino:#ffdfe8;--t-salvia:#5a7a63;--f-salvia:#e4f0e8;--t-gris:#5d5d68;--f-gris:#e9e7ee;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-family:var(--sans)">
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">BOTÓN · .btn</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 12px">
+        <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);font-size:12.5px;font-weight:500;box-shadow:var(--sombra)">Normal</div>
+        <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border:1px solid var(--borde-fuerte);border-radius:4px;background:var(--hover);font-size:12.5px;font-weight:500">Hover</div>
+        <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border:1px solid var(--foco-linea);border-radius:4px;background:var(--foco-suave);color:var(--foco);font-size:12.5px;font-weight:500">Activo</div>
+        <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);font-size:12.5px;font-weight:500;color:var(--palido)">Desactivado</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border-radius:4px;background:var(--foco);color:var(--foco-sobre);font-size:12.5px;font-weight:500">Primario</div>
+        <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);color:var(--peligro);font-size:12.5px;font-weight:500">Eliminar</div>
+        <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border:1px solid var(--foco);border-radius:4px;background:var(--papel);box-shadow:0 0 0 3px var(--foco-halo);font-size:12.5px;font-weight:500">Foco</div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);color:var(--tenue)"><svg width="15" height="15"><use href="#ic-search"></use></svg></div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">PESTAÑAS · .pestanas</div>
+      <div style="margin-top:18px;padding:0 10px;background:#e8e9ec;height:38px;display:flex;align-items:flex-end">
+        <div style="position:relative;z-index:2;margin-bottom:-1px;display:flex;align-items:center;gap:10px;height:33px;padding:0 13px;background:var(--panel);border:1px solid var(--borde);border-bottom:0;border-radius:7px 7px 0 0;font-size:13px;font-weight:500">Sin título<span style="width:5px;height:5px;border-radius:50%;background:var(--foco)"></span><svg width="12" height="12" style="color:var(--palido)"><use href="#ic-close"></use></svg></div>
+        <div style="display:flex;align-items:center;gap:8px;height:29px;padding:0 12px;font-size:13px;color:var(--tenue)">Piloto.cld</div>
+        <div style="display:flex;align-items:center;justify-content:center;width:26px;height:29px;color:var(--palido)"><svg width="14" height="14"><use href="#ic-plus"></use></svg></div>
+      </div>
+      <div style="height:44px;background:var(--panel);border-top:1px solid var(--borde);border-right:1px solid var(--borde-fuerte);width:70%"></div>
+      <div style="display:flex;align-items:stretch;gap:14px;margin-top:20px">
+        <div style="width:44px;flex:none;display:flex;flex-direction:column;align-items:center;padding:11px 0;background:var(--panel);border:1px solid var(--borde-fuerte)">
+          <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--tenue)"><svg width="16" height="16"><use href="#ic-panel"></use></svg></div>
+        </div>
+        <div style="flex:1;font-size:12.5px;color:var(--tenue);line-height:1.55">La barra se pliega a 44 px y no queda nada más que el botón de panel, el mismo que hay junto a la marca en la barra abierta: ni logo ni accesos. El árbol se guarda; al volver a abrirla las carpetas conservan su estado.</div>
+      </div>
+      <div style="font-size:12.5px;color:var(--tenue);line-height:1.55;margin-top:14px">Una sola pestaña de proyecto, anclada sobre la barra lateral y con su mismo fondo: la pestaña y la barra forman una pieza continua en vez de dos franjas. El punto de acento sustituye al asterisco de «sin guardar».</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">CAMPOS · .gd-crear · .field</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:16px">
+        <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 9px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;color:var(--palido);font-size:12.5px"><svg width="14" height="14"><use href="#ic-plus"></use></svg>Nombre del contenedor…</div>
+        <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 9px;background:var(--papel);border:1px solid var(--foco);border-radius:4px;box-shadow:0 0 0 3px var(--foco-halo);font-size:12.5px">Investigación<span style="width:1px;height:15px;background:var(--foco)"></span></div>
+        <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;color:var(--palido)">ENTER CREA · ESC CANCELA</div>
+        <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 9px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;font-size:12.5px">En escena<div style="flex:1"></div><svg width="13" height="13" style="color:var(--palido)"><use href="#ic-chev-d"></use></svg></div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">FILAS DEL ÁRBOL · .gd-cont · .gd-sub</div>
+      <div style="margin-top:16px;padding:8px 6px;background:var(--panel);border:1px solid var(--borde);display:flex;flex-direction:column;gap:3px">
+        <div style="display:flex;align-items:center;gap:9px;height:34px;padding:0 8px;border-radius:5px"><svg width="13" height="13" style="color:var(--tenue);flex:none"><use href="#ic-chev-d"></use></svg><span style="font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.02em">CAPÍTULO I</span><div style="flex:1"></div><svg width="15" height="15" style="color:var(--tenue)"><use href="#ic-plus"></use></svg><svg width="15" height="15" style="color:var(--tenue)"><use href="#ic-more"></use></svg></div>
+        <div style="position:relative;display:flex;flex-direction:column;gap:3px">
+          <div style="position:absolute;left:12px;top:15px;height:31px;width:1px;background:var(--borde-fuerte)"></div>
+          <div style="display:flex;align-items:center;gap:9px;height:28px;padding:0 8px 0 10px;border-radius:5px;background:var(--sel-bg);box-shadow:inset 2px 0 0 var(--foco)"><span style="width:5px;height:5px;border-radius:50%;background:var(--foco);flex:none"></span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--p-violeta-bg);border:1px solid var(--p-violeta-linea);color:var(--p-violeta-tinta);flex:none">Esquema</span><span style="font-family:var(--mono);font-size:12.5px;font-weight:500">Seleccionado</span><div style="flex:1"></div><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-more"></use></svg></div>
+          <div style="display:flex;align-items:center;gap:9px;height:28px;padding:0 8px 0 10px;border-radius:5px;background:var(--hover)"><span style="width:5px;height:5px;border-radius:50%;background:var(--borde-fuerte);flex:none"></span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--p-azul-bg);border:1px solid var(--p-azul-linea);color:var(--p-azul-tinta);flex:none">Biblioteca</span><span style="font-family:var(--mono);font-size:12.5px">Hover</span><div style="flex:1"></div><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-more"></use></svg></div>
+          <div style="display:flex;align-items:center;gap:9px;height:28px;padding:0 8px 0 10px;border-radius:5px"><span style="width:5px;height:5px;flex:none"></span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--p-azul-bg);border:1px solid var(--p-azul-linea);color:var(--p-azul-tinta);flex:none">Biblioteca</span><span style="font-family:var(--mono);font-size:12.5px">Normal</span><div style="flex:1"></div><span style="font-family:var(--mono);font-size:10px;color:var(--palido)">3</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;height:28px;margin-top:3px;padding:0 8px 0 10px;border-radius:5px;border:1px dashed var(--foco-linea);background:var(--drop-bg)"><span style="width:5px;height:5px;flex:none"></span><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--p-azul-bg);border:1px solid var(--p-azul-linea);color:var(--p-azul-tinta);flex:none">Biblioteca</span><span style="font-family:var(--mono);font-size:12.5px">Destino de arrastre</span></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--tenue);line-height:1.55;margin-top:14px">Sin iconos: la etiqueta de tipo va delante del nombre, con contorno en vez de relleno sólido, y el nombre en mono para que las tres columnas —punto, etiqueta, nombre— alineen en vertical. El grupo se rotula en mayúsculas y sus hijos cuelgan de una guía de 1 px.</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">NOTA EN TARJETA · .gd-nota</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--borde);border-radius:4px;font-size:12.5px">Normal<div style="flex:1"></div><span style="font-family:var(--mono);font-size:9.5px;color:var(--palido)">HOY</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--borde-fuerte);border-radius:4px;background:var(--lienzo);font-size:12.5px">Hover<div style="flex:1"></div><svg width="13" height="13" style="color:var(--tenue)"><use href="#ic-more"></use></svg></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--foco);border-radius:4px;background:var(--sel-bg);font-size:12.5px;font-weight:500">Seleccionada</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px dashed var(--borde-fuerte);border-radius:4px;color:var(--tenue);font-size:12.5px">Ajena<div style="flex:1"></div><span style="font-size:11px;font-style:italic;color:var(--palido)">en «Investigación»</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);font-size:12.5px;box-shadow:var(--sombra-alta);transform:rotate(-1.2deg)"><svg width="13" height="13" style="color:var(--palido)"><use href="#ic-drag"></use></svg>Arrastrándose</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">NODOS · .pt</div>
+      <div style="display:flex;justify-content:space-between;margin:24px 4px 0">
+        <div style="text-align:center;width:56px"><div style="width:12px;height:12px;margin:0 auto;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta,#6141c9)"></div><div style="font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--palido);margin-top:12px">ESCENA</div></div>
+        <div style="text-align:center;width:56px"><div style="width:12px;height:12px;margin:0 auto;border-radius:2px;background:#f5dc9a;border:2px solid #c98a00"></div><div style="font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--palido);margin-top:12px">SALTO A</div></div>
+        <div style="text-align:center;width:56px"><div style="width:11px;height:11px;margin:0 auto;border-radius:2px;background:#ddc7f8;border:2px solid #6d28d9;transform:rotate(45deg)"></div><div style="font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--palido);margin-top:12px">SALTO B</div></div>
+        <div style="text-align:center;width:56px"><div style="width:12px;height:12px;margin:0 auto;border-radius:50%;background:var(--foco);border:2px solid var(--foco);box-shadow:0 0 0 4px var(--foco-halo)"></div><div style="font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--palido);margin-top:12px">SELECC.</div></div>
+        <div style="text-align:center;width:56px"><div style="width:12px;height:12px;margin:0 auto;border-radius:50%;background:var(--papel);border:2px dashed #5d5d68;opacity:.55"></div><div style="font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--palido);margin-top:12px">DESCART.</div></div>
+      </div>
+      <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--regla)">
+        <div style="font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--palido)">TONOS · PUNTO · CUADRO · ROMBO</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:14px">
+          <sc-for list="{{ tonos }}" as="t" hint-placeholder-count="24">
+            <div style="display:flex;align-items:center;gap:5px">
+              <span style="width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid {{ t.t }}"></span>
+              <span style="width:10px;height:10px;border-radius:2px;background:{{ t.f }};border:2px solid {{ t.t }}"></span>
+              <span style="width:9px;height:9px;border-radius:2px;background:{{ t.f }};border:2px solid {{ t.t }};transform:rotate(45deg)"></span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:none">
+        </div>
+        <div style="font-size:12.5px;color:var(--tenue);line-height:1.55;margin-top:16px">Veinticuatro tonos para las tres formas y para las notas, subidos de saturación en claro: la escala recorre rojo, ladrillo, cobre, ámbar, oro, lima, oliva, verde, esmeralda, teal, turquesa, cielo, azul, marino, pizarra, índigo, violeta, uva, ciruela, magenta, rosa, vino, salvia y gris. Todos comparten el trazo de 2 px y el relleno pálido de su propio tono, así que la forma dice qué es —punto, cuadro de escena, rombo de salto— y el tono queda libre para decir de quién es.</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">MENÚ FLOTANTE · .gd-pop</div>
+      <div style="margin-top:16px;width:220px;padding:5px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra-alta);font-size:12.5px">
+        <div style="display:flex;align-items:center;gap:9px;height:27px;padding:0 9px;border-radius:4px"><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-plus"></use></svg>Nueva nota</div>
+        <div style="display:flex;align-items:center;gap:9px;height:27px;padding:0 9px;border-radius:4px;background:var(--hover)"><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-folder"></use></svg>Nuevo segmento</div>
+        <div style="height:1px;background:var(--regla);margin:4px 6px"></div>
+        <div style="display:flex;align-items:center;gap:9px;height:27px;padding:0 9px;border-radius:4px"><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-edit"></use></svg>Renombrar<div style="flex:1"></div><svg width="13" height="13" style="color:var(--foco)"><use href="#ic-check"></use></svg></div>
+        <div style="height:1px;background:var(--regla);margin:4px 6px"></div>
+        <div style="display:flex;align-items:center;gap:9px;height:27px;padding:0 9px;border-radius:4px;color:var(--peligro)"><svg width="14" height="14"><use href="#ic-trash"></use></svg>Eliminar contenedor</div>
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:.07em;color:var(--palido);padding:5px 9px 3px">CONTENEDOR DEL PROYECTO: NO SE ELIMINA</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">DIÁLOGO Y AVISO · #dlg · #aviso</div>
+      <div style="margin-top:16px;padding:16px 18px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra-alta)">
+        <div style="font-size:13.5px;font-weight:600">¿Eliminar «Investigación»?</div>
+        <div style="font-size:12.5px;color:var(--tenue);line-height:1.5;margin-top:6px">Sus 3 notas van a la papelera. Se puede recuperar desde ahí.</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+          <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border:1px solid var(--borde);border-radius:4px;font-size:12.5px;font-weight:500">Cancelar</div>
+          <div style="display:inline-flex;align-items:center;height:28px;padding:0 11px;border-radius:4px;background:var(--peligro);color:#fff;font-size:12.5px;font-weight:500">Eliminar</div>
+        </div>
+      </div>
+      <div style="display:inline-flex;align-items:center;gap:9px;margin-top:14px;padding:8px 13px;border-radius:5px;background:#2b2b31;color:#ececef;font-size:12.5px"><svg width="14" height="14" style="color:#b3a6f7"><use href="#ic-check"></use></svg>Esquema «Flashbacks» creado</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--palido)">CINTA DEL EDITOR · .ribbon</div>
+      <div style="margin-top:16px;padding:7px 9px;background:#e8e9ec;border:1px solid var(--borde);border-radius:4px;display:flex;flex-wrap:wrap;gap:5px;align-items:center">
+        <div style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 9px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);font-size:12px">Normal<svg width="12" height="12" style="color:var(--palido)"><use href="#ic-chev-d"></use></svg></div>
+        <div style="display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 9px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);font-family:var(--doc,'Courier Prime'),monospace;font-size:12px">Courier Prime<svg width="12" height="12" style="color:var(--palido)"><use href="#ic-chev-d"></use></svg></div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);font-family:var(--mono);font-size:11px">12</div>
+        <div style="width:1px;height:20px;background:var(--regla);margin:0 3px"></div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:4px;background:var(--foco-suave);color:var(--foco);border:1px solid var(--foco-linea)"><svg width="15" height="15"><use href="#ic-bold"></use></svg></div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:4px;color:var(--tenue)"><svg width="15" height="15"><use href="#ic-italic"></use></svg></div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:4px;color:var(--tenue)"><svg width="15" height="15"><use href="#ic-underline"></use></svg></div>
+        <div style="width:1px;height:20px;background:var(--regla);margin:0 3px"></div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:4px;color:var(--tenue)"><svg width="15" height="15"><use href="#ic-align"></use></svg></div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:4px;color:var(--tenue)"><svg width="15" height="15"><use href="#ic-list"></use></svg></div>
+        <div style="flex:1"></div>
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:4px;color:var(--tenue)"><svg width="15" height="15"><use href="#ic-panel"></use></svg></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--tenue);line-height:1.55;margin-top:14px">Una sola fila de 40 px en vez de dos: los selects a la izquierda, el formato agrupado con reglas verticales, el pin a la derecha.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:baseline;gap:14px;margin:64px 0 22px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:#878d97">06</span>
+    <span style="font-size:23px;font-weight:600;letter-spacing:-.015em">Tokens</span>
+    <div style="flex:1;height:1px;background:#d7d9df"></div>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#878d97">MISMOS NOMBRES QUE EL CÓDIGO ACTUAL</span>
+  </div>
+
+  <div style="background:#fff;border:1px solid #d7d9df">
+    <div style="display:grid;grid-template-columns:2fr 1.4fr 1.4fr;gap:0;padding:11px 20px;border-bottom:1px solid #d7d9df;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.11em;color:#878d97">
+      <span>TOKEN</span><span>CLARO</span><span>OSCURO</span>
+    </div>
+    <sc-for list="{{ tokens }}" as="t" hint-placeholder-count="20">
+      <div style="display:grid;grid-template-columns:2fr 1.4fr 1.4fr;gap:0;padding:0 20px;border-bottom:1px solid #ececf0;align-items:center;min-height:34px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#1b1d22">{{ t.n }}</span>
+        <span style="display:flex;align-items:center;gap:9px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5a5f68"><span style="width:22px;height:14px;border:1px solid #c5c8d0;background:{{ t.l }}"></span>{{ t.l }}</span>
+        <span style="display:flex;align-items:center;gap:9px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5a5f68"><span style="width:22px;height:14px;border:1px solid #c5c8d0;background:{{ t.d }}"></span>{{ t.d }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px">
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97;margin-bottom:12px">FORMA</div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.7">Borde 1 px. Radio 4 px en controles, campos y filas; 6 px en tarjetas, menús y diálogos; 5 px arriba en pestañas; 3 px en chips. Sombra de tarjeta <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">0 1px 1px</code>; sombra de flotante <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">0 1px 2px + 0 10px 24px</code>. Foco: anillo de 3 px.</div>
+    </div>
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97;margin-bottom:12px">MEDIDAS</div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.7">Franja de pestaña 38 px · barra lateral 320 px · migas 50 px · panel del nodo 330 px · tira de la trama 92 px · cinta 44 px · barra inferior 42 px · carril de tramas 48 px · carril 80 px · celda 49 px × escala. Filas del árbol 28 px con grupo de 34 px, etiquetas de tipo 22 px, controles 27–28 px, campos 30–36 px.</div>
+    </div>
+    <div style="background:#fff;border:1px solid #d7d9df;padding:20px 22px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:#878d97;margin-bottom:12px">QUÉ HAY QUE EMPAQUETAR</div>
+      <div style="font-size:13px;color:#5a5f68;line-height:1.7">IBM Plex Sans (400, 500, 600) e IBM Plex Mono (400, 500), licencia OFL, desde el paquete oficial. Courier Prime se queda. Patrick Hand se puede quitar del todo. Los iconos van como un sprite SVG con <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">currentColor</code>, así que heredan el token de texto de cada estado.</div>
+    </div>
+  </div>
+</div>
+
+</div></x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;acento&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#6141c9&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#6141c9&quot;,&quot;#4a37a8&quot;,&quot;#7f6ce0&quot;],&quot;section&quot;:&quot;Sistema&quot;},&quot;modo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Claro y oscuro&quot;,&quot;options&quot;:[&quot;Claro y oscuro&quot;,&quot;Solo claro&quot;,&quot;Solo oscuro&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Sistema&quot;},&quot;notas&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Sistema&quot;}}">
+class Component extends DCLogic {
+  hex(h) {
+    const s = h.replace('#', '');
+    return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
+  }
+  mix(a, b, t) {
+    const x = this.hex(a), y = this.hex(b);
+    const c = x.map((v, i) => Math.round(v + (y[i] - v) * t));
+    return '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+  rgba(h, a) { const c = this.hex(h); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+  renderVals() {
+    const base = this.props.acento || '#6141c9';
+    const claro = this.mix(base, '#ffffff', 0.42);
+    const modo = this.props.modo || 'Claro y oscuro';
+    const paleta = [
+      ['Azul', '#dbe8ff', '#1a4a86', '#2a3547', '#c3d2e6'],
+      ['Verde', '#d8f2df', '#11643d', '#28372b', '#c6dbc9'],
+      ['Terracota', '#ffe3d5', '#9c3f14', '#38281f', '#e3c7b6'],
+      ['Violeta', '#eae0ff', '#5326ab', '#332a42', '#d5c9e4'],
+      ['Ámbar', '#ffeec9', '#875408', '#3a3324', '#e4d6b4'],
+      ['Rosa', '#ffe0ea', '#a51a5a', '#3a2a30', '#e3c7cf'],
+      ['Teal', '#d2f0ed', '#0a6663', '#22383a', '#bcd4d6'],
+      ['Oliva', '#e8f4cd', '#4c6b0f', '#2d3122', '#d3d9bd'],
+      ['Índigo', '#e2e2ff', '#33359c', '#292c42', '#c9cbe4'],
+      ['Coral', '#ffe3dd', '#a83a26', '#3a2724', '#e5c6bf'],
+      ['Ciruela', '#f9dcf6', '#8b2280', '#332532', '#dfc5da'],
+      ['Arena', '#f4e8cf', '#6f5722', '#302a22', '#d9cdba'],
+      ['Cielo', '#d6eeff', '#05618f', '#22323b', '#c2d6e0'],
+      ['Lima', '#e9f8c8', '#4f7205', '#2b301e', '#d1dab6'],
+      ['Óxido', '#ffe0c4', '#94480a', '#37291b', '#e0c9ad'],
+      ['Grafito', '#e6e2ee', '#3c3648', '#2b2b30', '#cfcfd4']
+    ].map(t => ({ nombre: t[0], bg: t[1], ink: t[2], dbg: t[3], dink: t[4] }));
+
+    const iconos = ['undo Deshacer', 'redo Rehacer', 'search Buscar', 'panel Fijar', 'more Más', 'plus Añadir', 'chev-r Abrir', 'chev-d Plegar', 'script Documento', 'folder Segmento', 'trash Papelera', 'close Cerrar', 'drag Arrastrar', 'edit Renombrar', 'filter Filtrar', 'sort Orden', 'check Hecho', 'arr-l Anterior', 'arr-r Siguiente', 'bold Negrita', 'italic Cursiva', 'underline Subrayado', 'strike Tachado', 'tcolor Color', 'marker Resalte', 'align-l Izquierda', 'align-c Centro', 'align-r Derecha', 'align-j Justificar', 'list Viñetas', 'list-num Numerada', 'outdent Reducir', 'indent Aumentar', 'minus Quitar', 'out Fuera del guión', 'export Exportar']
+      .map(s => { const i = s.indexOf(' '); return { ref: '#ic-' + s.slice(0, i), n: s.slice(i + 1).toUpperCase() }; });
+
+    const tokens = [
+      ['--sans', 'IBM Plex Sans', 'IBM Plex Sans'],
+      ['--mono', 'IBM Plex Mono', 'IBM Plex Mono'],
+      ['--chrome', '#e8e9ec', '#202024'],
+      ['--panel', '#dfe1e6', '#191a1d'],
+      ['--papel', '#ffffff', '#26262a'],
+      ['--lienzo', '#f5f6f8', '#141417'],
+      ['--hover', '#d8dae0', '#2c2c32'],
+      ['--cuadricula', '#e2e4e9', '#26262c'],
+      ['--regla', '#d7d9df', '#2f2f36'],
+      ['--borde', '#c5c8d0', '#3a3a42'],
+      ['--borde-fuerte', '#aab0bb', '#4a4a54'],
+      ['--tinta', '#1b1d22', '#e8e8ec'],
+      ['--tenue', '#5a5f68', '#9a9aa4'],
+      ['--palido', '#878d97', '#75757f'],
+      ['--foco', '#6141c9', '#b3a6f7'],
+      ['--foco-suave', '#e9e6f8', '#2a2742'],
+      ['--foco-halo', 'rgba(97,65,201,.20)', 'rgba(179,166,247,.22)'],
+      ['--foco-linea', 'rgba(97,65,201,.42)', 'rgba(179,166,247,.40)'],
+      ['--foco-banda', 'rgba(97,65,201,.055)', 'rgba(179,166,247,.06)'],
+      ['--peligro', '#c4291c', '#d98a7e'],
+      ['--nota', '#f7efd9', '#38311f'],
+      ['--nota-borde', '#ddcda2', '#635230'],
+      ['--nota-tinta', '#6b5321', '#dcc48d'],
+      ['--t-rojo', '#c62828', '#f28b82'],
+      ['--t-ladrillo', '#d14a1f', '#f59a72'],
+      ['--t-cobre', '#d2691e', '#f5a35c'],
+      ['--t-ambar', '#c98a00', '#f0c04d'],
+      ['--t-oro', '#9a7b0a', '#dcb544'],
+      ['--t-lima', '#6e9a16', '#bcd95f'],
+      ['--t-oliva', '#4f7a1e', '#a8cc70'],
+      ['--t-verde', '#16803c', '#6bd68c'],
+      ['--t-esmeralda', '#0a8a5c', '#4fd1a5'],
+      ['--t-teal', '#0b8b82', '#48cfc4'],
+      ['--t-turquesa', '#0e8aa8', '#4fc9e6'],
+      ['--t-cielo', '#0378c0', '#5fbcf0'],
+      ['--t-azul', '#1a63d0', '#8fb2ff'],
+      ['--t-marino', '#17417e', '#7fa8d6'],
+      ['--t-pizarra', '#3e4a5c', '#9aa8bd'],
+      ['--t-indigo', '#4b34cc', '#a39bf7'],
+      ['--t-violeta', '#6d28d9', '#b99bf5'],
+      ['--t-uva', '#8a2bc4', '#cf9bf0'],
+      ['--t-ciruela', '#a21caf', '#e396f0'],
+      ['--t-magenta', '#bf1b8a', '#f090d4'],
+      ['--t-rosa', '#d31a6b', '#f58ab5'],
+      ['--t-vino', '#96153f', '#e08195'],
+      ['--t-salvia', '#5a7a63', '#a3c2aa'],
+      ['--t-gris', '#5d5d68', '#a8a8b3'],
+      ['--escena', '#f5dc9a', '#8a6f28'],
+      ['--escena-trazo', '#c98a00', '#f0c04d'],
+      ['--rombo', '#ddc7f8', '#4a3a6e'],
+      ['--rombo-trazo', '#6d28d9', '#b99bf5'],
+      ['--bb-bg', '#2b2b31', '#0f0f11'],
+      ['--bb-fg', '#ececef', '#e8e8ec'],
+      ['--bb-muted', '#9494a0', '#84848e'],
+      ['--bb-line', '#42424b', '#2a2a30']
+    ].map(t => ({ n: t[0], l: t[1], d: t[2] }));
+    const tonos = ['rojo','ladrillo','cobre','ambar','oro','lima','oliva','verde','esmeralda','teal','turquesa','cielo','azul','marino','pizarra','indigo','violeta','uva','ciruela','magenta','rosa','vino','salvia','gris']
+      .map(n => ({ t: 'var(--t-' + n + ')', f: 'var(--f-' + n + ')' }));
+
+    const tramas = [
+      ['ROJO', '#c62828', '#ffe2e2'], ['LADRILLO', '#d14a1f', '#ffe6dc'], ['COBRE', '#d2691e', '#ffeddb'],
+      ['ÁMBAR', '#c98a00', '#fff2d0'], ['ORO', '#9a7b0a', '#f7eecb'], ['LIMA', '#6e9a16', '#eef8d4'],
+      ['OLIVA', '#4f7a1e', '#e6f5d5'], ['VERDE', '#16803c', '#d9f5e2'], ['ESMERALDA', '#0a8a5c', '#d5f5e7'],
+      ['TEAL', '#0b8b82', '#d3f4f1'], ['TURQUESA', '#0e8aa8', '#d4f2fa'], ['CIELO', '#0378c0', '#d7eefe'],
+      ['AZUL', '#1a63d0', '#dfe9ff'], ['MARINO', '#17417e', '#dde6f7'], ['PIZARRA', '#3e4a5c', '#e4e9f0'],
+      ['ÍNDIGO', '#4b34cc', '#e5e1ff'], ['VIOLETA', '#6d28d9', '#ebe0ff'], ['UVA', '#8a2bc4', '#f2e0ff'],
+      ['CIRUELA', '#a21caf', '#fbe0fb'], ['MAGENTA', '#bf1b8a', '#ffe0f4'], ['ROSA', '#d31a6b', '#ffe0ec'],
+      ['VINO', '#96153f', '#ffdfe8'], ['SALVIA', '#5a7a63', '#e4f0e8'], ['GRIS', '#5d5d68', '#e9e7ee']
+    ].map(t => ({ n: t[0], l: t[1], f: t[2] }));
+
+    return {
+      paleta, iconos, tokens, tonos, tramas,
+      verNotas: this.props.notas !== false,
+      verClaro: modo !== 'Solo oscuro',
+      verOscuro: modo !== 'Solo claro',
+      aFoco: base,
+      aSuave: this.mix(base, '#ffffff', 0.88),
+      aHalo: this.rgba(base, 0.2),
+      aLinea: this.rgba(base, 0.42),
+      aBanda: this.rgba(base, 0.055),
+      aSel: this.mix(base, '#ffffff', 0.8),
+      aDrop: this.rgba(base, 0.09),
+      dFoco: claro,
+      dSuave: this.mix(claro, '#14141a', 0.82),
+      dHalo: this.rgba(claro, 0.22),
+      dLinea: this.rgba(claro, 0.4),
+      dBanda: this.rgba(claro, 0.06),
+      dSel: this.mix(claro, '#14141a', 0.74),
+      dDrop: this.rgba(claro, 0.1)
+    };
+  }
+}
+
+</script>
+</body>
+</html>

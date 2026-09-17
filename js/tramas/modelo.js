@@ -55,7 +55,10 @@
   const TIPOS = ['principal', 'secundaria', 'alterna'];
   const ETIQUETA = { principal: 'Principal', secundaria: 'Secundaria', alterna: 'Alternativa' };
   const FORMA = { cuadro: 'Cambio de escena', rombo: 'Salto alternativo' };
-  const MIN_CELDAS = 6, MAX_CELDAS = 60, ANCHO_ACTO = 15;
+  /* Un acto (un momento, en Personajes) puede quedarse en **una sola columna** (Leo, 16-09-2026: «lo mínimo que puede
+     tener un acto es 7; debe ser 1»): el mínimo manda en la barra del panel, en el divisor y en los actos que se crean
+     al alargar el tablero. */
+  const MIN_CELDAS = 1, MAX_CELDAS = 60, ANCHO_ACTO = 15;
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const hex = id => (PALETA.find(p => p.id === id) || PALETA[0]).c;
@@ -78,7 +81,7 @@
     lista(e.actos).forEach((a, i) => {
       if (!a || !a.id) return;
       d.actos.push({ id: String(a.id), nombre: String(a.nombre ?? ('Acto ' + romano(i + 1))),
-        celdas: clamp(Math.round(+a.celdas || ANCHO_ACTO), MIN_CELDAS, MAX_CELDAS),
+        celdas: clamp(Math.round(+a.celdas || ANCHO_ACTO), 1, MAX_CELDAS),   // desde 1: eliminar columnas (Leo, 16-09-2026) puede dejar un acto más estrecho que MIN_CELDAS, que es el mínimo de la barra y del divisor
         fondo: FONDOS.some(f => f.id === a.fondo) ? a.fondo : null });
     });
     if (!d.actos.length) d.actos.push({ id: 'a1', nombre: 'Acto I', celdas: ANCHO_ACTO, fondo: null });
@@ -103,7 +106,9 @@
       d.puntos.push({ id: String(p.id), lineaId: p.lineaId, actoId: p.actoId,
         celda: clamp(Math.round(+p.celda || 0), 0, a.celdas - 1),
         titulo: String(p.titulo ?? ''), descripcion: String(p.descripcion ?? p.nota ?? ''),
-        color: PALETA.some(c => c.id === p.color) ? p.color : null, cortado: !!p.cortado });
+        color: PALETA.some(c => c.id === p.color) ? p.color : null, cortado: !!p.cortado,
+        /* el color del enlace que sale de este nodo hacia el siguiente de su trama (Leo, 16-09-2026); sin él, el de la trama */
+        ...(PALETA.some(c => c.id === p.colorEnlace) ? { colorEnlace: p.colorEnlace } : {}) });
     });
 
     const puntoIds = new Set(d.puntos.map(p => p.id));
@@ -123,14 +128,13 @@
       a.cortado = false; b.cortado = false;                        // un extremo no se descarta
     });
 
-    const vistos = new Set();
+    /* Una nota va en un tramo (entre dos nodos consecutivos) o **en un nodo** (`aId: null`), y **caben varias**
+       (Leo, 16-09-2026: «quiero poder agregar varias notas apiladas… también agregar notas por nodo»). */
     lista(e.notas).forEach(n => {
-      if (!n || !n.id || !puntoIds.has(n.deId) || !puntoIds.has(n.aId) || n.deId === n.aId) return;
-      if (punto(n.deId).lineaId !== punto(n.aId).lineaId) return;
-      const clave = [n.deId, n.aId].sort().join('|');
-      if (vistos.has(clave)) return;                               // una nota por tramo
-      vistos.add(clave);
-      d.notas.push({ id: String(n.id), deId: n.deId, aId: n.aId, texto: String(n.texto ?? ''), ...(PALETA.some(c => c.id === n.color) ? { color: n.color } : {}) });
+      if (!n || !n.id || !puntoIds.has(n.deId)) return;
+      const suelta = !n.aId || n.aId === n.deId;                   // nota de un nodo
+      if (!suelta && (!puntoIds.has(n.aId) || punto(n.deId).lineaId !== punto(n.aId).lineaId)) return;
+      d.notas.push({ id: String(n.id), deId: n.deId, aId: suelta ? null : n.aId, texto: String(n.texto ?? ''), ...(PALETA.some(c => c.id === n.color) ? { color: n.color } : {}) });
     });
     return d;
   }
@@ -163,8 +167,16 @@
     puntosDe(lineaId) {
       return this.datos.puntos.filter(p => p.lineaId === lineaId).sort((a, b) => this.cg(a) - this.cg(b));
     }
-    notaDe(deId, aId) {
-      return this.datos.notas.find(n => (n.deId === deId && n.aId === aId) || (n.deId === aId && n.aId === deId));
+    notaDe(deId, aId) { return this.notasDe(deId, aId)[0] || null; }
+    /* Las notas de un tramo (dos nodos) o, con `aId` null, las de un nodo. Caben varias (Leo, 16-09-2026). */
+    notasDe(deId, aId) {
+      if (!aId) return this.datos.notas.filter(n => !n.aId && n.deId === deId);
+      return this.datos.notas.filter(n => n.aId && ((n.deId === deId && n.aId === aId) || (n.deId === aId && n.aId === deId)));
+    }
+    /* Todas las notas de una trama, en el orden del tiempo (las de nodo, en el nodo). */
+    notasDeLinea(lineaId) {
+      const x = n => { const a = this.punto(n.deId), b = n.aId && this.punto(n.aId); return a ? Math.min(this.cg(a), b ? this.cg(b) : Infinity) : Infinity; };
+      return this.datos.notas.filter(n => { const a = this.punto(n.deId); return a && a.lineaId === lineaId; }).sort((p, q) => x(p) - x(q));
     }
     /* ¿Un salto entre estas dos tramas sería rombo o cuadro? */
     formaEntre(lineaA, lineaB) {
@@ -301,8 +313,8 @@
       const cambia = id => id === P.id ? Q.id : id === Q.id ? P.id : id;
       this.datos.notas.forEach(n => {
         if (![n.deId, n.aId].some(id => id === P.id || id === Q.id)) return;
-        n.deId = cambia(n.deId); n.aId = cambia(n.aId);
-        const de = this.punto(n.deId), a = this.punto(n.aId);
+        n.deId = cambia(n.deId); if (n.aId) n.aId = cambia(n.aId);
+        const de = this.punto(n.deId), a = n.aId && this.punto(n.aId);
         if (de && a && this.cg(de) > this.cg(a)) [n.deId, n.aId] = [n.aId, n.deId];
       });
       return si({ punto: P, cambioTrama: false, intercambio: Q, aviso: `«${P.titulo || 'Nodo'}» y «${Q.titulo || 'Nodo'}» intercambiaron su lugar` });
@@ -364,6 +376,101 @@
       return si({});
     }
 
+    /* ====================================================================
+       Columnas (las celdas de la cuadrícula, a lo ancho de todas las tramas)
+       Leo, 16-09-2026: «como en Excel web»: insertar a la izquierda o a la derecha, varias de una vez, y
+       eliminar las elegidas. Una columna pertenece al acto que la contiene: insertar la añade a ese acto
+       y eliminarla se la quita; un acto que se queda sin columnas desaparece.
+       ==================================================================== */
+    /* Mete `cuantas` columnas vacías junto a la columna global `cg` (`lado`: 'izquierda' por defecto o
+       'derecha'). Lo que había desde ahí se corre a la derecha, en todas las tramas a la vez. */
+    insertarColumnas(cg, cuantas, lado) {
+      const total = this.totalCeldas();
+      if (!total) return no('No hay columnas');
+      cg = clamp(Math.round(+cg || 0), 0, total - 1);
+      cuantas = clamp(Math.round(+cuantas || 1), 1, MAX_CELDAS);
+      const u = this.ubicarCelda(cg), a = this.acto(u.actoId);
+      const sitio = MAX_CELDAS - a.celdas;
+      if (sitio <= 0) return no(`«${a.nombre}» ya tiene el máximo de columnas (${MAX_CELDAS})`);
+      const n = Math.min(cuantas, sitio);
+      const pos = u.celda + (lado === 'derecha' ? 1 : 0);
+      this.datos.puntos.filter(p => p.actoId === a.id && p.celda >= pos).forEach(p => { p.celda += n; });
+      a.celdas += n;
+      const desde = this.celdasAntes(a.id) + pos;
+      return si({ insertadas: n, desde,
+        aviso: (n === 1 ? '1 columna nueva' : n + ' columnas nuevas') + ` en «${a.nombre}»`
+          + (n < cuantas ? ` · solo cabían ${n}` : '') });
+    }
+
+    /* Qué se llevaría eliminar esas columnas: además de los nodos (como `resumenBorrado`), cuántos actos
+       se quedarían sin ninguna. */
+    resumenColumnas(cgs) {
+      const cs = this._columnas(cgs), set = new Set(cs);
+      const ids = this.datos.puntos.filter(p => set.has(this.cg(p))).map(p => p.id);
+      const r = this.resumenBorrado(ids);
+      const cuenta = new Map();
+      cs.forEach(c => { const u = this.ubicarCelda(c); cuenta.set(u.actoId, (cuenta.get(u.actoId) || 0) + 1); });
+      const actos = this.datos.actos.filter(a => (cuenta.get(a.id) || 0) >= a.celdas);
+      return Object.assign(r, { columnas: cs.length, actos: actos.length, nombresActos: actos.map(a => a.nombre) });
+    }
+
+    /* Elimina las columnas elegidas: sus nodos se van (con los saltos y las notas que los usaban) y lo que
+       quedaba a la derecha se corre a la izquierda. */
+    borrarColumnas(cgs) {
+      const cs = this._columnas(cgs);
+      if (!cs.length) return no('No hay columnas elegidas');
+      if (cs.length >= this.totalCeldas()) return no('Tiene que quedar al menos una columna');
+      const set = new Set(cs);
+      const ids = this.datos.puntos.filter(p => set.has(this.cg(p))).map(p => p.id);
+      const r = ids.length ? this.borrarPuntos(ids) : null;
+      /* dónde está cada columna antes de tocar nada; se quitan de atrás hacia delante (las de delante no se mueven) */
+      const donde = cs.map(c => this.ubicarCelda(c));
+      for (let i = donde.length - 1; i >= 0; i--) {
+        const a = this.acto(donde[i].actoId); if (!a) continue;
+        this.datos.puntos.filter(p => p.actoId === a.id && p.celda > donde[i].celda).forEach(p => { p.celda -= 1; });
+        a.celdas -= 1;
+      }
+      const vacios = this.datos.actos.filter(a => a.celdas < 1);
+      this.datos.actos = this.datos.actos.filter(a => a.celdas >= 1);
+      this._repararNotas();
+      const partes = [cs.length === 1 ? '1 columna eliminada' : cs.length + ' columnas eliminadas'];
+      if (r && r.borrados) partes.push(r.borrados === 1 ? '1 elemento borrado' : r.borrados + ' elementos borrados');
+      if (vacios.length) partes.push(vacios.length === 1 ? `«${vacios[0].nombre}» se quedó sin columnas` : `${vacios.length} ${this.nombre('acto').toLowerCase()}s se quedaron sin columnas`);
+      return si({ columnas: cs.length, borrados: (r && r.borrados) || 0, actos: vacios.length, aviso: partes.join(' · ') });
+    }
+
+    /* Mueve las columnas elegidas `delta` posiciones (con lo que haya dentro), como se arrastra una columna en Excel:
+       se sacan de la cuadrícula y se meten otra vez `delta` más allá, y lo demás conserva su orden. Si se eligieron
+       columnas sueltas, quedan juntas en el destino. Los actos no cambian de ancho: lo que cambia de sitio es su
+       contenido (un nodo puede pasar de un acto a otro). */
+    moverColumnas(cgs, delta) {
+      const cs = this._columnas(cgs);
+      if (!cs.length) return no('No hay columnas elegidas');
+      delta = Math.round(+delta || 0);
+      const total = this.totalCeldas();
+      if (cs.length >= total) return no('No hay a dónde moverlas');
+      const set = new Set(cs), resto = [];
+      for (let c = 0; c < total; c++) if (!set.has(c)) resto.push(c);
+      const inicio = clamp(cs[0] + delta, 0, resto.length);
+      if (!delta || (inicio === cs[0] && cs[cs.length - 1] - cs[0] + 1 === cs.length)) return si({ movidas: 0 });
+      const orden = [...resto.slice(0, inicio), ...cs, ...resto.slice(inicio)];
+      const mapa = new Map(); orden.forEach((viejo, nuevo) => mapa.set(viejo, nuevo));
+      const dest = new Map(this.datos.puntos.map(p => [p.id, mapa.get(this.cg(p))]));
+      this.datos.puntos.forEach(p => {
+        const u = this.ubicarCelda(dest.get(p.id));
+        p.actoId = u.actoId; p.celda = u.celda;
+      });
+      this._repararNotas();
+      return si({ movidas: cs.length, desde: inicio,
+        aviso: (cs.length === 1 ? '1 columna movida' : cs.length + ' columnas movidas') + ' a la posición ' + (inicio + 1) });
+    }
+
+    /* Columnas globales válidas, sin repetir y de menor a mayor. */
+    _columnas(cgs) {
+      const total = this.totalCeldas();
+      return [...new Set((cgs || []).map(c => Math.round(+c)))].filter(c => Number.isFinite(c) && c >= 0 && c < total).sort((x, y) => x - y);
+    }
+
     /* Tras mover varios nodos: una nota cuyos extremos ya no son dos nodos consecutivos de la misma trama pasa al tramo que
        empieza (o, si no, acaba) en su primer extremo; si no hay ninguno libre, se queda en el que tenga libre el otro extremo, y
        si tampoco, se elimina (no se puede leer ni guardar). */
@@ -371,12 +478,14 @@
       const d = this.datos;
       const vecinos = p => { const l = this.puntosDe(p.lineaId), i = l.findIndex(x => x.id === p.id); return [l[i + 1], l[i - 1]].filter(Boolean); };
       d.notas = d.notas.filter(n => {
-        const a = this.punto(n.deId), b = this.punto(n.aId);
-        if (a && b && !this._tramoValido(n.deId, n.aId, n.id)) { if (this.cg(a) > this.cg(b)) [n.deId, n.aId] = [n.aId, n.deId]; return true; }
+        const a = this.punto(n.deId), b = n.aId && this.punto(n.aId);
+        if (a && !n.aId) return true;                              // nota de un nodo: le basta con su nodo
+        if (a && b && !this._tramoValido(n.deId, n.aId)) { if (this.cg(a) > this.cg(b)) [n.deId, n.aId] = [n.aId, n.deId]; return true; }
         for (const x of [a, b].filter(Boolean)) {
           for (const v of vecinos(x)) {
-            if (!this._tramoValido(x.id, v.id, n.id)) { [n.deId, n.aId] = this.cg(x) <= this.cg(v) ? [x.id, v.id] : [v.id, x.id]; return true; }
+            if (!this._tramoValido(x.id, v.id)) { [n.deId, n.aId] = this.cg(x) <= this.cg(v) ? [x.id, v.id] : [v.id, x.id]; return true; }
           }
+          n.deId = x.id; n.aId = null; return true;                // sin tramo válido, se queda colgada de su nodo
         }
         return false;
       });
@@ -388,6 +497,20 @@
       if ('descripcion' in cambios) p.descripcion = String(cambios.descripcion);
       if ('color' in cambios) p.color = PALETA.some(c => c.id === cambios.color) ? cambios.color : null;
       return si({ punto: p });
+    }
+
+    /* **El color de un enlace** (Leo, 16-09-2026): el tramo que va de este nodo al siguiente de su trama. Vive en el nodo de
+       salida (`colorEnlace`), así que sigue a ese nodo si se mueve; null vuelve al color de la trama. */
+    colorearEnlace(deId, color) {
+      const p = this.punto(deId); if (!p) return no('Ese enlace no existe');
+      if (color && PALETA.some(c => c.id === color)) p.colorEnlace = color; else delete p.colorEnlace;
+      return si({ punto: p });
+    }
+    /* El nodo que sigue a este en su trama (el otro extremo de su enlace), o null si es el último. */
+    siguienteEnTrama(id) {
+      const p = this.punto(id); if (!p) return null;
+      const lista = this.puntosDe(p.lineaId), i = lista.indexOf(p);
+      return i >= 0 ? lista[i + 1] || null : null;
     }
 
     descartarPunto(id, valor) {
@@ -423,13 +546,13 @@
       saltos.forEach(s => { juntos.add(s.deId); juntos.add(s.aId); });
       const enSalto = new Set(saltos.flatMap(s => [s.deId, s.aId]));
       return { nodos: [...juntos].filter(id => !enSalto.has(id)).length, saltos: saltos.length,
-               notas: this.datos.notas.filter(n => juntos.has(n.deId) || juntos.has(n.aId)).length, total: juntos.size };
+               notas: this.datos.notas.filter(n => juntos.has(n.deId) || (n.aId && juntos.has(n.aId))).length, total: juntos.size };
     }
 
     _quitarPuntos(ids) {
       const d = this.datos;
       d.saltos = d.saltos.filter(s => !ids.has(s.deId) && !ids.has(s.aId));
-      d.notas = d.notas.filter(n => !ids.has(n.deId) && !ids.has(n.aId));
+      d.notas = d.notas.filter(n => !ids.has(n.deId) && !(n.aId && ids.has(n.aId)));
       d.puntos = d.puntos.filter(p => !ids.has(p.id));
     }
 
@@ -437,7 +560,7 @@
     _reanclarNotas(p) {
       const c = this.cg(p);
       this.datos.notas.forEach(nt => {
-        const a = this.punto(nt.deId), b = this.punto(nt.aId);
+        const a = this.punto(nt.deId), b = nt.aId && this.punto(nt.aId);
         if (!a || !b || a.lineaId !== p.lineaId || b.lineaId !== p.lineaId) return;
         const ca = this.cg(a), cb = this.cg(b);
         if (c > Math.min(ca, cb) && c < Math.max(ca, cb)) { nt.deId = (ca < cb ? a : b).id; nt.aId = p.id; }
@@ -620,28 +743,50 @@
     /* ====================================================================
        Notas
        ==================================================================== */
-    /* Solo entre dos nodos consecutivos de la misma trama, y una por tramo. */
-    _tramoValido(deId, aId, salvoNota) {
-      const a = this.punto(deId), b = this.punto(aId);
-      if (!a || !b || a.id === b.id) return 'Una nota va entre dos nodos';
+    /* Entre dos nodos consecutivos de la misma trama, o en un nodo (`aId` null). Caben varias en el mismo sitio. */
+    _tramoValido(deId, aId) {
+      const a = this.punto(deId);
+      if (!a) return 'Esa nota no tiene nodo';
+      if (!aId) return null;                                       // nota de un nodo
+      const b = this.punto(aId);
+      if (!b || a.id === b.id) return 'Una nota va entre dos nodos';
       if (a.lineaId !== b.lineaId) return 'Una nota va entre dos nodos de la misma trama';
       const ca = this.cg(a), cb = this.cg(b), lo = Math.min(ca, cb), hi = Math.max(ca, cb);
       const enMedio = this.datos.puntos.some(p => p.lineaId === a.lineaId && p.id !== a.id && p.id !== b.id
         && this.cg(p) > lo && this.cg(p) < hi);
       if (enMedio) return 'Una nota va entre dos nodos consecutivos';
-      const otra = this.notaDe(deId, aId);
-      if (otra && otra.id !== salvoNota) return 'Ese tramo ya tiene una nota';
       return null;
     }
 
+    /* `aId` null (o igual que `deId`): la nota cuelga de ese nodo. */
     crearNota(deId, aId, texto) {
-      const problema = this._tramoValido(deId, aId);
+      const problema = this._tramoValido(deId, aId === deId ? null : aId);
       if (problema) return no(problema);
-      const a = this.punto(deId), b = this.punto(aId);
-      const [de, hasta] = this.cg(a) <= this.cg(b) ? [a, b] : [b, a];
-      const n = { id: this._nid('n'), deId: de.id, aId: hasta.id, texto: String(texto ?? 'Nota nueva') };
+      const a = this.punto(deId), b = aId && aId !== deId ? this.punto(aId) : null;
+      const [de, hasta] = !b ? [a, null] : (this.cg(a) <= this.cg(b) ? [a, b] : [b, a]);
+      const n = { id: this._nid('n'), deId: de.id, aId: hasta ? hasta.id : null, texto: String(texto ?? 'Nota nueva') };
       this.datos.notas.push(n);
       return si({ nota: n });
+    }
+
+    /* **Reordenar notas apiladas** (Leo, 16-09-2026: «déjame reordenar notas, una encima o debajo de otras… y que no
+       importe si es del nodo o del enlace»): el orden en que se apilan es el de la lista, así que basta con recolocar
+       la nota delante de otra (`antesDe`) o al final. Solo entre las que comparten sitio. */
+    colocarNota(id, antesDe) {
+      const n = this.nota(id); if (!n) return no('Esa nota no existe');
+      const lista = this.datos.notas, i = lista.indexOf(n); if (i < 0) return no('Esa nota no existe');
+      const ref = antesDe ? this.nota(antesDe) : null;
+      if (ref === n) return si({ nota: n, movida: false });
+      /* La referencia puede ser **cualquier nota de la misma trama**, de nodo o de enlace: en el tablero se apilan
+         juntas y Leo quiere ordenarlas entre sí (16-09-2026). De otra trama, no: ahí no se ven una al lado de otra. */
+      if (ref) {
+        const suya = this.punto(ref.deId), mia = this.punto(n.deId);
+        if (!suya || !mia || suya.lineaId !== mia.lineaId) return no('Esa nota está en otra trama');
+      }
+      lista.splice(i, 1);
+      const j = ref ? lista.indexOf(ref) : lista.length;
+      lista.splice(j < 0 ? lista.length : j, 0, n);
+      return si({ nota: n, movida: lista.indexOf(n) !== i });
     }
 
     editarNota(id, texto) {
@@ -657,18 +802,17 @@
       return si({ nota: n });
     }
 
-    /* Salta de tramo en tramo; si el destino ya tiene nota, se queda donde estaba, salvo con `op.intercambiar` (Leo,
-       15-09-2026: como los nodos, soltar una nota sobre otra las cambia de lugar). */
-    moverNota(id, deId, aId, op) {
+    /* Salta de tramo en tramo (o a un nodo, `aId` null): donde caiga se apila con las que ya haya (Leo, 16-09-2026). */
+    moverNota(id, deId, aId) {
       const n = this.nota(id); if (!n) return no('Esa nota no existe');
-      if ((n.deId === deId && n.aId === aId) || (n.deId === aId && n.aId === deId)) return si({ nota: n, movida: false });
-      const otra = this.notaDe(deId, aId);
-      if (otra && otra.id !== id && op && op.intercambiar) return this.intercambiarNotas(id, otra.id);
-      const problema = this._tramoValido(deId, aId, id);
+      const destino = aId === deId ? null : (aId || null);
+      if (n.deId === deId && (n.aId || null) === destino) return si({ nota: n, movida: false });
+      if (destino && n.deId === destino && n.aId === deId) return si({ nota: n, movida: false });
+      const problema = this._tramoValido(deId, destino);
       if (problema) return no(problema);
-      const a = this.punto(deId), b = this.punto(aId);
-      const [de, hasta] = this.cg(a) <= this.cg(b) ? [a, b] : [b, a];
-      n.deId = de.id; n.aId = hasta.id;
+      const a = this.punto(deId), b = destino ? this.punto(destino) : null;
+      const [de, hasta] = !b ? [a, null] : (this.cg(a) <= this.cg(b) ? [a, b] : [b, a]);
+      n.deId = de.id; n.aId = hasta ? hasta.id : null;
       return si({ nota: n, movida: true });
     }
 
@@ -679,6 +823,14 @@
       if (A === B) return si({ nota: A, movida: false });
       [A.deId, B.deId] = [B.deId, A.deId]; [A.aId, B.aId] = [B.aId, A.aId];
       return si({ nota: A, movida: true, intercambio: B });
+    }
+
+    /* Varias notas a la vez (Leo, 16-09-2026: elegidas con Mayús). */
+    borrarNotas(ids) {
+      const quitar = new Set((ids || []).filter(id => this.nota(id)));
+      if (!quitar.size) return no('No hay nada elegido');
+      this.datos.notas = this.datos.notas.filter(n => !quitar.has(n.id));
+      return si({ borradas: quitar.size, aviso: quitar.size === 1 ? 'Nota eliminada' : quitar.size + ' notas eliminadas' });
     }
 
     borrarNota(id) {
@@ -813,18 +965,16 @@
   }
 
   /* ---------- tableros de partida ----------
-     `inicial()` es lo que ve el guionista la primera vez y al pulsar «Nuevo»: tres actos, la trama
-     principal con su primer nodo, y una secundaria lista para usar. `ejemplo()` es el tablero de
-     muestra del prototipo, usado en las pruebas. */
+     `inicial()` es lo que ve el guionista la primera vez y al pulsar «Nuevo»: tres actos y **solo la trama
+     principal, vacía** (Leo, 16-09-2026: ni el nodo «Inicio» ni la secundaria de antes, que había que borrar
+     siempre). `ejemplo()` es el tablero de muestra del prototipo, usado en las pruebas. */
   function inicial() {
     return {
       actos: [{ id: 'a1', nombre: 'Acto I', celdas: 14, fondo: null },
               { id: 'a2', nombre: 'Acto II', celdas: 22, fondo: null },
               { id: 'a3', nombre: 'Acto III', celdas: 15, fondo: null }],
-      lineas: [{ id: 'l1', nombre: 'Principal', tipo: 'principal', color: 'azul', cortada: false },
-               { id: 'l2', nombre: 'Secundaria', tipo: 'secundaria', color: 'violeta', cortada: false }],
-      puntos: [{ id: 'p1', lineaId: 'l1', actoId: 'a1', celda: 2, titulo: 'Inicio', descripcion: '', color: null, cortado: false }],
-      saltos: [], notas: []
+      lineas: [{ id: 'l1', nombre: 'Principal', tipo: 'principal', color: 'azul', cortada: false }],
+      puntos: [], saltos: [], notas: []
     };
   }
 

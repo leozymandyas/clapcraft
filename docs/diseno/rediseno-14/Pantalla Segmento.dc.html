@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="width:1280px;height:820px;display:flex;flex-direction:column;overflow:hidden;background:var(--chrome);color:var(--tinta);font-family:var(--sans);font-size:13px;border:1px solid var(--borde-fuerte);border-radius:6px">
+
+  <div style="height:38px;flex:none;display:flex;align-items:flex-end;padding-left:16px;background:var(--chrome)">
+    <div style="position:relative;z-index:2;margin-bottom:-1px;display:flex;align-items:center;gap:10px;height:33px;padding:0 13px;background:var(--panel);border:1px solid var(--borde);border-bottom:0;border-radius:7px 7px 0 0;font-size:13px;font-weight:500;white-space:nowrap">Sin título<span style="width:5px;height:5px;border-radius:50%;background:var(--foco)"></span><svg width="12" height="12" style="color:var(--palido)"><use href="#ic-close"></use></svg></div>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <div style="width:320px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--borde);border-right:1px solid var(--borde-fuerte);box-shadow:var(--sombra-lado)">
+      <div style="display:flex;align-items:center;gap:11px;padding:20px 18px 16px">
+        <svg width="27" height="27" viewBox="0 0 16 16"><rect x="1.4" y="5.6" width="13.2" height="8.9" rx="1.3" fill="var(--logo-1)"></rect><path d="M1.6 5.6 2.9 2.4l12.3 1-.5 2.2z" fill="var(--logo-2)"></path><path d="M5.4 2.7 4.3 5.5M8.7 3 7.6 5.7M12 3.3 10.9 5.9" stroke="var(--logo-3)" stroke-width="1.1"></path></svg>
+        <span style="font-family:var(--marca);font-weight:700;font-size:23px;letter-spacing:-.02em">ClapCraft</span><div style="flex:1"></div><div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--tenue)"><svg width="16" height="16"><use href="#ic-panel"></use></svg></div>
+      </div>
+      <div style="padding:0 18px">
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;height:40px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;font-size:14px;box-shadow:var(--sombra)"><svg width="15" height="15" style="color:var(--tenue)"><use href="#ic-plus"></use></svg>Nuevo personaje</div>
+      </div>
+      <div style="padding:22px 18px 8px;font-family:var(--mono);font-size:10px;letter-spacing:.11em;color:var(--palido)">PERSONAJES</div>
+
+      <div style="flex:1;min-height:0;padding:0 10px;display:flex;flex-direction:column;gap:2px;overflow:hidden">
+        <sc-for list="{{ filas }}" as="f" hint-placeholder-count="7">
+          <div style="display:flex;align-items:stretch;flex:none;height:30px">
+            <div style="flex:none;width:{{ f.sangria }}px;border-right:1px solid {{ f.guia }}"></div>
+            <sc-if value="{{ f.esCarpeta }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ f.alternar }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;margin-left:7px;padding:0 6px 0 9px;border-radius:5px;cursor:pointer;background:{{ f.fondo }};box-shadow:inset 2px 0 0 {{ f.color }}">
+                <svg width="12" height="12" style="color:var(--tenue);flex:none"><use href="{{ f.chev }}"></use></svg>
+                <svg width="15" height="15" style="flex:none;color:{{ f.color }}"><use href="#ic-folder"></use></svg>
+                <span style="font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.nombre }}</span>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--palido);flex:none">{{ f.cuenta }}</span>
+                <div style="flex:1"></div>
+                <svg width="14" height="14" style="color:var(--tenue);flex:none"><use href="#ic-more"></use></svg>
+              </div>
+            </sc-if>
+            <sc-if value="{{ f.esPersonaje }}">
+              <div onClick="{{ f.elegir }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;margin-left:7px;padding:0 6px 0 9px;border-radius:5px;cursor:pointer;background:{{ f.fondo }};box-shadow:{{ f.barra }}">
+                <span style="width:7px;height:7px;border-radius:50%;flex:none;background:{{ f.color }}"></span>
+                <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono);font-size:13px;font-weight:{{ f.peso }}">{{ f.nombre }}</span>
+                <svg width="14" height="14" style="color:var(--tenue);flex:none"><use href="#ic-more"></use></svg>
+              </div>
+            </sc-if>
+            <sc-if value="{{ f.esNuevo }}">
+              <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;margin-left:7px;padding:0 6px 0 9px;border-radius:5px;color:var(--palido)">
+                <svg width="13" height="13" style="flex:none"><use href="#ic-plus"></use></svg>
+                <span style="font-family:var(--mono);font-size:13px">personaje</span>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="flex:none;padding:10px 10px 14px;border-top:1px solid var(--regla);display:flex;flex-direction:column;gap:2px">
+        <div style="display:flex;align-items:center;gap:11px;height:32px;padding:0 10px;border-radius:5px;font-family:var(--mono);font-size:13.5px;color:var(--tinta)"><svg width="16" height="16" style="color:var(--tenue)"><use href="#ic-docs"></use></svg>Contenedores</div>
+        <div style="display:flex;align-items:center;gap:11px;height:32px;padding:0 10px;border-radius:5px;background:var(--sel-bg);box-shadow:inset 2px 0 0 var(--foco);font-family:var(--mono);font-size:13.5px;font-weight:500;color:var(--tinta)"><svg width="16" height="16" style="color:var(--foco)"><use href="#ic-person"></use></svg>Personajes</div>
+        <div style="display:flex;align-items:center;gap:11px;height:32px;padding:0 10px;border-radius:5px;font-family:var(--mono);font-size:13.5px;color:var(--tinta)"><svg width="16" height="16" style="color:var(--tenue)"><use href="#ic-trash"></use></svg>Papelera<div style="flex:1"></div><svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-more"></use></svg></div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--lienzo);border-top:1px solid var(--borde)">
+
+      <div style="height:50px;flex:none;display:flex;align-items:center;gap:11px;padding:0 18px">
+        <span style="font-family:var(--mono);font-size:14.5px;letter-spacing:.02em;color:var(--palido)">PERSONAJES</span>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:5px;font-family:var(--mono);font-size:11.5px;font-weight:500;background:var(--p-violeta-bg);border:1px solid var(--p-violeta-linea);color:var(--p-violeta-tinta);white-space:nowrap">Personaje</span>
+        <span style="font-family:var(--mono);font-size:15px;color:var(--tenue)">Lestat</span>
+        <svg width="14" height="14" style="color:var(--palido)"><use href="#ic-chev-r"></use></svg>
+        <span style="display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:5px;font-family:var(--mono);font-size:11.5px;font-weight:500;background:var(--p-teal-bg);color:var(--p-teal-tinta);white-space:nowrap">Segmento</span>
+        <span style="font-family:var(--mono);font-size:15px;font-weight:600">Nacimiento</span>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;padding:16px 18px 0;border-top:1px solid var(--regla)">
+
+        <div style="flex:none;height:52px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:0 14px;background:var(--p-teal-bg);border:1px solid var(--regla);border-radius:6px;color:var(--p-teal-tinta)">
+          <span style="font-size:16px;font-weight:600">Nacimiento</span>
+          <span style="font-family:var(--mono);font-size:11.5px;opacity:.85">8 notas</span>
+          <div style="width:1px;height:20px;background:currentColor;opacity:.22"></div>
+          <div style="display:flex;align-items:center;gap:8px;opacity:.85"><svg width="15" height="15"><use href="#ic-edit"></use></svg><svg width="15" height="15"><use href="#ic-more"></use></svg></div>
+          <div style="flex:1"></div>
+          <div style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border:1px solid var(--borde);border-radius:4px;background:var(--papel);color:var(--tinta);font-size:12.5px;font-weight:500;white-space:nowrap;box-shadow:var(--sombra)"><svg width="15" height="15" style="color:var(--foco)"><use href="#ic-collapse"></use></svg>Contraer</div>
+        </div>
+
+        <div style="flex:none;display:flex;align-items:center;gap:12px;padding:18px 2px 10px">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:.11em;color:var(--palido)">NOTAS DEL SEGMENTO</span>
+          <div style="flex:1;height:1px;background:var(--regla)"></div>
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--palido)">ORDEN MANUAL</span>
+          <svg width="14" height="14" style="color:var(--tenue)"><use href="#ic-sort"></use></svg>
+        </div>
+
+        <div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:14px;padding-bottom:16px">
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:var(--f-cielo);border:1px solid var(--t-cielo);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:var(--t-cielo);flex:none"></span><span style="font-size:13.5px;font-weight:600">Auvernia, 1760</span><div style="flex:1"></div><svg width="13" height="13" style="color:var(--tenue)"><use href="#ic-drag"></use></svg></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--tenue)">Invierno largo en la casa de piedra. El padre no le habla desde el otoño.</div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)">AYER</span></div>
+          </div>
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:var(--sel-bg);border:1px solid var(--foco);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:600">Casa del padre</span><div style="flex:1"></div><svg width="13" height="13" style="color:var(--tenue)"><use href="#ic-more"></use></svg></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--tenue)">Tres hermanos y un título sin dinero. Es el único de la casa que baja al pueblo.</div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)">HOY</span></div>
+          </div>
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:var(--f-cobre);border:1px solid var(--t-cobre);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:var(--t-cobre);flex:none"></span><span style="font-size:13.5px;font-weight:600">La cacería</span><div style="flex:1"></div><svg width="13" height="13" style="color:var(--tenue)"><use href="#ic-drag"></use></svg></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--tenue)">Vuelve con ocho pieles. El pueblo deja de mirarlo como al hijo menor.</div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)">HOY</span></div>
+          </div>
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:600">Gabrielle</span><div style="flex:1"></div><svg width="13" height="13" style="color:var(--tenue)"><use href="#ic-drag"></use></svg></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--tenue)">La madre enferma. Le da lo único que le queda por dar antes de que él se vaya.</div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)">12 MAR</span></div>
+          </div>
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:600">El perro de la torre</span><div style="flex:1"></div><svg width="13" height="13" style="color:var(--tenue)"><use href="#ic-drag"></use></svg></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--tenue)">Muere en la cacería. Primera pérdida que el texto nombra en voz alta.</div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)">12 MAR</span></div>
+          </div>
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:var(--papel);border:1px dashed var(--borde-fuerte);border-radius:6px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:600;color:var(--tenue)">Ficha de Nicky</span><div style="flex:1"></div><svg width="13" height="13" style="color:var(--palido)"><use href="#ic-more"></use></svg></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--palido)">Referencia: la nota vive en «Vínculos previos» y solo se muestra aquí.</div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11.5px;font-style:italic;color:var(--palido)">en «Vínculos previos»</span></div>
+          </div>
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:600">El cura del pueblo</span><div style="flex:1"></div><svg width="13" height="13" style="color:var(--tenue)"><use href="#ic-drag"></use></svg></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--tenue)">Le enseña a escribir durante un invierno; al siguiente se lo llevan.</div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)">10 MAR</span></div>
+          </div>
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:13px 14px;background:var(--papel);border:1px solid var(--borde);border-radius:6px;box-shadow:var(--sombra);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:600">Salida a París</span><div style="flex:1"></div><svg width="13" height="13" style="color:var(--tenue)"><use href="#ic-drag"></use></svg></div>
+            <div style="font-size:12px;line-height:1.5;color:var(--tenue)">Cierra el tramo: se va sin avisar y el segmento termina aquí.</div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--palido)">9 MAR</span></div>
+          </div>
+
+          <div style="min-height:0;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:9px;border:1px dashed var(--borde);border-radius:6px;color:var(--palido);font-size:13px"><svg width="14" height="14"><use href="#ic-plus"></use></svg>nota</div>
+        </div>
+      </div>
+
+      <div style="height:42px;flex:none;display:flex;align-items:center;gap:16px;padding:0 18px;background:var(--bb-bg);border-top:1px solid var(--bb-line);color:var(--bb-fg)">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--bb-muted)">ESCALA</span>
+        <div style="position:relative;width:130px;height:3px;border-radius:2px;background:var(--bb-line)">
+          <div style="position:absolute;left:0;top:0;height:3px;width:84px;border-radius:2px;background:var(--foco)"></div>
+          <div style="position:absolute;left:84px;top:-4px;margin-left:-5px;width:11px;height:11px;border-radius:50%;background:var(--papel);border:1px solid var(--borde-fuerte);box-shadow:var(--sombra)"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;margin-left:6px">
+          <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--bb-fg)"><svg width="16" height="16"><use href="#ic-undo"></use></svg></div>
+          <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--bb-muted)"><svg width="16" height="16"><use href="#ic-redo"></use></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:820}}">
+class Component extends DCLogic {
+  state = { abiertas: { vamp: true, paris: true, mortales: false }, sel: 'lestat' };
+  alternar(id) { this.setState(s => ({ abiertas: Object.assign({}, s.abiertas, { [id]: !s.abiertas[id] }) })); }
+  renderVals() {
+    const arbol = [
+      { id: 'vamp', tipo: 'carpeta', color: 'violeta', nombre: 'Vampiros', hijos: [
+        { id: 'paris', tipo: 'carpeta', color: 'azul', nombre: 'Coven de París', hijos: [
+          { id: 'armand', color: 'teal', nombre: 'Armand' },
+          { id: 'santiago', color: 'cobre', nombre: 'Santiago' }
+        ] },
+        { id: 'lestat', color: 'violeta', nombre: 'Lestat' },
+        { id: 'louis', color: 'azul', nombre: 'Louis' },
+        { id: 'claudia', color: 'rosa', nombre: 'Claudia' }
+      ] },
+      { id: 'mortales', tipo: 'carpeta', color: 'ambar', nombre: 'Mortales', hijos: [
+        { id: 'daniel', color: 'indigo', nombre: 'Daniel' }
+      ] }
+    ];
+    const cuenta = n => n.hijos ? n.hijos.reduce((t, h) => t + (h.hijos ? cuenta(h) : 1), 0) : 1;
+    const filas = [];
+    const recorrer = (nodos, nivel, guia) => {
+      nodos.forEach(n => {
+        const sangria = 2 + nivel * 11;
+        if (n.hijos) {
+          const abierta = !!this.state.abiertas[n.id];
+          filas.push({
+            esCarpeta: true, sangria, guia, nombre: n.nombre,
+            color: 'var(--t-' + n.color + ')', cuenta: String(cuenta(n)),
+            chev: abierta ? '#ic-chev-d' : '#ic-chev-r',
+            fondo: abierta ? 'var(--hover)' : 'transparent',
+            alternar: () => this.alternar(n.id)
+          });
+          if (abierta) recorrer(n.hijos, nivel + 1, 'var(--borde-fuerte)');
+        } else {
+          const sel = this.state.sel === n.id;
+          filas.push({
+            esPersonaje: true, sangria, guia, nombre: n.nombre,
+            color: 'var(--t-' + n.color + ')',
+            sel: sel,
+            fondo: sel ? 'var(--sel-bg)' : 'transparent',
+            barra: sel ? 'inset 2px 0 0 var(--foco)' : 'none',
+            peso: sel ? 600 : 400,
+            elegir: () => this.setState({ sel: n.id })
+          });
+        }
+      });
+    };
+    recorrer(arbol, 0, 'transparent');
+    filas.push({ esNuevo: true, sangria: 2, guia: 'transparent' });
+    return { filas };
+  }
+}
+</script>
+</body>
+</html>

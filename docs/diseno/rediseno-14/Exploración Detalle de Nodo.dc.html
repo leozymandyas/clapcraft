@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body { margin: 0; background: #f0f1f4; }
+a { color: #6141c9; text-decoration: none; }
+a:hover { color: #4b34cc; text-decoration: underline; }
+</style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true"><defs>
+<symbol id="ic-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 6.6h6.4a3.4 3.4 0 0 1 0 6.8H6.4"></path><path d="M6.3 3.4 3.1 6.6l3.2 3.2"></path></symbol>
+<symbol id="ic-redo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 6.6H6.4a3.4 3.4 0 0 0 0 6.8h3.2"></path><path d="M9.7 3.4l3.2 3.2-3.2 3.2"></path></symbol>
+<symbol id="ic-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.9" cy="6.9" r="4.3"></circle><path d="M10.1 10.1 13.6 13.6"></path></symbol>
+<symbol id="ic-panel" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="3.2" width="11.6" height="9.6" rx="1.4"></rect><path d="M6.2 3.2v9.6"></path></symbol>
+<symbol id="ic-more" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.9" cy="8" r=".95"></circle><circle cx="8" cy="8" r=".95"></circle><circle cx="12.1" cy="8" r=".95"></circle></symbol>
+<symbol id="ic-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3.4v9.2M3.4 8h9.2"></path></symbol>
+<symbol id="ic-chev-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 4.2 10.2 8l-3.8 3.8"></path></symbol>
+<symbol id="ic-chev-d" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 6.4 8 10.2l3.8-3.8"></path></symbol>
+<symbol id="ic-board" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.2 5.2h11.6M2.2 10.8h11.6"></path><circle cx="5.2" cy="5.2" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="10.6" cy="10.8" r="1.5" fill="currentColor" stroke="none"></circle></symbol>
+<symbol id="ic-script" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 2.4h8.8v11.2H3.6z"></path><path d="M5.9 5.4h4.2M5.9 8h4.2M5.9 10.6h2.4"></path></symbol>
+<symbol id="ic-person" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.4"></circle><path d="M3.4 13.6c0-2.5 2.1-4 4.6-4s4.6 1.5 4.6 4"></path></symbol>
+<symbol id="ic-docs" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="3.4" width="11.2" height="9.2" rx="1.3"></rect><path d="M2.4 6.6h11.2M6.9 6.6v6"></path></symbol>
+<symbol id="ic-trash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 4.8h9.6M6.4 4.8V3.2h3.2v1.6"></path><path d="M4.8 4.8l.6 8.4h5.2l.6-8.4"></path></symbol>
+<symbol id="ic-close" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"></path></symbol>
+<symbol id="ic-drag" viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r=".95"></circle><circle cx="10" cy="4" r=".95"></circle><circle cx="6" cy="8" r=".95"></circle><circle cx="10" cy="8" r=".95"></circle><circle cx="6" cy="12" r=".95"></circle><circle cx="10" cy="12" r=".95"></circle></symbol>
+<symbol id="ic-edit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.6 13.4 4.7 5.9 12.2l-2.8.7.7-2.8z"></path></symbol>
+<symbol id="ic-filter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 3.6h11.2L9.2 8.8v4.4L6.8 11.8V8.8z"></path></symbol>
+<symbol id="ic-sort" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4.4h10M3 8h6.6M3 11.6h3.6"></path></symbol>
+<symbol id="ic-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8.4 6.5 11.5 12.8 4.8"></path></symbol>
+<symbol id="ic-arr-l" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 4.2 5.8 8l3.8 3.8"></path></symbol>
+<symbol id="ic-arr-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 4.2 10.2 8l-3.8 3.8"></path></symbol>
+<symbol id="ic-expand" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 2.9h3.5v3.5M6.4 13.1H2.9V9.6M13.1 2.9 9.3 6.7M2.9 13.1l3.8-3.8"></path></symbol>
+<symbol id="ic-collapse" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.1 6.4H9.6V2.9M2.9 9.6h3.5v3.5M9.6 6.4l3.5-3.5M6.4 9.6l-3.5 3.5"></path></symbol>
+<symbol id="ic-bold" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 3h3.9a2.4 2.4 0 0 1 0 4.8H4.8z"></path><path d="M4.8 7.8h4.4a2.6 2.6 0 0 1 0 5.2H4.8z"></path></symbol>
+<symbol id="ic-italic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6.6 3h4.6M4.8 13h4.6M9.6 3 6.4 13"></path></symbol>
+<symbol id="ic-underline" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.9 3v4.8a3.1 3.1 0 0 0 6.2 0V3"></path><path d="M4 13.4h8"></path></symbol>
+<symbol id="ic-align" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4.4h10M3 8h6.8M3 11.6h10"></path></symbol>
+<symbol id="ic-list" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 4.4h7M6 8h7M6 11.6h7"></path><circle cx="3.3" cy="4.4" r=".9" fill="currentColor" stroke="none"></circle><circle cx="3.3" cy="8" r=".9" fill="currentColor" stroke="none"></circle><circle cx="3.3" cy="11.6" r=".9" fill="currentColor" stroke="none"></circle></symbol>
+<symbol id="ic-folder" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 4.2h4l1.3 1.7h5.9v7.1H2.4z"></path></symbol>
+<symbol id="ic-minus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3.4 8h9.2"></path></symbol>
+<symbol id="ic-strike" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 8h10.4"></path><path d="M5 5.2c.5-1.5 1.9-2.3 3.3-2.3 1.7 0 2.8.7 3.2 1.9"></path><path d="M11.2 10.4c-.2 1.7-1.5 2.7-3.3 2.7-1.6 0-2.9-.6-3.4-1.8"></path></symbol>
+<symbol id="ic-tcolor" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 10.8 7.3 2.8h1.4l3.7 8"></path><path d="M5.1 8.2h5.8"></path><path d="M3.4 13.8h9.2" stroke-width="2"></path></symbol>
+<symbol id="ic-marker" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 2.4 13.2 5.2 7.1 11.3H4.3V8.5z"></path><path d="M3.2 13.8h9.6" stroke-width="2"></path></symbol>
+<symbol id="ic-align-l" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.6 3.2h10.8M2.6 6.4h7M2.6 9.6h10.8M2.6 12.8h7"></path></symbol>
+<symbol id="ic-align-c" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.6 3.2h10.8M4.5 6.4h7M2.6 9.6h10.8M4.5 12.8h7"></path></symbol>
+<symbol id="ic-align-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.6 3.2h10.8M6.4 6.4h7M2.6 9.6h10.8M6.4 12.8h7"></path></symbol>
+<symbol id="ic-align-j" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.6 3.2h10.8M2.6 6.4h10.8M2.6 9.6h10.8M2.6 12.8h10.8"></path></symbol>
+<symbol id="ic-list-num" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 4.4h7M6 8h7M6 11.6h7"></path><path d="M2.6 4.4h1M2.6 8h1.7M2.6 11.6h2.3"></path></symbol>
+<symbol id="ic-indent" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h10.8M6.6 7.2h6.8M6.6 10.4h6.8M2.6 14.2h10.8"></path><path d="m2.6 6.6 2 2.2-2 2.2"></path></symbol>
+<symbol id="ic-outdent" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h10.8M6.6 7.2h6.8M6.6 10.4h6.8M2.6 14.2h10.8"></path><path d="m4.6 6.6-2 2.2 2 2.2"></path></symbol>
+<symbol id="ic-out" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.4"></circle><path d="M4.2 11.8 11.8 4.2"></path></symbol>
+<symbol id="ic-export" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10.2V2.9"></path><path d="M5.3 5.6 8 2.9l2.7 2.7"></path><path d="M2.9 9.6v2.3c0 .7.5 1.2 1.2 1.2h7.8c.7 0 1.2-.5 1.2-1.2V9.6"></path></symbol>
+</defs></svg>
+
+<div style="--sans:'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;--mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;--marca:'Courier New',Courier,monospace;--doc:'Courier Prime','Courier New',monospace;--chrome:#e8e9ec;--panel:#dfe1e6;--papel:#ffffff;--lienzo:#f5f6f8;--hover:#d8dae0;--tinta:#1b1d22;--tenue:#5a5f68;--palido:#878d97;--regla:#d7d9df;--borde:#c5c8d0;--borde-fuerte:#aab0bb;--cuadricula:#e2e4e9;--foco:#6141c9;--foco-claro:#6141c9;--foco-sobre:#ffffff;--foco-suave:#e9e6f8;--foco-halo:rgba(97,65,201,.2);--foco-linea:rgba(97,65,201,.42);--foco-banda:rgba(97,65,201,.055);--sel-bg:#dfd9f4;--drop-bg:rgba(97,65,201,.09);--peligro:#c4291c;--ok:#12803f;--nota:#f7efd9;--nota-borde:#ddcda2;--nota-tinta:#6b5321;--sombra:0 1px 1px rgba(24,24,32,.05);--sombra-alta:0 1px 2px rgba(24,24,32,.07),0 10px 24px rgba(24,24,32,.1);--sombra-lado:1px 0 0 rgba(24,24,32,.04);--inverso:#f4f4f6;--t-rojo:#c62828;--f-rojo:#ffe2e2;--t-ladrillo:#d14a1f;--f-ladrillo:#ffe6dc;--t-cobre:#d2691e;--f-cobre:#ffeddb;--t-ambar:#c98a00;--f-ambar:#fff2d0;--t-oro:#9a7b0a;--f-oro:#f7eecb;--t-lima:#6e9a16;--f-lima:#eef8d4;--t-oliva:#4f7a1e;--f-oliva:#e6f5d5;--t-verde:#16803c;--f-verde:#d9f5e2;--t-esmeralda:#0a8a5c;--f-esmeralda:#d5f5e7;--t-teal:#0b8b82;--f-teal:#d3f4f1;--t-turquesa:#0e8aa8;--f-turquesa:#d4f2fa;--t-cielo:#0378c0;--f-cielo:#d7eefe;--t-azul:#1a63d0;--f-azul:#dfe9ff;--t-marino:#17417e;--f-marino:#dde6f7;--t-pizarra:#3e4a5c;--f-pizarra:#e4e9f0;--t-indigo:#4b34cc;--f-indigo:#e5e1ff;--t-violeta:#6d28d9;--f-violeta:#ebe0ff;--t-uva:#8a2bc4;--f-uva:#f2e0ff;--t-ciruela:#a21caf;--f-ciruela:#fbe0fb;--t-magenta:#bf1b8a;--f-magenta:#ffe0f4;--t-rosa:#d31a6b;--f-rosa:#ffe0ec;--t-vino:#96153f;--f-vino:#ffdfe8;--t-salvia:#5a7a63;--f-salvia:#e4f0e8;--t-gris:#5d5d68;--f-gris:#e9e7ee;--escena:#f5dc9a;--escena-trazo:#c98a00;--rombo:#ddc7f8;--rombo-trazo:#6d28d9;--bb-bg:#e8e9ec;--bb-fg:#1b1d22;--bb-muted:#5a5f68;--bb-line:#c5c8d0;--bb-activo-tinta:#ffffff;--toast-bg:#2b2b31;--toast-fg:#ececef;--toast-acento:#b3a6f7;--backdrop:rgba(24,24,32,.34);--sombra-modal:0 4px 10px rgba(24,24,32,.14),0 24px 60px rgba(24,24,32,.22);--p-grafito-bg:#e6e2ee;--p-grafito-tinta:#3c3648;--logo-1:#2f2f2f;--logo-2:#707070;--logo-3:#d5b3ea;--p-azul-bg:#dbe8ff;--p-azul-tinta:#1a4a86;--p-verde-bg:#d8f2df;--p-verde-tinta:#11643d;--p-violeta-bg:#eae0ff;--p-violeta-tinta:#5326ab;--p-ambar-bg:#ffeec9;--p-ambar-tinta:#875408;--p-teal-bg:#d2f0ed;--p-teal-tinta:#0a6663;--p-rosa-bg:#ffe0ea;--p-rosa-tinta:#a51a5a;--p-violeta-linea:rgba(83,38,171,.4);--p-azul-linea:rgba(26,74,134,.4);--p-teal-linea:rgba(10,102,99,.4);font-family:var(--sans);color:var(--tinta);padding:40px;display:flex;flex-direction:column;gap:40px">
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:14px;max-width:960px">
+      <span style="font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--palido)">01</span>
+      <span style="font-size:23px;font-weight:600;letter-spacing:-.015em">Detalle del nodo sin panel lateral</span>
+      <div style="flex:1;height:1px;background:var(--regla)"></div>
+    </div>
+    <div style="max-width:780px;font-size:13.5px;line-height:1.6;color:var(--tenue);text-wrap:pretty">Tres formas de resolver lo mismo que hace el panel de 330 px —saber qué está seleccionado y poder editar su detalle— sin robarle ancho permanente al lienzo. Las tres conviven con el mismo esquema y la misma barra inferior; cambia dónde aparece el detalle y cuánto dura en pantalla.</div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:36px">
+
+      <div id="1a" style="width:940px;display:flex;flex-direction:column;gap:13px">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:3px;background:var(--tinta);color:#fff;font-family:var(--mono);font-size:10px;letter-spacing:.08em;font-weight:500">1a</span>
+          <span style="font-size:15.5px;font-weight:600">Ficha flotante anclada al nodo</span>
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--palido)">APARECE Y SE VA</span>
+        </div>
+
+        <div style="height:470px;display:flex;flex-direction:column;background:var(--lienzo);border:1px solid var(--borde-fuerte);border-radius:6px;overflow:hidden;box-shadow:0 1px 2px rgba(24,24,32,.07),0 10px 24px rgba(24,24,32,.09)">
+          <div style="height:42px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--regla)">
+            <span style="font-family:var(--mono);font-size:13px;letter-spacing:.02em;color:var(--palido)">CAPÍTULO I</span>
+            <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--f-violeta);border:1px solid var(--t-violeta);color:var(--t-violeta)">Esquema</span>
+            <span style="font-family:var(--mono);font-size:14px;font-weight:600">Esquema 1</span>
+            <div style="flex:1"></div>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--palido)">LIENZO COMPLETO · 896 PX</span>
+          </div>
+          <div style="height:30px;flex:none;display:flex;border-bottom:1px solid var(--regla)">
+            <div style="width:44px;flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--regla);font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--palido)">TR</div>
+            <div style="width:300px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-azul);border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO I</div>
+            <div style="width:260px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-ambar);border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO II</div>
+            <div style="flex:1;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-verde);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO III</div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex">
+            <div style="width:44px;flex:none;border-right:1px solid var(--regla);display:flex;flex-direction:column">
+              <div style="height:74px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-violeta);border:1px solid var(--t-violeta);color:var(--t-violeta);font-family:var(--mono);font-size:11.5px;font-weight:600">P</span></div>
+              <div style="height:74px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula)"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-azul);border:1px solid var(--t-azul);color:var(--t-azul);font-family:var(--mono);font-size:11.5px;font-weight:600">S</span></div>
+              <div style="height:74px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula)"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-verde);border:1px solid var(--t-verde);color:var(--t-verde);font-family:var(--mono);font-size:11.5px;font-weight:600">A</span></div>
+              <div style="height:30px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--palido)"><svg width="13" height="13"><use href="#ic-plus"></use></svg></div>
+            </div>
+            <div style="flex:1;min-width:0;position:relative;background:repeating-linear-gradient(90deg,var(--cuadricula) 0 1px,transparent 1px 49px)">
+
+              <div style="position:absolute;left:0;top:0;right:0;height:74px;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:var(--t-violeta);opacity:.62"></div>
+                <div style="position:absolute;left:0;top:36px;width:245px;height:2px;background:var(--foco-linea)"></div>
+                <div style="position:absolute;left:78px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:78px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:78px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Inicio</div>
+                <div style="position:absolute;left:245px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--foco);border:2px solid var(--foco);box-shadow:0 0 0 4px var(--foco-halo)"></div>
+                <div style="position:absolute;left:245px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:245px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--foco-linea);border-radius:4px;box-shadow:var(--sombra-alta);font-size:11.5px;font-weight:600;white-space:nowrap">Encuentro</div>
+                <div style="position:absolute;left:450px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:450px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:450px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Huida</div>
+                <div style="position:absolute;left:660px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:660px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:660px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Puerto</div>
+              </div>
+
+              <div style="position:absolute;left:0;top:74px;right:0;height:74px;border-bottom:1px solid var(--cuadricula)">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:var(--t-azul);opacity:.62"></div>
+                <div style="position:absolute;left:300px;top:37px;transform:translate(-50%,-50%) rotate(45deg);width:10px;height:10px;border-radius:2px;background:var(--rombo);border:2px solid var(--rombo-trazo)"></div>
+                <div style="position:absolute;left:390px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-azul)"></div>
+                <div style="position:absolute;left:390px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:390px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Aviso</div>
+                <div style="position:absolute;left:700px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px dashed var(--t-gris);opacity:.6"></div>
+              </div>
+
+              <div style="position:absolute;left:0;top:148px;right:0;height:74px;border-bottom:1px solid var(--cuadricula)">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:repeating-linear-gradient(90deg,var(--t-verde) 0 6px,transparent 6px 11px);opacity:.6"></div>
+                <div style="position:absolute;left:160px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-verde)"></div>
+                <div style="position:absolute;left:160px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:160px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Llega</div>
+                <div style="position:absolute;left:450px;top:37px;transform:translate(-50%,-50%);width:21px;height:21px;display:flex;align-items:center;justify-content:center;border-radius:4px;border:1px dashed var(--borde-fuerte);color:var(--palido);background:var(--papel)"><svg width="11" height="11"><use href="#ic-plus"></use></svg></div>
+              </div>
+
+              <div style="position:absolute;left:245px;top:44px;width:12px;height:12px;transform:translate(-50%,0) rotate(45deg);background:var(--papel);border-left:1px solid var(--borde);border-top:1px solid var(--borde);z-index:9"></div>
+              <div style="position:absolute;left:213px;top:50px;width:318px;box-sizing:border-box;z-index:8;background:var(--papel);border:1px solid var(--borde);border-radius:7px;box-shadow:var(--sombra-alta);display:flex;flex-direction:column">
+                <div style="display:flex;align-items:center;gap:8px;padding:9px 11px 9px 13px;border-bottom:1px solid var(--regla)">
+                  <span style="width:8px;height:8px;border-radius:50%;background:var(--t-violeta);flex:none"></span>
+                  <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido)">PRINCIPAL · ACTO I</span>
+                  <div style="flex:1"></div>
+                  <div style="display:flex;gap:3px">
+                    <div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--tenue)"><svg width="12" height="12"><use href="#ic-arr-l"></use></svg></div>
+                    <div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--tenue)"><svg width="12" height="12"><use href="#ic-arr-r"></use></svg></div>
+                    <div style="width:22px;height:22px;margin-left:4px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--tenue)"><svg width="13" height="13"><use href="#ic-close"></use></svg></div>
+                  </div>
+                </div>
+                <div style="padding:11px 13px 13px;display:flex;flex-direction:column;gap:10px">
+                  <div style="height:32px;display:flex;align-items:center;padding:0 10px;background:var(--lienzo);border:1px solid var(--foco);border-radius:5px;box-shadow:0 0 0 3px var(--foco-halo);font-size:14px;font-weight:500">Encuentro</div>
+                  <div style="padding:9px 11px;background:var(--lienzo);border:1px solid var(--borde);border-radius:5px;font-size:12.5px;line-height:1.5;color:var(--tinta);text-wrap:pretty">Ana vuelve a la cafetería del puerto y reconoce a quien no esperaba. Primer punto de giro del acto.</div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div style="flex:1;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--lienzo);border:1px solid var(--borde);border-radius:5px;font-size:12.5px">En escena<div style="flex:1"></div><svg width="12" height="12" style="color:var(--palido)"><use href="#ic-chev-d"></use></svg></div>
+                    <div style="height:30px;display:inline-flex;align-items:center;gap:7px;padding:0 11px;border-radius:5px;background:var(--foco);color:var(--foco-sobre);font-size:12.5px;font-weight:500;white-space:nowrap"><svg width="13" height="13"><use href="#ic-script"></use></svg>Abrir</div>
+                    <div style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:5px;background:var(--lienzo);color:var(--peligro)"><svg width="13" height="13"><use href="#ic-trash"></use></svg></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;font-size:12.5px;line-height:1.55;color:var(--tenue)">
+          <div><b style="color:var(--tinta);font-weight:600">Gana.</b> El detalle sale donde estás mirando y el lienzo nunca pierde ancho. Se cierra con <span style="font-family:var(--mono);font-size:11.5px">ESC</span> o al pinchar fuera, y viaja con el nodo al desplazar el esquema.</div>
+          <div><b style="color:var(--tinta);font-weight:600">Cuesta.</b> Tapa parte de las tramas de abajo y no sirve para comparar dos nodos seguidos; con el esquema muy lleno hay que decidir a qué lado se abre.</div>
+        </div>
+      </div>
+
+      <div id="1b" style="width:940px;display:flex;flex-direction:column;gap:13px">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:3px;background:var(--tinta);color:#fff;font-family:var(--mono);font-size:10px;letter-spacing:.08em;font-weight:500">1b</span>
+          <span style="font-size:15.5px;font-weight:600">Barra de inspección abajo</span>
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--palido)">SIEMPRE EN EL MISMO SITIO</span>
+        </div>
+
+        <div style="height:470px;display:flex;flex-direction:column;background:var(--lienzo);border:1px solid var(--borde-fuerte);border-radius:6px;overflow:hidden;box-shadow:0 1px 2px rgba(24,24,32,.07),0 10px 24px rgba(24,24,32,.09)">
+          <div style="height:42px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--regla)">
+            <span style="font-family:var(--mono);font-size:13px;letter-spacing:.02em;color:var(--palido)">CAPÍTULO I</span>
+            <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--f-violeta);border:1px solid var(--t-violeta);color:var(--t-violeta)">Esquema</span>
+            <span style="font-family:var(--mono);font-size:14px;font-weight:600">Esquema 1</span>
+            <div style="flex:1"></div>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--palido)">DETALLE 116 PX DE ALTO</span>
+          </div>
+          <div style="height:30px;flex:none;display:flex;border-bottom:1px solid var(--regla)">
+            <div style="width:44px;flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--regla);font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--palido)">TR</div>
+            <div style="width:300px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-azul);border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO I</div>
+            <div style="width:260px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-ambar);border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO II</div>
+            <div style="flex:1;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-verde);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO III</div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex">
+            <div style="width:44px;flex:none;border-right:1px solid var(--regla);display:flex;flex-direction:column">
+              <div style="height:74px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-violeta);border:1px solid var(--t-violeta);color:var(--t-violeta);font-family:var(--mono);font-size:11.5px;font-weight:600">P</span></div>
+              <div style="height:74px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula)"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-azul);border:1px solid var(--t-azul);color:var(--t-azul);font-family:var(--mono);font-size:11.5px;font-weight:600">S</span></div>
+              <div style="height:74px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula)"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-verde);border:1px solid var(--t-verde);color:var(--t-verde);font-family:var(--mono);font-size:11.5px;font-weight:600">A</span></div>
+            </div>
+            <div style="flex:1;min-width:0;position:relative;background:repeating-linear-gradient(90deg,var(--cuadricula) 0 1px,transparent 1px 49px)">
+              <div style="position:absolute;left:0;top:0;right:0;height:74px;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:var(--t-violeta);opacity:.62"></div>
+                <div style="position:absolute;left:0;top:36px;width:245px;height:2px;background:var(--foco-linea)"></div>
+                <div style="position:absolute;left:78px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:78px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:78px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Inicio</div>
+                <div style="position:absolute;left:245px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--foco);border:2px solid var(--foco);box-shadow:0 0 0 4px var(--foco-halo)"></div>
+                <div style="position:absolute;left:245px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:245px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--foco-linea);border-radius:4px;box-shadow:var(--sombra-alta);font-size:11.5px;font-weight:600;white-space:nowrap">Encuentro</div>
+                <div style="position:absolute;left:450px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:450px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:450px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Huida</div>
+                <div style="position:absolute;left:660px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:660px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:660px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Puerto</div>
+              </div>
+              <div style="position:absolute;left:0;top:74px;right:0;height:74px;border-bottom:1px solid var(--cuadricula)">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:var(--t-azul);opacity:.62"></div>
+                <div style="position:absolute;left:300px;top:37px;transform:translate(-50%,-50%) rotate(45deg);width:10px;height:10px;border-radius:2px;background:var(--rombo);border:2px solid var(--rombo-trazo)"></div>
+                <div style="position:absolute;left:390px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-azul)"></div>
+                <div style="position:absolute;left:390px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:390px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Aviso</div>
+                <div style="position:absolute;right:16px;top:44px;width:136px;box-sizing:border-box;padding:6px 8px;background:var(--nota);border:1px solid var(--nota-borde);border-radius:4px;font-size:11px;line-height:1.35;color:var(--nota-tinta);box-shadow:var(--sombra)">¿Aquí revela la carta?</div>
+              </div>
+              <div style="position:absolute;left:0;top:148px;right:0;height:74px;border-bottom:1px solid var(--cuadricula)">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:repeating-linear-gradient(90deg,var(--t-verde) 0 6px,transparent 6px 11px);opacity:.6"></div>
+                <div style="position:absolute;left:160px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-verde)"></div>
+                <div style="position:absolute;left:160px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:160px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Llega</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:116px;flex:none;box-sizing:border-box;display:flex;align-items:stretch;gap:0;padding:0;background:var(--papel);border-top:1px solid var(--borde-fuerte);box-shadow:0 -1px 0 rgba(24,24,32,.04)">
+            <div style="width:236px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:7px;padding:0 16px;border-right:1px solid var(--regla)">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:8px;height:8px;border-radius:50%;background:var(--t-violeta);flex:none"></span>
+                <span style="font-size:15px;font-weight:600">Encuentro</span>
+              </div>
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;color:var(--palido)">PRINCIPAL · ACTO I · 2.º DE 4</span>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+                <div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--tenue)"><svg width="12" height="12"><use href="#ic-arr-l"></use></svg></div>
+                <div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:4px;background:var(--lienzo);color:var(--tenue)"><svg width="12" height="12"><use href="#ic-arr-r"></use></svg></div>
+                <span style="font-family:var(--mono);font-size:9px;letter-spacing:.07em;color:var(--palido);margin-left:2px">TAB SALTA</span>
+              </div>
+            </div>
+            <div style="flex:1;min-width:0;box-sizing:border-box;display:flex;flex-direction:column;gap:5px;justify-content:center;padding:0 16px;border-right:1px solid var(--regla)">
+              <span style="font-family:var(--mono);font-size:9px;letter-spacing:.09em;color:var(--palido)">DESCRIPCIÓN</span>
+              <div style="padding:8px 10px;background:var(--lienzo);border:1px solid var(--borde);border-radius:5px;font-size:12.5px;line-height:1.45;color:var(--tinta);text-wrap:pretty">Ana vuelve a la cafetería del puerto y reconoce a quien no esperaba. Primer punto de giro del acto: a partir de aquí ya no puede fingir que el viaje era por trabajo.</div>
+            </div>
+            <div style="width:212px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:0 16px">
+              <div style="height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--lienzo);border:1px solid var(--borde);border-radius:5px;font-size:12.5px">En escena<div style="flex:1"></div><svg width="12" height="12" style="color:var(--palido)"><use href="#ic-chev-d"></use></svg></div>
+              <div style="display:flex;align-items:center;gap:7px">
+                <div style="flex:1;height:30px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:5px;background:var(--foco);color:var(--foco-sobre);font-size:12.5px;font-weight:500"><svg width="13" height="13"><use href="#ic-script"></use></svg>Abrir</div>
+                <div style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:5px;background:var(--lienzo);color:var(--peligro)"><svg width="13" height="13"><use href="#ic-trash"></use></svg></div>
+                <div style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:5px;background:var(--lienzo);color:var(--tenue)"><svg width="13" height="13"><use href="#ic-chev-d"></use></svg></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;font-size:12.5px;line-height:1.55;color:var(--tenue)">
+          <div><b style="color:var(--tinta);font-weight:600">Gana.</b> Nunca tapa el esquema y el sitio del detalle es siempre el mismo, así que con <span style="font-family:var(--mono);font-size:11.5px">TAB</span> se recorren nodos leyendo abajo sin que nada se mueva. Se pliega a 32 px y deja solo el nombre.</div>
+          <div><b style="color:var(--tinta);font-weight:600">Cuesta.</b> Quita 116 px de alto, que es justo lo que le falta a una trama más; la descripción larga se lee en un campo ancho y bajo, peor que en columna.</div>
+        </div>
+      </div>
+
+      <div id="1c" style="width:940px;display:flex;flex-direction:column;gap:13px">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:3px;background:var(--tinta);color:#fff;font-family:var(--mono);font-size:10px;letter-spacing:.08em;font-weight:500">1c</span>
+          <span style="font-size:15.5px;font-weight:600">El nodo se abre en el eje</span>
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--palido)">SIN COMPONENTE NUEVO</span>
+        </div>
+
+        <div style="height:470px;display:flex;flex-direction:column;background:var(--lienzo);border:1px solid var(--borde-fuerte);border-radius:6px;overflow:hidden;box-shadow:0 1px 2px rgba(24,24,32,.07),0 10px 24px rgba(24,24,32,.09)">
+          <div style="height:42px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--regla)">
+            <span style="font-family:var(--mono);font-size:13px;letter-spacing:.02em;color:var(--palido)">CAPÍTULO I</span>
+            <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--f-violeta);border:1px solid var(--t-violeta);color:var(--t-violeta)">Esquema</span>
+            <span style="font-family:var(--mono);font-size:14px;font-weight:600">Esquema 1</span>
+            <div style="flex:1"></div>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--palido)">LA FILA CRECE A 168 PX</span>
+          </div>
+          <div style="height:30px;flex:none;display:flex;border-bottom:1px solid var(--regla)">
+            <div style="width:44px;flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--regla);font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--palido)">TR</div>
+            <div style="width:300px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-azul);border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO I</div>
+            <div style="width:260px;flex:none;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-ambar);border-right:1px solid var(--regla);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO II</div>
+            <div style="flex:1;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;background:var(--f-verde);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tenue)">ACTO III</div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex">
+            <div style="width:44px;flex:none;border-right:1px solid var(--regla);display:flex;flex-direction:column">
+              <div style="height:168px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-violeta);border:1px solid var(--t-violeta);color:var(--t-violeta);font-family:var(--mono);font-size:11.5px;font-weight:600">P</span></div>
+              <div style="height:74px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula);opacity:.55"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-azul);border:1px solid var(--t-azul);color:var(--t-azul);font-family:var(--mono);font-size:11.5px;font-weight:600">S</span></div>
+              <div style="height:74px;flex:none;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--cuadricula);opacity:.55"><span style="width:23px;height:23px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--f-verde);border:1px solid var(--t-verde);color:var(--t-verde);font-family:var(--mono);font-size:11.5px;font-weight:600">A</span></div>
+            </div>
+            <div style="flex:1;min-width:0;position:relative;background:repeating-linear-gradient(90deg,var(--cuadricula) 0 1px,transparent 1px 49px)">
+
+              <div style="position:absolute;left:0;top:0;right:0;height:168px;border-bottom:1px solid var(--cuadricula);background:var(--foco-banda)">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:var(--t-violeta);opacity:.62"></div>
+                <div style="position:absolute;left:0;top:36px;width:245px;height:2px;background:var(--foco-linea)"></div>
+                <div style="position:absolute;left:78px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:78px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:78px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Inicio</div>
+                <div style="position:absolute;left:245px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--foco);border:2px solid var(--foco);box-shadow:0 0 0 4px var(--foco-halo);z-index:4"></div>
+                <div style="position:absolute;left:450px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:450px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:450px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Huida</div>
+                <div style="position:absolute;left:660px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-violeta)"></div>
+                <div style="position:absolute;left:660px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:660px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;box-shadow:var(--sombra);font-size:11.5px;color:var(--tenue);white-space:nowrap">Puerto</div>
+
+                <div style="position:absolute;left:245px;top:44px;width:1px;height:10px;background:var(--foco-linea)"></div>
+                <div style="position:absolute;left:141px;top:54px;width:288px;box-sizing:border-box;background:var(--papel);border:1px solid var(--foco);border-radius:6px;box-shadow:var(--sombra-alta);display:flex;flex-direction:column;z-index:3">
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 10px 0 11px">
+                    <input value="Encuentro" style="flex:1;min-width:0;height:26px;box-sizing:border-box;padding:0 8px;background:var(--lienzo);border:1px solid var(--foco);border-radius:4px;box-shadow:0 0 0 3px var(--foco-halo);font-family:var(--sans);font-size:13.5px;font-weight:600;color:var(--tinta)">
+                    <div style="display:flex;gap:2px;flex:none">
+                      <div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--tenue)"><svg width="13" height="13"><use href="#ic-more"></use></svg></div>
+                      <div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--tenue)"><svg width="13" height="13"><use href="#ic-close"></use></svg></div>
+                    </div>
+                  </div>
+                  <div style="padding:8px 11px 0;font-size:12.5px;line-height:1.5;color:var(--tinta);text-wrap:pretty">Ana vuelve a la cafetería del puerto y reconoce a quien no esperaba. Primer punto de giro del acto.</div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:9px 11px 9px;margin-top:8px;border-top:1px solid var(--regla)">
+                    <span style="display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:4px;background:var(--lienzo);border:1px solid var(--borde);font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--tenue)">EN ESCENA<svg width="10" height="10" style="color:var(--palido)"><use href="#ic-chev-d"></use></svg></span>
+                    <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--palido)">PRINCIPAL</span>
+                    <div style="flex:1"></div>
+                    <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:4px;background:var(--foco);color:var(--foco-sobre);font-size:12px;font-weight:500;white-space:nowrap"><svg width="12" height="12"><use href="#ic-script"></use></svg>Abrir</span>
+                    <div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:var(--peligro)"><svg width="13" height="13"><use href="#ic-trash"></use></svg></div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="position:absolute;left:0;top:168px;right:0;height:74px;border-bottom:1px solid var(--cuadricula);opacity:.55">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:var(--t-azul);opacity:.62"></div>
+                <div style="position:absolute;left:300px;top:37px;transform:translate(-50%,-50%) rotate(45deg);width:10px;height:10px;border-radius:2px;background:var(--rombo);border:2px solid var(--rombo-trazo)"></div>
+                <div style="position:absolute;left:390px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-azul)"></div>
+                <div style="position:absolute;left:390px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:390px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;font-size:11.5px;color:var(--tenue);white-space:nowrap">Aviso</div>
+              </div>
+
+              <div style="position:absolute;left:0;top:242px;right:0;height:74px;opacity:.55">
+                <div style="position:absolute;left:0;right:0;top:36px;height:2px;background:repeating-linear-gradient(90deg,var(--t-verde) 0 6px,transparent 6px 11px);opacity:.6"></div>
+                <div style="position:absolute;left:160px;top:37px;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:var(--papel);border:2px solid var(--t-verde)"></div>
+                <div style="position:absolute;left:160px;top:24px;width:1px;height:7px;background:var(--borde-fuerte)"></div><div style="position:absolute;left:160px;top:4px;transform:translateX(-50%);padding:2px 7px;background:var(--papel);border:1px solid var(--borde);border-radius:4px;font-size:11.5px;color:var(--tenue);white-space:nowrap">Llega</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;font-size:12.5px;line-height:1.55;color:var(--tenue)">
+          <div><b style="color:var(--tinta);font-weight:600">Gana.</b> No hay panel: el rótulo del nodo crece en su sitio y la fila de la trama se abre para dejarle hueco, así que se edita mirando exactamente donde está la historia. Las otras tramas bajan, no se tapan.</div>
+          <div><b style="color:var(--tinta);font-weight:600">Cuesta.</b> El esquema se reacomoda al seleccionar, que es el movimiento que el panel evitaba; con dos nodos pegados la tarjeta se solapa y hay que desplazarla, y los campos son más estrechos.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+</x-dc>
+</body>
+</html>

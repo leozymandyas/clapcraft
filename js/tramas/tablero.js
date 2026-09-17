@@ -14,7 +14,13 @@
   /* Alto de carril y del eje: los fija la hoja de estilos (--fila, --eje) para que la piel de
      ClapCraft pueda cambiarlos sin desalinear los cables del SVG; si no están, 120 y 44. */
   const medida = (v, defecto) => { const n = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v)); return n > 0 ? n : defecto; };
-  let FILA = medida('--fila', 120);                // el alto de carril se puede cambiar: T.tablero.alto()
+  let FILA_BASE = medida('--fila', 120);           // el alto de carril que pide la vista (T.tablero.alto())
+  /* **Cada fila tiene su alto** (Leo, 16-09-2026: «si en una trama tengo notas, está bien que se haga más ancha la fila,
+     pero si tengo más tramas se hacen igual de anchas aunque no existan notas»): crece la que no da para sus rótulos y
+     sus notas, las demás se quedan en FILA_BASE. `GEO` lleva, por trama, dónde empieza, cuánto mide y dónde va su carril. */
+  let GEO = new Map();                             // lineaId → { top, alto, centro } (top desde el final del eje)
+  const geo = lineaId => GEO.get(lineaId) || { top: Math.max(0, filaDe(lineaId)) * FILA_BASE, alto: FILA_BASE, centro: FILA_BASE / 2 };
+  const altoFilas = () => m.datos.lineas.reduce((t, l) => t + geo(l.id).alto, 0);
   const EJE = medida('--eje', 44);
   /* Los colores se pintan como variables CSS (css/tramas.css las define para el tema claro y el
      oscuro), así cambiar de tema no obliga a redibujar. Solo el globo necesita el valor real. */
@@ -29,7 +35,7 @@
   /* iconos de trazo del panel (rejilla de 16, como el sprite de ClapCraft, pero sin depender de él) */
   const svg = d => `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const ICONO = { izq: svg('<path d="M9.6 4.2 5.8 8l3.8 3.8"/>'), der: svg('<path d="M6.4 4.2 10.2 8l-3.8 3.8"/>'),
-    cerrar: svg('<path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/>'), borrar: svg('<path d="M3.2 4.8h9.6M6.4 4.8V3.2h3.2v1.6"/><path d="M4.8 4.8l.6 8.4h5.2l.6-8.4"/>') };
+    cerrar: svg('<path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/>'), chev: svg('<path d="M4.2 6.4 8 10.2l3.8-3.8"/>'), borrar: svg('<path d="M3.2 4.8h9.6M6.4 4.8V3.2h3.2v1.6"/><path d="M4.8 4.8l.6 8.4h5.2l.6-8.4"/>') };
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   let m = null;                          // T.Modelo
@@ -42,19 +48,25 @@
   const SIN_PRESENCIA = { fuera: () => false, tramoFuera: () => false, lineaEnFlujo: () => false };
   const historial = new T.Historial(80);
   let restaurando = false;
-  const ganchos = { alCambiar: () => {} };
+  const ganchos = { alCambiar: () => {}, alPanel: null };        // alPanel: el alto del panel de abajo, para recordarlo
 
   let $nombres;                          // capa con el nombre de cada salto sobre su trazo (Leo, 15-09-2026)
   let $axis, $rows, $cables, $canvas, $board, $panel, $menu, $tip, $aviso, $celda;
 
   /* ---------- geometría: celdas → píxeles (única capa que conoce píxeles) ---------- */
   const G = () => BASE * zoom;
-  const totalW = () => m.totalCeldas() * G();
+  /* Delante de la primera columna queda un hueco de una celda (Leo, 16-09-2026: «deja un espacio, como punto 0, pero sin
+     el 0, donde no se pone nada»): así la columna 1 se ve entera y no queda pegada a la columna de tramas. Todo lo que
+     pasa de celdas a píxeles va por `px()`, y de píxeles a celdas, por `celdaEn()`. */
+  const MARGEN = () => G();
+  const px = cg => MARGEN() + cg * G();
+  const celdaEn = x => (x - MARGEN()) / G();
+  const totalW = () => px(m.totalCeldas());
   const anchoDe = a => a.celdas * G();
-  const offsetDe = actoId => m.celdasAntes(actoId) * G();
-  const xDe = p => m.cg(p) * G();
+  const offsetDe = actoId => px(m.celdasAntes(actoId));
+  const xDe = p => px(m.cg(p));
   const filaDe = lineaId => m.datos.lineas.findIndex(l => l.id === lineaId);
-  const yFila = lineaId => EJE + filaDe(lineaId) * FILA + FILA / 2;
+  const yFila = lineaId => { const g = geo(lineaId); return EJE + g.top + g.centro; };
   const yDe = p => yFila(p.lineaId);
   // borde izquierdo a partir del cual empieza la zona donde sí se puede soltar: el borde derecho de la
   // columna de tramas tal como se ve (si el CSS la contrae, la zona útil empieza antes)
@@ -65,13 +77,13 @@
 
   /* ---------- selección ---------- */
   const esSel = (tipo, id) => !!sel && sel.tipo === tipo && sel.id === id;
-  function elegir(tipo, id) { sel = { tipo, id }; render(); }
+  function elegir(tipo, id) { sel = { tipo, id }; sinRuta = false; render(); }
   function limpiarSelDOM() {
-    document.querySelectorAll('.pt.sel,.label.sel,.acto.sel,.nota.sel').forEach(x => x.classList.remove('sel'));
+    document.querySelectorAll('.pt.sel,.label.sel,.acto.sel,.nota.sel,.cadena.sel').forEach(x => x.classList.remove('sel'));
   }
   /* Selecciona sin reconstruir el tablero: solo cambia clases, el panel y el recorrido. */
   function seleccionSuave(tipo, id, el) {
-    sel = { tipo, id }; limpiarSelDOM();
+    sel = { tipo, id }; sinRuta = false; limpiarSelDOM();
     if (el) el.classList.add('sel');
     panel(); pintarRuta();
   }
@@ -81,8 +93,11 @@
   /* ====================================================================
      Render
      ==================================================================== */
+  /* `sinRuta`: Esc apaga el camino iluminado del nodo elegido, pero lo deja elegido (Leo, 16-09-2026: «Esc solo debe ser
+     para escapar de que se me muestre el recorrido, no para cerrar el panel»). Elegir otra cosa lo vuelve a encender. */
+  let sinRuta = false;
   function calcularRuta() {
-    ruta = (!simple && sel && sel.tipo === 'punto') ? m.recorrido(sel.id, pres) : null;
+    ruta = (!simple && !sinRuta && sel && sel.tipo === 'punto') ? m.recorrido(sel.id, pres) : null;
   }
   const enRuta = (lineaId, ca, cb) => !!ruta && ruta.incluye(lineaId, ca, cb);
 
@@ -94,13 +109,16 @@
     $canvas.style.width = (GUTTER + W + 46) + 'px';
 
     $axis.innerHTML = `<div class="gutter">Tramas</div>
-      <div class="acts" style="width:${W + 46}px">
-        ${d.actos.map(a => `<div class="acto${esSel('acto', a.id) ? ' sel' : ''}" data-acto="${a.id}"
-             style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondoActo(a)}">
-            <input class="aname" readonly data-acto-nombre="${a.id}" title="Clic: seleccionar · doble clic: renombrar">
-            ${d.actos.length > 1 ? `<button class="mini" data-acto-del="${a.id}" title="Eliminar ${esc(m.nombre('acto').toLowerCase())}">×</button>` : ''}
-            <span class="handle" data-handle="${a.id}" title="Arrastra para cambiar el ancho"></span></div>`).join('')}
-        <button class="add-acto" id="addActo" style="left:${W}px" title="Nuevo ${esc(m.nombre('acto').toLowerCase())}">+</button>
+      <div class="eje-cuerpo" style="width:${W + 46}px">
+        <div class="acts">
+          ${d.actos.map(a => `<div class="acto${esSel('acto', a.id) ? ' sel' : ''}" data-acto="${a.id}"
+               style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondoActo(a)}">
+              <input class="aname" readonly data-acto-nombre="${a.id}" title="Clic: seleccionar · doble clic: renombrar">
+              ${d.actos.length > 1 ? `<button class="mini" data-acto-del="${a.id}" title="Eliminar ${esc(m.nombre('acto').toLowerCase())}">×</button>` : ''}
+              <span class="handle" data-handle="${a.id}" title="Arrastra para cambiar el ancho"></span></div>`).join('')}
+          <button class="add-acto" id="addActo" style="left:${W}px" title="Nuevo ${esc(m.nombre('acto').toLowerCase())}">+</button>
+        </div>
+        <div class="cols">${columnasHtml()}</div>
       </div>`;
     d.actos.forEach(a => { $axis.querySelector(`[data-acto-nombre="${a.id}"]`).value = a.nombre; });
 
@@ -108,6 +126,7 @@
     const actoSel = sel && sel.tipo === 'acto' ? m.acto(sel.id) : null;
 
     $rows.innerHTML = '';
+    const filas = [];
     d.lineas.forEach(l => {
       const row = document.createElement('div');
       row.className = 'row ' + l.tipo + (l.cortada ? ' cortada' : '');
@@ -131,33 +150,21 @@
       const track = row.querySelector('.track');
       const props = m.puntosDe(l.id);
 
-      // notas ancladas a dos nodos de esta trama
-      d.notas.forEach(nt => {
-        const a = m.punto(nt.deId), b = m.punto(nt.aId);
-        if (!a || !b || a.lineaId !== l.id) return;
-        const x1 = Math.min(xDe(a), xDe(b)), x2 = Math.max(xDe(a), xDe(b));
+      /* las notas de la trama: las de un tramo (entre dos nodos) y las de un nodo; caben varias y se apilan
+         debajo del carril (Leo, 16-09-2026) */
+      m.notasDeLinea(l.id).forEach(nt => {
+        const a = m.punto(nt.deId), b = nt.aId && m.punto(nt.aId);
         const el = document.createElement('div');
-        el.className = 'nota' + (esSel('nota', nt.id) ? ' sel' : '') + (nt.color ? ' con-color' : '');
+        el.className = 'nota' + (b ? '' : ' de-nodo') + (esSel('nota', nt.id) ? ' sel' : '') + (nt.color ? ' con-color' : '');
         el.dataset.nota = nt.id;
         if (nt.color) { el.style.setProperty('--tc', tono(nt.color)); el.style.setProperty('--tf', `var(--f-${nt.color})`); }   // su tono: trazo y fondo pálido
-        el.style.left = x1 + 'px'; el.style.width = Math.max(30, x2 - x1) + 'px';
+        el.style.setProperty('--gl', tono(l.color));           // el color de su trama: la guía que la une a su nodo (Leo, 16-09-2026)
         const s = document.createElement('span'); s.textContent = nt.texto;
         el.appendChild(s); track.appendChild(el);
       });
 
-      // huecos: bajo la línea, entre dos nodos consecutivos sin nota (doble clic o icono crea una)
-      props.forEach((p, i) => {
-        const sig = props[i + 1]; if (!sig) return;
-        if (m.notaDe(p.id, sig.id)) return;
-        const x1 = xDe(p), x2 = xDe(sig); if (x2 - x1 < 44) return;
-        const h = document.createElement('div');
-        h.className = 'hueco'; h.style.left = x1 + 'px'; h.style.width = (x2 - x1) + 'px';
-        h.dataset.tramo = `${p.id}|${sig.id}`;
-        h.title = 'Doble clic para poner una nota';
-        h.innerHTML = `<button class="add-nota" data-nota-add="${p.id}|${sig.id}" title="Nota entre estos dos puntos">
-          <svg viewBox="0 0 14 14"><path d="M1.6 1.8h10.8v7.4H6.2L3.4 12V9.2H1.6z"/></svg></button>`;
-        track.appendChild(h);
-      });
+      /* ya no hay huecos con el icono de nota bajo cada tramo (Leo, 16-09-2026): el enlace se elige y su menú contextual
+         «Agregar nota» pone las que hagan falta */
 
       // cadena: el hilo de la historia de un nodo al siguiente
       for (let i = 0; i < props.length - 1; i++) {
@@ -167,14 +174,30 @@
         const seg = document.createElement('div');
         seg.className = 'cadena' + (pres.tramoFuera(l.id, ca, cb) ? ' fuera' : '') + (enRuta(l.id, ca, cb) ? ' ruta' : '');
         seg.dataset.ca = ca; seg.dataset.cb = cb;
+        seg.dataset.enlace = a.id;                             // se elige y tiene su menú (Leo, 16-09-2026)
+        if (sel && sel.tipo === 'enlace' && sel.id === a.id) seg.classList.add('sel');
         seg.style.left = x1 + 'px'; seg.style.width = (x2 - x1) + 'px';
-        seg.style.background = tono(l.color); seg.style.color = tono(l.color);
+        const ce = tono(a.colorEnlace || l.color);              // su color propio, o el de la trama
+        seg.style.background = ce; seg.style.color = ce;
         track.appendChild(seg);
       }
 
       props.forEach((p, i) => track.appendChild(nodo(p, l, i)));
       $rows.appendChild(row);
-      colocarRotulos(row);
+      filas.push(row);
+    });
+    /* el alto de carril que pide la vista, para todas las filas; la que no da para sus rótulos apilados y sus notas crece
+       **solo ella y solo lo que haga falta**, y su carril deja de ir centrado (Leo, 16-09-2026) */
+    document.documentElement.style.setProperty('--fila', FILA_BASE + 'px');
+    document.documentElement.style.setProperty('--centro', FILA_BASE / 2 + 'px');
+    GEO = new Map(); let top = 0;
+    filas.forEach(row => {
+      const r = colocarRotulos(row);
+      const cabe = r.arriba + r.abajo + 12 <= FILA_BASE;
+      const alto = cabe ? FILA_BASE : r.arriba + r.abajo + 12, centro = cabe ? FILA_BASE / 2 : r.arriba + 6;
+      if (cabe) { row.style.removeProperty('--fila'); row.style.removeProperty('--centro'); }
+      else { row.style.setProperty('--fila', alto + 'px'); row.style.setProperty('--centro', centro + 'px'); }
+      GEO.set(row.dataset.linea, { top, alto, centro }); top += alto;
     });
 
     const add = document.createElement('div');
@@ -185,10 +208,129 @@
     cables();
     panel();
     podarMulti();
+    pintarColumnas();
     if (!restaurando && !arrastrando()) registrar();
   }
 
-  function podarMulti() { [...multi].forEach(id => { if (!m.punto(id)) multi.delete(id); }); pintarMulti(); }
+  function podarMulti() { [...multi].forEach(id => { if (!m.punto(id)) multi.delete(id); }); [...multiNotas].forEach(id => { if (!m.nota(id)) multiNotas.delete(id); }); pintarMulti(); }
+
+  /* ---------- columnas: la tira de cabeceras del eje (Leo, 16-09-2026) ----------
+     Una cabecera por celda global, con su número si la escala da para leerlo. Elegir columnas es cosa
+     de la tira: el tablero solo las tiñe de arriba abajo (`.col-marca`, una por tramo seguido). */
+  function columnasHtml() {
+    const g = G(), n = m.totalCeldas(), num = g >= 22;
+    let h = '';
+    for (let c = 0; c < n; c++)                                 // la cabecera va centrada en la raya, no en el hueco (Leo, 16-09-2026)
+      h += `<div class="col${cols.has(c) ? ' sel' : ''}" data-col="${c}" style="left:${px(c) - g / 2}px;width:${g}px" title="Columna ${c + 1}: la raya vertical donde caen los nodos · clic: elegirla · arrastra o Mayús: varias · clic derecho: insertar o eliminar">${num ? '<span>' + (c + 1) + '</span>' : ''}</div>`;
+    return h;
+  }
+  /* Marca lo elegido: las cabeceras, la raya de cada columna sobre el tablero, los nodos que se van con ella
+     y la barra flotante. */
+  function pintarColumnas() {
+    const g = G(), n = m.totalCeldas();
+    [...cols].forEach(c => { if (c >= n) cols.delete(c); });
+    if ($axis) $axis.querySelectorAll('.col[data-col]').forEach(el => el.classList.toggle('sel', cols.has(+el.dataset.col)));
+    let capa = document.getElementById('colsCapa');
+    if (!capa && $canvas) { capa = document.createElement('div'); capa.id = 'colsCapa'; $canvas.appendChild(capa); }
+    if (capa) {
+      /* una raya por columna elegida, justo donde se dibuja la cuadrícula y donde se posan los nodos (Leo, 16-09-2026:
+         la banda de celda hacía creer que lo elegido era el hueco de al lado) */
+      capa.innerHTML = [...cols].sort((a, b) => a - b).map(c => `<div class="col-marca" style="left:${GUTTER + px(c)}px"></div>`).join('');
+      capa.style.top = EJE + 'px';
+      capa.style.height = ($rows ? $rows.offsetHeight : 0) + 'px';   // hasta el último carril, no hasta el fondo del lienzo
+    }
+    /* y los nodos que están sobre esas rayas se marcan: así se ve qué se borra (un cuadro o un rombo son un
+       solo salto aunque se enciendan sus dos extremos) */
+    document.querySelectorAll('#board .pt').forEach(el => {
+      const p = m.punto(el.dataset.punto);
+      el.classList.toggle('en-columna', !!p && cols.has(m.cg(p)));
+    });
+    /* la barra de la selección: insertar a un lado o a otro, eliminar y soltar */
+    let barra = document.getElementById('colBarra');
+    if (!cols.size || !$board) { if (barra) barra.remove(); return; }
+    if (!barra) { barra = document.createElement('div'); barra.id = 'colBarra'; barra.className = 'multi-barra col-barra'; document.body.appendChild(barra); }
+    const k = cols.size, res = m.resumenColumnas([...cols]);
+    const relacion = m.nombres && m.nombres.cuadro === 'Relación';
+    const que = [res.nodos ? plural(res.nodos, m.nombre('nodo').toLowerCase(), m.nombre('nodo').toLowerCase() + 's') : '',
+      res.saltos ? plural(res.saltos, relacion ? 'relación' : 'salto', relacion ? 'relaciones' : 'saltos') : ''].filter(Boolean).join(' · ');
+    barra.innerHTML = `<span>${k === 1 ? '1 columna' : k + ' columnas'}${que ? '<i class="multi-barra-que">' + que + '</i>' : ''}</span>
+      <button type="button" data-col-ins="izquierda" title="Insertar ${k === 1 ? 'una columna' : k + ' columnas'} a la izquierda">＋ Izquierda</button>
+      <button type="button" data-col-ins="derecha" title="Insertar ${k === 1 ? 'una columna' : k + ' columnas'} a la derecha">＋ Derecha</button>
+      <button type="button" class="peligro" data-col-borrar>Eliminar</button>
+      <button type="button" data-col-soltar title="Soltar la selección (Esc)">Soltar</button>`;
+    const r = $board.getBoundingClientRect();
+    barra.style.left = (r.left + r.width / 2) + 'px'; barra.style.top = (r.bottom - 52) + 'px';
+  }
+  function limpiarColumnas() { if (!cols.size) return; cols = new Set(); colAncla = null; colPrevias = new Set(); pintarColumnas(); }
+  /* Vista previa de mover las columnas elegidas: sus rayas, sus nodos y los trazos de sus saltos se corren `dc`
+     columnas; el modelo no se toca hasta soltar (así se ve el intento aunque al final no se mueva). */
+  function previaColumnas(dc) {
+    const tx = dc * G();
+    document.querySelectorAll('#colsCapa .col-marca').forEach(el => { el.style.transform = `translateX(${tx}px)`; });
+    $axis.querySelectorAll('.col.sel').forEach(el => { el.style.transform = `translateX(${tx}px)`; });
+    const dentro = new Set();
+    document.querySelectorAll('#board .pt').forEach(el => {
+      const p = m.punto(el.dataset.punto);
+      if (!p || !cols.has(m.cg(p))) { el.classList.remove('arrastrando'); el.style.transform = ''; return; }
+      dentro.add(p.id);
+      el.style.transform = `translate(calc(-50% + ${tx}px), -50%)`;
+      el.classList.toggle('arrastrando', !!dc);
+    });
+    m.datos.saltos.forEach(sa => {
+      const g = $cables.querySelector(`[data-salto-g="${sa.id}"]`);
+      const nom = $nombres && $nombres.querySelector(`[data-salto-nombre="${sa.id}"]`);
+      const va = dentro.has(sa.deId) || dentro.has(sa.aId);
+      if (g) g.setAttribute('transform', va ? `translate(${tx} 0)` : '');
+      if (nom) nom.style.transform = va ? `translate(calc(-50% + ${tx}px), -50%)` : '';
+    });
+    document.body.classList.toggle('moviendo-columnas', !!dc);
+  }
+  /* La columna que hay bajo un punto de la pantalla (fuera del tablero, la primera o la última). */
+  function columnaEn(clientX) {
+    const r = $canvas.getBoundingClientRect(), n = m.totalCeldas();
+    return clamp(Math.round(celdaEn(clientX - r.left - GUTTER)), 0, n - 1);   // la raya más cercana, como la cabecera
+  }
+  function elegirRango(c) {
+    const a = Math.min(colAncla, c), b = Math.max(colAncla, c);
+    cols = new Set(colPrevias);
+    for (let i = a; i <= b; i++) cols.add(i);
+  }
+  /* Insertar tantas columnas como haya elegidas, a un lado o a otro (como Excel: lo nuevo queda elegido). */
+  function insertarColumnas(lado) {
+    const lista = [...cols].sort((a, b) => a - b); if (!lista.length) return;
+    const ref = lado === 'derecha' ? lista[lista.length - 1] : lista[0];
+    const r = m.insertarColumnas(ref, lista.length, lado);
+    if (aplicar(r)) {
+      cols = new Set(); colPrevias = new Set(); colAncla = r.desde;
+      for (let i = 0; i < r.insertadas; i++) cols.add(r.desde + i);
+    }
+    render();
+  }
+  async function pedirBorrarColumnas() {
+    const lista = [...cols]; if (!lista.length) return;
+    const r = m.resumenColumnas(lista); if (!r.columnas) return;
+    const partes = [];
+    if (r.nodos) partes.push(plural(r.nodos, m.nombre('nodo').toLowerCase(), m.nombre('nodo').toLowerCase() + 's'));
+    const relacion = m.nombres && m.nombres.cuadro === 'Relación';
+    if (r.saltos) partes.push(plural(r.saltos, relacion ? 'relación' : 'salto', relacion ? 'relaciones' : 'saltos') + ' (con sus dos extremos)');
+    if (r.notas) partes.push(plural(r.notas, 'nota', 'notas'));
+    const solo = r.nodos + r.saltos + r.notas === 1;
+    const texto = `¿Eliminar ${plural(r.columnas, 'columna', 'columnas')}?`
+      + (partes.length ? ` Se ${solo ? 'borra' : 'borran'} ${partes.join(', ')}.` : r.columnas === 1 ? ' Está vacía.' : ' Están vacías.')
+      + (r.actos ? ` ${r.nombresActos.map(x => '«' + x + '»').join(', ')} se ${r.actos === 1 ? 'queda' : 'quedan'} sin columnas y ${r.actos === 1 ? 'desaparece' : 'desaparecen'}.` : '');
+    if (!await confirmar(texto, 'Eliminar ' + r.columnas)) return;
+    if (aplicar(m.borrarColumnas(lista))) { cols = new Set(); colPrevias = new Set(); colAncla = null; sel = null; }
+    render();
+  }
+  function menuColumnas(x, y) {
+    const k = cols.size, lista = [...cols].sort((a, b) => a - b);
+    const cuantas = k === 1 ? 'una columna' : k + ' columnas';
+    abrirMenuEn(x, y, `<div class="mt">${k === 1 ? 'Columna ' + (lista[0] + 1) : k + ' columnas (' + (lista[0] + 1) + '–' + (lista[k - 1] + 1) + ')'}</div>
+      <button data-col-ins="izquierda">Insertar ${cuantas} a la izquierda</button>
+      <button data-col-ins="derecha">Insertar ${cuantas} a la derecha</button>
+      <div class="sep"></div>
+      <button class="peligro" data-col-borrar>Eliminar ${k === 1 ? 'la columna' : 'las ' + k + ' columnas'}</button>`);
+  }
 
   function nodo(p, l, i) {
     const el = document.createElement('div');
@@ -209,87 +351,98 @@
     return el;
   }
 
-  /* Rótulos de los nodos (rediseño «carpetas y tooltips», 15-09-2026): el nombre va encima del punto; si choca con
-     el del nodo anterior, se desdobla debajo del eje (`.abajo`) y, si tampoco cabe ahí, se queda arriba. Una nota
-     entre dos nodos cuyo rótulo baja, o demasiado estrecha para leerse, deja en el eje solo su marca y el papel se
-     corre a la derecha, unido por una guía discontinua (`.aparte`). Se mide en el DOM: va tras montar la fila. */
-  const HOLGURA_ROTULO = 6, NOTA_MINIMA = 48, HUECO_MINIMO = 26;
+  /* Rótulos y notas de una fila (Leo, 16-09-2026: «no importa que crezca el alto vertical de la trama donde no quepa
+     la información»). Los **rótulos se apilan hacia arriba** (nivel 0 pegado al carril; si uno choca con el anterior,
+     sube otro nivel) y las **notas hacia abajo**, del mismo modo: así caben varias en un tramo y las de un nodo, sin
+     correrse a un lado ni taparse. El rótulo del primer nodo no se sale por la izquierda (se desplaza lo justo: si no,
+     un nombre largo en la primera columna se perdía debajo de la columna de tramas). Devuelve lo que ocupa arriba y
+     abajo, para que `render` suba el alto del carril si hace falta. Se mide en el DOM: va tras montar la fila. */
+  const HOLGURA_ROTULO = 6, ALTO_ROTULO = 19, BASE_ROTULO = 14;
+  const HOLGURA_NOTA = 8, ALTO_NOTA = 26, BASE_NOTA = 13, NOTA_MAX = 260, ANCHO_TOPE = 620;
+  /* Lo ancho que puede ponerse lo que va centrado en un nodo (su rótulo, sus notas): el hueco hasta el nodo de al
+     lado. **Con más escala se lee más texto** (Leo, 16-09-2026: «si ya tengo más espacio, debería ver más texto de
+     títulos o notas largas»); con poca, se sigue cortando con «…» como antes. */
+  function sitioDe(p, props, minimo) {
+    const x = xDe(p);
+    const izq = props.filter(q => xDe(q) < x).pop(), der = props.find(q => xDe(q) > x);
+    const hueco = Math.min(izq ? (x - xDe(izq)) : Infinity, der ? (xDe(der) - x) : Infinity);
+    const libre = hueco === Infinity ? ANCHO_TOPE : Math.round(hueco - HOLGURA_ROTULO * 2);   // sin llegar al nodo vecino
+    return Math.max(minimo, Math.min(ANCHO_TOPE, libre));
+  }
   function colocarRotulos(row) {
-    const track = row.querySelector('.track'); if (!track) return;
-    let finArriba = -Infinity, finAbajo = -Infinity;
-    const bordes = new Map();                                   // id del nodo → borde derecho de su rótulo
-    track.querySelectorAll(':scope > .pt').forEach(el => el.classList.remove('abajo'));
+    const track = row.querySelector('.track'); if (!track) return { arriba: 0, abajo: 0 };
+    /* ---- rótulos de los nodos, apilados hacia arriba ---- */
+    const niveles = [];                                         // por nivel, el borde derecho de lo último colocado
     const pts = Array.from(track.querySelectorAll(':scope > .pt')).map(el => ({ el, p: m.punto(el.dataset.punto) })).filter(x => x.p)
       .sort((a, b) => xDe(a.p) - xDe(b.p));
+    const enOrden = pts.map(x => x.p);
     pts.forEach(({ el, p }) => {
-      const cap = el.querySelector('.cap'), w = cap ? cap.offsetWidth : 0, x = xDe(p), izq = x - w / 2, der = x + w / 2;
-      if (!w) return;
-      if (izq >= finArriba + HOLGURA_ROTULO) finArriba = der;
-      else if (izq >= finAbajo + HOLGURA_ROTULO) { el.classList.add('abajo'); finAbajo = der; }
-      else finArriba = Math.max(finArriba, der);
-      bordes.set(p.id, der);
+      const cap = el.querySelector('.cap'); if (!cap) return;
+      cap.style.bottom = ''; cap.style.transform = '';
+      cap.style.setProperty('--cap-max', sitioDe(p, enOrden, 0) + 'px');   // lo que caben sin pisar al vecino
+      const w = cap.offsetWidth; if (!w) return;
+      const x = xDe(p);
+      const dx = Math.max(0, 2 - (x - w / 2));                  // no se sale por la izquierda
+      const izq = x - w / 2 + dx, der = izq + w;
+      let n = 0; while (niveles[n] !== undefined && izq < niveles[n] + HOLGURA_ROTULO) n++;
+      niveles[n] = der;
+      if (dx) cap.style.transform = `translateX(calc(-50% + ${Math.round(dx)}px))`;
+      cap.style.bottom = (BASE_ROTULO + n * ALTO_ROTULO) + 'px';
+      el.dataset.nivel = n;
     });
-    /* las notas: primero las que se quedan en su tramo (son obstáculo), luego las que se corren a un lado, con el
-       ancho que les deja libre lo siguiente de debajo del eje (un rótulo que bajó u otra nota) */
-    const abajo = [];                                           // [izq, der] de lo que ocupa debajo del eje
-    pts.forEach(({ el, p }) => { if (el.classList.contains('abajo')) { const w = el.querySelector('.cap').offsetWidth; abajo.push([xDe(p) - w / 2, xDe(p) + w / 2]); } });
-    const notas = Array.from(track.querySelectorAll(':scope > .nota')).map(el => {
-      const nt = m.nota(el.dataset.nota), a = nt && m.punto(nt.deId), b = nt && m.punto(nt.aId); if (!a || !b) return null;
-      const x1 = Math.min(xDe(a), xDe(b)), x2 = Math.max(xDe(a), xDe(b));
-      const bajan = [a, b].filter(q => { const e = track.querySelector(`:scope > .pt[data-punto="${q.id}"]`); return e && e.classList.contains('abajo'); });
-      el.querySelectorAll('.nota-guia').forEach(g => g.remove());
-      /* un rótulo que bajó de otro nodo recorta la nota por la derecha; si no le deja sitio para leerse, se corre */
-      const choca = Math.min(Infinity, ...abajo.filter(([i, d]) => d > x1 && i < x2).map(([i]) => i - 4));
-      const fin = Math.min(x2, choca);
-      return { el, x1, x2, fin, bajan, aparte: bajan.length > 0 || fin - x1 < NOTA_MINIMA };
-    }).filter(Boolean);
-    notas.forEach(n => {
-      n.el.classList.toggle('aparte', n.aparte);
-      n.el.style.maxWidth = '';
-      if (!n.aparte) { const w = Math.max(30, n.fin - n.x1); n.el.style.left = n.x1 + 'px'; n.el.style.width = w + 'px'; abajo.push([n.x1, n.x1 + w]); }
+    /* ---- notas y huecos, apilados hacia abajo ---- */
+    const usados = [];                                          // por nivel, el borde derecho de lo último colocado
+    const piezas = [];
+    Array.from(track.querySelectorAll(':scope > .nota')).forEach(el => {
+      const nt = m.nota(el.dataset.nota); if (!nt) return;
+      const a = m.punto(nt.deId), b = nt.aId && m.punto(nt.aId); if (!a) return;
+      el.style.marginTop = ''; el.style.left = ''; el.style.width = ''; el.style.maxWidth = '';
+      /* `orden`: el de la lista, que es el que se cambia arrastrando una nota sobre otra (Leo, 16-09-2026); `clave`
+         ordena por sitio —el tramo o el nodo—, no por el borde de cada nota, que cambia con lo larga que sea */
+      const orden = m.datos.notas.indexOf(nt);
+      /* Las dos clases de nota se ponen igual: **a su medida y colgadas de su sitio** —el nodo, o la mitad del tramo
+         que une dos nodos (Leo, 16-09-2026: «su ancla debe ser la mitad de la unión entre dos nodos»)—, con su guía
+         hasta el carril. Antes la de tramo se estiraba de nodo a nodo y crecía con la escala. */
+      const x = b ? (xDe(a) + xDe(b)) / 2 : xDe(a);
+      const hueco = b ? Math.abs(xDe(b) - xDe(a)) - HOLGURA_NOTA : null;
+      el.style.maxWidth = (b ? Math.max(NOTA_MAX, Math.min(ANCHO_TOPE, Math.round(hueco)))
+                             : sitioDe(a, m.puntosDe(a.lineaId), NOTA_MAX)) + 'px';   // con más escala, más texto a la vista
+      const w = Math.max(44, el.offsetWidth);
+      piezas.push({ el, x1: x - w / 2, ancho: w, centro: x, clave: x, orden });
     });
-    /* dos notas corridas seguidas no se pisan: cada una acaba antes de donde empieza la siguiente y empieza tras la anterior */
-    const apartes = notas.filter(n => n.aparte).sort((a, b) => a.x1 - b.x1);
-    apartes.forEach(n => { n.izq = Math.max(n.x2, ...n.bajan.map(q => bordes.get(q.id) || 0)) + 14; });   // a la derecha del rótulo que bajó
-    let finAnterior = -Infinity;
-    apartes.forEach((n, k) => {
-      const marca = (n.x1 + n.x2) / 2;
-      const izq = Math.max(n.izq, finAnterior + 8);
-      const siguiente = apartes[k + 1] ? apartes[k + 1].izq : Infinity;
-      const sig = Math.min(siguiente, ...abajo.filter(([i, d]) => d > izq && i >= izq - 1).map(([i]) => i));
-      const ancho = Math.max(44, Math.min(210, sig - izq - 8));
-      n.el.style.left = izq + 'px'; n.el.style.width = ''; n.el.style.maxWidth = ancho + 'px';
-      finAnterior = izq + Math.min(ancho, n.el.offsetWidth);
-      abajo.push([izq, finAnterior]);
-      n.el.insertAdjacentHTML('afterbegin', `<i class="nota-guia nota-marca" style="left:${marca - izq}px"></i>`
-        + `<i class="nota-guia nota-guia-v" style="left:${marca - izq}px"></i><i class="nota-guia nota-guia-h" style="left:${marca - izq}px;width:${izq - marca}px"></i>`);
-    });
-    /* los huecos para poner nota (debajo del eje): un rótulo que bajó o una nota corrida se pintaban encima y tapaban el
-       botón (Leo, 15-09-2026). Cada hueco ocupa el trozo libre más ancho de su tramo; si ninguno da para el botón, el
-       primer sitio libre a su derecha, sin pisar el hueco anterior. */
-    const tapan = abajo.map(([i, d]) => [i - 4, d + 4]).sort((a, b) => a[0] - b[0]);
-    let finHueco = -Infinity;
-    Array.from(track.querySelectorAll(':scope > .hueco')).map(h => {
+    Array.from(track.querySelectorAll(':scope > .hueco')).forEach(h => {
       const [d, a] = (h.dataset.tramo || '').split('|'), p = m.punto(d), q = m.punto(a);
-      return p && q ? { h, x1: xDe(p), x2: xDe(q) } : null;
-    }).filter(Boolean).sort((a, b) => a.x1 - b.x1).forEach(({ h, x1, x2 }) => {
-      let ini = Math.max(x1, finHueco), mejor = null;
-      const probar = (i, f) => { if (f - i > (mejor ? mejor[1] - mejor[0] : 0)) mejor = [i, f]; };
-      tapan.forEach(([i, f]) => { if (f <= ini || i >= x2) return; probar(ini, Math.min(i, x2)); ini = Math.max(ini, f); });
-      if (ini < x2) probar(ini, x2);
-      if (!mejor || mejor[1] - mejor[0] < HUECO_MINIMO) {
-        let pos = Math.max(x1, finHueco);
-        for (const [i, f] of tapan) { if (f <= pos) continue; if (i - pos >= HUECO_MINIMO) break; pos = f; }
-        mejor = [pos, pos + HUECO_MINIMO];
-      }
-      h.style.left = mejor[0] + 'px'; h.style.width = (mejor[1] - mejor[0]) + 'px';
-      finHueco = mejor[1];
+      if (!p || !q) return;
+      h.style.marginTop = '';
+      piezas.push({ el: h, x1: xDe(p), ancho: xDe(q) - xDe(p), hueco: true, clave: xDe(p), orden: 0 });
     });
+    /* primero las notas (en su nivel más alto posible) y después los huecos del «+», que ocupan todo el tramo */
+    /* manda el orden de la lista, que es el que se cambia arrastrando: así una nota de enlace puede quedar encima de
+       una de nodo y al revés (Leo, 16-09-2026). Las que no se pisan siguen compartiendo nivel: el reparto es por
+       huecos libres, no por el orden. */
+    piezas.sort((a, b) => (a.hueco ? 1 : 0) - (b.hueco ? 1 : 0) || a.orden - b.orden || a.clave - b.clave);
+    piezas.forEach(z => {
+      const izq = Math.max(2, z.x1), der = izq + z.ancho;
+      /* el nivel es el primero donde **no se pisa con nadie**, mirando lo que ya hay puesto en él. Antes bastaba con
+         el borde derecho del último, porque las piezas venían de izquierda a derecha; con el orden de la lista por
+         delante (Leo, 16-09-2026) una nota se iba muy abajo aunque tuviera todo el hueco libre a su izquierda. */
+      let n = 0;
+      while ((usados[n] || []).some(([i, d]) => izq < d + HOLGURA_NOTA && der + HOLGURA_NOTA > i)) n++;
+      (usados[n] || (usados[n] = [])).push([izq, der]);
+      z.el.style.left = Math.round(izq) + 'px';
+      const arriba = BASE_NOTA + n * ALTO_NOTA;
+      z.el.style.marginTop = arriba + 'px';
+      /* la guía hasta el carril mide lo que la nota se haya bajado: con la altura fija se veía cortada en cuanto la
+         nota caía a un segundo nivel (Leo, 16-09-2026) */
+      if (!z.hueco) z.el.style.setProperty('--guia', arriba + 'px');
+      z.nivel = n;
+    });
+    return { arriba: BASE_ROTULO + Math.max(0, niveles.length - 1) * ALTO_ROTULO + ALTO_ROTULO,
+             abajo: BASE_NOTA + Math.max(0, usados.length - 1) * ALTO_NOTA + ALTO_NOTA };
   }
 
-  /* Saltos: unión estrictamente vertical entre dos extremos en la misma celda. */
   function cables() {
-    const H = EJE + m.datos.lineas.length * FILA + 90;
+    const H = EJE + altoFilas() + 90;
     $cables.setAttribute('width', GUTTER + totalW() + 46);
     $cables.setAttribute('height', H);
     $cables.style.height = H + 'px';
@@ -315,7 +468,10 @@
       /* el nombre del salto (cuadro, rombo o relación) va en su trazo, no en sus extremos (Leo, 15-09-2026); se arrastra, abre
          su menú y se renombra como el trazo (`data-salto`) */
       const titulo = a.titulo || m.forma(s.tipo);
-      nombres += `<div class="salto-nombre${seleccionado ? ' sel' : ''}" data-salto="${s.id}" data-salto-nombre="${s.id}" style="left:${x}px;top:${(y1 + y2) / 2}px;opacity:${op};--c:${col}" title="${esc(titulo)}">${esc(titulo)}</div>`;
+      /* el nombre va en el hueco entre el carril de salida y el de al lado, no a mitad del trazo: en un salto de la trama 1
+         a la 3 el medio caía sobre los nodos de la 2 y tapaba su lectura (Leo, 16-09-2026) */
+      const ga = geo(a.lineaId), yNombre = EJE + (y2 > y1 ? ga.top + ga.alto : ga.top);   // el borde de su fila hacia el salto
+      nombres += `<div class="salto-nombre${seleccionado ? ' sel' : ''}" data-salto="${s.id}" data-salto-nombre="${s.id}" style="left:${x}px;top:${yNombre}px;opacity:${op};--c:${col}" title="${esc(titulo)}">${esc(titulo)}</div>`;
     });
     $cables.innerHTML = d;
     if ($nombres) $nombres.innerHTML = nombres;
@@ -344,11 +500,18 @@
      cuadros y rombos que quedan dentro se eligen (`multi`); arrastrando uno de ellos se mueve el bloque entero (`bloque`,
      `m.moverBloque`). */
   const multi = new Set();
+  /* **Varias notas elegidas** (Leo, 16-09-2026: «seleccionar varios nodos o notas, siempre que sean del mismo tipo, para
+     cambiarles el color o eliminarlas… manteniendo presionado Mayús»): nodos en `multi`, notas en `multiNotas`; nunca los dos. */
+  const multiNotas = new Set();
+  const hayMulti = () => !!(multi.size || multiNotas.size);
   let marq = null, bloque = null, soltarClic = false;
   /* Reordenar tramas (Leo, 15-09-2026): se arrastra su etiqueta en la columna; la fila sigue al puntero y una raya marca dónde cae.
      En el tablero de un personaje (simple) su carril principal no se mueve y nada pasa por encima de él. */
   let filaArr = null, finFila = 0;
-  const arrastrando = () => !!(arr || res || mov || cel || notaArr || (marq && marq.activo) || bloque || (filaArr && filaArr.activo));
+  /* Columnas (Leo, 16-09-2026, «como en Excel web»): la tira de cabeceras bajo los actos las elige (clic, arrastre,
+     Cmd/Ctrl para sumar sueltas, Mayús para el rango) y desde ahí se insertan a un lado o a otro y se eliminan. */
+  let cols = new Set(), colAncla = null, colPrevias = new Set(), colArr = null;
+  const arrastrando = () => !!(arr || res || mov || cel || notaArr || (marq && marq.activo) || bloque || (filaArr && filaArr.activo) || (colArr && colArr.activo));
   function empezarArrastreFila(e, lineaId) {
     const l = m.linea(lineaId), row = l && $rows.querySelector(`.row[data-linea="${CSS.escape(lineaId)}"]`);
     if (!row || e.button !== 0 || (simple && l.tipo === 'principal')) return false;
@@ -376,16 +539,41 @@
   }
   function pintarMulti() {
     document.querySelectorAll('#board .pt').forEach(el => el.classList.toggle('multi', multi.has(el.dataset.punto)));
-    /* la barra de la selección: cuántos hay, eliminarlos y soltarlos (abajo, en el centro del tablero) */
+    document.querySelectorAll('#board .nota').forEach(el => el.classList.toggle('multi', multiNotas.has(el.dataset.nota)));
+    /* la barra de la selección: cuántos hay, su color, eliminarlos y soltarlos (abajo, en el centro del tablero) */
     let barra = document.getElementById('multiBarra');
-    const n = [...multi].filter(id => m.punto(id)).length;
+    const notas = multiNotas.size > 0;
+    const n = notas ? [...multiNotas].filter(id => m.nota(id)).length : [...multi].filter(id => m.punto(id)).length;
     if (!n || !$board) { if (barra) barra.remove(); return; }
     if (!barra) { barra = document.createElement('div'); barra.id = 'multiBarra'; barra.className = 'multi-barra'; document.body.appendChild(barra); }
-    barra.innerHTML = `<span>${n === 1 ? '1 elegido' : n + ' elegidos'}</span><button type="button" class="peligro" data-multi-borrar>Eliminar</button><button type="button" data-multi-soltar title="Soltar la selección (Esc)">Soltar</button>`;
+    const que = notas ? (n === 1 ? '1 nota elegida' : n + ' notas elegidas') : (n === 1 ? '1 elegido' : n + ' elegidos');
+    barra.innerHTML = `<span>${que}</span><button type="button" data-multi-color>Color</button><button type="button" class="peligro" data-multi-borrar>Eliminar</button><button type="button" data-multi-soltar title="Soltar la selección (Esc)">Soltar</button>`;
     const r = $board.getBoundingClientRect();
     barra.style.left = (r.left + r.width / 2) + 'px'; barra.style.top = (r.bottom - 52) + 'px';
   }
-  function limpiarMulti() { if (!multi.size) return; multi.clear(); pintarMulti(); }
+  function limpiarMulti() { if (!hayMulti()) return; multi.clear(); multiNotas.clear(); pintarMulti(); }
+  /* Mayús + clic en un nodo o una nota: lo suma a lo elegido o lo quita; lo que estaba elegido solo entra también, y elegir
+     de un tipo suelta lo del otro */
+  function alternarMulti(tipo, id) {
+    const set = tipo === 'nota' ? multiNotas : multi, otro = tipo === 'nota' ? multi : multiNotas;
+    otro.clear();
+    if (!set.size && sel && sel.tipo === (tipo === 'nota' ? 'nota' : 'punto') && sel.id !== id) set.add(sel.id);
+    if (set.has(id)) set.delete(id); else set.add(id);
+    sel = null; limpiarSelDOM(); panel(); pintarRuta(); pintarMulti();
+  }
+  /* El tramo entre dos nodos consecutivos bajo el puntero, a la altura del carril (para su menú contextual; sobre el «+» de
+     la celda también), o null */
+  function enlaceEn(e) {
+    let tr = null;
+    for (const x of document.elementsFromPoint(e.clientX, e.clientY)) { tr = x.closest && x.closest('#board .track'); if (tr) break; }
+    if (!tr) return null;
+    const id = tr.dataset.linea, rc = $canvas.getBoundingClientRect();
+    if (Math.abs(e.clientY - rc.top - yFila(id)) > 9) return null;
+    const x = e.clientX - tr.getBoundingClientRect().left, props = m.puntosDe(id);
+    for (let i = 0; i < props.length - 1; i++)
+      if (x > xDe(props[i]) + 7 && x < xDe(props[i + 1]) - 7) return [props[i], props[i + 1]];
+    return null;
+  }
   /* ¿empieza aquí un rectángulo? en un hueco de una trama (no sobre un nodo, una nota o un control) o, con Mayús, sobre el «+» */
   function empiezaMarquesina(e) {
     const cl = s => e.target.closest && e.target.closest(s);
@@ -398,11 +586,57 @@
 
   function onPointerDown(e) {
     $tip.classList.remove('show');
+    soltarClic = false;                                        // un clic que no llegó no se come el siguiente
+
+    /* el asa del panel de abajo: arrastrar hacia arriba lo agranda */
+    if (e.target === $asa && e.button === 0) {
+      panelArr = { y0: e.clientY, alto: panelAlto(), movido: false };
+      document.body.classList.add('redimensionando');
+      try { $asa.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault(); return;
+    }
+
+    /* la tira de columnas: clic elige una, arrastrar el rango, Cmd/Ctrl suma sueltas y Mayús extiende (Excel) */
+    const cab = e.target.closest && e.target.closest('.col[data-col]');
+    if (cab) {
+      if (e.button !== 0) return;                              // el clic derecho lo lleva el menú contextual, sin tocar lo elegido
+      const c = +cab.dataset.col;
+      limpiarMulti(); cerrarMenu();
+      /* si ya está elegida, arrastrarla mueve las columnas elegidas con lo que tengan dentro (Leo, 16-09-2026) */
+      if (cols.has(c) && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        colArr = { activo: false, x0: e.clientX, ultima: c, mover: true, dc: 0, col: c };
+        try { cab.setPointerCapture(e.pointerId); } catch (_) {}
+        e.preventDefault(); return;
+      }
+      if (e.metaKey || e.ctrlKey) {
+        if (cols.has(c)) cols.delete(c); else cols.add(c);
+        colAncla = c; colPrevias = new Set(cols); colPrevias.delete(c);
+      } else if (e.shiftKey && colAncla !== null) elegirRango(c);
+      else { colPrevias = new Set(); colAncla = c; cols = new Set([c]); }
+      colArr = { activo: false, x0: e.clientX, ultima: c };
+      try { cab.setPointerCapture(e.pointerId); } catch (_) {}
+      pintarColumnas();
+      e.preventDefault(); return;
+    }
+    if (cols.size && !(e.target.closest && e.target.closest('#menu, aside, .multi-barra, #dlg'))) limpiarColumnas();
 
     /* la etiqueta de una trama se arrastra para reordenar (un clic seco sigue eligiéndola; en un campo que se edita, no) */
     const etiqueta = e.target.closest && e.target.closest('#board .row[data-linea] > .label');
     if (etiqueta && !e.target.closest('.mini, button, input:not([readonly]), .per-combo, .per-color, .per-etq') && empezarArrastreFila(e, etiqueta.parentElement.dataset.linea)) return;
 
+    /* Mayús + clic en un nodo (su punto o su rótulo) o en una nota: se suma a lo elegido o se quita (Leo, 16-09-2026) */
+    if (e.shiftKey && e.button === 0 && e.target.closest) {
+      const ptS = e.target.closest('#board .pt > .dot, #board .pt > .cap'), ntS = !ptS && e.target.closest('#board .nota');
+      if (ptS || ntS) {
+        cerrarMenu();
+        if (ptS) alternarMulti('punto', ptS.parentElement.dataset.punto); else alternarMulti('nota', ntS.dataset.nota);
+        soltarClic = true;                                      // el clic de después no elige nada
+        e.preventDefault(); return;
+      }
+    }
+    /* clic derecho sobre una nota elegida: su menú ofrece colorear o borrar todas */
+    const ntB = e.target.closest && e.target.closest('#board .nota');
+    if (ntB && e.button === 2 && multiNotas.has(ntB.dataset.nota)) return;
     /* un nodo del bloque elegido: se arrastra el bloque entero */
     const dotB = e.target.closest && e.target.closest('#board .dot');
     if (dotB && e.button === 2 && multi.has(dotB.parentElement.dataset.punto)) return;   // clic derecho sobre lo elegido: su menú ofrece borrarlo todo
@@ -413,10 +647,11 @@
     }
     if (empiezaMarquesina(e) && (e.shiftKey || !(e.target.closest && e.target.closest('#celda')))) {
       marq = { x0: e.clientX, y0: e.clientY, activo: false, sumar: e.shiftKey && multi.size ? new Set(multi) : null };
+      if (!e.shiftKey) multiNotas.clear();
       e.preventDefault();                                      // sin seleccionar texto al arrastrar (el clic seco sigue llegando)
       return;
     }
-    if (multi.size && !(e.target.closest && e.target.closest('#menu, aside, .multi-barra, #dlg'))) limpiarMulti();
+    if (hayMulti() && !(e.target.closest && e.target.closest('#menu, aside, .multi-barra, #dlg'))) limpiarMulti();
 
     // el "+" del cruce se sostiene y se arrastra hasta otra trama: crea un salto
     const marca = e.target.closest && e.target.closest('#celda');
@@ -448,13 +683,15 @@
     const nt0 = bajoNota || (e.target.closest && e.target.closest('#board [data-nota]'));   // solo las del tablero (en ClapCraft hay otras `data-nota` fuera)
     if (nt0 && !(e.target.classList && e.target.classList.contains('nota-edit'))) {
       const n0 = m.nota(nt0.dataset.nota);
-      notaArr = { id: nt0.dataset.nota, movido: false, origen: n0 ? [n0.deId, n0.aId] : null, desplazada: null };
+      notaArr = { id: nt0.dataset.nota, movido: false, origen: n0 ? [n0.deId, n0.aId] : null };
       if (bajoNota) seleccionSuave('nota', nt0.dataset.nota, nt0);   // el clic cayó en el «+»: no llegará a la nota
       nt0.classList.add('arrastrando');
       e.preventDefault(); return;
     }
-    // un nodo
-    const dot = e.target.closest && e.target.closest('.dot');
+    /* un nodo: su punto o **su rótulo fijo**, que vale igual que el punto (Leo, 16-09-2026: «presionar el tooltip fijo
+       es como si seleccionara el nodo»); desde el rótulo también se arrastra */
+    const rotulo = e.target.closest && e.target.closest('#board .pt > .cap');
+    const dot = (e.target.closest && e.target.closest('.dot')) || (rotulo && rotulo.parentElement.querySelector('.dot'));
     if (!dot) return;
     const el = dot.parentElement, p = m.punto(el.dataset.punto);
     if (!p) return;
@@ -466,6 +703,20 @@
   }
 
   function onPointerMove(e) {
+    if (panelArr) { if (Math.abs(e.clientY - panelArr.y0) > 2) panelArr.movido = true; panelAlto(panelArr.alto + (panelArr.y0 - e.clientY)); return; }
+    if (colArr) {
+      if (!colArr.activo && Math.abs(e.clientX - colArr.x0) < 4) return;
+      colArr.activo = true;
+      if (colArr.mover) {                                    // las columnas elegidas siguen al puntero (se mueven al soltar)
+        const dc = Math.round((e.clientX - colArr.x0) / G());
+        if (dc !== colArr.dc) { colArr.dc = dc; previaColumnas(dc); }
+        return;
+      }
+      const c = columnaEn(e.clientX);                        // arrastrar por la tira extiende el rango desde el ancla
+      if (c === colArr.ultima) return;
+      colArr.ultima = c; elegirRango(c); pintarColumnas();
+      return;
+    }
     if (filaArr) { moverFila(e); return; }
     if (marq) {
       if (!marq.activo) {
@@ -489,10 +740,18 @@
       const dx = e.clientX - bloque.x0, dy = e.clientY - bloque.y0;
       if (!bloque.movido && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
       bloque.movido = true;
-      bloque.dc = Math.round(dx / G()); bloque.dl = Math.round(dy / FILA);
+      bloque.dc = Math.round(dx / G());
+      /* las filas no miden lo mismo: cuántas se baja se cuenta por la fila que hay bajo el puntero */
+      const filaEn = y => { const r = $canvas.getBoundingClientRect(), yy = y - r.top - EJE; let i = 0, t = 0;
+        for (const l of m.datos.lineas) { const a = geo(l.id).alto; if (yy < t + a) return i; t += a; i++; }
+        return i - 1 + Math.round((yy - t) / FILA_BASE + .5); };
+      const f0 = filaEn(bloque.y0), f1 = filaEn(e.clientY);
+      bloque.dl = f1 - f0;
+      const carrilDe = i => { const l = m.datos.lineas[i]; if (l) { const g = geo(l.id); return g.top + g.centro; }
+        return altoFilas() + (i - m.datos.lineas.length) * FILA_BASE + FILA_BASE / 2; };
       /* vista previa: el bloque (con las parejas de sus saltos) y sus trazos se desplazan; el modelo se mueve al soltar */
       const ids = new Set(bloque.ids); bloque.ids.forEach(id => { const q = m.parejaDe(id); if (q) ids.add(q.id); });
-      const tx = bloque.dc * G(), ty = bloque.dl * FILA;
+      const tx = bloque.dc * G(), ty = carrilDe(Math.max(0, f1)) - carrilDe(Math.max(0, f0));
       ids.forEach(id => { const el = document.querySelector(`#board .pt[data-punto="${CSS.escape(id)}"]`); if (el) { el.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px))`; el.classList.add('arrastrando'); } });
       m.datos.saltos.forEach(sa => {
         if (!ids.has(sa.deId)) return;
@@ -513,19 +772,34 @@
       const tr = bajo && bajo.closest && bajo.closest('.track'); if (!tr) return;
       const id = tr.dataset.linea, r = tr.getBoundingClientRect(), px = e.clientX - r.left;
       const props = m.puntosDe(id);
-      let par = null;
-      for (let i = 0; i < props.length - 1; i++)
-        if (px >= xDe(props[i]) && px <= xDe(props[i + 1])) { par = [props[i], props[i + 1]]; break; }
-      if (!par) return;                                       // fuera de todo tramo: no se mueve
-      if (!colocarNotaArrastrada(par)) return;                // el mismo tramo, o no cabe
+      /* cerca de un nodo, la nota cuelga de él; si no, del tramo donde cae (Leo, 16-09-2026) */
+      /* **Volver a colgarla de un nodo no exige atinarle** (Leo, 16-09-2026: «si muevo una nota de nodo a un enlace,
+         regresarla es muy complicado»; antes solo valía un cuadro de 24 px sobre el nodo, a la altura del carril). A
+         cualquier altura, acercar el puntero a un nodo la cuelga de él: el imán es el 30 % del tramo hacia ese lado
+         (hasta 40 px), así que la mitad del tramo sigue siendo del enlace y ahí se ordena sin convertirse. */
+      const iman = p => {
+        const i = props.indexOf(p), vecino = px >= xDe(p) ? props[i + 1] : props[i - 1];
+        return vecino ? Math.max(12, Math.min(40, Math.abs(xDe(vecino) - xDe(p)) * 0.3)) : 40;
+      };
+      const cerca = props.filter(p => Math.abs(xDe(p) - px) <= iman(p))
+        .sort((p, q) => Math.abs(xDe(p) - px) - Math.abs(xDe(q) - px))[0];
+      let destino = cerca ? [cerca, null] : null;
+      if (!destino) for (let i = 0; i < props.length - 1; i++)
+        if (px >= xDe(props[i]) && px <= xDe(props[i + 1])) { destino = [props[i], props[i + 1]]; break; }
+      if (!destino) return;                                   // fuera de todo tramo: no se mueve
+      const antes = rectsNotas();
+      const cambio = colocarNotaArrastrada(destino);
+      const orden = reordenarNotaArrastrada(destino, e.clientY);   // arriba o debajo de las que ya están ahí
+      if (!cambio && !orden) return;                          // donde ya estaba
       notaArr.movido = true; render();
+      animarNotas(antes);
       const vivo = document.querySelector(`[data-nota="${notaArr.id}"]`);
       if (vivo) vivo.classList.add('arrastrando');
       return;
     }
     if (cel) {
       const rc = $canvas.getBoundingClientRect();
-      const x = GUTTER + (m.celdasAntes(cel.actoId) + cel.celda) * G();
+      const x = GUTTER + px(m.celdasAntes(cel.actoId) + cel.celda);
       const y1 = yFila(cel.lineaId), yc = e.clientY - rc.top;
       const bajo = document.elementFromPoint(e.clientX, e.clientY);
       const pista = bajo && bajo.closest && bajo.closest('.track');
@@ -546,7 +820,7 @@
       if (!mov.movido && Math.abs(e.clientX - mov.x0) <= 3) return;   // el temblor de un clic no es un arrastre
       mov.movido = true;
       const r = $canvas.getBoundingClientRect();
-      const pos = m.ubicarCelda((e.clientX - r.left - GUTTER) / G());
+      const pos = m.ubicarCelda(celdaEn(e.clientX - r.left - GUTTER));
       mov.pos = pos;
       /* solo se desplaza el dibujo (los dos extremos y el trazo); el modelo se mueve al soltar, y si
          la celda está ocupada es entonces cuando avisa y todo vuelve a su sitio */
@@ -577,28 +851,66 @@
     quitarHot();
     if (destino !== arr.track) destino.classList.add('hot');
     const r = destino.getBoundingClientRect();
-    const pos = m.ubicarCelda((e.clientX - r.left) / G());
+    const pos = m.ubicarCelda(celdaEn(e.clientX - r.left));
     arr.destino = destino; arr.pos = pos;
-    arr.el.style.left = ((m.celdasAntes(pos.actoId) + pos.celda) * G()) + 'px';
+    arr.el.style.left = px(m.celdasAntes(pos.actoId) + pos.celda) + 'px';
     previaIntercambio(arr.p, destino.dataset.linea, pos);
   }
 
-  /* Una nota arrastrada sobre un tramo (Leo, 15-09-2026: como los nodos, se reordenan): si el tramo tiene otra nota, esa pasa
-     al tramo de donde salió la arrastrada; al seguir arrastrando, la que se apartó vuelve a su tramo. Devuelve si cambió algo. */
-  function colocarNotaArrastrada(par) {
+  /* Una nota arrastrada a otro sitio: un tramo (`[a, b]`) o un nodo (`[p, null]`). Donde caiga se apila con las que ya
+     haya (Leo, 16-09-2026: caben varias). Devuelve si cambió algo. */
+  function colocarNotaArrastrada(destino) {
     const n = m.nota(notaArr.id); if (!n) return false;
-    const mismo = (x, a, b) => (x.deId === a && x.aId === b) || (x.deId === b && x.aId === a);
-    if (mismo(n, par[0].id, par[1].id)) return false;
-    const antes = JSON.stringify(m.datos.notas.map(x => [x.deId, x.aId]));
-    /* primero se deshace lo apartado y la nota vuelve a su tramo de origen */
-    if (notaArr.desplazada && m.nota(notaArr.desplazada)) m.intercambiarNotas(notaArr.id, notaArr.desplazada);
-    notaArr.desplazada = null;
-    if (notaArr.origen && !mismo(n, notaArr.origen[0], notaArr.origen[1])) m.moverNota(notaArr.id, notaArr.origen[0], notaArr.origen[1]);
-    if (!mismo(n, par[0].id, par[1].id)) {
-      const r = m.moverNota(notaArr.id, par[0].id, par[1].id, { intercambiar: true });
-      if (r.ok && r.intercambio) notaArr.desplazada = r.intercambio.id;
-    }
-    return JSON.stringify(m.datos.notas.map(x => [x.deId, x.aId])) !== antes;
+    const [a, b] = destino;
+    if (!b ? (n.deId === a.id && !n.aId) : ((n.deId === a.id && n.aId === b.id) || (n.deId === b.id && n.aId === a.id))) return false;
+    return m.moverNota(notaArr.id, a.id, b ? b.id : null).ok;
+  }
+
+  /* **Reordenar notas apiladas** (Leo, 16-09-2026): en el sitio donde cae, la nota se pone encima o debajo de las que
+     ya hay según la altura del puntero; vale igual para las de un nodo y las de un tramo. */
+  function reordenarNotaArrastrada(destino, y) {
+    const [a, b] = destino, aId = b ? b.id : null;
+    const n = m.nota(notaArr.id); if (!n) return false;
+    const aqui = (n.deId === a.id && (n.aId || null) === aId) || (aId && n.deId === aId && n.aId === a.id);
+    if (!aqui) return false;                                  // aún no ha caído en este sitio
+    /* se ordena contra **las notas que comparten sitio con ella** —las que se pisan en horizontal—, sean de nodo o de
+       enlace: ahora cada una es una cajita colgada de su sitio, así que las de un mismo sitio caen una sobre otra */
+    const mio = document.querySelector(`#board [data-nota="${n.id}"]`); if (!mio) return false;
+    const caja = mio.getBoundingClientRect();
+    const izq = caja.left, der = caja.right;
+    const vecinas = m.notasDeLinea(a.lineaId).filter(z => {
+      if (z.id === n.id) return false;
+      const el = document.querySelector(`#board [data-nota="${z.id}"]`); if (!el) return false;
+      const q = el.getBoundingClientRect();
+      return q.right > izq + 2 && q.left < der - 2;
+    });
+    if (!vecinas.length) return false;
+    const conY = vecinas.map(z => ({ z, y: document.querySelector(`#board [data-nota="${z.id}"]`).getBoundingClientRect() }))
+      .sort((p, q) => p.y.top - q.y.top);
+    let antesDe = null;                                       // la primera cuya mitad queda por debajo del puntero
+    for (const z of conY) if (y < z.y.top + z.y.height / 2) { antesDe = z.z.id; break; }
+    const lista = m.datos.notas;
+    const i = lista.indexOf(n);
+    const j = antesDe ? lista.findIndex(z => z.id === antesDe) : lista.length;
+    if (j === i || j === i + 1) return false;                 // ya está ahí
+    return m.colocarNota(n.id, antesDe).movida === true;
+  }
+  /* Dónde estaba cada nota antes de mover, para que las de al lado se aparten con animación (FLIP). */
+  function rectsNotas() {
+    const mapa = new Map();
+    document.querySelectorAll('#board [data-nota]').forEach(el => mapa.set(el.dataset.nota, el.getBoundingClientRect()));
+    return mapa;
+  }
+  function animarNotas(antes) {
+    if (!antes || !antes.size || !document.querySelector('#board [data-nota]')) return;
+    document.querySelectorAll('#board [data-nota]').forEach(el => {
+      if (notaArr && el.dataset.nota === notaArr.id) return;   // la arrastrada va al puntero, no se anima
+      const a = antes.get(el.dataset.nota); if (!a) return;
+      const b = el.getBoundingClientRect();
+      const dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      if (el.animate) el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 170, easing: 'cubic-bezier(.2,.8,.3,1)' });
+    });
   }
 
   /* Vista previa del intercambio de nodos: mientras se arrastra un nodo sobre otro, el de debajo (con su pareja de salto) se
@@ -623,6 +935,28 @@
   }
 
   function onPointerUp() {
+    if (panelArr) {
+      const movido = panelArr.movido; panelArr = null;
+      document.body.classList.remove('redimensionando');
+      if (movido) { soltarClic = true; setTimeout(() => { soltarClic = false; }, 0); }   // el clic que cierra el arrastre no cuenta
+      if (ganchos.alPanel) ganchos.alPanel(panelAlto());
+      return;
+    }
+    if (colArr) {
+      const { activo, mover, dc, col } = colArr; colArr = null;
+      if (activo) { soltarClic = true; setTimeout(() => { soltarClic = false; }, 0); }
+      if (!mover) return;
+      if (!activo) {                                           // clic seco sobre una elegida: se queda solo esa
+        colPrevias = new Set(); colAncla = col; cols = new Set([col]); pintarColumnas(); return;
+      }
+      previaColumnas(0);
+      if (dc) {
+        const r = m.moverColumnas([...cols], dc);
+        if (aplicar(r) && r.movidas) { colPrevias = new Set(); colAncla = r.desde; cols = new Set(); for (let i = 0; i < r.movidas; i++) cols.add(r.desde + i); }
+      }
+      render();
+      return;
+    }
     if (filaArr) {
       const { id, activo, destino, row, marca } = filaArr; filaArr = null;
       if (!activo) return;                                     // clic seco: lo elige el clic
@@ -634,7 +968,7 @@
     }
     if (marq) {
       const hubo = marq.activo; if (marq.el) marq.el.remove(); marq = null;
-      if (hubo) { soltarClic = true; setTimeout(() => { soltarClic = false; }, 0); if (multi.size) { sel = null; limpiarSelDOM(); panel(); pintarRuta(); } pintarMulti(); }
+      if (hubo) { soltarClic = true; setTimeout(() => { soltarClic = false; }, 0); multiNotas.clear(); if (multi.size) { sel = null; limpiarSelDOM(); panel(); pintarRuta(); } pintarMulti(); }
       return;
     }
     if (bloque) {
@@ -729,15 +1063,77 @@
   }
 
   /* ====================================================================
-     Panel lateral: solo lo que necesita espacio para escribir
+     Panel del nodo: solo lo que necesita espacio para escribir.
+     En ClapCraft va abajo, de borde a borde (Leo, 16-09-2026, docs/diseno/rediseno-14): `panelAbajo(true)` pone
+     `body.panel-abajo` y le añade el asa con la que se arrastra para que crezca hacia arriba (`--panel-alto`).
+     En tramas.html y en el tablero de Personajes sigue a un lado.
      ==================================================================== */
+  let abajo = false, $asa = null, panelArr = null;
+  const PANEL_ALTO = 164, PANEL_MIN = 132;   // de partida cabe la descripción con varias líneas (Leo, 16-09-2026)
+  let plegado = false;
+  /* El panel de abajo es una sección fija: siempre está, aunque no haya nada elegido, y se contrae hacia abajo con el
+     chevrón de su cabecera (Leo, 16-09-2026). */
+  function panelPlegado(v) {
+    if (v !== undefined) { plegado = !!v; document.body.classList.toggle('panel-plegado', abajo && plegado); if ($panel) panel(); }
+    return plegado;
+  }
+  function panelAbajo(v) {
+    abajo = !!v;
+    document.body.classList.toggle('panel-abajo', abajo);
+    document.body.classList.toggle('panel-plegado', abajo && plegado);
+    if (abajo && $panel && !$asa) {                              // el asa es hermana del panel: no la borra cada render
+      $asa = document.createElement('div');
+      $asa.id = 'panelAsa'; $asa.title = 'Arrastra para agrandar el panel · doble clic: alto de partida';
+      $panel.parentElement.insertBefore($asa, $panel);
+    }
+  }
+  /* Añade a la cabecera el chevrón que contrae la sección y, para cuando está contraída, el nombre de lo elegido. */
+  function adornarAbajo() {
+    const cab = $panel.querySelector('.panel-cabecera'); if (!cab) return;
+    const quien = document.createElement('span');
+    quien.className = 'panel-quien';
+    quien.textContent = !sel ? '' : sel.tipo === 'punto' ? ((m.punto(sel.id) || {}).titulo || '')
+      : sel.tipo === 'nota' ? ((m.nota(sel.id) || {}).texto || '')
+      : sel.tipo === 'enlace' ? (() => { const a = m.punto(sel.id), b = a && m.siguienteEnTrama(a.id); return a && b ? `${a.titulo} → ${b.titulo}` : ''; })()
+      : sel.tipo === 'linea' ? ((m.linea(sel.id) || {}).nombre || '') : ((m.acto(sel.id) || {}).nombre || '');
+    const h2 = cab.querySelector('h2');
+    if (h2) h2.after(quien); else cab.prepend(quien);
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'mini panel-plegar'; b.dataset.panelPlegar = '';
+    b.title = plegado ? 'Desplegar el panel' : 'Contraer el panel';
+    b.setAttribute('aria-expanded', String(!plegado));
+    b.innerHTML = ICONO.chev;
+    cab.appendChild(b);
+  }
+  /* Alto del panel de abajo en px (lo escribe en --panel-alto para que el CSS lo lea). */
+  function panelAlto(px) {
+    if (px !== undefined) {
+      const tope = $board ? Math.max(PANEL_MIN, $board.getBoundingClientRect().height - 120) : 520;
+      const v = Math.round(clamp(+px || PANEL_ALTO, PANEL_MIN, tope));
+      document.documentElement.style.setProperty('--panel-alto', v + 'px');
+    }
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-alto')) || PANEL_ALTO;
+  }
   function panel() {
-    const abre = sel && ['punto', 'linea', 'acto'].includes(sel.tipo);
+    /* Elegir el trazo de un salto (la diagonal de una relación) abre el panel de su nodo de salida: ahí se escribe su
+       descripción, como en cualquier nodo (Leo, 16-09-2026: «si selecciono la diagonal, no se abre el texto en la
+       descripción; debe poderse escribir como si eligiera uno de sus nodos»). */
+    const saltoSel = sel && sel.tipo === 'salto' ? m.salto(sel.id) : null;
+    const abre = sel && (['punto', 'linea', 'acto', 'nota', 'enlace'].includes(sel.tipo) || !!saltoSel);
     document.body.classList.toggle('con-panel', !!abre);
-    if (!abre) { $panel.innerHTML = ''; return; }
+    $panel.dataset.panel = abre ? (saltoSel ? 'punto' : sel.tipo) : 'vacio';          // la piel compacta el de la trama y el del acto
+    if (!abre) {
+      /* abajo es una sección fija: sin nada elegido enseña de qué va, en lugar de desaparecer */
+      $panel.innerHTML = abajo
+        ? `<div class="panel-cabecera"><h2>${esc(m.nombre('nodo'))}</h2></div>
+           <p class="empty panel-vacio">Elige un nodo, una nota, una trama o un ${esc(m.nombre('acto').toLowerCase())} del tablero para ver aquí sus datos y escribir su descripción.</p>`
+        : '';
+      if (abajo) adornarAbajo();
+      return;
+    }
 
-    if (sel.tipo === 'punto') {
-      const p = m.punto(sel.id); if (!p) { sel = null; return panel(); }
+    if (sel.tipo === 'punto' || saltoSel) {
+      const p = m.punto(saltoSel ? saltoSel.deId : sel.id); if (!p) { sel = null; return panel(); }
       const l = m.linea(p.lineaId), forma = m.formaDe(p.id), v = m.vecinos(p.id);
       /* cabecera con ‹ › y ×; título, descripción (ocupa el alto), estado, dónde está y las acciones */
       const pos = `${v.indice + 1} de ${v.total} · ${v.enHilo ? 'en el hilo' : 'solo en ' + l.nombre}`;
@@ -755,32 +1151,98 @@
         <div class="panel-meta"><span class="panel-meta-punto" style="background:${tono(l.color)}"></span>${esc(l.nombre)}<span class="panel-meta-sep">·</span>${esc((m.acto(p.actoId) || {}).nombre || '')}</div>
         <div class="panel-acciones">
           <button class="btn act-btn danger" id="bBorrar" title="${forma ? 'Eliminar salto' : 'Eliminar punto'} (Supr)" aria-label="${forma ? 'Eliminar salto' : 'Eliminar punto'}">${ICONO.borrar}</button></div>
-        <div class="panel-pista"><span>Supr elimina</span><span>Esc cierra</span></div>`;
+        <div class="panel-pista"><span>Supr elimina</span><span>${abajo ? 'Esc apaga el recorrido' : 'Esc cierra'}</span></div>`;
       $panel.querySelector('#fTitulo').value = p.titulo;
       $panel.querySelector('#fNota').value = p.descripcion;
-      $panel.querySelector('#fTitulo').oninput = e => { m.editarPunto(p.id, { titulo: e.target.value }); rapido(p); tocar(); };
+      /* en un salto, el nombre es de los dos extremos (como al renombrarlo en su trazo) */
+      const pareja = (sa => sa && (sa.deId === p.id ? sa.aId : sa.deId))(m.saltoDe(p.id));
+      $panel.querySelector('#fTitulo').oninput = e => {
+        m.editarPunto(p.id, { titulo: e.target.value });
+        if (pareja) m.editarPunto(pareja, { titulo: e.target.value });
+        rapido(p); tocar();
+      };
       $panel.querySelector('#fNota').oninput = e => { m.editarPunto(p.id, { descripcion: e.target.value }); tocar(); };
       /* (Leo, 14-09-2026: el panel ya no lleva «Estado»; descartar sigue en el menú del nodo) */
       $panel.querySelector('#bBorrar').onclick = () => pedirBorrarPunto(p.id);
     }
 
+    /* el panel de una nota: su texto, dónde está y su color (Leo, 16-09-2026: «que se vea su contenido en el panel») */
+    if (sel.tipo === 'nota') {
+      const n = m.nota(sel.id); if (!n) { sel = null; return panel(); }
+      const a = m.punto(n.deId), b = n.aId && m.punto(n.aId), l = a && m.linea(a.lineaId);
+      const corto = q => { const t = (q.titulo || m.nombre('nodo')).trim(); return t.length > 22 ? t.slice(0, 21) + '…' : t; };
+      const donde = !a ? '' : b ? `entre «${corto(a)}» y «${corto(b)}»` : `en «${corto(a)}»`;
+      $panel.innerHTML = `
+        <div class="panel-cabecera"><h2>Nota</h2>
+          <span class="panel-nav"><button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)" aria-label="Cerrar el panel">${ICONO.cerrar}</button></span></div>
+        <div class="field"><label>Color</label>
+          <div class="swatches nota-colores">
+            <button class="sw papel${n.color ? '' : ' on'}" data-ncolor="${n.id}|" title="Papel de nota" aria-label="Papel de nota"></button>
+            ${PALETA.map(c => `<button class="sw${n.color === c.id ? ' on' : ''}" data-ncolor="${n.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}" aria-label="${c.label}"></button>`).join('')}
+          </div></div>
+        <div class="panel-meta"><span class="panel-meta-punto" style="background:${tono(n.color || (l && l.color))}"></span>${esc(l ? l.nombre : '')}<span class="panel-meta-sep">·</span>${esc(donde)}</div>
+        <div class="panel-acciones">
+          <button class="btn act-btn danger" id="bBorrar" title="Eliminar la nota (Supr)" aria-label="Eliminar la nota">${ICONO.borrar}</button></div>
+        <div class="field field-crece"><label for="fNotaTexto">Texto</label>
+          <textarea id="fNotaTexto" placeholder="Qué quieres recordar aquí"></textarea></div>
+        <div class="panel-pista"><span>Supr elimina</span><span>${abajo ? 'Esc apaga el recorrido' : 'Esc cierra'}</span></div>`;
+      const ta = $panel.querySelector('#fNotaTexto');
+      ta.value = n.texto;
+      ta.oninput = e => {
+        m.editarNota(n.id, e.target.value);
+        const vivo = document.querySelector(`#board [data-nota="${CSS.escape(n.id)}"] span`);
+        if (vivo) { vivo.textContent = e.target.value; const row = vivo.closest('.row'); if (row) colocarRotulos(row); }
+        tocar();
+      };
+      $panel.querySelector('#bBorrar').onclick = () => pedirBorrarNota(n.id);
+    }
+
+    /* el panel de un enlace (Leo, 16-09-2026): su color, entre qué nodos va, «＋ Nota» y a la derecha sus notas */
+    if (sel.tipo === 'enlace') {
+      const a = m.punto(sel.id), b = a && m.siguienteEnTrama(a.id); if (!b) { sel = null; return panel(); }
+      const l = m.linea(a.lineaId), notas = m.notasDe(a.id, b.id);
+      const corto = q => { const t = (q.titulo || m.nombre('nodo')).trim(); return t.length > 22 ? t.slice(0, 21) + '…' : t; };
+      $panel.innerHTML = `
+        <div class="panel-cabecera"><h2>Enlace</h2>
+          <span class="panel-nav"><button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)" aria-label="Cerrar el panel">${ICONO.cerrar}</button></span></div>
+        <div class="field"><label>Color</label>
+          <div class="swatches nota-colores">
+            <button class="sw trama${a.colorEnlace ? '' : ' on'}" data-ecolor="${a.id}|" style="--tc:${tono(l.color)}" title="El de la trama" aria-label="El color de la trama"></button>
+            ${PALETA.map(c => `<button class="sw${a.colorEnlace === c.id ? ' on' : ''}" data-ecolor="${a.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}" aria-label="${c.label}"></button>`).join('')}
+          </div></div>
+        <div class="panel-meta"><span class="panel-meta-punto" style="background:${tono(a.colorEnlace || l.color)}"></span>${esc(l.nombre)}<span class="panel-meta-sep">·</span>entre «${esc(corto(a))}» y «${esc(corto(b))}»</div>
+        <div class="panel-acciones">
+          <button class="btn act-btn" data-enlace-nota="${a.id}|${b.id}" title="Agregar una nota a este enlace">＋ Nota</button></div>
+        <div class="field field-crece"><label>Notas</label>
+          <div class="panel-bloque enlace-notas">
+            ${notas.length ? notas.map(n => `<button type="button" class="enlace-nota${n.color ? ' con-color' : ''}" data-ir-nota="${n.id}"${n.color ? ` style="--tc:${tono(n.color)}"` : ''}>${esc(n.texto || 'Nota')}</button>`).join('')
+              : '<p class="empty">Sin notas. «＋ Nota» o el clic secundario sobre el enlace ponen las que hagan falta.</p>'}
+          </div></div>`;
+    }
+
     if (sel.tipo === 'linea') {
       const l = m.linea(sel.id); if (!l) { sel = null; return panel(); }
+      const nodos = m.puntosDe(l.id).length;
+      /* la misma forma que el panel de un nodo (Leo, 16-09-2026): a la izquierda el título y las acciones, y a la
+         derecha, ocupando el alto, lo ancho (aquí el tipo y el color) */
       $panel.innerHTML = `
         <div class="panel-cabecera"><h2>${esc(m.nombre('linea'))}</h2>
-          <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)">×</button></div>
-        <div class="field"><label>Nombre</label><input type="text" id="fNombre"></div>
-        <div class="field"><label>Tipo</label>
-          ${l.tipo === 'principal' ? '<p class="empty" style="font-size:12.5px;margin:0">Es la trama principal: el hilo del que parte la historia. No se elimina ni cambia de tipo.</p>' : `
-          <div class="chips">
-            ${['secundaria', 'alterna'].map(t => `<button class="btn${l.tipo === t ? ' on' : ''}" data-tipo="${l.id}|${t}">${ETIQUETA[t]}</button>`).join('')}
-          </div>`}
-        </div>
-        <div class="field"><label>Color</label><div class="swatches">
-          ${PALETA.map(c => `<button class="sw${l.color === c.id ? ' on' : ''}" data-lcolor="${l.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
-        </div></div>
-        <button class="btn act-btn${l.cortada ? ' on' : ''}" id="bCortar">${l.cortada ? 'Descartada ✓' : 'Marcar como descartada'}</button>
-        ${l.tipo === 'principal' ? '' : '<button class="btn act-btn danger" id="bBorrar">Eliminar trama</button>'}`;
+          <span class="panel-nav"><button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)" aria-label="Cerrar el panel">${ICONO.cerrar}</button></span></div>
+        <div class="field"><label for="fNombre">Nombre</label><input type="text" id="fNombre"></div>
+        <div class="panel-meta"><span class="panel-meta-punto" style="background:${tono(l.color)}"></span>${esc(ETIQUETA[l.tipo])}<span class="panel-meta-sep">·</span>${nodos} ${nodos === 1 ? esc(m.nombre('nodo').toLowerCase()) : esc(m.nombre('nodo').toLowerCase()) + 's'}</div>
+        <div class="panel-acciones">
+          <button class="btn act-btn${l.cortada ? ' on' : ''}" id="bCortar" title="${l.cortada ? 'Volver a ponerla en el guion' : 'Marcarla como descartada'}">${l.cortada ? 'Descartada ✓' : 'Descartar'}</button>
+          ${l.tipo === 'principal' ? '' : `<button class="btn act-btn danger" id="bBorrar" title="Eliminar ${esc(m.nombre('linea').toLowerCase())}" aria-label="Eliminar ${esc(m.nombre('linea').toLowerCase())}">${ICONO.borrar}</button>`}</div>
+        <div class="field field-crece"><label>Tipo y color</label>
+          <div class="panel-bloque">
+            ${l.tipo === 'principal' ? '<p class="empty">Es la trama principal: el hilo del que parte la historia. No se elimina ni cambia de tipo.</p>' : `
+            <div class="chips">
+              ${['secundaria', 'alterna'].map(t => `<button class="btn${l.tipo === t ? ' on' : ''}" data-tipo="${l.id}|${t}">${ETIQUETA[t]}</button>`).join('')}
+            </div>`}
+            <div class="swatches">
+              ${PALETA.map(c => `<button class="sw${l.color === c.id ? ' on' : ''}" data-lcolor="${l.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
+            </div>
+          </div></div>`;
       $panel.querySelector('#fNombre').value = l.nombre;
       $panel.querySelector('#fNombre').oninput = e => {
         m.editarLinea(l.id, { nombre: e.target.value });
@@ -795,15 +1257,20 @@
       const a = m.acto(sel.id); if (!a) { sel = null; return panel(); }
       $panel.innerHTML = `
         <div class="panel-cabecera"><h2>${esc(m.nombre('acto'))}</h2>
-          <button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)">×</button></div>
-        <div class="field"><label>Nombre</label><input type="text" id="fNombre"></div>
-        <div class="field"><label id="lAncho">Ancho: ${a.celdas} celdas</label>
-          <input type="range" id="fAncho" min="${MIN_CELDAS}" max="${MAX_CELDAS}" step="1" value="${a.celdas}"></div>
-        <div class="field"><label>Fondo del ${esc(m.nombre('acto').toLowerCase())}</label><div class="swatches">
-          ${FONDOS.map(f => `<button class="sw${T.fondoEfectivo(a, m.datos.actos.indexOf(a)) === f.id ? ' on' : ''}" data-fondo="${a.id}|${f.id}"
-            title="${f.label}${!a.fondo && T.fondoEfectivo(a, m.datos.actos.indexOf(a)) === f.id ? ' (automático)' : ''}" style="background:${fondo(f.id)};${f.id === 'ninguno' ? 'border:1px dashed var(--regla-fuerte)' : ''}"></button>`).join('')}
-        </div></div>
-        ${m.datos.actos.length > 1 ? `<button class="btn act-btn danger" id="bBorrar">Eliminar ${esc(m.nombre('acto').toLowerCase())}</button>` : ''}`;
+          <span class="panel-nav"><button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)" aria-label="Cerrar el panel">${ICONO.cerrar}</button></span></div>
+        <div class="field"><label for="fNombre">Nombre</label><input type="text" id="fNombre"></div>
+        <div class="panel-meta">${a.celdas} ${a.celdas === 1 ? 'celda' : 'celdas'}<span class="panel-meta-sep">·</span>${m.datos.actos.indexOf(a) + 1} de ${m.datos.actos.length}</div>
+        <div class="panel-acciones">
+          ${m.datos.actos.length > 1 ? `<button class="btn act-btn danger" id="bBorrar" title="Eliminar ${esc(m.nombre('acto').toLowerCase())}" aria-label="Eliminar ${esc(m.nombre('acto').toLowerCase())}">${ICONO.borrar}</button>` : ''}</div>
+        <div class="field field-crece"><label>Ancho y fondo</label>
+          <div class="panel-bloque">
+            <label id="lAncho" class="panel-sub">Ancho: ${a.celdas} celdas</label>
+            <input type="range" id="fAncho" min="${MIN_CELDAS}" max="${MAX_CELDAS}" step="1" value="${a.celdas}">
+            <div class="swatches">
+              ${FONDOS.map(f => `<button class="sw${T.fondoEfectivo(a, m.datos.actos.indexOf(a)) === f.id ? ' on' : ''}" data-fondo="${a.id}|${f.id}"
+                title="${f.label}${!a.fondo && T.fondoEfectivo(a, m.datos.actos.indexOf(a)) === f.id ? ' (automático)' : ''}" style="background:${fondo(f.id)};${f.id === 'ninguno' ? 'border:1px dashed var(--regla-fuerte)' : ''}"></button>`).join('')}
+            </div>
+          </div></div>`;
       $panel.querySelector('#fNombre').value = a.nombre;
       $panel.querySelector('#fNombre').oninput = e => {
         m.editarActo(a.id, { nombre: e.target.value });
@@ -813,6 +1280,7 @@
       const bb = $panel.querySelector('#bBorrar');
       if (bb) bb.onclick = () => pedirBorrarActo(a.id);
     }
+    if (abajo) adornarAbajo();
   }
 
   /* Diálogo modal de confirmación. Resuelve con true (aceptar) o false (Cancelar, Escape, clic fuera).
@@ -885,6 +1353,13 @@
     const n = m.nota(id); if (!n) return;
     if (!await confirmar(`¿Eliminar la nota «${String(n.texto || '').slice(0, 60)}»?`)) return;
     if (aplicar(m.borrarNota(id))) sel = null;
+    render();
+  }
+  async function pedirBorrarNotas(ids) {
+    const vivas = ids.filter(id => m.nota(id)); if (!vivas.length) return;
+    if (vivas.length === 1) return pedirBorrarNota(vivas[0]);
+    if (!await confirmar(`¿Eliminar ${vivas.length} notas?`, 'Eliminar ' + vivas.length)) return;
+    if (aplicar(m.borrarNotas(vivas))) { multiNotas.clear(); sel = null; }
     render();
   }
   /* Borrado masivo de lo elegido con el rectángulo (Supr, la barra de la selección o el menú de uno de ellos). */
@@ -961,13 +1436,19 @@
     if (nl) { const r = m.nuevaLinea(nl.dataset.nuevatrama); cerrarMenu(); if (aplicar(r)) elegir('linea', r.linea.id); return; }
     if (cl('#addActo')) { const r = m.nuevoActo(); if (aplicar(r)) elegir('acto', r.acto.id); return; }
 
+    if (cl('[data-panel-plegar]')) { panelPlegado(!plegado); if (ganchos.alPanel) ganchos.alPanel(panelAlto(), plegado); return; }
     if (cl('[data-panel-cerrar]')) { sel = null; render(); return; }
     const hn = cl('[data-hilo]');
     if (hn) { if (hn.dataset.hilo) irANodo(hn.dataset.hilo); return; }
     const nc = cl('[data-ncolor]');                            // el color de una nota (Leo, 15-09-2026)
     if (nc) {
       const [id, c] = nc.dataset.ncolor.split('|');
-      if (aplicar(m.colorearNota(id, c || null))) { render(); const n = m.nota(id), el = document.querySelector(`#board [data-nota="${CSS.escape(id)}"]`); if (n && el) menuNota(n, el); }
+      const desdePanel = !!nc.closest('#panel') || nc.dataset.panel !== undefined;
+      if (aplicar(m.colorearNota(id, c || null))) {
+        render();
+        if (desdePanel) { cerrarMenu(); return; }
+        const n = m.nota(id), el = document.querySelector(`#board [data-nota="${CSS.escape(id)}"]`); if (n && el) menuNota(n, el);
+      }
       return;
     }
     const mc = cl('[data-mcolor]');
@@ -981,8 +1462,31 @@
     const mb = cl('[data-mborrar]');
     if (mb) { cerrarMenu(); pedirBorrarPunto(mb.dataset.mborrar); return; }
     if (cl('[data-mborrar-varios]')) { cerrarMenu(); pedirBorrarVarios([...multi]); return; }
-    if (cl('[data-multi-borrar]')) { pedirBorrarVarios([...multi]); return; }
+    if (cl('[data-nborrar-varios]')) { cerrarMenu(); pedirBorrarNotas([...multiNotas]); return; }
+    if (cl('[data-multi-borrar]')) { if (multiNotas.size) pedirBorrarNotas([...multiNotas]); else pedirBorrarVarios([...multi]); return; }
+    if (cl('[data-multi-color]')) { const r = cl('[data-multi-color]').getBoundingClientRect(); paletaVarios(r.left, r.top); return; }
+    const vc = cl('[data-varios-color]');                      // un color para todo lo elegido
+    if (vc) {
+      const c = vc.dataset.variosColor || null;
+      if (multiNotas.size) multiNotas.forEach(id => m.colorearNota(id, c));
+      else multi.forEach(id => m.editarPunto(id, { color: c }));
+      cerrarMenu(); render(); return;
+    }
+    const ec = cl('[data-ecolor]');                            // el color de un enlace (Leo, 16-09-2026)
+    if (ec) {
+      const [id, c] = ec.dataset.ecolor.split('|');
+      if (aplicar(m.colorearEnlace(id, c || null))) { if (cl('#menu')) cerrarMenu(); render(); }
+      return;
+    }
+    const en2 = cl('[data-enlace-nota]');                      // «Agregar nota» a un enlace: caben varias
+    if (en2) { cerrarMenu(); const [d, a] = en2.dataset.enlaceNota.split('|'); ponerNota(d, a); return; }
+    const irn = cl('[data-ir-nota]');
+    if (irn) { elegir('nota', irn.dataset.irNota); return; }
     if (cl('[data-multi-soltar]')) { limpiarMulti(); return; }
+    const ci = cl('[data-col-ins]');                            // columnas: insertar a un lado, eliminar o soltar
+    if (ci) { cerrarMenu(); insertarColumnas(ci.dataset.colIns); return; }
+    if (cl('[data-col-borrar]')) { cerrarMenu(); pedirBorrarColumnas(); return; }
+    if (cl('[data-col-soltar]')) { limpiarColumnas(); return; }
     const ne = cl('[data-nota-editar]');
     if (ne) {
       const id = ne.dataset.notaEditar; cerrarMenu();
@@ -1007,8 +1511,8 @@
     if (tp) { const [id, tipo] = tp.dataset.tipo.split('|'); aplicar(m.fijarTipo(id, tipo)); render(); return; }
     const lc = cl('[data-lcolor]');
     if (lc) { const [id, c] = lc.dataset.lcolor.split('|'); m.editarLinea(id, { color: c }); render(); return; }
-    const na = cl('[data-nota-add]');
-    if (na) { const [d, a] = na.dataset.notaAdd.split('|'); ponerNota(d, a); return; }
+    const nn = cl('[data-nota-nodo]');                         // «Nota en este nodo» (Leo, 16-09-2026)
+    if (nn) { cerrarMenu(); ponerNota(nn.dataset.notaNodo, null); return; }
     const nt = cl('[data-nota]');
     if (nt) { seleccionSuave('nota', nt.dataset.nota, nt); return; }
     const ld = cl('[data-linea-del]');
@@ -1016,6 +1520,8 @@
     const ad = cl('[data-acto-del]');
     if (ad) { pedirBorrarActo(ad.dataset.actoDel); return; }
     if (cl('[data-punto]')) return;                            // ya quedó seleccionado en pointerdown
+    const enl = cl('#board [data-enlace]');                    // el enlace entre dos nodos: se elige (su panel: color y notas)
+    if (enl) { elegir('enlace', enl.dataset.enlace); return; }
     const lab = cl('.label');
     if (lab && lab.parentElement.dataset.linea && !cl('.mini') && !t.matches('.lname')) {
       elegir('linea', lab.parentElement.dataset.linea); return;
@@ -1024,25 +1530,32 @@
     if (ac && !cl('.mini') && !t.matches('.aname')) { elegir('acto', ac.dataset.acto); return; }
 
     // clic en blanco: se suelta la selección y se cierra el panel
-    if (cl('aside') || cl('header') || cl('#menu')) return;
+    if (cl('aside') || cl('header') || cl('#menu') || cl('#panelAsa')) return;   // el asa del panel no es un clic en blanco (Leo, 16-09-2026: se cerraba al agrandarlo)
     if (t.matches && t.matches('.lname,.aname,.cap-edit,.nota-edit')) return;
     if (sel) { sel = null; render(); }
   }
 
   function onContextMenu(e) {
     const cl = s => e.target.closest && e.target.closest(s);
+    const cab = cl('.col[data-col]');                          // la tira de columnas: insertar y eliminar
+    if (cab) {
+      e.preventDefault(); cerrarMenu();
+      const c = +cab.dataset.col;
+      if (!cols.has(c)) { cols = new Set([c]); colPrevias = new Set(); colAncla = c; limpiarMulti(); pintarColumnas(); }
+      menuColumnas(e.clientX, e.clientY); return;
+    }
     const pt = cl('[data-punto]');
     if (pt) {
       const q = m.punto(pt.dataset.punto); if (!q) return;
       e.preventDefault(); cerrarMenu();
-      seleccionSuave('punto', q.id, pt);
+      if (!multi.has(q.id)) { limpiarMulti(); seleccionSuave('punto', q.id, pt); }   // sobre lo elegido con Mayús, lo deja elegido
       menuNodo(q, pt); return;
     }
     const nt = cl('[data-nota]');
     if (nt) {
       const n = m.nota(nt.dataset.nota); if (!n) return;
       e.preventDefault(); cerrarMenu();
-      seleccionSuave('nota', n.id, nt);
+      if (!multiNotas.has(n.id)) { limpiarMulti(); seleccionSuave('nota', n.id, nt); }
       menuNota(n, nt); return;
     }
     const sl = cl('[data-salto]');
@@ -1051,14 +1564,21 @@
       e.preventDefault(); cerrarMenu();
       sel = { tipo: 'salto', id: x.id }; render();
       menuSalto(x, e.clientX, e.clientY);
+      return;
+    }
+    /* el enlace entre dos nodos (sobre su trazo, o sobre el «+» de una celda de ese tramo): agregar nota y su color */
+    const en = cl('#board') && enlaceEn(e);
+    if (en) {
+      e.preventDefault(); cerrarMenu(); limpiarMulti();
+      sel = { tipo: 'enlace', id: en[0].id }; sinRuta = false; render();
+      menuEnlace(en[0], en[1], e.clientX, e.clientY);
     }
   }
 
   function onDblClick(e) {
     cerrarMenu();
     const cl = s => e.target.closest && e.target.closest(s);
-    const hu = cl('.hueco');
-    if (hu && hu.dataset.tramo && !cl('.add-nota')) { const [d, a] = hu.dataset.tramo.split('|'); ponerNota(d, a); return; }
+    if (cl('#panelAsa')) { panelAlto(PANEL_ALTO); if (ganchos.alPanel) ganchos.alPanel(panelAlto()); return; }   // alto de partida
     const nm = cl('.lname,.aname');
     if (nm) { nm.dataset.antes = nm.value; nm.readOnly = false; nm.focus(); nm.select(); return; }      // renombrar trama o acto (Enter guarda; Esc o un clic fuera, no)
     const sn = cl('[data-salto-nombre]');
@@ -1081,10 +1601,10 @@
     const track = cl('.track');
     if (!track) return;
     const r = track.getBoundingClientRect();
-    abrirMenuCrear(e.clientX, e.clientY, track.dataset.linea, m.ubicarCelda((e.clientX - r.left) / G()));
+    abrirMenuCrear(e.clientX, e.clientY, track.dataset.linea, m.ubicarCelda(celdaEn(e.clientX - r.left)));
   }
 
-  /* Crea la nota y la deja lista para escribir encima, sin pasar por el panel. */
+  /* Crea la nota (de un tramo, o de un nodo con `aId` null) y la deja lista para escribir encima. */
   function ponerNota(deId, aId) {
     const r = m.crearNota(deId, aId, 'Nota nueva');
     if (!aplicar(r)) return;
@@ -1110,7 +1630,9 @@
       el.textContent = nuevo == null ? viejo : nuevo;
       registrar();
     };
-    inp.addEventListener('blur', () => fin(false));                       // un clic fuera sale sin cambiar (Leo): guarda solo Enter
+    /* un clic fuera **guarda** lo escrito, como Enter; solo Esc lo deja como estaba (Leo, 16-09-2026: «cuando escribo
+       el nombre de un nodo o una nota y doy un clic fuera, no se me guarda; forzosamente tengo que dar Enter») */
+    inp.addEventListener('blur', () => fin(true));
     inp.addEventListener('keydown', ev => {
       ev.stopPropagation();
       if (ev.key === 'Enter' || ev.code === 'Enter' || ev.keyCode === 13) { ev.preventDefault(); fin(true); }
@@ -1130,8 +1652,10 @@
   function onFocusOut(e) {
     const nm = e.target.closest && e.target.closest('.lname,.aname');
     if (!nm) return;
-    if (nm.dataset.antes !== undefined && nm.value !== nm.dataset.antes) { nm.value = nm.dataset.antes; onInput({ target: nm }); }   // sin Enter: como estaba
-    delete nm.dataset.antes; nm.readOnly = true;
+    /* salir del campo **guarda** lo escrito (se va aplicando al teclear); solo Esc lo deja como estaba, y lo marca
+       (Leo, 16-09-2026: antes un clic fuera lo devolvía al nombre de antes) */
+    if (nm.dataset.cancelar && nm.dataset.antes !== undefined && nm.value !== nm.dataset.antes) { nm.value = nm.dataset.antes; onInput({ target: nm }); }
+    delete nm.dataset.cancelar; delete nm.dataset.antes; nm.readOnly = true;
     try { nm.setSelectionRange(0, 0); } catch (_) {}                         // sin texto marcado al salir
   }
   /* Enter guarda el nombre de una trama o un acto; Esc lo deja como estaba (lo deshace al salir) */
@@ -1139,8 +1663,8 @@
     const nm = e.target.closest && e.target.closest('.lname,.aname');
     if (!nm || nm.readOnly) return;
     e.stopPropagation();
-    if (e.key === 'Enter') { e.preventDefault(); if (!nm.value.trim()) { nm.blur(); return; } delete nm.dataset.antes; nm.blur(); }
-    else if (e.key === 'Escape') { e.preventDefault(); nm.blur(); }
+    if (e.key === 'Enter') { e.preventDefault(); if (!nm.value.trim()) { nm.dataset.cancelar = '1'; nm.blur(); return; } delete nm.dataset.antes; nm.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); nm.dataset.cancelar = '1'; nm.blur(); }
   }
   function onInput(e) {
     const ln = e.target.closest && e.target.closest('[data-linea-nombre]');
@@ -1178,15 +1702,41 @@
   }
 
   /* Clic secundario en un nodo: color, descartar y eliminar; en un extremo: convertir, invertir, eliminar. */
+  /* los colores de lo elegido con Mayús (nodos o notas), anclados a la barra o al menú de uno de ellos */
+  function coloresVarios() {
+    const notas = multiNotas.size > 0;
+    return `<div class="colores">
+        ${PALETA.map(c => `<button class="sw" data-varios-color="${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
+        <button class="sw hereda" data-varios-color="" title="${notas ? 'Sin color: el papel de nota' : 'Hereda el color de la trama'}">${notas ? 'nota' : 'trama'}</button>
+      </div>`;
+  }
+  function paletaVarios(x, y) {
+    const n = multiNotas.size || multi.size;
+    abrirMenuEn(x, y, `<div class="mt">Color de ${multiNotas.size ? (n === 1 ? 'la nota' : 'las ' + n + ' notas') : (n === 1 ? '1 elegido' : 'los ' + n + ' elegidos')}</div>${coloresVarios()}`);
+    const r = $menu.getBoundingClientRect();
+    $menu.style.top = Math.max(8, y - r.height - 8) + 'px';    // encima de la barra
+  }
+  /* Clic secundario en un enlace: agregar nota (caben varias) y su color (Leo, 16-09-2026). */
+  function menuEnlace(a, b, cx, cy) {
+    abrirMenuEn(cx, cy, `<div class="mt">Enlace</div>
+      <button data-enlace-nota="${a.id}|${b.id}"><span class="ic" style="border:1.5px solid var(--nota-borde);background:var(--nota)"></span>Agregar nota</button>
+      <div class="sep"></div><div class="mt">Color</div>
+      <div class="colores">
+        ${PALETA.map(c => `<button class="sw${a.colorEnlace === c.id ? ' on' : ''}" data-ecolor="${a.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
+        <button class="sw hereda${a.colorEnlace ? '' : ' on'}" data-ecolor="${a.id}|" title="El color de la trama">trama</button>
+      </div>`);
+  }
   function menuNodo(p, el) {
     const s = m.saltoDe(p.id);
+    const varios = multi.size > 1 && multi.has(p.id);
     const html = (s ? `<div class="mt">${esc(m.forma(s.tipo))}</div>${simple ? '' : opcionesSalto(s) + '<div class="sep"></div>'}`
       : `<div class="mt">${esc(m.nombre('nodo'))}</div>
-         <div class="colores">
+         ${varios ? `<div class="mt">Color de los ${multi.size} elegidos</div>${coloresVarios()}` : `<div class="colores">
            ${PALETA.map(c => `<button class="sw${p.color === c.id ? ' on' : ''}" data-mcolor="${p.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
            <button class="sw hereda${p.color ? '' : ' on'}" data-mcolor="${p.id}|" title="Hereda el color de la trama">trama</button>
-         </div><div class="sep"></div>
+         </div>`}<div class="sep"></div>
          <button data-mcortar="${p.id}"><span class="ic" style="border:1.5px dashed var(--tenue);background:none"></span>${p.cortado ? 'Quitar el descarte' : 'Descartar'}</button>`)
+      + `<button data-nota-nodo="${p.id}"><span class="ic" style="border:1.5px solid var(--nota-borde);background:var(--nota)"></span>Nota en este nodo</button>`
       + (multi.size > 1 && multi.has(p.id) ? `<button class="peligro" data-mborrar-varios>Eliminar los ${multi.size} elegidos</button>` : '')
       + `<button class="peligro" data-mborrar="${p.id}">Eliminar</button>`;
     const r = el.getBoundingClientRect();
@@ -1205,8 +1755,14 @@
     abrirMenuEn(cx, cy, `<div class="mt">${esc(m.forma(s.tipo))}</div>${simple ? '' : opcionesSalto(s) + '<div class="sep"></div>'}
       <button class="peligro" data-salto-del="${s.id}">Eliminar</button>`);
   }
+  /* La paleta de una nota abierta desde el panel: el mismo menú, anclado al botón. */
   function menuNota(n, el) {
     const r = el.getBoundingClientRect();
+    if (multiNotas.size > 1 && multiNotas.has(n.id)) {
+      abrirMenuEn(r.left + r.width / 2 - 105, r.bottom + 12, `<div class="mt">${multiNotas.size} notas elegidas</div>${coloresVarios()}
+        <div class="sep"></div><button class="peligro" data-nborrar-varios>Eliminar las ${multiNotas.size} notas</button>`);
+      return;
+    }
     abrirMenuEn(r.left + r.width / 2 - 105, r.bottom + 12, `<div class="mt">Nota</div>
       <div class="colores">
         ${PALETA.map(c => `<button class="sw${n.color === c.id ? ' on' : ''}" data-ncolor="${n.id}|${c.id}" style="background:${tono(c.id)}" title="${c.label}"></button>`).join('')}
@@ -1230,13 +1786,14 @@
       && e.clientX >= zonaUtil() && !arrastrando();
     if (!libre) { $celda.classList.remove('show'); celdaObj = null; return; }
     const r = tr.getBoundingClientRect();
-    const pos = m.ubicarCelda((e.clientX - r.left) / G());
+    if (celdaEn(e.clientX - r.left) < 0) { $celda.classList.remove('show'); celdaObj = null; return; }   // el hueco de delante no es una celda
+    const pos = m.ubicarCelda(celdaEn(e.clientX - r.left));
     const id = tr.dataset.linea;
     if (m.datos.puntos.some(p => p.lineaId === id && p.actoId === pos.actoId && p.celda === pos.celda)) {
       $celda.classList.remove('show'); celdaObj = null; return;
     }
     celdaObj = { lineaId: id, actoId: pos.actoId, celda: pos.celda };
-    $celda.style.left = (GUTTER + (m.celdasAntes(pos.actoId) + pos.celda) * G()) + 'px';
+    $celda.style.left = (GUTTER + px(m.celdasAntes(pos.actoId) + pos.celda)) + 'px';
     $celda.style.top = yFila(id) + 'px';
     $celda.classList.add('show');
   }
@@ -1284,6 +1841,8 @@
       if (id) { e.preventDefault(); irANodo(id); }
       return;
     }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && cols.size) { e.preventDefault(); return pedirBorrarColumnas(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && multiNotas.size) { e.preventDefault(); return pedirBorrarNotas([...multiNotas]); }
     if ((e.key === 'Delete' || e.key === 'Backspace') && multi.size) { e.preventDefault(); return pedirBorrarVarios([...multi]); }
     if ((e.key === 'Delete' || e.key === 'Backspace') && sel) {
       e.preventDefault();
@@ -1293,7 +1852,11 @@
       if (sel.tipo === 'acto') return pedirBorrarActo(sel.id);
       if (sel.tipo === 'nota') return pedirBorrarNota(sel.id);
     }
-    if (e.key === 'Escape') { cerrarMenu(); limpiarMulti(); if (sel) { sel = null; render(); } }
+    if (e.key === 'Escape') {
+      cerrarMenu(); limpiarMulti(); limpiarColumnas();
+      if (ruta) { sinRuta = true; render(); return; }        // apaga el camino iluminado y deja el nodo (y su descripción)
+      if (sel && !abajo) { sel = null; render(); }           // con el panel al lado sigue cerrándose, como siempre
+    }
   }
 
   /* ====================================================================
@@ -1340,6 +1903,7 @@
   function iniciar(opciones) {
     m = opciones.modelo;
     if (opciones.alCambiar) ganchos.alCambiar = opciones.alCambiar;
+    if (opciones.alPanel) ganchos.alPanel = opciones.alPanel;
     if (opciones.zoom) zoom = opciones.zoom;
     $axis = document.getElementById('axis'); $rows = document.getElementById('rows');
     $cables = document.getElementById('cables'); $canvas = document.getElementById('canvas');
@@ -1387,13 +1951,14 @@
     /* para ClapCraft: sus controles del carril (selector, color, etiqueta) interceptan el puntero; desde ahí también se reordena */
     arrastrarFila: (e, lineaId) => empezarArrastreFila(e, lineaId),
     acabaDeReordenar: () => Date.now() - finFila < 350,
-    zoom: v => { if (v !== undefined) { zoom = clamp(+v || 1.7, .5, 6); render(); } return zoom; },   // máximo doblado (Leo, 15-09-2026: el de antes se quedaba corto)
+    zoom: v => { if (v !== undefined) { zoom = clamp(+v || 1.7, .5, 18); render(); } return zoom; },   // tope × 3 (Leo, 16-09-2026: «el escalamiento horizontal sigue pareciéndome muy pequeño»; antes 6, y 3 hasta el 15-09)
     /* sin fuera de escena ni camino iluminado (true) o con ellos (false, lo normal) */
     simple: v => { if (v !== undefined && !!v !== simple) { simple = !!v; render(); } return simple; },
-    /* Alto de carril (escala vertical), en px: lo escribe en --fila para que el CSS de las filas vaya a la par. */
+    /* Alto de carril (escala vertical), en px: lo escribe en --fila para que el CSS de las filas vaya a la par. El
+       aplicado puede ser mayor si los rótulos o las notas no caben (Leo, 16-09-2026: «no importa que crezca el alto»). */
     alto: v => {
-      if (v !== undefined) { FILA = Math.round(clamp(+v || 80, 48, 240)); document.documentElement.style.setProperty('--fila', FILA + 'px'); render(); }
-      return FILA;
+      if (v !== undefined) { FILA_BASE = Math.round(clamp(+v || 80, 48, 240)); render(); }
+      return FILA_BASE;
     },
     /* Ancho de la columna de tramas. El CSS lo lee de --gutter (css/tramas.css); aquí se usa para
        colocar la marca de cruce, los cables y el ancho del lienzo. */
@@ -1404,6 +1969,10 @@
         if (m) render();
       }
       return GUTTER;
-    }
+    },
+    /* El panel del nodo abajo, de borde a borde, con asa para agrandarlo (ClapCraft; en Personajes va al lado).
+       `panelPlegado` tiene que salir aquí: app.js lo llama al arrancar para devolverlo contraído como se dejó, y sin
+       exportar reventaba el arranque entero (Leo, 16-09-2026: «ya no funciona nada»). */
+    panelAbajo, panelAlto, panelPlegado,
   };
 })(window.Tramas);

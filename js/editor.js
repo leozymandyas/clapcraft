@@ -1003,6 +1003,37 @@
     if (a && (e.metaKey || e.ctrlKey)) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); }
   });
 
+  /* ---------- escribir donde se pulse (Leo, 16-09-2026) ----------
+     Un clic en el hueco que queda debajo del último bloque baja hasta ahí con las líneas en blanco que hagan falta,
+     en lugar de dejar el cursor al final del último párrafo: antes había que llegar a pulsar Intro tantas veces. */
+  const MAX_LINEAS = 80;                                   // un clic no escribe una hoja entera de líneas vacías
+  /* Lo que ocupa un renglón **en pantalla**: los estilos vienen sin el zoom de la hoja (`zoom` en .page-wrap) y las
+     coordenadas del clic, con él; mezclarlos dejaba el cursor muy por encima de donde se pulsó. */
+  function altoDeLinea(ref) {
+    const cs = getComputedStyle(ref || editor);
+    const alto = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4 || 20;
+    const zoom = parseFloat(getComputedStyle(editor.parentElement || editor).zoom) || 1;
+    return (alto + (ref ? parseFloat(cs.marginBottom) || 0 : 0)) * zoom;
+  }
+  editor.addEventListener('mousedown', e => {
+    if (e.button !== 0 || e.target !== editor || !editor.isContentEditable) return;   // solo el hueco de la hoja
+    const ultimo = editor.lastElementChild; if (!ultimo) return;
+    const caja = ultimo.getBoundingClientRect();
+    if (e.clientY <= caja.bottom + 2) return;              // el hueco está debajo de todo lo escrito
+    e.preventDefault();
+    const vacio = b => !b.textContent.trim() && !b.querySelector('img, table, .db, hr');
+    const linea = altoDeLinea(ultimo);
+    let faltan = Math.max(0, Math.round((e.clientY - caja.bottom) / linea));
+    if (vacio(ultimo)) faltan--;                           // el último, si está en blanco, ya es una de esas líneas
+    faltan = Math.min(faltan, MAX_LINEAS);
+    const r = document.createRange();
+    r.selectNodeContents(ultimo); r.collapse(false);
+    Ed.restoreSelection(r);
+    editor.focus();
+    if (faltan > 0) Ed.cmd('insertHTML', '<p><br></p>'.repeat(faltan));   // con execCommand, para que entre en Deshacer
+    Ed.afterChange();
+  });
+
   /* ---------- arranque ---------- */
   function init() {
     document.execCommand('defaultParagraphSeparator', false, 'p');

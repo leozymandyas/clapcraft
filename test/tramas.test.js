@@ -17,6 +17,8 @@ function base() {
     puntos: [], saltos: [], notas: []
   });
 }
+/* como base(), pero con un acto de 20 celdas: base() ya está en el máximo y no admite columnas nuevas */
+const corto = () => { const m = base(); m.acto('a1').celdas = 20; return m; };
 const P = (m, id, lineaId, celda, extra) => m.datos.puntos.push(Object.assign(
   { id, lineaId, actoId: 'a1', celda, titulo: id, descripcion: '', color: null, cortado: false }, extra));
 const S = (m, id, deId, aId, tipo) => m.datos.saltos.push({ id, deId, aId, tipo: tipo || 'cuadro' });
@@ -152,27 +154,37 @@ test('12b. crear un nodo fuera de ese tramo no toca la nota', () => {
   assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId], ['a', 'b']);
 });
 
-test('13. arrastrar una nota a un tramo que ya tiene otra la deja donde estaba', () => {
+test('13. en un tramo caben varias notas apiladas (Leo, 16-09-2026)', () => {
   const m = base();
   P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12); P(m, 'c', 'l1', 20);
   m.datos.notas.push({ id: 'n1', deId: 'a', aId: 'b', texto: '1' }, { id: 'n2', deId: 'b', aId: 'c', texto: '2' });
-  assert.equal(m.moverNota('n1', 'b', 'c').ok, false);
-  assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId], ['a', 'b']);
-  // sin nota en el destino sí se mueve, y también entre tramas
+  assert.equal(m.moverNota('n1', 'b', 'c').ok, true);              // el tramo ya tiene otra: se apila
+  assert.deepEqual(m.notasDe('b', 'c').map(n => n.id), ['n1', 'n2']);
+  assert.equal(m.crearNota('b', 'c', 'tercera').ok, true);
+  assert.equal(m.notasDe('b', 'c').length, 3);
+  // y también entre tramas
   P(m, 'x', 'l2', 1); P(m, 'y', 'l2', 9);
   assert.equal(m.moverNota('n1', 'x', 'y').ok, true);
   assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId], ['x', 'y']);
 });
 
-test('soltar una nota sobre otra las intercambia (Leo, 15-09-2026), también entre tramas', () => {
+test('notas de un nodo: varias, y se van con él (Leo, 16-09-2026)', () => {
   const m = base();
-  P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12); P(m, 'c', 'l1', 20); P(m, 'x', 'l2', 1); P(m, 'y', 'l2', 9);
-  m.datos.notas.push({ id: 'n1', deId: 'a', aId: 'b', texto: '1' }, { id: 'n2', deId: 'b', aId: 'c', texto: '2' }, { id: 'n3', deId: 'x', aId: 'y', texto: '3' });
-  const r = m.moverNota('n1', 'b', 'c', { intercambiar: true });
-  assert.equal(r.ok, true); assert.equal(r.intercambio.id, 'n2');
-  assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId, m.nota('n2').deId, m.nota('n2').aId], ['b', 'c', 'a', 'b']);
-  assert.equal(m.moverNota('n1', 'x', 'y', { intercambiar: true }).ok, true);
-  assert.deepEqual([m.nota('n1').deId, m.nota('n3').deId], ['x', 'b']);
+  P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12);
+  assert.equal(m.crearNota('a', null, 'una').ok, true);
+  assert.equal(m.crearNota('a', 'a', 'otra').ok, true);            // `aId` igual al nodo: también es suya
+  assert.deepEqual(m.notasDe('a', null).map(n => n.texto), ['una', 'otra']);
+  assert.equal(m.notasDe('a', 'b').length, 0);
+  assert.equal(m.notasDeLinea('l1').length, 2);
+  const n0 = m.notasDe('a', null)[0];
+  assert.equal(m.moverNota(n0.id, 'a', 'b').ok, true);             // de un nodo a un tramo
+  assert.deepEqual([m.nota(n0.id).deId, m.nota(n0.id).aId], ['a', 'b']);
+  assert.equal(m.moverNota(n0.id, 'b', null).ok, true);            // y de vuelta a un nodo
+  assert.equal(m.nota(n0.id).aId, null);
+  const copia = new T.Modelo(JSON.parse(JSON.stringify(m.toJSON())));
+  assert.equal(copia.notasDe('b', null).length, 1, 'viaja en los datos');
+  assert.equal(m.borrarPunto('a').ok, true);
+  assert.equal(m.datos.notas.filter(n => n.deId === 'a').length, 0, 'las notas de un nodo se van con él');
 });
 
 test('soltar un nodo sobre otro los intercambia (Leo, 15-09-2026)', () => {
@@ -224,7 +236,7 @@ test('una nota solo va entre dos nodos consecutivos de la misma trama', () => {
   assert.equal(m.crearNota('a', 'z').ok, false);
   assert.equal(m.crearNota('b', 'a').ok, true);
   assert.deepEqual([m.datos.notas[0].deId, m.datos.notas[0].aId], ['a', 'b']);
-  assert.equal(m.crearNota('a', 'b').ok, false);           // ya hay una
+  assert.equal(m.crearNota('a', 'b').ok, true);            // caben varias (Leo, 16-09-2026)
 });
 
 /* ---------- recorrido ---------- */
@@ -318,7 +330,7 @@ test('normalizar deja un JSON ajeno cumpliendo las invariantes', () => {
     notas: [{ id: 'n1', deId: 'p1', aId: 'p3', texto: 'rota' }]
   });
   assert.equal(m.lineaPrincipal().id, 'l1');
-  assert.equal(m.acto('a1').celdas, T.MIN_CELDAS);
+  assert.equal(m.acto('a1').celdas, 2);                   // el ancho se respeta desde 1 celda (eliminar columnas puede dejarlo así)
   assert.equal(m.datos.puntos.length, 2);
   assert.equal(m.datos.saltos.length, 1);
   assert.equal(m.datos.saltos[0].tipo, 'rombo');          // toca una alternativa
@@ -472,4 +484,127 @@ test('reordenar tramas: cambia la posición y la flecha del salto se lee al rev�
   assert.equal(m.moverLinea('l3', 99).movida, false, 'ya es la última');
   assert.equal(m.moverLinea('nada', 0).ok, false);
   assert.equal(m.lineaPrincipal().id, 'l1', 'la principal sigue siéndolo');
+});
+
+/* Columnas (Leo, 16-09-2026, «como en Excel web»): insertar a un lado o a otro, varias de una vez, y
+   eliminar las elegidas con lo que hubiera dentro. */
+test('columnas: insertar a la izquierda y a la derecha corre lo que hay', () => {
+  const m = corto();
+  P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 9); P(m, 'c', 'l2', 4);
+  const r = m.insertarColumnas(4, 2, 'izquierda');
+  assert.equal(r.ok, true); assert.equal(r.insertadas, 2); assert.equal(r.desde, 4);
+  assert.deepEqual([m.cg(m.punto('a')), m.cg(m.punto('b')), m.cg(m.punto('c'))], [6, 11, 6], 'todo lo de la columna 4 en adelante, y en todas las tramas');
+  assert.equal(m.acto('a1').celdas, 22, 'el acto que las recibe crece');
+  const d = m.insertarColumnas(6, 1, 'derecha');
+  assert.equal(d.desde, 7, 'entra detrás de esa columna');
+  assert.deepEqual([m.cg(m.punto('a')), m.cg(m.punto('b'))], [6, 12], 'la de la izquierda no se mueve');
+});
+
+test('columnas: eliminar se lleva lo que hay dentro y corre el resto', () => {
+  const m = corto();
+  P(m, 'a', 'l1', 2); P(m, 'q', 'l1', 5); m.crearSalto('q', 'l2');           // el salto ocupa la columna 5 en dos tramas
+  P(m, 'z', 'l1', 9);
+  m.datos.notas.push({ id: 'n', deId: 'a', aId: 'q', texto: 'x' });
+  const res = m.resumenColumnas([5]);
+  assert.deepEqual([res.columnas, res.saltos, res.notas, res.actos], [1, 1, 1, 0]);
+  const r = m.borrarColumnas([5]);
+  assert.equal(r.ok, true); assert.equal(r.columnas, 1);
+  assert.equal(m.datos.saltos.length, 0); assert.equal(m.datos.notas.length, 0);
+  assert.deepEqual(m.datos.puntos.map(p => p.id).sort(), ['a', 'z']);
+  assert.deepEqual([m.cg(m.punto('a')), m.cg(m.punto('z'))], [2, 8], 'lo de la derecha se corre; lo de la izquierda no');
+  assert.equal(m.acto('a1').celdas, 19);
+});
+
+test('columnas: varias a la vez, el acto que se queda sin ninguna desaparece y siempre queda una', () => {
+  const m = new T.Modelo({
+    actos: [{ id: 'a1', nombre: 'Acto I', celdas: 2, fondo: null }, { id: 'a2', nombre: 'Acto II', celdas: 3, fondo: null }],
+    lineas: [{ id: 'l1', nombre: 'Principal', tipo: 'principal', color: 'azul' }], puntos: [], saltos: [], notas: []
+  });
+  P(m, 'p', 'l1', 1, { actoId: 'a2' });                                      // celda global 3
+  assert.equal(m.resumenColumnas([0, 1]).actos, 1, 'Acto I se quedaría sin columnas');
+  const r = m.borrarColumnas([0, 1, 0, 99]);                                 // repetidas y fuera de rango no cuentan
+  assert.equal(r.ok, true); assert.equal(r.columnas, 2); assert.equal(r.actos, 1);
+  assert.deepEqual(m.datos.actos.map(a => a.id), ['a2']);
+  assert.equal(m.cg(m.punto('p')), 1);
+  assert.equal(m.borrarColumnas([0, 1, 2]).ok, false, 'tiene que quedar al menos una columna');
+  assert.equal(m.borrarColumnas([]).ok, false);
+});
+
+test('columnas: moverlas con su contenido, varias a la vez (Leo, 16-09-2026)', () => {
+  const m = corto();
+  P(m, 'a', 'l1', 2); P(m, 'b', 'l1', 3); P(m, 'c', 'l1', 9); P(m, 'q', 'l2', 3);
+  const cg = id => m.cg(m.punto(id));
+  const r = m.moverColumnas([2, 3], 5);                                    // las dos columnas, cinco más allá
+  assert.equal(r.ok, true); assert.equal(r.movidas, 2);
+  assert.deepEqual([cg('a'), cg('b'), cg('q')], [7, 8, 8], 'se van juntas, y lo de la misma columna con ellas');
+  assert.equal(cg('c'), 9, 'lo que estaba más allá del destino no se mueve');
+  assert.deepEqual(m.datos.actos.map(x => x.celdas), [20], 'los actos no cambian de ancho');
+  assert.equal(m.moverColumnas([7, 8], -5).ok, true);
+  assert.deepEqual([cg('a'), cg('b'), cg('q')], [2, 3, 3], 'y vuelven');
+  assert.equal(m.moverColumnas([2], 0).movidas, 0);                        // sin mover, no pasa nada
+  assert.equal(m.moverColumnas([], 3).ok, false);
+});
+
+test('columnas: moverlas al principio y al final, sin salirse', () => {
+  const m = corto();
+  P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 0);
+  assert.equal(m.moverColumnas([4], -99).ok, true);
+  assert.deepEqual([m.cg(m.punto('a')), m.cg(m.punto('b'))], [0, 1], 'a la primera posición; lo que había se corre');
+  assert.equal(m.moverColumnas([0], 99).ok, true);
+  assert.equal(m.cg(m.punto('a')), m.totalCeldas() - 1, 'y a la última');
+});
+
+test('notas apiladas: se reordenan una encima o debajo de otra (Leo, 16-09-2026)', () => {
+  const m = new T.Modelo(T.inicial());
+  const l = m.datos.lineas[0].id, a = m.datos.actos[0].id;
+  const p1 = m.nuevoPunto(l, a, 2).punto, p2 = m.nuevoPunto(l, a, 6).punto;
+  const n1 = m.crearNota(p1.id, null, 'A').nota, n2 = m.crearNota(p1.id, null, 'B').nota, n3 = m.crearNota(p1.id, null, 'C').nota;
+  const t1 = m.crearNota(p1.id, p2.id, 'T1').nota, t2 = m.crearNota(p1.id, p2.id, 'T2').nota;
+  const enNodo = () => m.notasDe(p1.id, null).map(x => x.texto);
+  const enTramo = () => m.notasDe(p1.id, p2.id).map(x => x.texto);
+
+  assert.deepEqual(enNodo(), ['A', 'B', 'C']);
+  assert.equal(m.colocarNota(n3.id, n1.id).ok, true);          // la última, la primera
+  assert.deepEqual(enNodo(), ['C', 'A', 'B']);
+  assert.equal(m.colocarNota(n3.id, null).ok, true);           // al final
+  assert.deepEqual(enNodo(), ['A', 'B', 'C']);
+  assert.equal(m.colocarNota(n2.id, n2.id).movida, false, 'delante de sí misma no hace nada');
+
+  /* también las de un tramo (el enlace entre dos nodos), sin mezclarse con las del nodo */
+  assert.deepEqual(enTramo(), ['T1', 'T2']);
+  assert.equal(m.colocarNota(t2.id, t1.id).ok, true);
+  assert.deepEqual(enTramo(), ['T2', 'T1']);
+  assert.deepEqual(enNodo(), ['A', 'B', 'C'], 'las del nodo no se tocan');
+  /* y se mezclan: una de enlace puede ponerse encima de una de nodo, que en el tablero se apilan juntas */
+  assert.equal(m.colocarNota(t1.id, n1.id).ok, true, 'una de enlace, delante de una de nodo');
+  assert.deepEqual(m.datos.notas.map(x => x.texto), ['T1', 'A', 'B', 'T2', 'C']);
+  assert.deepEqual(enNodo(), ['A', 'B', 'C']); assert.deepEqual(enTramo(), ['T1', 'T2'], 'cada una sigue en su sitio');
+  /* pero no contra una nota de otra trama, que no se ve al lado */
+  const l2 = m.nuevaLinea('secundaria').linea;
+  const q1 = m.nuevoPunto(l2.id, a, 4).punto;
+  const otra = m.crearNota(q1.id, null, 'Otra trama').nota;
+  assert.equal(m.colocarNota(n1.id, otra.id).ok, false);
+  assert.equal(m.colocarNota('n-no-existe', null).ok, false);
+  /* el orden viaja en los datos */
+  assert.deepEqual(new T.Modelo(JSON.parse(JSON.stringify(m.toJSON()))).notasDe(p1.id, p2.id).map(x => x.texto), ['T1', 'T2']);
+});
+
+test('el enlace entre dos nodos tiene color propio y admite varias notas; varias notas se borran de una vez (Leo, 16-09-2026)', () => {
+  const m = base();
+  const p1 = m.nuevoPunto('l1', 'a1', 2).punto, p2 = m.nuevoPunto('l1', 'a1', 6).punto, p3 = m.nuevoPunto('l1', 'a1', 9).punto;
+  assert.equal(m.siguienteEnTrama(p1.id), p2); assert.equal(m.siguienteEnTrama(p3.id), null);
+  assert.equal(m.colorearEnlace(p1.id, 'rojo').ok, true);
+  assert.equal(m.punto(p1.id).colorEnlace, 'rojo');
+  assert.equal(m.colorearEnlace(p1.id, 'no-es-un-tono').ok, true);
+  assert.equal('colorEnlace' in m.punto(p1.id), false, 'un tono que no existe vuelve al de la trama');
+  m.colorearEnlace(p2.id, 'verde');
+  const copia = new T.Modelo(JSON.parse(JSON.stringify(m.toJSON())));
+  assert.equal(copia.punto(p2.id).colorEnlace, 'verde', 'viaja en los datos');
+  assert.equal('colorEnlace' in copia.punto(p1.id), false, 'y sin él no se añade nada');
+  const a = m.crearNota(p1.id, p2.id, 'Uno').nota, b = m.crearNota(p1.id, p2.id, 'Dos').nota, c = m.crearNota(p2.id, p3.id, 'Tres').nota;
+  assert.equal(m.notasDe(p1.id, p2.id).length, 2, 'caben varias en el mismo enlace');
+  const r = m.borrarNotas([a.id, c.id, 'no-existe']);
+  assert.equal(r.ok, true); assert.equal(r.borradas, 2);
+  assert.deepEqual(m.datos.notas.map(n => n.id), [b.id]);
+  assert.equal(m.borrarNotas([]).ok, false);
 });

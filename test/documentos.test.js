@@ -8,6 +8,13 @@ function nuevo(datos) {
   let t = 1000, n = 0;
   return new C.Documentos(datos, { ahora: () => (t += 10), idNuevo: () => 'x' + (++n) });
 }
+/* Un esquema con su biblioteca agrupada a mano: `crearEsquema` ya no la crea (Leo, 16-09-2026). */
+function conBiblioteca(d, cid, datos, nombre, nombreSub) {
+  const e = d.crearEsquema(cid, datos, nombre).esquema;
+  const sub = d.crearSub(cid, nombreSub || e.nombre).sub;
+  d.crearGrupo(cid, [e.id, sub.id], e.nombre);
+  return { esquema: e, sub, contenedor: d.contenedor(cid) };
+}
 const nombres = xs => xs.map(x => x.nombre || x.titulo);
 const TABLERO = { actos: [{ id: 'a1', nombre: 'Acto I', celdas: 10 }], lineas: [{ id: 'l1', tipo: 'principal' }], puntos: [{ id: 'p1', lineaId: 'l1', actoId: 'a1', celda: 2, titulo: 'Inicio' }], saltos: [], notas: [] };
 
@@ -217,10 +224,8 @@ test('migrar el esquema antiguo del guion: al primer contenedor (o «Trama globa
   const d = nuevo();
   const r = d.migrarEsquema(TABLERO, { p1: { title: 'Inicio', html: '<p>hola</p>' } });
   assert.equal(r.cambio, true); assert.equal(r.contenedor.nombre, C.NOMBRE_GLOBAL); assert.equal(r.esquema.nombre, 'Esquema de pasos');
-  assert.deepEqual(nombres(d.subsDe(r.contenedor.id)), ['Esquema de pasos']);   // el «Capítulo» nuevo trae solo el esquema y su biblioteca enlazada
-  assert.equal(d.enlace(r.esquema.id).sub.nombre, 'Esquema de pasos');
-  assert.equal(!!d.enlace(r.esquema.id).sub.segmentosPrimero, false);                            // la cronología arriba por defecto
-  assert.equal(d.ordenarSecciones(d.enlace(r.esquema.id).sub.id, false).ok, true); assert.equal(nuevo(d.toJSON()).enlace(r.esquema.id).sub.segmentosPrimero, true);
+  assert.deepEqual(nombres(d.subsDe(r.contenedor.id)), ['Biblioteca']);         // el «Capítulo» nuevo trae su biblioteca; el esquema ya no estrena una
+  assert.equal(d.enlace(r.esquema.id), null);
   assert.equal(d.notaEsquema(r.esquema.id, 'p1').html, '<p>hola</p>');
   assert.equal(d.migrarEsquema(TABLERO).cambio, false);                          // ya migrado
   assert.equal(nuevo(d.toJSON()).datos.migrado, true);
@@ -236,63 +241,91 @@ test('migrar el esquema antiguo del guion: al primer contenedor (o «Trama globa
 test('enlace esquema ↔ documentos: nacen juntos con el mismo nombre, se renombran por separado, se mueven juntos y el enlace se quita', () => {
   const d = nuevo();
   d.crearContenedor('Uno'); d.crearContenedor('Dos');                                      // x1 (x2) y x3 (x4)
-  const r = d.crearEsquema('x1', TABLERO, 'Flashbacks');
-  assert.equal(r.sub.nombre, 'Flashbacks'); assert.equal(r.esquema.subId, r.sub.id);
+  const r = conBiblioteca(d, 'x1', TABLERO, 'Flashbacks');
+  assert.equal(r.sub.nombre, 'Flashbacks'); assert.deepEqual(d.grupoDe(r.esquema.id).grupo.items, [r.esquema.id, r.sub.id]);
   assert.deepEqual(nombres(d.subsDe('x1')), ['Biblioteca', 'Flashbacks']);
   assert.equal(d.enlace(r.esquema.id).sub, r.sub); assert.equal(d.enlace(r.sub.id).esquema, r.esquema); assert.equal(d.enlace('x2'), null);
-  assert.equal(d.crearEsquema('x1', TABLERO, 'Biblioteca').sub.nombre, 'Biblioteca 2');   // choca con otro subcontenedor: nombre libre
+  assert.equal(conBiblioteca(d, 'x1', TABLERO, 'Otro', 'Biblioteca').sub.nombre, 'Biblioteca 2');   // choca con otro subcontenedor: nombre libre
   assert.equal(d.renombrarSub(r.sub.id, 'Fichas').ok, true); assert.equal(r.esquema.nombre, 'Flashbacks');
   assert.equal(d.renombrarEsquema(r.esquema.id, 'Pasos').ok, true); assert.equal(r.sub.nombre, 'Fichas');
   /* mover el esquema se lleva su documentos, y al revés */
   assert.equal(d.colocarEsquema(r.esquema.id, null, 'x3').ok, true);
   assert.equal(d.enlace(r.sub.id).contenedor.id, 'x3'); assert.deepEqual(nombres(d.subsDe('x3')), ['Biblioteca', 'Fichas']);
   assert.equal(d.colocarSub(r.sub.id, null, 'x1').ok, true);
-  assert.deepEqual(nombres(d.esquemasDe('x1')), ['Biblioteca', 'Pasos']); assert.equal(d.esquemasDe('x3').length, 0);
+  assert.deepEqual(nombres(d.esquemasDe('x1')), ['Otro', 'Pasos']); assert.equal(d.esquemasDe('x3').length, 0);
   assert.equal(nuevo(d.toJSON()).enlace(r.esquema.id).sub.id, r.sub.id);                   // viaja en los datos
   /* un enlace roto o repetido se descarta al cargar */
-  const j = d.toJSON(); j.contenedores[0].esquemas[0].subId = r.sub.id;
-  assert.equal(nuevo(j).esquemasDe('x1').filter(e => e.subId === r.sub.id).length, 1);
+  const j = d.toJSON(); j.contenedores[0].grupos = [{ id: 'gx', nombre: 'Grupo', color: 'ambar', items: [r.esquema.id, r.sub.id, r.sub.id] }];
+  assert.deepEqual(nuevo(j).grupoDe(r.esquema.id).grupo.items, [r.esquema.id, r.sub.id]);   // sin repetidos
   /* quitar el enlace: los dos se quedan, sueltos */
-  assert.equal(d.quitarEnlace(r.sub.id).ok, true); assert.equal(d.enlace(r.esquema.id), null); assert.equal(d.quitarEnlace(r.esquema.id).ok, false);
+  assert.equal(d.quitarEnlace(r.sub.id).ok, true); assert.equal(d.enlace(r.esquema.id), null);
+  assert.equal(d.quitarEnlace(r.esquema.id).ok, true, 'el grupo se queda con uno y de ahí también se sale');
   assert.equal(d.colocarEsquema(r.esquema.id, null, 'x3').ok, true); assert.equal(d.sub(r.sub.id).contenedor.id, 'x1');
-  /* enlazar a mano: uno con uno y dentro del mismo contenedor */
+  /* agrupar a mano: dentro del mismo contenedor, y un grupo admite más de dos (Leo, 16-09-2026) */
   const suelto = d.crearSub('x1', 'Notas').sub;
-  assert.equal(d.enlazar(r.esquema.id, suelto.id).ok, false);                              // el esquema está en x3, los documentos en x1
+  assert.equal(d.enlazar(r.esquema.id, suelto.id).ok, false);                              // el esquema está en x3, la biblioteca en x1
   assert.equal(d.colocarEsquema(r.esquema.id, null, 'x1').ok, true);
-  assert.equal(d.enlazar(r.esquema.id, suelto.id).ok, true); assert.equal(d.enlace(suelto.id).esquema, r.esquema);
-  assert.equal(d.enlazar(r.esquema.id, r.sub.id).ok, false);                               // ya tiene enlace
+  assert.equal(d.enlazar(r.esquema.id, suelto.id).ok, true);
+  assert.equal(d.grupoDe(suelto.id).grupo.items.length, 2, 'un grupo nuevo con los dos');
+  assert.equal(d.enlace(suelto.id).esquema, r.esquema);
+  assert.equal(d.enlazar(r.sub.id, suelto.id).ok, true);                                   // un tercero entra en ese grupo
+  assert.equal(d.grupoDe(r.sub.id).grupo.items.length, 3);
   const otro = d.crearEsquema('x1', TABLERO, 'Otro esquema').esquema;
-  assert.equal(d.enlazar(otro.id, suelto.id).ok, false);                                   // esos documentos ya tienen esquema
+  assert.equal(d.enlazar(otro.id, suelto.id).ok, true);                                    // se puede juntar con lo que sea
+  assert.equal(d.grupoDe(otro.id).grupo.items.length, 4);
+  assert.equal(d.quitarEnlace(otro.id).ok, true); assert.equal(d.grupoDe(otro.id), null);
   /* eliminar el documentos enlazado deja el esquema suelto */
-  const r2 = d.crearEsquema('x3', TABLERO, 'Otro');
-  assert.equal(d.eliminarSub(r2.sub.id).ok, true); assert.equal(d.esquema(r2.esquema.id).esquema.subId, null);
+  const r2 = conBiblioteca(d, 'x3', TABLERO, 'Otro');
+  assert.equal(d.eliminarSub(r2.sub.id).ok, true);
+  assert.deepEqual(d.nivelGrupo(d.grupoDe(r2.esquema.id).grupo.id).map(x => x.id), [r2.esquema.id]);   // el grupo se queda con él solo
 });
 
-test('personajes: contenedor oculto con un tablero y una biblioteca por personaje', () => {
+test('personajes: dos contenedores ocultos, la biblioteca de cada uno y los esquemas de personaje', () => {
   const d = nuevo(); d.crearContenedor('Capítulo');
-  assert.equal(d.personajes(), null);                                                   // no existe hasta que se crea
+  assert.equal(d.personajes(), null); assert.equal(d.esquemasPersonajes(), null);        // no existen hasta que se crean
   const p = d.personajes(true);
   assert.equal(p.oculto, true); assert.equal(d.personajes(true), p);                     // una sola vez
   const le = d.crearPersonaje('Lestat').personaje, lo = d.crearPersonaje('Louis').personaje;
-  assert.equal(d.esquemaPersonaje(le.id), null);                                         // sin tablero de partida no lo crea
-  const t = { actos: TABLERO.actos, lineas: [{ id: 'l1', tipo: 'principal', nombre: 'Sin personaje' }, { id: 'l2', tipo: 'secundaria', nombre: 'Lestat', personaje: le.id }], puntos: [], saltos: [], notas: [] };
-  const e = d.esquemaPersonaje(le.id, t);
-  assert.equal(e.id, 'personajes:esquema:' + le.id); assert.deepEqual([e.datos.lineas[0].personaje, e.datos.lineas[0].nombre], [le.id, 'Lestat']);   // el principal es el personaje
-  assert.equal(e.datos.lineas[1].personaje, undefined);                                   // y no se repite en otro carril
-  assert.equal(d.esquemaPersonaje(le.id, t), e); assert.notEqual(d.esquemaPersonaje(lo.id, t), e);   // uno por personaje
-  e.datos.lineas[0].nombre = 'Otro'; assert.equal(d.esquemaPersonaje(le.id).datos.lineas[0].nombre, 'Lestat');   // el principal no se cambia
-  e.datos.lineas[1].personaje = lo.id; d.renombrarPersonaje(le.id, 'Lestat de L.');
-  assert.equal(e.nombre, 'Lestat de L.'); assert.equal(e.datos.lineas[0].nombre, 'Lestat de L.');
-  assert.equal(d.eliminarPersonaje(lo.id).ok, true); assert.equal(e.datos.lineas[1].personaje, undefined);
-  assert.equal(p.esquemas.some(x => x.id === 'personajes:esquema:' + lo.id), false);         // su tablero se va con él
-  assert.equal(d.contenedores({}).total, 1); assert.deepEqual(nombres(d.contenedores({}).sueltos), ['Capítulo']);   // no sale en el árbol
-  const b = d.bibliotecaPersonaje('l1', 'Lestat');
-  assert.equal(b.nombre, 'Lestat'); assert.equal(d.bibliotecaPersonaje('l1', 'Lestat de Lioncourt'), b); assert.equal(b.nombre, 'Lestat de Lioncourt');
+  /* un esquema de personaje: documento suelto del contenedor «Esquemas», con su primera trama */
+  const t = { actos: TABLERO.actos, lineas: [{ id: 'l1', tipo: 'principal', nombre: 'Lestat', personaje: le.id }], puntos: [], saltos: [], notas: [] };
+  const r = d.crearEsquemaPersonaje(t, 'Lestat');
+  assert.equal(r.ok, true); assert.equal(r.contenedor.id, C.ID_ESQUEMAS_PERSONAJE); assert.equal(r.contenedor.oculto, true);
+  assert.equal(r.contenedor.subs.length, 0);                                             // ahí no nacen bibliotecas
+  assert.equal(d.esEsquemaPersonaje(r.esquema.id), true);
+  const r2 = d.crearEsquemaPersonaje(t, 'Lestat');                                       // se pueden tener varios del mismo
+  assert.equal(r2.esquema.nombre, 'Lestat 2'); assert.notEqual(r2.esquema.id, r.esquema.id);
+  assert.equal(d.eliminarEsquema(r2.esquema.id).ok, true);                               // y se eliminan como cualquiera
+  /* ahí también hay carpetas y orden */
+  const k = d.crearCarpeta(C.ID_ESQUEMAS_PERSONAJE, 'Secundarios', 'azul').carpeta;
+  assert.equal(d.moverACarpeta('esquema', r.esquema.id, k.id).ok, true);
+  assert.equal(d.nivelArbol(C.ID_ESQUEMAS_PERSONAJE, k.id).map(x => x.id).join(), r.esquema.id);
+  assert.equal(d.eliminarPersonaje(lo.id).ok, true);
+  assert.equal(d.contenedores({}).total, 1); assert.deepEqual(nombres(d.contenedores({}).sueltos), ['Capítulo']);   // ninguno sale en el árbol
+  const b = d.bibliotecaPersonaje(le.id, 'Lestat');
+  assert.equal(b.nombre, 'Lestat'); assert.equal(d.bibliotecaPersonaje(le.id, 'Lestat de Lioncourt'), b); assert.equal(b.nombre, 'Lestat de Lioncourt');
   d.crearNota(b.id, null, 'Voz del narrador');
   const j = nuevo(d.toJSON());
-  assert.equal(j.contenedor('personajes').oculto, true); assert.equal(j.bibliotecaPersonaje('l1').id, b.id); assert.equal(j.notasDe(b.id).length, 1);
-  const k = nuevo(); k.personajes(true);
-  assert.equal(k.migrarEsquema(TABLERO).contenedor.nombre, C.NOMBRE_GLOBAL);             // la migración no usa el oculto
+  assert.equal(j.contenedor('personajes').oculto, true); assert.equal(j.bibliotecaPersonaje(le.id).id, b.id); assert.equal(j.notasDe(b.id).length, 1);
+  assert.equal(j.esEsquemaPersonaje(r.esquema.id), true);
+  const k2 = nuevo(); k2.personajes(true);
+  assert.equal(k2.migrarEsquema(TABLERO).contenedor.nombre, C.NOMBRE_GLOBAL);            // la migración no usa los ocultos
+});
+
+test('los tableros por personaje de antes se mudan al contenedor «Esquemas»; los vacíos se descartan', () => {
+  const d = nuevo(); d.personajes(true); d.crearPersonaje('Lestat'); d.crearPersonaje('Louis');
+  const le = d.elenco()[0].id, lo = d.elenco()[1].id;
+  const conNodo = { actos: TABLERO.actos, lineas: [{ id: 'l1', tipo: 'principal', nombre: 'Lestat', personaje: le }],
+                    puntos: [{ id: 'p1', lineaId: 'l1', actoId: TABLERO.actos[0].id, celda: 0, titulo: 'Inicio' }], saltos: [], notas: [] };
+  const vacio = { actos: TABLERO.actos, lineas: [{ id: 'l1', tipo: 'principal', nombre: 'Louis', personaje: lo }], puntos: [], saltos: [], notas: [] };
+  const datos = d.toJSON();
+  const per = datos.contenedores.find(c => c.id === 'personajes');
+  per.esquemas = [{ id: 'personajes:esquema:' + le, nombre: 'Lestat', datos: conNodo, notas: {} },
+                  { id: 'personajes:esquema:' + lo, nombre: 'Louis', datos: vacio, notas: {} }];
+  const j = nuevo(datos);
+  assert.equal(j.contenedor('personajes').esquemas.length, 0);
+  const c = j.contenedor(C.ID_ESQUEMAS_PERSONAJE);
+  assert.deepEqual(c.esquemas.map(e => e.nombre), ['Lestat']);                            // el vacío no se queda
+  assert.equal(c.oculto, true); assert.equal(j.esEsquemaPersonaje(c.esquemas[0].id), true);
 });
 
 test('elenco: personajes del editor y de Personajes; renombrar y recolorear reescribe las notas; no se elimina si lo nombran', () => {
@@ -322,7 +355,7 @@ test('elenco: personajes del editor y de Personajes; renombrar y recolorear rees
   d.colorearPersonaje(ana.id, 7); assert.equal(d.nota(n.id).characters.anabel.color, 7); assert.equal(d.notaEsquema(e.id, 'p1').characters.anabel.color, 7);
   /* eliminar: no mientras lo nombren; sí cuando no, y su carril queda sin personaje */
   assert.equal(d.eliminarPersonaje(ana.id).ok, false);
-  const pj = d.esquemaPersonaje(ana.id, { actos: TABLERO.actos, lineas: [{ id: 'l1', tipo: 'principal' }, { id: 'l2', tipo: 'secundaria', personaje: lu.id, nombre: 'Lucía' }], puntos: [], saltos: [], notas: [] });
+  const pj = d.crearEsquemaPersonaje({ actos: TABLERO.actos, lineas: [{ id: 'l1', tipo: 'principal' }, { id: 'l2', tipo: 'secundaria', personaje: lu.id, nombre: 'Lucía' }], puntos: [], saltos: [], notas: [] }, 'Ana').esquema;
   d.renombrarPersonaje(lu.id, 'Lucía Pérez'); assert.equal(pj.datos.lineas[1].nombre, 'Lucía Pérez');
   assert.equal(d.eliminarPersonaje(lu.id).ok, true); assert.equal(pj.datos.lineas[1].personaje, undefined);
   /* una errata que llegó al elenco desde una nota sale cuando ya no la nombra ninguna; lo creado a mano se queda */
@@ -375,7 +408,7 @@ test('orden propio de actos y documentos en una biblioteca (no toca la línea de
 test('carpetas: crear anidadas, meter esquemas (con su biblioteca) y bibliotecas, contar, plegar, renombrar y colorear', () => {
   const d = nuevo();
   const { contenedor: c } = d.crearContenedor('Capítulo', { vacio: true });
-  const e = d.crearEsquema(c.id, TABLERO, 'Esquema 1');
+  const e = conBiblioteca(d, c.id, TABLERO, 'Esquema 1');
   const suelta = d.crearSub(c.id, 'Lugares').sub;
   const t1 = d.crearCarpeta(c.id, 'Temporada 1', 'azul').carpeta;
   const cap = d.crearCarpeta(c.id, 'Capítulo I', 'violeta', t1.id).carpeta;
@@ -395,35 +428,36 @@ test('carpetas: crear anidadas, meter esquemas (con su biblioteca) y bibliotecas
   assert.equal(d.renombrarCarpeta(cap.id, 'capítulo i 2').ok, false);
   assert.equal(d.colorearCarpeta(cap.id, 'verde').carpeta.color, 'verde');
   /* soltar un esquema delante de otro lo deja en su carpeta; sobre el contenedor, en la raíz */
-  const e2 = d.crearEsquema(c.id, TABLERO, 'Esquema 2').esquema;
-  d.colocarEsquema(e2.id, e.esquema.id);
-  assert.equal(d.esquema(e2.id).esquema.carpetaId, cap.id);
-  d.colocarEsquema(e2.id, null, c.id);
-  assert.equal(d.esquema(e2.id).esquema.carpetaId, undefined);
-  assert.equal(d.sub(e2.subId).sub.carpetaId, undefined);
+  const e2 = conBiblioteca(d, c.id, TABLERO, 'Esquema 2');
+  d.colocarEsquema(e2.esquema.id, e.esquema.id);
+  assert.equal(d.esquema(e2.esquema.id).esquema.carpetaId, cap.id);
+  d.colocarEsquema(e2.esquema.id, null, c.id);
+  assert.equal(d.esquema(e2.esquema.id).esquema.carpetaId, undefined);
+  assert.equal(d.sub(e2.sub.id).sub.carpetaId, undefined);
 });
 
 test('carpetas: eliminar sube lo suyo un nivel; mudar una carpeta a otro contenedor se lleva todo; se guardan y se sanean', () => {
   const d = nuevo();
   const { contenedor: a } = d.crearContenedor('A', { vacio: true }), { contenedor: b } = d.crearContenedor('B', { vacio: true });
   const t = d.crearCarpeta(a.id, 'Temporada', 'azul').carpeta, k = d.crearCarpeta(a.id, 'Capítulo', 'violeta', t.id).carpeta;
-  const e = d.crearEsquema(a.id, TABLERO, 'Esquema').esquema; d.moverACarpeta('esquema', e.id, k.id);
+  const e = conBiblioteca(d, a.id, TABLERO, 'Esquema').esquema; d.moverACarpeta('esquema', e.id, k.id);
   const s = d.crearSub(a.id, 'Notas').sub; d.moverACarpeta('sub', s.id, t.id);
   /* mudar «Temporada» a B: sus carpetas, el esquema con su biblioteca y la biblioteca suelta */
   assert.equal(d.moverACarpeta('carpeta', t.id, null, b.id).ok, true);
   assert.deepEqual(a.carpetas, []); assert.equal(b.carpetas.length, 2);
   assert.equal(d.esquema(e.id).contenedor, b); assert.equal(d.esquema(e.id).esquema.carpetaId, k.id);
-  assert.equal(d.sub(e.subId).contenedor, b); assert.equal(d.sub(s.id).sub.carpetaId, t.id);
+  assert.equal(d.enlace(e.id).contenedor, b); assert.equal(d.sub(s.id).sub.carpetaId, t.id);
   /* eliminar «Temporada»: «Capítulo» y la biblioteca suben a la raíz, nada se pierde */
   d.eliminarCarpeta(t.id);
   assert.equal(d.carpeta(k.id).carpeta.padreId, null); assert.equal(d.sub(s.id).sub.carpetaId, undefined);
   assert.equal(d.esquema(e.id).esquema.carpetaId, k.id);
-  /* personajes */
-  const vamp = d.crearCarpeta(C.ELENCO_CARPETAS, 'Vampiros', 'violeta').carpeta;
+  /* en Personajes hay carpetas propias (Leo, 16-09-2026: vuelven) y ahí van los personajes */
+  const v = d.crearCarpeta(C.ELENCO_CARPETAS, 'Vampiros', 'violeta');
+  assert.equal(v.ok, true);
   const lestat = d.crearPersonaje('Lestat').personaje;
-  assert.equal(d.moverACarpeta('personaje', lestat.id, vamp.id).ok, true);
-  assert.equal(d.cuentaCarpeta(vamp.id), 1);
-  assert.equal(d.moverACarpeta('esquema', e.id, vamp.id).ok, false);
+  assert.equal(d.moverACarpeta('personaje', lestat.id, k.id).ok, false);           // no en las de un contenedor
+  assert.equal(d.moverACarpeta('personaje', lestat.id, v.carpeta.id).ok, true);
+  assert.equal(d.cuentaCarpeta(v.carpeta.id), 1);
   /* guardado y saneado: padres que no existen y ciclos van a la raíz; carpetaId roto se quita */
   const x = nuevo(d.toJSON());
   assert.deepEqual(x.toJSON(), d.toJSON());
@@ -433,34 +467,41 @@ test('carpetas: eliminar sube lo suyo un nivel; mudar una carpeta a otro contene
   const y = nuevo(roto), cy = y.contenedor(b.id);
   assert.equal(cy.carpetas.find(z => z.id === 'c3').padreId, null);
   assert.ok(['c1', 'c2'].some(id => cy.carpetas.find(z => z.id === id).padreId === null));
-  assert.equal(cy.esquemas[0].carpetaId, undefined); assert.equal(y.sub(cy.esquemas[0].subId).sub.carpetaId, undefined);
+  /* un `carpetaId` roto lo arregla su grupo: sus piezas viven donde el grupo (Leo, 16-09-2026) */
+  const gy = y.grupoDe(cy.esquemas[0].id).grupo;
+  assert.equal(cy.esquemas[0].carpetaId, gy.carpetaId); assert.equal(y.enlace(cy.esquemas[0].id).sub.carpetaId, gy.carpetaId);
 });
 
-test('árbol: carpetas, esquemas (con su biblioteca) y bibliotecas sueltas se ordenan mezclados en su nivel; también personajes', () => {
+test('árbol: carpetas, grupos y piezas sueltas se ordenan mezclados en su nivel; también personajes', () => {
   const d = nuevo();
   const { contenedor: c } = d.crearContenedor('Capítulo', { vacio: true }), { contenedor: c2 } = d.crearContenedor('Otro', { vacio: true });
-  const e = d.crearEsquema(c.id, TABLERO, 'Esquema'), suelta = d.crearSub(c.id, 'Lugares').sub, k = d.crearCarpeta(c.id, 'Temporada', 'azul').carpeta;
+  const e = conBiblioteca(d, c.id, TABLERO, 'Esquema'), suelta = d.crearSub(c.id, 'Lugares').sub, k = d.crearCarpeta(c.id, 'Temporada', 'azul').carpeta;
+  const g = d.grupoDe(e.esquema.id).grupo;
   const nivel = (amb, kid) => d.nivelArbol(amb, kid).map(x => x.tipo + ':' + (x.obj.nombre || x.obj.titulo));
-  assert.deepEqual(nivel(c.id), ['carpeta:Temporada', 'esquema:Esquema', 'sub:Lugares']);          // sin orden guardado: carpetas, esquemas, sueltas
-  assert.equal(d.colocarEnArbol(suelta.id, e.esquema.id).ok, true);                                 // una biblioteca encima de la pareja
-  assert.deepEqual(nivel(c.id), ['carpeta:Temporada', 'sub:Lugares', 'esquema:Esquema']);
-  assert.equal(d.colocarEnArbol(k.id, e.sub.id, true).ok, true);                                    // la biblioteca enlazada cuenta como su esquema
-  assert.deepEqual(nivel(c.id), ['sub:Lugares', 'esquema:Esquema', 'carpeta:Temporada']);
-  /* delante de algo de otra carpeta: entra en ella; la pareja nunca se separa */
+  /* sin orden guardado: carpetas, grupos y lo suelto; lo del grupo va dentro de él */
+  assert.deepEqual(nivel(c.id), ['carpeta:Temporada', 'grupo:' + g.nombre, 'sub:Lugares']);
+  assert.equal(d.colocarEnArbol(suelta.id, g.id).ok, true);                                        // una biblioteca encima del grupo
+  assert.deepEqual(nivel(c.id), ['carpeta:Temporada', 'sub:Lugares', 'grupo:' + g.nombre]);
+  assert.equal(d.colocarEnArbol(k.id, g.id, true).ok, true);                                       // la carpeta, detrás del grupo
+  assert.deepEqual(nivel(c.id), ['sub:Lugares', 'grupo:' + g.nombre, 'carpeta:Temporada']);
+  /* delante de algo de otra carpeta: entra en ella (y sale de su grupo, porque ahí vive lo otro) */
   const dentro = d.crearSub(c.id, 'Dentro').sub; d.moverACarpeta('sub', dentro.id, k.id);
   assert.equal(d.colocarEnArbol(e.esquema.id, dentro.id).ok, true);
   assert.deepEqual(nivel(c.id, k.id), ['esquema:Esquema', 'sub:Dentro']);
-  assert.equal(d.sub(e.sub.id).sub.carpetaId, k.id);
+  assert.equal(d.grupoDe(e.esquema.id), null); assert.equal(d.sub(e.sub.id).sub.carpetaId, undefined);
+  /* el grupo entero a una carpeta: se lleva lo suyo */
+  const g3 = d.crearGrupo(c.id, [suelta.id, dentro.id], 'Bloque').grupo;
+  assert.equal(d.moverACarpeta('grupo', g3.id, k.id).ok, true);
+  assert.equal(d.sub(suelta.id).sub.carpetaId, k.id);
   /* y a otro contenedor, delante de lo suyo */
   const alla = d.crearSub(c2.id, 'Allá').sub;
-  assert.equal(d.colocarEnArbol(suelta.id, alla.id).ok, true);
-  assert.deepEqual(nivel(c2.id), ['sub:Lugares', 'sub:Allá']);
-  assert.deepEqual(nuevo(d.toJSON()).toJSON(), d.toJSON());                                         // se guarda
-  /* personajes y sus carpetas */
-  const a = d.crearPersonaje('Lestat').personaje, b = d.crearPersonaje('Louis').personaje, v = d.crearCarpeta(C.ELENCO_CARPETAS, 'Vampiros', 'rojo').carpeta;
+  assert.equal(d.colocarEnArbol(e.sub.id, alla.id).ok, true);
+  assert.deepEqual(nivel(c2.id), ['sub:Esquema', 'sub:Allá']);
+  assert.deepEqual(nuevo(d.toJSON()).toJSON(), d.toJSON());                                        // se guarda
+  /* personajes: se ordenan entre ellos y no se mezclan con los contenedores */
+  const a = d.crearPersonaje('Lestat').personaje, b = d.crearPersonaje('Louis').personaje;
   assert.equal(d.colocarEnArbol(b.id, a.id).ok, true);
-  assert.equal(d.colocarEnArbol(v.id, a.id, true).ok, true);
-  assert.deepEqual(nivel(C.ELENCO_CARPETAS), ['personaje:Louis', 'personaje:Lestat', 'carpeta:Vampiros']);
+  assert.deepEqual(nivel(C.ELENCO_CARPETAS), ['personaje:Louis', 'personaje:Lestat']);
   assert.equal(d.colocarEnArbol(a.id, e.esquema.id).ok, false);                                    // un personaje no va entre esquemas
   assert.deepEqual(nuevo(d.toJSON()).toJSON(), d.toJSON());
 });
@@ -482,10 +523,10 @@ test('notas de biblioteca con color: uno de los 24 tonos o ninguno, sin tocar la
   assert.equal('color' in otra.nota(n.id), false);                             // un color que no es de la paleta se descarta
 });
 
-test('revisar guión: secciones fuera, orden propio y plegadas por esquema; guiones generados aparte de la bandeja', () => {
+test('el guion de un esquema: secciones fuera, orden propio y plegadas, y su documento aparte de la biblioteca', () => {
   const d = nuevo();
   const cont = d.crearContenedor('Capítulo', { vacio: true }).contenedor;
-  const e = d.crearEsquema(cont.id, TABLERO, 'Escaleta').esquema, sub = d.enlace(e.id).sub;
+  const { esquema: e, sub } = conBiblioteca(d, cont.id, TABLERO, 'Escaleta');
   assert.deepEqual(d.guionEsquema(e.id), { fuera: [], orden: [], plegadas: [] });
   assert.equal('guion' in d.esquema(e.id).esquema, false);                    // vacío no se guarda
   d.sacarDelGuion(e.id, ['p2', 'p4', 'p2']);
@@ -501,48 +542,95 @@ test('revisar guión: secciones fuera, orden propio y plegadas por esquema; guio
   assert.deepEqual(d.guionEsquema(e.id), { fuera: [], orden: ['p3', 'p1'], plegadas: [] });
 
   d.crearNota(sub.id, null, 'Ideas');
-  const g = d.crearGuion(sub.id, e.id, 'Guion final v1', { html: '<p>Hola</p>', characters: {} }).nota;
-  assert.deepEqual(g.guion, { eid: e.id, generado: g.creado });
-  assert.deepEqual(nombres(d.guionesDe(sub.id)), ['Guion final v1']);
-  assert.deepEqual(nombres(d.notasDe(sub.id, null)), ['Ideas']);           // no está en la bandeja
-  assert.equal(d.notasDe(sub.id).length, 2);
-  const ajena = d.crearSub(d.enlace(e.id).contenedor.id, 'Otra').sub;
-  assert.equal(d.moverNota(g.id, null, ajena.id).ok, false);               // no sale de su biblioteca
-  assert.equal(d.crearGuion(sub.id, e.id, 'Guion final v1', { html: '' }).nota.titulo, 'Guion final v1 2');
+  const g = d.crearGuion(e.id, 'Guion final v1', { html: '<p>Hola</p>', characters: {} }).nota;
+  assert.deepEqual(g.guion, { eid: e.id, generado: g.creado, principal: true });   // el primero es el documento del esquema
+  assert.deepEqual(nombres(d.guionesDe(e.id)), ['Guion final v1']);
+  assert.deepEqual(nombres(d.notasDe(sub.id, null)), ['Ideas']);           // el guion no está en la biblioteca
+  assert.equal(d.notasDe(sub.id).length, 1);
+  const gsub = d.bibliotecaGuiones(e.id);
+  assert.equal(d.esGuiones(gsub.id), true);
+  assert.deepEqual(nombres(d.subsDe(d.esquema(e.id).contenedor.id)), ['Escaleta']);   // la de guiones no sale en el árbol
+  const ajena = d.crearSub(d.esquema(e.id).contenedor.id, 'Otra').sub;
+  assert.equal(d.moverNota(g.id, null, ajena.id).ok, false);               // un guion no sale de su esquema
+  /* un esquema tiene un documento: al abrir el archivo, los demás pasan a ser versiones suyas (Leo, 16-09-2026) */
+  assert.equal(d.crearGuion(e.id, 'Guion final v1', { html: '<p>Otro</p>' }).nota.titulo, 'Guion final v1 2');
   const otra = nuevo(JSON.parse(JSON.stringify(d.datos)));
-  assert.equal(otra.guionesDe(sub.id).length, 2);
+  assert.equal(otra.guionesDe(e.id).length, 1);
+  assert.deepEqual(otra.versionesDe(g.id).map(v => v.nombre), ['Guion final v1 2']);
 });
 
-test('sección «Guiones generados»: segmentos negros con su bandeja y su orden; cada documento en su sección', () => {
+test('el documento de un esquema vive con él, en su biblioteca oculta (Leo, 16-09-2026)', () => {
   const d = nuevo();
   const cont = d.crearContenedor('Capítulo', { vacio: true }).contenedor;
-  const e = d.crearEsquema(cont.id, TABLERO, 'Escaleta').esquema, sub = d.enlace(e.id).sub;
+  const { esquema: e, sub } = conBiblioteca(d, cont.id, TABLERO, 'Escaleta');
   const lugares = d.crearEtiqueta(sub.id, 'Lugares').etiqueta;
-  const versiones = d.crearEtiqueta(sub.id, 'Versiones', null, { guiones: true }).etiqueta;
-  assert.equal(versiones.guiones, true);
-  assert.deepEqual(nombres(d.etiquetasDe(sub.id)), ['Lugares']);                    // los de guiones no son segmentos normales
-  assert.deepEqual(nombres(d.guionesSegmentosDe(sub.id)), ['Versiones']);
-  const g = d.crearGuion(sub.id, e.id, 'Guion final v1', { html: '<p>x</p>' }).nota;
+  const doc = d.crearDocumentoEsquema(e.id, 'Escaleta', { html: '<p>x</p>' }).nota;
+  const gsub = d.bibliotecaGuiones(e.id);
+  assert.equal(d.esGuiones(gsub.id), true);
+  assert.equal(d.documentoEsquema(e.id).id, doc.id);
+  assert.deepEqual(nombres(d.subsDe(cont.id)), ['Escaleta']);                      // la de guiones no sale en el árbol
   const nota = d.crearNota(sub.id, null, 'Ideas').nota;
-  assert.deepEqual(nombres(d.notasDe(sub.id, C.SEGMENTO_GUIONES)), ['Guion final v1']);   // cae en la bandeja de guiones
-  assert.equal(d.moverNota(g.id, versiones.id, sub.id).ok, true);
-  assert.deepEqual(nombres(d.notasDe(sub.id, versiones.id)), ['Guion final v1']);
-  assert.equal(d.notasDe(sub.id, C.SEGMENTO_GUIONES).length, 0);
-  assert.equal(d.moverNota(g.id, lugares.id, sub.id).ok, false);                    // no a un segmento normal
-  assert.equal(d.moverNota(nota.id, versiones.id, sub.id).ok, false);               // una nota no entra en guiones
-  assert.equal(d.moverNota(g.id, null, sub.id).ok, true);                           // de vuelta a la bandeja de guiones
-  assert.deepEqual(nombres(d.notasDe(sub.id, C.SEGMENTO_GUIONES)), ['Guion final v1']);
-  assert.deepEqual(nombres(d.notasDe(sub.id, null)), ['Ideas']);
-  const hecho = d.crearNota(sub.id, versiones.id, 'Guion a mano').nota;               // «＋ documento» en un segmento de guiones
-  assert.deepEqual(hecho.guion, { eid: null, generado: 0 });
-  d.colocarSegmentoGuiones(sub.id, 'etq:' + versiones.id, 'bandeja', ['bandeja', 'etq:' + versiones.id]);
-  assert.deepEqual(d.ordenGuiones(sub.id, ['bandeja', 'etq:' + versiones.id]), ['etq:' + versiones.id, 'bandeja']);
+  assert.equal(d.moverNota(doc.id, lugares.id, sub.id).ok, false);                 // el documento no sale a la biblioteca
+  assert.equal(d.moverNota(nota.id, null, gsub.id).ok, false);                     // ni entra una nota
+  /* quitar el enlace con la biblioteca no toca el documento (por eso vive con el esquema) */
+  assert.equal(d.quitarEnlace(e.id).ok, true);
+  assert.equal(d.documentoEsquema(e.id).id, doc.id);
+  /* y al eliminar el esquema se va con él a la papelera */
+  d.eliminarEsquema(e.id);
+  assert.equal(d.documentoEsquema(e.id), null);
+  assert.equal(d.papelera().length, 1);
+});
+
+test('versiones de un documento: guardar, cargar, renombrar y eliminar (Leo, 16-09-2026)', () => {
+  const d = nuevo();
+  const cont = d.crearContenedor('Capítulo', { vacio: true }).contenedor;
+  const e = d.crearEsquema(cont.id, TABLERO, 'Escaleta').esquema;
+  const doc = d.crearDocumentoEsquema(e.id, 'Escaleta', { html: '<p>Primera</p>' }).nota;
+  assert.deepEqual(d.versionesDe(doc.id), []);
+  const v1 = d.guardarVersion(doc.id, 'v1').version;
+  assert.equal(v1.html, '<p>Primera</p>');
+  d.guardarNota(doc.id, { title: 'Escaleta', html: '<p>Segunda</p>', characters: {} });
+  const v2 = d.guardarVersion(doc.id, 'v1').version;                               // nombre repetido: se hace libre
+  assert.equal(v2.nombre, 'v1 2');
+  assert.deepEqual(d.versionesDe(doc.id).map(v => v.nombre), ['v1', 'v1 2']);
+  assert.equal(d.guardarVersion(doc.id).version.nombre, 'v3');                     // sin nombre, el que toca
+  /* cargar una versión deja su texto en el documento */
+  assert.equal(d.cargarVersion(doc.id, v1.id).ok, true);
+  assert.equal(d.nota(doc.id).html, '<p>Primera</p>');
+  assert.equal(d.renombrarVersion(doc.id, v1.id, 'Borrador').ok, true);
+  assert.equal(d.version(doc.id, v1.id).nombre, 'Borrador');
+  /* viaja en los datos */
   const copia = nuevo(JSON.parse(JSON.stringify(d.datos)));
-  assert.deepEqual(nombres(copia.guionesSegmentosDe(sub.id)), ['Versiones']);
-  assert.deepEqual(copia.nota(hecho.id).guion, { eid: null, generado: 0 });
-  assert.deepEqual(copia.ordenGuiones(sub.id, ['bandeja', 'etq:' + versiones.id]), ['etq:' + versiones.id, 'bandeja']);
-  d.eliminarEtiqueta(versiones.id);                                                 // sus documentos vuelven a la bandeja de guiones
-  assert.deepEqual(nombres(d.notasDe(sub.id, C.SEGMENTO_GUIONES)).sort(), ['Guion a mano', 'Guion final v1']);
+  assert.deepEqual(copia.versionesDe(doc.id).map(v => v.nombre), ['Borrador', 'v1 2', 'v3']);
+  assert.equal(copia.version(doc.id, v1.id).html, '<p>Primera</p>');
+  assert.equal(d.eliminarVersion(doc.id, v1.id).ok, true);
+  assert.deepEqual(d.versionesDe(doc.id).map(v => v.nombre), ['v1 2', 'v3']);
+});
+
+test('secciones de una biblioteca: agrupan segmentos y la de partida lleva la bandeja (Leo, 16-09-2026)', () => {
+  const d = nuevo();
+  const cont = d.crearContenedor('Capítulo', { vacio: true }).contenedor;
+  const sub = d.crearSub(cont.id, 'Biblioteca').sub;
+  const lugares = d.crearEtiqueta(sub.id, 'Lugares').etiqueta;
+  const k = d.crearSeccion(sub.id, 'Investigación').seccion;
+  const k2 = d.crearSeccion(sub.id, 'Investigación').seccion;                       // nombre libre
+  assert.equal(k2.nombre, 'Investigación 2');
+  const fichas = d.crearEtiqueta(sub.id, 'Fichas', null, { seccionId: k.id }).etiqueta;
+  assert.deepEqual(nombres(d.etiquetasDe(sub.id, null)), ['Lugares']);
+  assert.deepEqual(nombres(d.etiquetasDe(sub.id, k.id)), ['Fichas']);
+  assert.deepEqual(nombres(d.etiquetasDe(sub.id)), ['Lugares', 'Fichas']);          // todas
+  assert.equal(d.cambiarSeccion(lugares.id, k.id).ok, true);
+  assert.deepEqual(nombres(d.etiquetasDe(sub.id, k.id)), ['Lugares', 'Fichas']);
+  assert.deepEqual(nombres(d.etiquetasDe(sub.id, null)), []);
+  assert.equal(d.renombrarSeccion(k.id, 'Investigación 2').ok, false);              // ya hay otra así
+  assert.equal(d.colocarSeccion(k2.id, k.id).ok, true);
+  assert.deepEqual(nombres(d.seccionesDe(sub.id)), ['Investigación 2', 'Investigación']);
+  const copia = nuevo(JSON.parse(JSON.stringify(d.datos)));
+  assert.deepEqual(nombres(copia.seccionesDe(sub.id)), ['Investigación 2', 'Investigación']);
+  assert.deepEqual(nombres(copia.etiquetasDe(sub.id, k.id)), ['Lugares', 'Fichas']);
+  d.eliminarSeccion(k.id);                                                          // sus segmentos vuelven a la de partida
+  assert.deepEqual(nombres(d.etiquetasDe(sub.id, null)), ['Lugares', 'Fichas']);
+  assert.deepEqual(nombres(d.seccionesDe(sub.id)), ['Investigación 2']);
 });
 
 test('la biblioteca de un personaje estrena «Hoja de personaje» una sola vez (Leo, 15-09-2026)', () => {
@@ -560,4 +648,125 @@ test('la biblioteca de un personaje estrena «Hoja de personaje» una sola vez (
   const j = new C.Documentos(JSON.parse(JSON.stringify(d.toJSON())));
   j.bibliotecaPersonaje(p.id, 'Claudia');
   assert.equal(j.etiquetasDe(b.id).filter(e => e.nombre === C.HOJA_PERSONAJE).length, 0, 'tampoco al abrir el archivo');
+});
+
+test('grupos del árbol: juntan lo que sea, se anidan y se entra y se sale arrastrando (Leo, 16-09-2026)', () => {
+  const d = nuevo();
+  const { contenedor: c } = d.crearContenedor('Capítulo', { vacio: true });
+  const e = conBiblioteca(d, c.id, TABLERO, 'Esquema');                            // agrupado a mano con su biblioteca
+  const g = d.grupoDe(e.esquema.id).grupo;
+  assert.deepEqual(g.items, [e.esquema.id, e.sub.id]);
+  const a = d.crearSub(c.id, 'Lugares').sub, b = d.crearSub(c.id, 'Tono').sub;
+  const nivel = (kid) => d.nivelArbol(c.id, kid).map(x => x.tipo + ':' + (x.obj.nombre || ''));
+  assert.deepEqual(nivel(), ['grupo:' + g.nombre, 'sub:Lugares', 'sub:Tono']);      // lo del grupo no sale suelto
+  assert.deepEqual(d.nivelGrupo(g.id).map(x => x.tipo), ['esquema', 'sub']);
+  /* entrar: soltarla junto a una pieza del grupo (va a donde vive esa pieza) */
+  assert.equal(d.colocarEnArbol(a.id, e.esquema.id, true).ok, true);
+  assert.equal(d.grupoDe(a.id).grupo.id, g.id);
+  assert.equal(d.nivelGrupo(g.id).length, 3);
+  /* salir: soltarla junto a algo que está fuera */
+  assert.equal(d.colocarEnArbol(a.id, b.id).ok, true);
+  assert.equal(d.grupoDe(a.id), null);
+  /* grupos dentro de grupos (Leo): el de dentro se arrastra como una pieza más */
+  const g2 = d.crearGrupo(c.id, [a.id, b.id], 'Bloque').grupo;
+  assert.equal(d.colocarEnArbol(g2.id, e.esquema.id).ok, true);                     // el grupo entero, dentro del otro
+  assert.equal(d.grupo(g2.id).grupo.padreId, g.id);
+  assert.deepEqual(d.nivelGrupo(g.id).map(x => x.tipo).sort(), ['esquema', 'grupo', 'sub']);
+  assert.deepEqual(nivel(), ['grupo:' + g.nombre]);                                 // arriba solo queda el grupo de fuera
+  assert.equal(d.colocarEnArbol(g.id, g2.id).ok, false, 'un grupo no entra en uno suyo');
+  assert.equal(nuevo(d.toJSON()).grupo(g2.id).grupo.padreId, g.id);                 // viaja en los datos
+  /* sacar el grupo de dentro y deshacerlo: lo suyo sube */
+  assert.equal(d.sacarDeGrupo(g2.id).ok, true); assert.equal(d.grupo(g2.id).grupo.padreId, null);
+  assert.equal(d.deshacerGrupo(g2.id).ok, true); assert.equal(d.grupo(g2.id), null);
+  assert.equal(d.grupoDe(a.id), null);
+  /* renombrar y colorear */
+  assert.equal(d.renombrarGrupo(g.id, 'Bloque I').ok, true);
+  assert.equal(d.colorearGrupo(g.id, 'verde').ok, true); assert.equal(d.grupo(g.id).grupo.color, 'verde');
+  /* un grupo de uno vale, y **uno vacío también** (Leo, 16-09-2026: «quiero poder crear grupos vacíos») */
+  assert.equal(d.quitarEnlace(e.sub.id).ok, true);
+  assert.equal(d.grupoDe(e.esquema.id).grupo.id, g.id); assert.equal(d.gruposDe(c.id).length, 1);
+  assert.equal(d.crearGrupo(c.id, [e.sub.id], 'Solo').ok, true, 'un grupo con un solo elemento');
+  assert.equal(d.nivelGrupo(d.grupoDe(e.sub.id).grupo.id).length, 1);
+  assert.equal(nuevo(d.toJSON()).grupoDe(e.sub.id).grupo.nombre, 'Solo', 'y sigue ahí al volver a abrir el archivo');
+  assert.equal(d.quitarEnlace(e.esquema.id).ok, true);
+  assert.equal(d.grupo(g.id).grupo.items.length, 0, 'vacío, el grupo se queda');
+  assert.equal(nuevo(d.toJSON()).grupo(g.id).grupo.nombre, 'Bloque I', 'y sobrevive al archivo');
+  assert.equal(d.deshacerGrupo(g.id).ok, true); assert.equal(d.grupo(g.id), null, 'solo «Deshacer el grupo» lo quita');
+  /* uno creado de cero, sin nada dentro, listo para llenarlo */
+  const vacio = d.crearGrupo(c.id, [], 'En blanco', 'verde');
+  assert.equal(vacio.ok, true); assert.equal(vacio.grupo.items.length, 0);
+  assert.equal(d.aGrupo(vacio.grupo.id, e.esquema.id).ok, true);
+  assert.deepEqual(d.nivelGrupo(vacio.grupo.id).map(x => x.obj.nombre), ['Esquema']);
+});
+
+test('un doble espacio suelta al personaje: «MARA  (V.O.)» y «MARA  CONT\u2019D» son MARA (Leo, 16-09-2026)', () => {
+  const d = nuevo();
+  const c = d.crearContenedor('Capítulo').contenedor, sub = c.subs[0].id;
+  const n = d.crearNota(sub, null, 'Escena').nota;
+  const html = '<p class="sp-character">MARA</p><p class="sp-character">MARA\u00a0 (V.O.)</p><p class="sp-character">MARA  CONT\u2019D</p>';
+  d.guardarNota(n.id, { title: 'Escena', html, characters: { mara: { name: 'MARA', color: 0 } } });
+  assert.deepEqual(d.elenco().map(p => p.nombre), ['MARA']);                       // uno solo, no tres
+  const mara = d.elenco()[0];
+  assert.equal(d.menciones(mara.id).length, 1);
+  assert.equal(d.renombrarPersonaje(mara.id, 'Marina').ok, true);
+  const h = d.nota(n.id).html;
+  assert.match(h, />Marina<\/p>/);
+  assert.match(h, />Marina\u00a0 \(V\.O\.\)<\/p>/, 'la anotación se queda tal cual');
+  assert.match(h, />Marina {2}CONT\u2019D<\/p>/);
+});
+
+test('grupos y carpetas en Personajes (Leo, 16-09-2026)', () => {
+  const d = nuevo();
+  const a = d.crearPersonaje('Lestat').personaje, b = d.crearPersonaje('Louis').personaje, e = d.crearPersonaje('Claudia').personaje;
+  const g = d.crearGrupo(C.ELENCO_CARPETAS, [a.id, b.id], 'Vampiros', 'rojo').grupo;
+  assert.equal(d.grupoDe(a.id).grupo.id, g.id);
+  const nivel = () => d.nivelArbol(C.ELENCO_CARPETAS, null).map(x => x.tipo + ':' + (x.obj.nombre || ''));
+  assert.deepEqual(nivel(), ['grupo:Vampiros', 'personaje:Claudia']);
+  assert.equal(d.colocarEnArbol(e.id, a.id, true).ok, true); assert.equal(d.grupoDe(e.id).grupo.id, g.id);
+  assert.deepEqual(d.nivelGrupo(g.id).map(x => x.obj.nombre), ['Lestat', 'Claudia', 'Louis']);
+  const k = d.crearCarpeta(C.ELENCO_CARPETAS, 'Mortales', 'azul').carpeta;          // y carpetas propias (Leo, 16-09-2026)
+  const copia = nuevo(d.toJSON());
+  assert.equal(copia.grupoDe(e.id).grupo.nombre, 'Vampiros');                       // viaja en los datos
+  assert.deepEqual(copia.datos.carpetasElenco.map(x => x.nombre), ['Mortales']);
+  assert.equal(copia.moverACarpeta('personaje', b.id, k.id).ok, true);              // un personaje del grupo se lleva al grupo entero
+  assert.deepEqual(copia.nivelArbol(C.ELENCO_CARPETAS, k.id).map(x => x.tipo), ['grupo']);
+});
+
+test('color propio en la etiqueta de un esquema o una biblioteca (Leo, 16-09-2026)', () => {
+  const d = nuevo();
+  const { contenedor: c } = d.crearContenedor('Capítulo', { vacio: true });
+  const e = conBiblioteca(d, c.id, TABLERO, 'Esquema');
+  assert.equal(e.esquema.color, undefined);                                        // sin color: el de siempre
+  assert.equal(d.colorearHijo(e.esquema.id, 3).ok, true); assert.equal(d.esquema(e.esquema.id).esquema.color, 3);
+  assert.equal(d.colorearHijo(e.sub.id, 99).ok, true); assert.equal(d.sub(e.sub.id).sub.color, 0);   // fuera de la paleta: el primero
+  assert.equal(nuevo(d.toJSON()).esquema(e.esquema.id).esquema.color, 3);
+  assert.equal(d.colorearHijo(e.esquema.id, null).ok, true); assert.equal(d.esquema(e.esquema.id).esquema.color, undefined);
+});
+
+test('los esquemas donde el personaje tiene carril (Leo, 16-09-2026: «Esquemas relacionados»)', () => {
+  const d = nuevo();
+  const le = d.crearPersonaje('Lestat').personaje, lo = d.crearPersonaje('Louis').personaje;
+  const claudia = d.crearPersonaje('Claudia').personaje;
+  const carriles = (...ps) => ({ actos: TABLERO.actos, puntos: [], saltos: [], notas: [],
+    lineas: ps.map((p, i) => ({ id: 'l' + (i + 1), tipo: i ? 'secundaria' : 'principal', nombre: p.nombre, personaje: p.id })) });
+  const suyo = d.crearEsquemaPersonaje(carriles(le, lo), 'Lestat').esquema;             // el de Lestat: Louis también sale
+  const deLouis = d.crearEsquemaPersonaje(carriles(lo), 'Louis').esquema;
+  const { contenedor: c } = d.crearContenedor('Capítulo', { vacio: true });
+  const normal = d.crearEsquema(c.id, carriles(lo), 'Roadmap').esquema;                 // y un esquema normal con su carril
+
+  const deLo = d.esquemasDePersonaje(lo.id);
+  assert.deepEqual(deLo.map(x => x.nombre), ['Louis', 'Lestat', 'Roadmap']);            // delante el suyo, al final los normales
+  assert.deepEqual(deLo.map(x => x.eid), [deLouis.id, suyo.id, normal.id]);
+  assert.deepEqual(deLo.map(x => x.personaje), [true, true, false]);                    // cuál es un esquema de personaje
+  assert.deepEqual(deLo.map(x => x.principal), [true, false, false]);                   // «el suyo»: su primer carril
+  assert.equal(deLo[2].contenedor, 'Capítulo');
+
+  assert.deepEqual(d.esquemasDePersonaje(le.id).map(x => x.nombre), ['Lestat']);
+  assert.deepEqual(d.esquemasDePersonaje(claudia.id), []);                              // sin carril en ninguno
+  assert.deepEqual(d.esquemasDePersonaje(''), []);
+  /* deja de salir en cuanto pierde el carril */
+  const m = d.esquema(normal.id).esquema;
+  m.datos.lineas = m.datos.lineas.filter(l => l.personaje !== lo.id);
+  d.guardarEsquema(normal.id, m.datos);
+  assert.deepEqual(d.esquemasDePersonaje(lo.id).map(x => x.nombre), ['Louis', 'Lestat']);
 });

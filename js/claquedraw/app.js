@@ -61,7 +61,8 @@
     localOk = escribirJSON(CLAVE, biblioteca.toJSON());
     if (abiertoId) programarEscritura(abiertoId);
     indicador(); renderPestanas(); renderChipEsquema();       // el título del esquema sigue a renombres y enlaces
-    if (esPersonajes(esquemaId) && C.gestor && vista.modo === 'personajes') C.gestor.render();   // la lista de personajes sigue al tablero
+    if (esPersonajes(esquemaId) && C.gestor && enPersonajes()) C.gestor.render();   // el árbol de Personajes sigue al tablero
+    recordarPantalla();                                        // y se apunta dónde estamos, para volver aquí al abrir
   }
 
   /* ---------- tablero: un solo modelo, se vuelca en el guion abierto ---------- */
@@ -78,13 +79,12 @@
     clearTimeout(temporizador); temporizador = null;
     if (abiertoId && biblioteca.guion(abiertoId)) {
       if (esquemaId && refEsquema(esquemaId)) {
-        /* en el tablero de un personaje, sus relaciones con otros se reflejan al final del tablero de cada uno (js/claquedraw/relaciones.js);
-           antes de guardar, porque marca las relaciones de este tablero */
+        /* en un esquema de personaje, sus relaciones se reflejan en los demás esquemas donde los dos personajes tienen
+           carril (js/claquedraw/relaciones.js); antes de guardar, porque marca las relaciones de este esquema */
         if (esPersonajes(esquemaId) && C.relaciones) {
-          const duenio = esquemaId.slice((C.ID_PERSONAJES + ':esquema:').length);
-          const borradas = C.relaciones.borrarReflejos(docs(), T, modelo, duenio).length;   // lo borrado aquí, fuera de los demás tableros
-          const renombradas = C.relaciones.renombrarReflejos(docs(), T, modelo, duenio).length;   // y el nombre que se le puso, en los reflejos
-          if (borradas + renombradas + C.relaciones.reflejar(docs(), T, modelo, duenio, datosPersonajes).length) biblioteca.marcar(abiertoId);
+          const borradas = C.relaciones.borrarReflejos(docs(), T, modelo, esquemaId).length;   // lo borrado aquí, fuera de los demás esquemas
+          const renombradas = C.relaciones.renombrarReflejos(docs(), T, modelo, esquemaId).length;   // y el nombre que se le puso, en los reflejos
+          if (borradas + renombradas + C.relaciones.reflejar(docs(), T, modelo, esquemaId).length) biblioteca.marcar(abiertoId);
         }
         const r = docs().guardarEsquema(esquemaId, modelo.toJSON()); if (r.ok && r.cambio) biblioteca.marcar(abiertoId);
       }
@@ -108,17 +108,19 @@
     if (eid && !refEsquema(eid)) eid = null;
     if (temporizador) volcar();
     C.texto.cerrar();
+    if (esquemaId && !esPersonajes(esquemaId)) esquemaPrevio = esquemaId;   // al volver de Personajes se remonta este
     const board = $('board');
     if (esquemaId) desplazamientos.set(esquemaId, { left: board.scrollLeft, top: board.scrollTop });
     if (esquemaId && refEsquema(esquemaId)) { const vivos = modelo.datos.puntos.map(p => p.id); docs().podarNotasEsquema(esquemaId, vivos); docs().podarGuion(esquemaId, vivos); }
-    if (C.revisar.abierto()) C.revisar.cerrar();
     esquemaId = eid;
-    /* el tablero de Personajes: columna ancha con nombres, sin fuera de escena ni camino iluminado, y lo
+    /* un esquema de personaje: columna ancha con nombres, sin fuera de escena ni camino iluminado, y lo
        nuevo se llama «Momento», «Personaje», «Evento» (nodo) y «Relación» (cuadro) */
     const per = esPersonajes(eid);
     modelo.nombres = per ? { acto: 'Momento', linea: 'Personaje', punto: 'Evento', nodo: 'Evento', cuadro: 'Relación', femeninos: ['cuadro'] } : null;
-    T.tablero.simple(per); T.tablero.gutter(per ? 250 : 48);   // con el color, la etiqueta «Personaje» y el nombre
+    T.tablero.simple(per); T.tablero.gutter(48);               // la columna estrecha de siempre, también en personajes (Leo, 16-09-2026)
+    T.tablero.panelAbajo(true);                                // el panel del nodo abajo, también en los de personaje (Leo, 16-09-2026)
     document.body.classList.toggle('tablero-personajes', per);
+    recordarPantalla();
     T.tablero.cargar(eid ? refEsquema(eid).esquema.datos : T.inicial());
     /* cada tablero vuelve a donde se dejó (uno nuevo, al principio): si se heredaba el desplazamiento del
        anterior, con otro número de carriles la vista brincaba */
@@ -127,7 +129,7 @@
     document.body.classList.toggle('sin-esquema', !eid);
     renderChipEsquema();
     C.gestor.render();                                         // la barra señala el esquema montado
-    if (vista.modo === 'texto') { if (eid) C.texto.abrir(); else verVista('esquema'); }
+    if (vista.modo === 'texto') { if (eid) { docId = null; abrirEnEditor(); } else verVista('esquema'); }
   }
   /* El título de la vista Esquema: «CONTENEDOR [Esquema] Nombre» del esquema montado (no hace nada al
      pulsarlo, Leo) y «Ver documentos» si tiene documentos enlazados. */
@@ -136,27 +138,73 @@
     const r = refEsquema(esquemaId), x = r && docs().enlace(esquemaId), per = r && esPersonajes(esquemaId);
     b.hidden = !r;
     if (r) {
-      /* en Personajes: «PERSONAJES [Personaje] Nombre del personaje abierto» */
-      const l = per && vista.personaje && docs().personaje(vista.personaje);
       b.querySelector('[data-chip-cont]').textContent = r.contenedor.nombre;
-      /* el chip lleva el nombre (Leo: como en la cabecera del editor) y el color dice qué es: el esquema en violeta;
-         en Personajes, el personaje con su color (el par claro/oscuro de la paleta, como en el editor) */
+      /* el chip lleva el nombre (Leo: como en la cabecera del editor) y su color, si se le puso uno */
       const chip = b.querySelector('.gd-chip');
-      const t = per && l && C.PALETA_ETIQUETAS[l.color];
+      const col = r.esquema.color, t = col !== undefined && col !== null && C.PALETA_ETIQUETAS[col];
       chip.classList.toggle('per-chip', !!t); chip.classList.toggle('gd-chip--esquema', !t);
       if (t) { chip.style.setProperty('--chl', t[1]); chip.style.setProperty('--chd', t[2]); } else { chip.style.removeProperty('--chl'); chip.style.removeProperty('--chd'); }
-      const nombre = per ? (l ? l.nombre : '') : r.esquema.nombre;
-      b.querySelector('[data-chip-esq]').textContent = nombre;
-      chip.setAttribute('aria-label', (per ? 'Personaje' : 'Esquema') + ' «' + nombre + '»');   // cortado, sale el globo (texto.js)
+      b.querySelector('[data-chip-esq]').textContent = r.esquema.nombre;
+      chip.setAttribute('aria-label', 'Esquema «' + r.esquema.nombre + '»');   // cortado, sale el globo (texto.js)
     }
     $('verDocumentos').hidden = !x;
+    /* sin esquema montado no hay documento que abrir, y **un esquema de personaje no lleva documento** (Leo,
+       16-09-2026: «quita de personajes el botón, estos esquemas no necesitan documento») */
+    $('abrirDoc').hidden = !r || esPersonajes(esquemaId);
   }
-  /* La biblioteca donde el esquema montado tiene sus actos como segmentos: la enlazada, o la del personaje. */
+  /* La biblioteca donde el esquema montado tiene sus actos como segmentos: la enlazada (los de personaje no tienen). */
   function bibliotecaDelEsquema() {
-    const d = docs(); if (!d || !esquemaId) return null;
-    if (esPersonajes(esquemaId)) { const p = vista.personaje && d.personaje(vista.personaje); return p ? d.bibliotecaPersonaje(p.id, p.nombre).id : null; }
+    const d = docs(); if (!d || !esquemaId || esPersonajes(esquemaId)) return null;
     const x = d.enlace(esquemaId); return x ? x.sub.id : null;
   }
+  /* ---------- el documento del esquema (Leo, 16-09-2026) ----------
+     El editor vuelve a ser un editor normal: lo que se abre es **un documento**, una nota de la biblioteca de guiones
+     del esquema marcada como principal, y encima queda la tira de la trama, de referencia. La primera vez se crea con
+     lo que hubiera escrito en los nodos (hasta la 1.0.59 el editor era una sección por nodo), para no perder nada. */
+  let docId = null;                                            // el documento abierto en la vista Texto
+  function documentoDe(eid, crear) {
+    const d = docs(); if (!d || !eid || !refEsquema(eid)) return null;
+    const hay = d.documentoEsquema(eid);
+    if (hay || !crear || esPersonajes(eid)) return hay;         // un esquema de personaje no estrena documento (Leo)
+    const r = refEsquema(eid);
+    const tm = eid === esquemaId ? modelo : new T.Modelo(r.esquema.datos);
+    const partes = [], chars = {};
+    C.guion.estado(d, eid, tm, esPersonajes(eid)).filas.forEach(f => {
+      if (f.html && (f.palabras || /(<img|<table|<hr)/i.test(f.html))) { partes.push(f.html); Object.assign(chars, f.characters); }
+    });
+    const x = d.crearDocumentoEsquema(eid, r.esquema.nombre, { html: partes.join(''), characters: chars });
+    if (!x.ok) { T.tablero.avisar(x.aviso); return null; }
+    if (partes.length) d.podarNotasEsquema(eid, []);           // lo que estaba en los nodos ya vive en el documento
+    biblioteca.marcar(abiertoId); persistir();
+    return x.nota;
+  }
+  /* Abre un documento del esquema en el editor (sin id, el principal). Desde los guiones se pasa el suyo, y si es de
+     otro esquema, se monta antes. */
+  function abrirTexto(id) {
+    const d = docs(); if (!d) return;
+    const n = id && d.nota(id), r = n && d.sub(n.subId);
+    const eid = r && r.sub.guionEid;                           // el esquema al que pertenece esa biblioteca de guiones
+    if (eid && eid !== esquemaId && refEsquema(eid)) montarEsquema(eid);
+    docId = n ? n.id : null;
+    verVista('texto');
+  }
+  /* Pone en el editor el documento que toca (el elegido, o el principal del esquema montado). */
+  function abrirEnEditor() {
+    const d = docs(); if (!d || !esquemaId) return;
+    let n = docId && d.nota(docId);
+    const r = n && d.sub(n.subId);
+    if (!n || !r || r.sub.guionEid !== esquemaId) n = documentoDe(esquemaId, true);   // el principal del esquema montado
+    if (!n) return;
+    docId = n.id;
+    if (C.gestor.notaAbierta()) C.gestor.cerrarNota();
+    C.texto.abrirDocumento({ titulo: n.titulo, html: n.html, characters: n.characters }, {
+      titulo: () => { const dd = docs(), x = dd && dd.nota(n.id); return x ? x.titulo : ''; },
+      guardar: doc => { const dd = docs(); if (!dd || !dd.nota(n.id)) return; const x = dd.guardarNota(n.id, doc); if (x.ok && x.cambio) { biblioteca.marcar(abiertoId); persistir(); pintarVersion(); } },
+      alCambiar: () => { C.gestor.render(); pintarVersion(); }
+    }, { tira: true });
+    pintarVersion();
+  }
+
   /* El primer esquema que haya en el guion (por orden de contenedores), o null. */
   function primerEsquema() {
     const d = docs(); if (!d) return null;
@@ -166,12 +214,14 @@
 
   /* ---------- Personajes ----------
      Los personajes del guion son el elenco de los documentos: los que se escriben en el editor con «/» y
-     los que se crean aquí (nombre y color; renombrar o recolorear reescribe todas las notas). La pantalla
-     es la del esquema con el tablero del personaje abierto (actos = momentos) y encima el carrusel de su
-     biblioteca. Cada personaje tiene su tablero: el carril principal es él (fijo, no se cambia ni se
-     borra) y cada uno de los demás lleva un selector con el personaje que representa (`linea.personaje`). */
-  const esPersonajes = eid => !!eid && eid.startsWith(C.ID_PERSONAJES + ':esquema:');
-  let esquemaPrevio = null;                                    // el esquema montado antes de entrar en Personajes
+     los que se crean aquí (nombre y color; renombrar o recolorear reescribe todas las notas). El menú
+     enseña **su propio árbol** (`vista.arbol`, Leo 16-09-2026) con dos contenedores: «Personajes», donde
+     cada personaje **es** su biblioteca (se abre como cualquier otra, con sus secciones y sus segmentos,
+     y caben carpetas y grupos), y «Esquemas», con los esquemas de personaje, que son documentos sueltos:
+     se crean eligiendo un personaje (su primera trama es él) y luego se editan como cualquier esquema. */
+  const esPersonajes = eid => { const d = docs(); return !!d && d.esEsquemaPersonaje(eid); };
+  const enPersonajes = () => vista.arbol === 'personajes';
+  let esquemaPrevio = null;                                    // el último esquema de contenedor montado
   function datosPersonajes(p) {
     const t = T.inicial();
     t.actos.forEach((a, i) => { a.nombre = 'Momento ' + T.romano(i + 1); });
@@ -188,37 +238,60 @@
   }
   /* antes de reescribir notas desde aquí: lo que haya en el editor se guarda y se cierra (se relee al abrir) */
   function soltarEditor() { C.texto.volcar(); C.texto.cerrar(); if (C.gestor.notaAbierta()) C.gestor.cerrarNota(); }
-  /* Abre un personaje: monta su tablero (lo crea la primera vez) y su biblioteca en el carrusel. Sin
-     personajes no hay tablero (`body.sin-personajes`). */
+  /* Abre un personaje: su biblioteca, como cualquier otra (Leo, 16-09-2026: «los personajes pasan a ser
+     bibliotecas»). La crea la primera vez que se abre. */
   function abrirPersonaje(id) {
     const d = docs(); if (!d) return;
     const p = d.personaje(id);
-    vista.personaje = p ? id : null; guardarVista();
-    const antes = !!(p && d.esquemaPersonaje(p.id));
-    const e = p ? d.esquemaPersonaje(p.id, datosPersonajes(p)) : null, eid = e ? e.id : null;
-    if (e && !antes) biblioteca.marcar(abiertoId);
-    if (!esPersonajes(esquemaId) && esquemaId) esquemaPrevio = esquemaId;
-    if (esquemaId !== eid) montarEsquema(eid);
-    document.body.classList.toggle('sin-personajes', !eid);
-    /* al arrancar ya en Personajes (`vista.modo` recordado) la vista aún no está puesta: sin la clase no se ve el carrusel */
-    if (vista.modo !== 'personajes' || !document.body.classList.contains('vista-personajes')) verVista('personajes');
-    const cuerpo = $('personajesSeg').querySelector('[data-per-cuerpo]');
-    if (p) C.gestor.renderPersonaje(cuerpo, docs().bibliotecaPersonaje(id, p.nombre).id, id);
-    else { C.gestor.contraer(); cuerpo.innerHTML = '<div class="gd-nada per-vacio"><b>Aún no hay personajes</b><br>Escríbelos en el editor con «/» o créalos con «＋ Nuevo personaje».</div>'; }
-    C.gestor.render(); renderChipEsquema(); marcarPersonaje();
+    vista.personaje = p ? id : null; vista.arbol = 'personajes'; guardarVista();
+    if (!p) { C.gestor.render(); verVista('documentos'); return; }
+    const c = d.contenedor(C.ID_PERSONAJES), antes = !!(c && c.subs.some(s => s.lineaId === id));
+    const s = d.bibliotecaPersonaje(id, p.nombre);
+    if (!antes) { biblioteca.marcar(abiertoId); persistir(); }
+    C.gestor.abrirSub(s.id);                                   // navega, redibuja y pasa a la vista Biblioteca
   }
+  /* Va al **esquema** de un personaje (Leo, 16-09-2026: «al dar doble clic a un personaje, te debe dirigir al esquema
+     del personaje»): el suyo —el esquema de personaje que nació con él, su primer carril— o, si no lo tiene, el primer
+     esquema de personaje donde salga. Sin ninguno, su biblioteca, que es lo que sí existe siempre. */
+  function irAEsquemaPersonaje(id) {
+    const d = docs(); if (!d || !d.personaje(id)) return abrirPersonaje(id);
+    const lista = d.esquemasDePersonaje(id).filter(x => x.personaje);
+    const suyo = lista.find(x => x.principal) || lista[0];
+    if (!suyo) return abrirPersonaje(id);
+    vista.personaje = id; vista.arbol = 'personajes'; guardarVista();
+    montarEsquema(suyo.eid);
+    C.gestor.render(); verVista('esquema');
+  }
+  /* El árbol de Personajes: lo último que se vio ahí (una biblioteca de personaje o un esquema suyo). */
   function verPersonajes() {
     const d = docs(); if (!d) return;
-    if (!['personajes', 'texto'].includes(vista.modo)) vista.modoPrevio = vista.modo;
-    const l = personajes(); abrirPersonaje(l && l.abierto);
+    vista.arbol = 'personajes'; guardarVista();
+    const l = personajes();
+    if (l && l.abierto) abrirPersonaje(l.abierto);
+    else if (esPersonajes(esquemaId)) { C.gestor.render(); verVista('esquema'); }
+    else { C.gestor.render(); verVista('documentos'); }
     persistir();
   }
   function verContenedores() {
-    const destino = vista.modoPrevio === 'esquema' ? 'esquema' : 'documentos';
-    document.body.classList.remove('sin-personajes');
+    vista.arbol = 'contenedores'; guardarVista();
     if (esPersonajes(esquemaId) || !esquemaId) montarEsquema(esquemaPrevio && refEsquema(esquemaPrevio) ? esquemaPrevio : primerEsquema());
     C.gestor.reiniciar();
-    verVista(destino);
+    verVista(vista.modo === 'texto' ? 'esquema' : vista.modo);
+  }
+  /* «Nuevo esquema…» del contenedor «Esquemas»: se elige el personaje y su primera trama es él (Leo,
+     16-09-2026); a partir de ahí se edita y se borra como cualquier trama. */
+  function nuevoEsquemaPersonaje(trigger, carpetaId) {
+    const d = docs(); if (!d) return;
+    C.gestor.menuCarril(trigger, { titulo: 'Esquema de…', alElegir: pid => {
+      const p = d.personaje(pid); if (!p) return;
+      const r = d.crearEsquemaPersonaje(datosPersonajes(p), p.nombre);
+      if (!r.ok) { T.tablero.avisar(r.aviso); return; }
+      if (carpetaId) d.moverACarpeta('esquema', r.esquema.id, carpetaId);
+      biblioteca.marcar(abiertoId); persistir();
+      vista.arbol = 'personajes'; guardarVista();
+      montarEsquema(r.esquema.id); verVista('esquema');
+      T.tablero.avisar(r.aviso);
+    } });
   }
   /* Crear un personaje (menú lateral): un diálogo con su nombre y su color (el primero libre de la
      paleta); se abre su tablero. Desde el tablero no se crean (Leo): solo se eligen. */
@@ -233,8 +306,8 @@
     abrirPersonaje(r.personaje.id);
     return r.personaje;
   }
-  /* los que no se ofrecen en un selector del tablero: el dueño y los que ya tienen carril (salvo el propio) */
-  const conCarril = (salvoLinea) => [vista.personaje, ...modelo.datos.lineas.filter(l => l.id !== salvoLinea && l.personaje).map(l => l.personaje)];
+  /* los que no se ofrecen en un selector del tablero: los que ya tienen carril (salvo el del propio selector) */
+  const conCarril = (salvoLinea) => modelo.datos.lineas.filter(l => l.id !== salvoLinea && l.personaje).map(l => l.personaje);
   /* «＋ personaje» del tablero: un carril nuevo con el personaje del diálogo */
   function carrilNuevo(p) {
     if (modelo.datos.lineas.some(l => l.personaje === p.id)) { T.tablero.avisar('«' + p.nombre + '» ya tiene carril en este tablero'); return; }
@@ -242,17 +315,24 @@
     modelo.editarLinea(r.linea.id, { personaje: p.id, nombre: p.nombre });
     T.tablero.render(); volcar();
   }
-  /* Eliminar un carril del tablero de un personaje (Leo, 15-09-2026: no había forma; el panel de la trama no se abre ahí): con
-     eventos pide confirmación; se va con ellos y con sus notas. El carril del dueño no tiene selector y no se elimina. */
+  /* Eliminar un carril de un esquema de personaje (Leo, 15-09-2026: no había forma; el panel de la trama no se abre ahí): con
+     eventos pide confirmación; se va con ellos y con sus notas. Cualquiera se borra mientras quede otro (Leo, 16-09-2026: la
+     primera trama «puede borrarse y editarse con normalidad»): si es la principal, otra ocupa su sitio (aquí «principal» no
+     significa nada, el tablero va en modo simple). */
   async function eliminarCarril(lineaId) {
-    const l = modelo.linea(lineaId); if (!l || l.tipo === 'principal') return;
+    const l = modelo.linea(lineaId); if (!l) return;
+    if (l.tipo === 'principal' && modelo.datos.lineas.length < 2) { T.tablero.avisar('Es el único carril: el esquema se queda sin tramas'); return; }
     const n = modelo.datos.puntos.filter(p => p.lineaId === lineaId).length;
     const quien = l.personaje && docs().personaje(l.personaje), nombre = quien ? quien.nombre : 'Sin personaje';
     if (!await T.tablero.confirmar('¿Eliminar el carril de «' + nombre + '»?' + (!n ? '' : n === 1 ? ' Se borra su evento en este tablero y lo escrito en él.' : ' Se borran sus ' + n + ' eventos en este tablero y lo escrito en ellos.'), 'Eliminar')) return;   // siempre con confirmación (Leo)
+    if (l.tipo === 'principal') {                              // otra pasa a ser la principal: el modelo no borra la que lo es
+      const otra = modelo.datos.lineas.find(x => x !== l); if (!otra) return;
+      l.tipo = 'secundaria'; otra.tipo = 'principal';
+    }
     const r = modelo.borrarLinea(lineaId); if (!r.ok) { T.tablero.avisar(r.aviso); return; }
     T.tablero.render(); volcar();
     T.tablero.avisar('Carril de «' + nombre + '» eliminado');
-    if (vista.modo === 'personajes') C.gestor.render();
+    if (enPersonajes()) C.gestor.render();
   }
   /* los carriles del tablero montado siguen al elenco (nombre); el modelo de documentos ya cambió sus datos guardados */
   function carrilesDe(id, fn) {
@@ -266,25 +346,26 @@
     carrilesDe(id, l => { l.nombre = r.personaje.nombre; });
     biblioteca.marcar(abiertoId); persistir();
     if (r.notas) T.tablero.avisar('«' + r.personaje.nombre + '»: actualizado en ' + r.notas + (r.notas === 1 ? ' nota' : ' notas'));
-    abrirPersonaje(id);
+    C.gestor.render();
   }
   function colorPersonaje(id, color) {
     soltarEditor(); volcar();
     const r = docs().colorearPersonaje(id, color); if (!r.ok) { T.tablero.avisar(r.aviso); return; }
-    biblioteca.marcar(abiertoId); persistir(); abrirPersonaje(id);
+    biblioteca.marcar(abiertoId); persistir(); C.gestor.render();
   }
   async function eliminarPersonaje(id) {
     const d = docs(), p = d.personaje(id); if (!p) return;
     const m = d.menciones(id);
     if (m.length) { T.tablero.avisar('«' + p.nombre + '» aparece en ' + m.length + (m.length === 1 ? ' nota' : ' notas') + ': no se puede eliminar mientras lo nombren'); return; }
-    const sub = d.contenedor(C.ID_PERSONAJES).subs.find(s => s.lineaId === id), n = sub ? d.notasDe(sub.id).length : 0;
-    if (!await T.tablero.confirmar('¿Eliminar a «' + p.nombre + '»? Su tablero se elimina' + (n ? ' y sus ' + n + (n === 1 ? ' nota va' : ' notas van') + ' a la papelera' : '') + '. En los tableros de otros personajes, sus carriles quedan sin personaje.', 'Eliminar')) return;
+    const c = d.contenedor(C.ID_PERSONAJES), sub = c && c.subs.find(s => s.lineaId === id), n = sub ? d.notasDe(sub.id).length : 0;
+    if (!await T.tablero.confirmar('¿Eliminar a «' + p.nombre + '»?' + (n ? ' Sus ' + n + (n === 1 ? ' nota va' : ' notas van') + ' a la papelera.' : '') + ' En los esquemas de personaje, sus carriles quedan sin personaje.', 'Eliminar')) return;
     volcar();
     const r = d.eliminarPersonaje(id); if (!r.ok) { T.tablero.avisar(r.aviso); return; }
     carrilesDe(id, l => { delete l.personaje; l.nombre = 'Sin personaje'; });
     if (vista.personaje === id) vista.personaje = null;
     biblioteca.marcar(abiertoId); persistir();
-    const P = personajes(); abrirPersonaje(P && P.abierto);
+    const P = personajes();
+    if (P && P.abierto) abrirPersonaje(P.abierto); else { C.gestor.reiniciar(); verVista(esPersonajes(esquemaId) ? 'esquema' : 'documentos'); }
   }
   /* el selector de un carril: elegir personaje (el carril toma su nombre), crear uno o quitarlo */
   function asignarCarril(lineaId, personajeId) {
@@ -292,54 +373,69 @@
     modelo.editarLinea(lineaId, p ? { personaje: p.id, nombre: p.nombre } : { personaje: null, nombre: 'Sin personaje' });
     T.tablero.render(); volcar();
   }
-  /* En el tablero de un personaje, tras cada render: el carril principal con su nombre fijo y en cada
-     uno de los demás el selector con su personaje (sin el círculo de la inicial, Leo). */
+  /* En un esquema de personaje, tras cada render: **la misma columna estrecha que en cualquier esquema** (Leo,
+     16-09-2026: la de 250 px ocupaba demasiado), con el círculo de la trama enseñando **las dos primeras letras del
+     personaje** y su color de etiqueta; al pasar el ratón sale su nombre (el rótulo de siempre) y al pulsarlo, el
+     selector de personaje. */
   function marcarPersonaje() {
     if (!esPersonajes(esquemaId)) return;
-    const d = docs(), duenio = d.personaje(vista.personaje);
-    let corregido = false;
+    const d = docs();
     modelo.datos.lineas.forEach(l => {
       const row = document.querySelector(`#rows .row[data-linea="${CSS.escape(l.id)}"]`); if (!row) return;
-      const fijo = l.tipo === 'principal';
-      /* el principal es siempre el dueño del tablero (si alguien lo renombró desde el panel, vuelve) */
-      if (fijo && duenio && (l.personaje !== duenio.id || l.nombre !== duenio.nombre)) { l.personaje = duenio.id; l.nombre = duenio.nombre; corregido = true; }
       const p = l.personaje && d.personaje(l.personaje);
-      row.classList.toggle('abierto', fijo);
       row.classList.toggle('sin-personaje', !p);
-      /* el carril lleva el color de su trama, como en cualquier esquema (Leo, 15-09-2026: ya no el de la etiqueta del personaje) */
-      const label = row.querySelector('.label');
-      let combo = label.querySelector('.per-combo');
-      if (combo && combo.classList.contains('fijo') !== fijo) { combo.remove(); combo = null; }
-      if (!combo) {
-        combo = document.createElement(fijo ? 'span' : 'button'); combo.className = 'per-combo' + (fijo ? ' fijo' : '');
-        if (!fijo) combo.type = 'button';
-        label.insertBefore(combo, label.querySelector('.lbox'));
-      }
-      combo.dataset.linea = l.id;
-      /* delante: el color de la trama (se cambia pulsándolo) y la etiqueta «Personaje» con el color del personaje, como en el
-         menú lateral (Leo, 15-09-2026) */
-      let tono = label.querySelector('.per-color');
-      if (!tono) { tono = document.createElement('button'); tono.type = 'button'; tono.className = 'per-color'; label.insertBefore(tono, combo); }
-      tono.dataset.linea = l.id; tono.style.setProperty('--tc', `var(--t-${l.color})`);
-      tono.title = 'Color de la trama'; tono.setAttribute('aria-label', 'Color de la trama');
-      let etq = label.querySelector('.per-etq');
+      const chip = row.querySelector('.chip'); if (!chip) return;
+      const nombre = p ? p.nombre : 'Sin personaje';
+      chip.dataset.inicial = (nombre.trim().replace(/\s+/g, ' ').slice(0, 2) || '·').toUpperCase();
       const par = p && C.PALETA_ETIQUETAS[p.color];
-      if (par && !etq) { etq = document.createElement('span'); etq.className = 'gd-chip per-chip per-etq'; etq.textContent = 'Personaje'; label.insertBefore(etq, combo); }
-      if (!par && etq) { etq.remove(); etq = null; }
-      if (etq) { etq.style.setProperty('--chl', par[1]); etq.style.setProperty('--chd', par[2]); }
-      combo.innerHTML = '<span class="per-combo-nom"></span>' + (fijo ? '' : '<svg width="12" height="12"><use href="#ic-chev-d"></use></svg>');
-      combo.firstElementChild.textContent = p ? p.nombre : 'Sin personaje';
-      combo.title = fijo ? 'El personaje de este tablero' : p ? 'Personaje del carril · clic para cambiarlo · doble clic: ir a «' + p.nombre + '»' : 'Elegir el personaje de este carril';
+      chip.classList.toggle('per-tono', !!par);
+      if (par) { chip.style.setProperty('--chl', par[1]); chip.style.setProperty('--chd', par[2]); }
+      else { chip.style.removeProperty('--chl'); chip.style.removeProperty('--chd'); }
+      chip.title = p ? p.nombre + ' · clic para cambiar de personaje' : 'Elegir el personaje de este carril';
+      const tipo = row.querySelector('.ltipo'); if (tipo) tipo.textContent = 'Personaje';
+      const inp = row.querySelector('.lname'); if (inp && inp.readOnly) inp.value = nombre;
     });
-    if (corregido) alCambiar();
   }
   /* Al montar un guion: el esquema que vivía en el guion (forma antigua) pasa a sus documentos una
      sola vez, y se monta el primero que haya. */
+  /* ---------- la última pantalla de cada proyecto (Leo, 16-09-2026) ----------
+     «Que cuando cierre y abra el programa me deje en la última pantalla que estaba»: por proyecto se recuerda qué
+     vista estaba delante, en qué árbol, qué esquema montado, qué biblioteca abierta y qué nota, y al abrirlo se vuelve
+     ahí. Vive en la vista (`guiones.claquedraw.vista`), no en el archivo: es de esta máquina, no del guion. */
+  let reponiendo = true;                                       // hasta reponerla, nada la pisa (el arranque persiste antes de montar)
+  function recordarPantalla() {
+    if (reponiendo || !abiertoId || pantalla !== 'proyecto') return;
+    const s = C.gestor.subActual && C.gestor.subActual();
+    const p = vista.pantallas || (vista.pantallas = {});
+    p[abiertoId] = { modo: vista.modo, arbol: enPersonajes() ? 'personajes' : 'contenedores',
+                     esquema: esquemaId || null,
+                     sub: s && s.tipo === 'sub' ? s.id : null,
+                     nota: (C.gestor.notaAbierta && C.gestor.notaAbierta()) || null };
+    Object.keys(p).forEach(id => { if (!biblioteca.guion(id)) delete p[id]; });   // proyectos cerrados: fuera
+    guardarVista();
+  }
+  /* Vuelve a lo último que se vio de este proyecto (o al primer esquema, como antes). */
+  function restaurarPantalla() {
+    const p = (vista.pantallas || {})[abiertoId] || {};
+    reponiendo = true;
+    try { reponer(p); } finally { reponiendo = false; }
+    recordarPantalla();
+  }
+  function reponer(p) {
+    vista.arbol = p.arbol === 'personajes' ? 'personajes' : 'contenedores';
+    montarEsquema(p.esquema && refEsquema(p.esquema) ? p.esquema : primerEsquema());
+    const d = docs();
+    if (p.nota && d && d.nota(p.nota)) { C.gestor.abrirNota(p.nota); return; }
+    /* el gestor recuerda la biblioteca aunque delante esté el esquema: solo se abre si era lo que se veía */
+    if (p.modo === 'documentos' && p.sub && d && d.sub(p.sub)) { C.gestor.abrirSub(p.sub); return; }
+    if (p.modo === 'texto' && esquemaId && !esPersonajes(esquemaId)) { abrirTexto(null); return; }
+    verVista(p.modo === 'documentos' ? 'documentos' : 'esquema');
+  }
   function montarPrimero() {
     const g = biblioteca.guion(abiertoId), d = g && docs(); if (!d) return;
     const r = d.migrarEsquema(g.datos, g.notas);
     if (r.cambio) { g.notas = {}; biblioteca.marcar(abiertoId); }
-    montarEsquema(primerEsquema());
+    restaurarPantalla();
   }
   function alCambiar() {
     clearTimeout(temporizador);
@@ -359,7 +455,6 @@
     if (g && docs()) montarPrimero(); else { T.tablero.cargar(T.inicial()); document.body.classList.add('sin-esquema'); }
     persistir();
     C.gestor.mostrar();                                        // la barra de documentos está en todas las vistas
-    if (vista.modo === 'personajes') verPersonajes();          // la pestaña se abre en Personajes: su tablero
     pantalla = 'proyecto'; aplicarPantalla();
     if (g && estado(g.id).archivo) recordarReciente(g.id);
   }
@@ -873,8 +968,11 @@
   /* ---------- arranque ---------- */
   if (escritorio) document.body.classList.add('escritorio');
   const ALTO_PARTIDA = T.tablero.alto();                        // el alto de carril de la hoja de estilos (80)
-  T.tablero.iniciar({ modelo, alCambiar, zoom: vista.zoom });
+  T.tablero.iniciar({ modelo, alCambiar, zoom: vista.zoom, alPanel: (px, plegado) => { vista.panelAlto = px; vista.panelPlegado = !!plegado; guardarVista(); } });
   if (vista.alto) T.tablero.alto(vista.alto);
+  T.tablero.panelAbajo(true);                                  // el panel del nodo va abajo desde el arranque (en Personajes lo apaga montarEsquema)
+  if (vista.panelAlto) T.tablero.panelAlto(vista.panelAlto);   // el panel de abajo vuelve con el alto que se le dejó
+  if (vista.panelPlegado) T.tablero.panelPlegado(true);        // y contraído, si así se dejó
   abiertoId = biblioteca.activo() ? biblioteca.activo().id : null;
   document.title = (abiertoId ? biblioteca.activo().nombre + ' · ' : '') + 'ClapCraft';
   C.proyectos.iniciar({ crear: crearProyecto, cancelar: cancelarProyecto, nuevo: () => nuevo(), abrir: () => abrirArchivo(), abrirReciente, recientes,
@@ -907,107 +1005,114 @@
      cinta, la tira de la trama: una nota por nodo. Al volver al esquema se selecciona en el tablero el
      nodo de la nota abierta, y se pinta de nuevo por si el título cambió desde el editor. */
   C.texto.iniciar({
-    marco: $('editorMarco'), tira: $('hilo'), seccion: $('texto'), cabecera: $('textoCab'), tip: $('tip'), biblioteca, notas,
+    marco: $('editorMarco'), tira: $('hilo'), seccion: $('texto'), cabecera: $('textoCab'), tip: $('tip'), biblioteca,
     contenedor: () => { const r = refEsquema(esquemaId); return r ? r.contenedor.nombre : ''; },
     /* el elenco del guion para el editor: sugerencias de «/» y colores */
     elenco: () => (docs() ? docs().elenco().map(p => ({ name: p.nombre, color: p.color })) : []),
     /* «Ver biblioteca» de la cabecera del editor: la biblioteca enlazada al esquema montado */
     tieneBiblioteca: () => !!(esquemaId && docs() && docs().enlace(esquemaId)),
     verBiblioteca: () => { const x = esquemaId && docs() && docs().enlace(esquemaId); if (x) C.gestor.abrirSub(x.sub.id); },
-    /* el chip del acto: el segmento expandido de ese acto en la biblioteca enlazada (o, en Personajes, del momento
-       en la biblioteca del personaje), con el documento abierto marcado */
-    puedeVerSegmento: () => false,   // ni las bibliotecas tienen cronología ni los personajes segmentos de momentos (Leo): el chip del acto no abre nada
-    /* el chip del esquema en la cabecera del editor: su nombre, o el personaje con su color */
+    /* el chip del esquema en la cabecera del editor: su nombre, con su color si se le puso uno */
     esquemaChip: () => {
       const r = refEsquema(esquemaId); if (!r) return null;
-      if (!esPersonajes(esquemaId)) return { nombre: r.esquema.nombre };
-      const l = vista.personaje && docs().personaje(vista.personaje), t = l && C.PALETA_ETIQUETAS[l.color];
-      return l ? { nombre: l.nombre, chl: t && t[1], chd: t && t[2] } : null;
+      const c0 = r.esquema.color, t0 = c0 !== undefined && c0 !== null && C.PALETA_ETIQUETAS[c0];
+      return t0 ? { nombre: r.esquema.nombre, chl: t0[1], chd: t0[2] } : { nombre: r.esquema.nombre };
     },
-    verSegmento: (actoId, nodoId) => { const sub = bibliotecaDelEsquema(); if (sub) C.gestor.expandir(sub, 'acto:' + actoId, nodoId); },
     modelo: () => modelo, guion: () => biblioteca.guion(abiertoId),
     guardar: persistir, alCambiarTablero: alCambiar, avisar: T.tablero.avisar, vista, guardarVista,
     alternar: () => verVista(vista.modo === 'texto' ? 'esquema' : 'texto'), alternarLado: () => alternarLado(),
-    volver: () => { C.gestor.contraer(); verVista(esPersonajes(esquemaId) ? 'personajes' : 'esquema'); },
-    /* el tablero de un personaje: sin tira en el editor, y los dos cuadros de un salto comparten nota */
-    saltosConNota: () => esPersonajes(esquemaId), sinTira: () => esPersonajes(esquemaId),
-    /* el guion del esquema montado (Revisar guión): su estado, sacar/devolver/plegar secciones y la pantalla de revisión */
-    barraGuion: $('guionBarra'),
-    guionDe: () => (esquemaId && docs() && refEsquema(esquemaId) ? docs().guionEsquema(esquemaId) : null),
-    guionAccion: (accion, claves) => accionGuion(accion, claves),
-    revisar: () => { C.texto.volcar(); C.revisar.abrir(); C.texto.refrescarGuion(); },   // en Revisar guión la barra se ve aunque esté contraída
+    volver: () => { C.gestor.contraer(); verVista('esquema'); },
     exportar: rect => exportarDesdeEditor(rect),
+    versiones: rect => menuVersiones(rect),
     alTema: oscuro => { if (oscuro !== esOscuro()) { aplicarTema(oscuro); guardarTema(); } }
   });
 
-  /* ---------- Revisar guión: sacar y devolver secciones, su orden de lectura y el documento plano ---------- */
-  function accionGuion(accion, claves) {
-    const d = docs(); if (!d || !esquemaId || !claves.length) return;
-    const r = accion === 'sacar' ? d.sacarDelGuion(esquemaId, claves)
-      : accion === 'devolver' ? d.devolverAlGuion(esquemaId, claves)
-      : d.plegarSeccion(esquemaId, claves[0], accion === 'plegar');
-    if (r.ok && r.cambio) { biblioteca.marcar(abiertoId); persistir(); }
-  }
-  /* lo que Revisar guión necesita del esquema montado */
-  function datosGuion() {
-    const d = docs(), r = refEsquema(esquemaId); if (!d || !r) return null;
-    const subId = bibliotecaDelEsquema(), sub = subId && d.sub(subId);
-    return { d, eid: esquemaId, tm: modelo, conSaltos: esPersonajes(esquemaId), esquemaNombre: r.esquema.nombre,
-             bibliotecaId: esPersonajes(esquemaId) ? null : subId, bibliotecaNombre: sub ? sub.sub.nombre : '' };
-  }
   const nombreProyecto = () => { const g = biblioteca.guion(abiertoId); return g ? g.nombre : ''; };
-  /* genera el documento plano en «Guiones» de la biblioteca enlazada y lo abre en el editor */
-  function generarGuion(titulo) {
-    C.texto.volcar();
-    const x = datosGuion(); if (!x || !x.bibliotecaId) { T.tablero.avisar('Este esquema no tiene biblioteca enlazada'); return; }
-    const doc = C.guion.componer(x.d, x.eid, x.tm, x.conSaltos, { proyecto: nombreProyecto(), titulo });
-    const r = x.d.crearGuion(x.bibliotecaId, x.eid, titulo, doc);
-    if (!r.ok) { T.tablero.avisar(r.aviso); return; }
-    biblioteca.marcar(abiertoId); persistir();
-    C.revisar.cerrar();
-    C.gestor.abrirNota(r.nota.id);
-    T.tablero.avisar(r.aviso);
-  }
-  /* El documento que exporta cada sitio: una nota abierta (un guion generado u otra), o lo que está dentro del guion del
-     esquema montado, en su orden de lectura. */
+  /* El documento que exporta cada sitio: el que hay abierto en el editor (el del esquema, un guion generado o una nota
+     de biblioteca). Leo, 16-09-2026: sin «Revisar guión», se exporta lo que se está escribiendo. */
   function documentoAExportar() {
     const d = docs(); if (!d) return null;
-    const nid = C.gestor.notaAbierta();
-    if (nid && C.texto.enDocumento()) { C.texto.volcar(); const n = d.nota(nid); return n ? { titulo: n.titulo, html: n.html } : null; }
-    const x = datosGuion(); if (!x) return null;
     C.texto.volcar();
-    const titulo = x.esquemaNombre + ' · guion';
-    return { titulo, html: C.guion.componer(x.d, x.eid, x.tm, x.conSaltos, { proyecto: nombreProyecto(), titulo: x.esquemaNombre }).html };
+    const nid = C.gestor.notaAbierta() || (C.texto.enDocumento() ? docId : null);
+    const n = nid && d.nota(nid);
+    return n ? { titulo: n.titulo, html: n.html } : null;
   }
+  /* ---------- versiones del documento abierto (Leo, 16-09-2026) ----------
+     Un esquema tiene un documento y dentro suyo sus versiones: el botón «Versiones» de la barra inferior del editor
+     abre la lista (js/claquedraw/versiones.js), «Guardar versión…» pide el nombre en el modal de siempre y se puede
+     comparar cualquiera con lo que hay ahora. */
+  const disparadorEn = rect => ({ getBoundingClientRect: () => rect, classList: { add() {}, remove() {} }, focus() {} });
+  function notaAbiertaEnEditor() {
+    const d = docs(); if (!d) return null;
+    const nid = C.gestor.notaAbierta() || (C.texto.enDocumento() || vista.modo === 'texto' ? docId : null);
+    return (nid && d.nota(nid)) || null;
+  }
+  /* la versión que hay en el editor: la que coincide con su texto (si no, aún no se ha guardado) */
+  const versionActual = n => ((n.versiones || []).find(v => v.html === n.html) || {}).id || null;
+  function pintarVersion() {
+    const n = notaAbiertaEnEditor();
+    C.texto.versionEnBoton(n ? ((n.versiones || []).find(v => v.id === versionActual(n)) || {}).nombre : null);
+  }
+  function menuVersiones(rect) {
+    const d = docs(); C.texto.volcar();
+    const n = notaAbiertaEnEditor(); if (!n) { T.tablero.avisar('Aquí no hay documento'); return; }
+    const trigger = disparadorEn(rect);
+    const tras = r => { if (!r.ok) { T.tablero.avisar(r.aviso); return false; } biblioteca.marcar(abiertoId); persistir(); pintarVersion(); return true; };
+    C.versiones.menu(trigger, { titulo: n.titulo, versiones: d.versionesDe(n.id), actual: versionActual(n), html: n.html }, {
+      cargar: async vid => {
+        C.gestor.cerrarPop();
+        const v = d.version(n.id, vid); if (!v) return;
+        if (!versionActual(n) && !await T.tablero.confirmar('¿Cargar «' + v.nombre + '»? Lo que has escrito y no has guardado como versión se pierde.', 'Cargar')) return;
+        if (!tras(d.cargarVersion(n.id, vid))) return;
+        C.texto.soltar();                                      // lo que quedó en el editor no debe volver a la nota
+        abrirEnEditor();
+        T.tablero.avisar('Versión «' + v.nombre + '» cargada');
+      },
+      guardar: async () => {
+        C.gestor.cerrarPop();
+        const lista = d.versionesDe(n.id);
+        const r0 = await C.gestor.pedirNombre({ ceja: 'Versión de «' + n.titulo + '»', titulo: 'Guardar versión',
+          pista: 'Por ejemplo, v1 o Primer borrador', boton: 'Guardar', valor: 'v' + (lista.length + 1) });
+        if (!r0) return;
+        if (!r0.nombre.trim()) { T.tablero.avisar('Escribe un nombre para la versión'); return; }
+        const r = d.guardarVersion(n.id, r0.nombre);
+        if (tras(r)) T.tablero.avisar(r.aviso);
+      },
+      comparar: vid => {
+        C.gestor.cerrarPop();
+        const lista = d.versionesDe(n.id); if (!lista.length) return;
+        const abrir = v => C.versiones.abrirComparacion({ nombre: v.nombre, html: v.html }, { nombre: 'Ahora', html: n.html });
+        if (vid) { const v = d.version(n.id, vid); if (v) abrir(v); return; }
+        if (lista.length === 1) { abrir(lista[0]); return; }
+        C.gestor.menuLista(trigger, 'Comparar con la actual…', lista.map(v => ({ id: v.id, nombre: v.nombre })), id => abrir(d.version(n.id, id)));
+      },
+      renombrar: async vid => {
+        C.gestor.cerrarPop();
+        const v = d.version(n.id, vid); if (!v) return;
+        const r0 = await C.gestor.pedirNombre({ ceja: 'Versión de «' + n.titulo + '»', titulo: 'Renombrar la versión', boton: 'Renombrar', valor: v.nombre });
+        if (!r0 || !r0.nombre.trim()) return;
+        tras(d.renombrarVersion(n.id, vid, r0.nombre));
+      },
+      eliminar: async vid => {
+        const v = d.version(n.id, vid); if (!v) return;
+        C.gestor.cerrarPop();
+        if (!await T.tablero.confirmar('¿Eliminar la versión «' + v.nombre + '»? El documento de ahora no se toca.', 'Eliminar')) return;
+        const r = d.eliminarVersion(n.id, vid);
+        if (tras(r)) T.tablero.avisar(r.aviso);
+      }
+    });
+  }
+
   /* «Exportar» de la barra inferior del editor (dentro del marco): el menú se abre en la página, sobre el botón */
   function exportarDesdeEditor(rect) {
     const disparador = { getBoundingClientRect: () => rect, classList: { add() {}, remove() {} }, focus() {} };
     C.exportar.menu(disparador, documentoAExportar, T.tablero.avisar);
   }
-  C.revisar.iniciar({
-    seccion: $('texto'), cont: $('revisar'), cab: $('textoCab'), datos: datosGuion,
-    accion: (accion, claves) => { accionGuion(accion, claves); C.texto.refrescarGuion(); },
-    ordenar: claves => { const d = docs(); if (!d || !esquemaId) return; const r = d.ordenarGuion(esquemaId, claves); if (r.ok && r.cambio) { biblioteca.marcar(abiertoId); persistir(); } },
-    generar: generarGuion,
-    abrirGuion: id => { C.revisar.cerrar(); C.gestor.abrirNota(id); },
-    exportar: boton => C.exportar.menu(boton, documentoAExportar, T.tablero.avisar),
-    alCerrar: () => { C.texto.refrescarGuion(); C.texto.enfocar(); }
-  });
-
-  /* Doble clic en un nodo del tablero: abre su documento en el editor (en lugar de renombrarlo en
-     sitio, que sigue en el panel). Va en fase de captura para que el tablero no lo vea; los extremos
-     de un salto no tienen nota y conservan su doble clic, salvo en el tablero de un personaje, donde los
-     dos cuadros de un salto comparten una nota (`saltosConNota`). */
-  $('board').addEventListener('dblclick', e => {
-    const pt = e.target.closest && e.target.closest('.pt');
-    if (!pt || !modelo.punto(pt.dataset.punto) || (modelo.saltoDe(pt.dataset.punto) && !esPersonajes(esquemaId))) return;
-    e.preventDefault(); e.stopPropagation();
-    verVista('texto', pt.dataset.punto);
-  }, true);
 
   /* ---------- gestor de documentos (vista Documentos) ---------- */
   C.gestor.iniciar({
     seccion: $('documentos'), lado: $('gdSide'), main: $('gdMain'), migas: $('migas'),
+    alNavegar: () => recordarPantalla(),                       // lo abierto en el gestor entra en la última pantalla
     guion: () => biblioteca.guion(abiertoId), texto: C.texto, vista, guardarVista,
     biblioteca, alCambiarTablero: alCambiar,
     /* el modelo de un esquema: el montado si es ese, si no uno de solo lectura sobre sus datos */
@@ -1039,15 +1144,14 @@
       return x;
     },
     /* abre el documento de un nodo en el editor (montando antes su esquema si hace falta) */
-    abrirNodo: (eid, id) => { if (!refEsquema(eid)) return; if (eid !== esquemaId) montarEsquema(eid); verVista('texto', id); },
-    esquemaMontado: () => esquemaId, modo: () => vista.modo,
+    /* un nodo ya no tiene documento propio (Leo, 16-09-2026): lleva a su sitio en el esquema */
+    abrirNodo: (eid, id) => { if (!refEsquema(eid)) return; if (eid !== esquemaId) montarEsquema(eid); verVista('esquema'); if (id) seleccionarEnTablero(id); },
+    esquemaMontado: () => esquemaId, modo: () => vista.modo, abrirTexto,
     crearEsquemaDatos: () => T.inicial(),
     abrirEsquema: eid => { montarEsquema(eid || null); verVista('esquema'); },
     personajes, abrirPersonaje, verPersonajes, verContenedores, nuevoPersonaje: () => nuevoPersonaje(), renombrarPersonaje, eliminarPersonaje, colorPersonaje,
-    carrusel: $('personajesSeg'),
-    esquemaPersonaje: pid => { const e = docs() && docs().esquemaPersonaje(pid); return e ? e.id : null; },
-    personajesActivo: () => vista.modo === 'personajes' || (vista.modo === 'texto' && esPersonajes(esquemaId))
-      || (vista.modo === 'documentos' && !!C.gestor.notaAbierta() && (C.gestor.subActual() || {}).cid === C.ID_PERSONAJES),
+    nuevoEsquemaPersonaje: (trigger, carpetaId) => nuevoEsquemaPersonaje(trigger, carpetaId),
+    enPersonajes, verArbol: cual => { vista.arbol = cual === 'personajes' ? 'personajes' : 'contenedores'; guardarVista(); },
     /* lo elegido en la barra se enseña en la vista Documentos (la barra está en todas) */
     mostrarTablero: () => { if (vista.modo !== 'documentos') verVista('documentos'); },
     alternarLado: () => alternarLado(),
@@ -1109,6 +1213,10 @@
     if (x) C.gestor.abrirSub(x.sub.id);
   });
 
+  document.querySelector('#esquema > .esq-cab').addEventListener('click', e => {
+    if (e.target.closest('#abrirDoc')) { e.stopPropagation(); abrirTexto(null); }   // el documento del esquema
+  });
+
   /* ---------- columna de tramas: un carril de 48 px con la inicial de cada trama (rediseño) ----------
      El nombre y el tipo se asoman al pasar el ratón (CSS); se renombra y se cambia desde el panel. */
   T.tablero.gutter(48);
@@ -1123,18 +1231,15 @@
 
   /* Tres vistas: esquema (el tablero), texto (el editor con la tira) y documentos (el gestor, con su
      barra lateral solo ahí; una nota abierta usa el mismo editor). */
-  function verVista(modo, puntoId) {
-    modo = ['texto', 'documentos', 'personajes'].includes(modo) ? modo : 'esquema';
-    if (modo === 'personajes' && !esPersonajes(esquemaId) && !document.body.classList.contains('sin-personajes')) { verPersonajes(); return; }   // primero hay que montar su tablero
-    if (modo === 'esquema' && esPersonajes(esquemaId)) modo = 'personajes';   // el tablero de Personajes se ve en su pantalla
+  function verVista(modo) {
+    modo = ['texto', 'documentos'].includes(modo) ? modo : 'esquema';
     const anterior = vista.modo, cambia = modo !== anterior;
     vista.modo = modo; guardarVista();
     if (cambia && anterior === 'documentos') C.gestor.salir();
     if (cambia && anterior === 'texto') C.texto.volcar();
-    if (modo !== 'texto' && C.revisar.abierto()) C.revisar.cerrar();
+
     document.body.classList.toggle('vista-texto', modo === 'texto');
     document.body.classList.toggle('vista-documentos', modo === 'documentos');
-    document.body.classList.toggle('vista-personajes', modo === 'personajes');
     /* el editor de nodos (texto) es parte del esquema: en la cabecera se ve como Esquema */
     const cabecera = modo === 'texto' ? 'esquema' : modo;
     document.querySelectorAll('[data-vista]').forEach(b => {
@@ -1142,54 +1247,37 @@
       b.setAttribute('aria-selected', String(b.dataset.vista === cabecera));
     });
     if (modo === 'texto') {
-      const sel = T.tablero.seleccion();
-      if (abiertoId) C.texto.abrir(puntoId || (sel && sel.tipo === 'punto' ? sel.id : null));
+      if (abiertoId) abrirEnEditor();
     } else if (modo === 'documentos') {
       C.gestor.mostrar();
     } else if (cambia) {
       T.tablero.render();
-      const id = C.texto.actual();
-      if (id) seleccionarEnTablero(id);
     }
     if (cambia && modo !== 'documentos') C.gestor.render();   // el menú señala lo que enseña la vista
+    recordarPantalla();
   }
   document.querySelectorAll('[data-vista]').forEach(b => b.addEventListener('click', () => verVista(b.dataset.vista)));
 
   /* tras cada render del tablero, los selectores de personaje (solo en el tablero de Personajes) */
   new MutationObserver(() => marcarPersonaje()).observe($('rows'), { childList: true });
-  /* el selector del carril: su clic y su puntero no llegan al tablero (lo tomaría por elegir o arrastrar la trama) */
-  ['pointerdown', 'mousedown', 'click', 'dblclick'].forEach(t => $('rows').addEventListener(t, e => {
-    /* doble clic en un carril de otro personaje (su nombre, su etiqueta o el hueco de la columna): a ese personaje (Leo, 15-09-2026).
-       También el segundo clic de un doble clic (`detail` 2): si el primero abrió el menú del selector, el `dblclick` no siempre llega */
-    if ((t === 'dblclick' || (t === 'click' && e.detail >= 2)) && esPersonajes(esquemaId) && !T.tablero.acabaDeReordenar()) {
-      const label = e.target.closest('.label'), row = label && label.closest('.row[data-linea]');
-      const l = row && !e.target.closest('.per-color, input') && modelo.linea(row.dataset.linea);
-      const p = l && l.tipo !== 'principal' && l.personaje && docs().personaje(l.personaje);
-      if (p) { e.stopImmediatePropagation(); e.preventDefault(); C.gestor.cerrarPop(); abrirPersonaje(p.id); return; }   // inmediata: el oyente del selector (mismo elemento) no reabre su menú
+  /* el círculo del carril (con las dos letras del personaje): su clic abre el selector y no llega al tablero */
+  ['pointerdown', 'click', 'dblclick'].forEach(t => $('rows').addEventListener(t, e => {
+    if (!esPersonajes(esquemaId) || !e.target.closest('.chip')) return;
+    /* doble clic en el círculo: ir a ese personaje (Leo, 15-09-2026). También el segundo clic de un doble clic
+       (`detail` 2): si el primero abrió el menú, el `dblclick` no siempre llega */
+    if ((t === 'dblclick' || (t === 'click' && e.detail >= 2)) && !T.tablero.acabaDeReordenar()) {
+      const row = e.target.closest('.row[data-linea]'), l = row && modelo.linea(row.dataset.linea);
+      const p = l && l.personaje && docs().personaje(l.personaje);
+      if (p) { e.stopImmediatePropagation(); e.preventDefault(); C.gestor.cerrarPop(); irAEsquemaPersonaje(p.id); return; }
     }
-    if (t === 'click') return;                                 // el clic sencillo del selector lo lleva su propio oyente
-    /* desde el selector, la etiqueta o el color también se arrastra el carril para reordenarlo (el tablero no ve ese puntero) */
-    if (t === 'pointerdown' && esPersonajes(esquemaId) && e.target.closest('.per-combo:not(.fijo), .per-etq, .per-color')) {
-      const row = e.target.closest('.row[data-linea]'); if (row) T.tablero.arrastrarFila(e, row.dataset.linea);
-    }
-    const b = e.target.closest('.per-combo'); if (b && (t === 'dblclick' || !b.classList.contains('fijo'))) e.stopPropagation();   // el nombre fijo no se renombra con doble clic
-    if (e.target.closest('.per-color, .per-etq')) e.stopPropagation();
+    e.stopPropagation();
+    if (t === 'pointerdown') { const row = e.target.closest('.row[data-linea]'); if (row) T.tablero.arrastrarFila(e, row.dataset.linea); return; }
+    if (t !== 'click' || T.tablero.acabaDeReordenar()) return;
+    const row = e.target.closest('.row[data-linea]'), l = row && modelo.linea(row.dataset.linea); if (!l) return;
+    C.gestor.menuCarril(e.target.closest('.chip'), { actual: l.personaje || null, salvo: conCarril(l.id),
+      alElegir: pid => asignarCarril(l.id, pid), alQuitar: () => asignarCarril(l.id, null),
+      alEliminar: () => eliminarCarril(l.id), alIr: () => { if (l.personaje) abrirPersonaje(l.personaje); } });
   }));
-  /* el color de la trama de un carril: los 24 tonos (en Personajes el panel de la trama no se abre) */
-  $('rows').addEventListener('click', e => {
-    const b = e.target.closest('.per-color'); if (!b) return;
-    e.stopPropagation();
-    if (T.tablero.acabaDeReordenar()) return;                  // el clic con que acaba un arrastre del carril
-    const lid = b.dataset.linea, l = modelo.linea(lid); if (!l) return;
-    C.gestor.paletaTrama(b, l.color, c => { modelo.editarLinea(lid, { color: c }); T.tablero.render(); alCambiar(); if (vista.modo === 'personajes') C.gestor.render(); });
-  });
-  $('rows').addEventListener('click', e => {
-    const b = e.target.closest('.per-combo:not(.fijo)'); if (!b) return;
-    e.stopPropagation();
-    if (T.tablero.acabaDeReordenar()) return;
-    const lid = b.dataset.linea, l = modelo.linea(lid); if (!l) return;
-    C.gestor.menuCarril(b, { actual: l.personaje || null, salvo: conCarril(lid), alElegir: pid => asignarCarril(lid, pid), alQuitar: () => asignarCarril(lid, null), alEliminar: () => eliminarCarril(lid), alIr: () => { if (l.personaje) abrirPersonaje(l.personaje); } });
-  });
   /* «＋ personaje» (el «Nueva trama» del tablero): sin elegir tipo, se elige un personaje y nace su carril */
   $('rows').addEventListener('click', e => {
     const b = esPersonajes(esquemaId) && e.target.closest('#addLinea'); if (!b) return;
@@ -1197,28 +1285,11 @@
     C.gestor.menuCarril(b, { titulo: 'Añadir personaje', salvo: conCarril(), alElegir: pid => { const p = docs().personaje(pid); if (p) carrilNuevo(p); } });
   }, true);
 
-  /* En el panel del tablero, un nodo con nota ofrece abrirla (los extremos de un salto no tienen).
-     El panel se reconstruye con innerHTML en cada selección: se observa y se añade el botón. */
-  new MutationObserver(() => {
-    const panel = $('panel'), s = T.tablero.seleccion();
-    /* en el tablero de un personaje, elegir un carril no abre el panel (Leo): el carril es su personaje */
-    if (s && s.tipo === 'linea' && esPersonajes(esquemaId)) { if (panel.childElementCount) { panel.replaceChildren(); document.body.classList.remove('con-panel'); } return; }
-    if (!s || s.tipo !== 'punto' || panel.querySelector('[data-nota-abrir]') || (modelo.saltoDe(s.id) && !esPersonajes(esquemaId))) return;
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'btn act-btn'; b.dataset.notaAbrir = s.id;
-    b.innerHTML = '<svg width="14" height="14"><use href="#ic-script"></use></svg>Abrir documento';
-    const acciones = panel.querySelector('.panel-acciones');
-    if (acciones) acciones.insertBefore(b, acciones.firstChild); else panel.appendChild(b);
-  }).observe($('panel'), { childList: true });
-  document.addEventListener('click', e => {
-    const b = e.target.closest && e.target.closest('[data-nota-abrir]');
-    if (b) verVista('texto', b.dataset.notaAbrir);
-  });
-  /* la app arranca en Contenedores (Leo): si se cerró en Personajes, vuelve a la vista de la que se entró */
-  if (vista.modo === 'personajes') { vista.modo = vista.modoPrevio === 'documentos' ? 'documentos' : 'esquema'; guardarVista(); C.gestor.render(); }
-  if (vista.modo !== 'esquema') verVista(vista.modo);
+  /* la pantalla ya la repuso `restaurarPantalla()` al montar el proyecto (Leo, 16-09-2026: antes se arrancaba siempre
+     en Contenedores y en el primer esquema) */
+  C.gestor.render();
   /* el editor se carga escondido desde el principio: así la primera nota no parpadea en blanco */
-  else setTimeout(() => C.texto.precargar(), 600);
+  if (vista.modo === 'esquema') setTimeout(() => C.texto.precargar(), 600);
 
 
   /* Escalas del tablero: horizontal (ancho de celda, T.tablero.zoom) y vertical (alto de carril,

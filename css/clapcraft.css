@@ -42,7 +42,7 @@
   --p-violeta-linea: rgba(83, 38, 171, .4); --p-azul-linea: rgba(26, 74, 134, .4);
   /* barra inferior */
   --bb-bg: #e8e9ec; --bb-line: #c5c8d0; --bb-fg: #1b1d22; --bb-muted: #5a5f68;
-  --fila: 80px; --eje: 34px;                                 /* carriles de 80 px y eje de 34 (tablero.js los lee) */
+  --fila: 80px; --eje: 46px; --eje-col: 12px;                /* carriles de 80 px y eje de 46: 34 de actos + la tira de columnas (tablero.js lee --fila y --eje) */
 }
 html[data-theme="dark"] {
   --chrome: #202024; --panel: #191a1d; --papel: #26262a; --lienzo: #141417;
@@ -106,6 +106,8 @@ main { border-top: 1px solid var(--borde); }
 .esq-cab .btn svg { color: var(--foco); }
 .esq-cont { font: 400 14.5px var(--mono); letter-spacing: .02em; text-transform: uppercase; color: var(--palido); white-space: nowrap; }
 .esq-titulo .gd-chip { height: 24px; padding: 0 9px; font-size: 11.5px; border-radius: 5px; }
+/* «Abrir documento» en la cabecera del esquema: botón normal con el icono en acento (Leo, 16-09-2026) */
+.btn.con-icono svg { color: var(--foco); }
 .esq-nom { font: 600 15px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .esq-cuerpo { border-top: 1px solid var(--regla); }
 /* pie de la vista Esquema (42 px): escala y deshacer / rehacer */
@@ -207,44 +209,52 @@ main { border-top: 1px solid var(--borde); }
 .pt.rombo .dot { width: 10px; height: 10px; border-radius: 2px; border: 2px solid var(--rombo-trazo); background: var(--rombo) !important; }
 .pt.sel.caja .dot, .pt.sel.rombo .dot { box-shadow: 0 0 0 4px var(--foco-halo); border-color: var(--foco); }
 .pt.arrastrando .dot { transform: scale(1.15); }
-.cap { font-size: 11px; color: var(--tenue); bottom: 16px; max-width: 150px; }
+.cap { font-size: 11px; color: var(--tenue); bottom: 16px; max-width: max(150px, var(--cap-max, 0px)); }
 .pt.sel .cap { color: var(--tinta); font-weight: 600; font-size: 11.5px; }
+/* al pasar el ratón por el nodo **o por su rótulo** (Leo, 16-09-2026), el nombre entero, en varias líneas si hace falta */
+.pt:hover .cap { width: max-content; max-width: max(300px, var(--cap-max, 0px)); white-space: normal; box-shadow: var(--sombra-alta); z-index: 2; }
 .pt.alto .cap { bottom: 26px; }
 .pt.cortado .cap { color: var(--palido); }
 /* rótulo perpetuo (rediseño «carpetas y tooltips», 15-09-2026): el nombre de un nodo redondo va en papel con borde,
-   sombra y una guía de 7 px hasta el punto; el del nodo seleccionado, con borde de acento. Si choca con el anterior
-   baja al otro lado del eje (`.abajo`). Cuadros, rombos y descartados siguen con su texto suelto. */
+   sombra y una guía hasta el punto; el del nodo seleccionado, con borde de acento. Si choca con el del nodo anterior
+   sube un nivel (tablero.js). Cuadros, rombos y descartados siguen con su texto suelto. */
 .pt.con-rotulo::before { content: ''; position: absolute; left: 50%; top: -7.5px; width: 1px; height: 7px; background: var(--borde-fuerte); pointer-events: none; }
-.pt.con-rotulo.abajo::before { top: 11.5px; }
 .pt.con-rotulo .cap { bottom: 18.5px; padding: 2px 7px; background: var(--papel); border: 1px solid var(--borde); border-radius: 4px; box-shadow: var(--sombra);
   font-size: 11.5px; line-height: 16px; font-weight: 400; color: var(--tenue); }
 .pt.con-rotulo.sel .cap { border-color: var(--foco-linea); box-shadow: var(--sombra-alta); font-weight: 600; color: var(--tinta); }
-.pt.con-rotulo.abajo .cap { bottom: auto; top: 18.5px; }
-.pt.abajo:not(.con-rotulo) .cap { bottom: auto; top: 16px; }
-.pt.abajo .cap-edit { bottom: auto; top: 17px; }
 .cadena { height: 2px; }
+.cadena.sel { height: 4px; }
+.enlace-nota { font: italic 400 11.5px var(--sans); }
 .cadena.ruta { height: 2px; box-shadow: none; background: var(--foco-linea) !important; }
 body.con-ruta .rail { opacity: .15; }
 .cap-edit { font-size: 12.5px; border: 1px solid var(--foco); border-radius: 4px; box-shadow: 0 0 0 3px var(--foco-halo); }
 /* notas entre nodos: post-it pequeño en el tono de nota */
 .nota { height: 24px; border: 1px solid var(--nota-borde); border-radius: 3px; box-shadow: var(--sombra); margin-top: 12px; }
-.nota span { font: 400 10.5px var(--sans); font-style: normal; color: var(--nota-tinta); }
+/* en **itálica**, y con su papel amarillo: a simple vista no se confunden con los rótulos de los nodos
+   (Leo, 16-09-2026: «las notas se parecen bastante a los tooltips, ponlas en itálica») */
+.nota span { font: 400 10.5px var(--sans); font-style: italic; color: var(--nota-tinta); }
 .nota:hover { border-color: var(--nota-tinta); }
 .nota.sel { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
-.nota.aparte { height: 24px; margin-top: 10px; }
-.nota.aparte span { line-height: 22px; padding: 0 8px; font-size: 11px; }
+.nota span { line-height: 22px; padding: 0 8px; }
+/* continua, de 2 px y del color de la trama del nodo; con un punto donde toca el carril (Leo, 16-09-2026) */
+.nota::before { background: var(--gl, var(--borde-fuerte)); }
+.nota::after { content: ''; position: absolute; left: 50%; top: calc(-2px - var(--guia, 13px)); width: 5px; height: 5px; margin-left: -2.5px;
+        border-radius: 50%; background: var(--gl, var(--borde-fuerte)); box-shadow: 0 0 0 2px var(--lienzo); }
+.nota:hover::after, .nota.sel::after { box-shadow: 0 0 0 2px var(--lienzo), 0 0 0 4px var(--foco-halo); }
 /* Una nota con color (rediseño 9): fondo pálido y borde de su tono (--tf/--tc, tablero.js), texto en tinta. Al pasar el
    ratón se marca la guía que la une a la trama: raya continua de su tono, marca con halo y sombra alta. */
 .nota { --nc: var(--nota-tinta); --nh: var(--nota); }
-.nota.con-color { --nc: var(--tc); --nh: var(--tf); background: var(--tf); border-color: var(--tc); }
-.nota.con-color span, .nota.con-color.sel span { color: var(--tinta); }
-.nota.con-color:hover { border-color: var(--tc); }
-.nota.con-color .nota-marca { background: var(--tc); box-shadow: 0 0 0 2px var(--papel); }
-.nota.con-color .nota-guia-v { background: repeating-linear-gradient(180deg, var(--borde-fuerte) 0 3px, transparent 3px 6px); }
-.nota.con-color .nota-guia-h { background: repeating-linear-gradient(90deg, var(--borde-fuerte) 0 3px, transparent 3px 6px); }
+/* **Una nota con color sigue siendo papel de nota** (Leo, 16-09-2026: con el fondo pálido y el borde del tono entero «se
+   ven más como nodos que notas»): un papel apenas teñido de su tono (sobre el papel amarillo, los fríos salían turbios),
+   con el borde suave y la letra en cursiva de la nota */
+.nota.con-color { --nc: var(--tc); --nh: var(--tf);
+        background: color-mix(in oklab, var(--tc) 11%, var(--papel));
+        border-color: color-mix(in oklab, var(--tc) 30%, var(--borde)); }
+.nota.con-color span { color: color-mix(in oklab, var(--tc) 55%, var(--tinta)); }
+.nota.con-color:hover { border-color: color-mix(in oklab, var(--tc) 50%, var(--borde)); }
+.nota.con-color.sel { border-color: var(--foco); }
 .nota:hover { box-shadow: var(--sombra-alta); }
-.nota:hover .nota-guia-v, .nota:hover .nota-guia-h { background: var(--nc); }
-.nota:hover .nota-marca { background: var(--nc); box-shadow: 0 0 0 4px var(--nh); }
+.nota:hover::before, .nota.sel::before { background: var(--nc); }
 .nota-edit { font: 400 10.5px var(--sans); font-style: normal; border: 1px solid var(--foco); border-radius: 3px; box-shadow: 0 0 0 3px var(--foco-halo); }
 .hueco:hover { border-radius: 3px; }
 .add-nota { border: 1px dashed var(--nota-borde); border-radius: 3px; }
@@ -322,6 +332,99 @@ aside h2 { font: 500 10px var(--mono); letter-spacing: .09em; color: var(--palid
 #esquema .add-linea button:hover .plus { color: var(--foco); }
 /* el panel del nodo: columna de 330 px en papel; la descripción ocupa el alto que sobra */
 body.con-panel #panel { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 16px; }
+
+/* ---------- el panel del nodo, abajo (Leo, 16-09-2026, docs/diseno/rediseno-14) ----------
+   En lugar de la columna de la derecha, una franja de borde a borde bajo el tablero: el mismo contenido en
+   columnas separadas por una raya, con la descripción ocupando el ancho que sobra. El asa de arriba
+   (`#panelAsa`) lo agranda arrastrando hacia arriba (`--panel-alto`). En Personajes sigue al lado. */
+body.panel-abajo .esq-cuerpo { flex-direction: column; }
+/* es una sección fija: está siempre, con o sin nada elegido (Leo, 16-09-2026) */
+body.panel-abajo #panel { display: flex; }
+body.panel-abajo #panel { flex: none; width: auto; height: var(--panel-alto, 164px); min-height: 0;
+        flex-direction: row; align-items: stretch; gap: 0; padding: 0; overflow-x: auto; overflow-y: hidden;
+        border-left: 0; border-top: 1px solid var(--borde-fuerte); background: var(--papel); }
+body.panel-abajo #panel > * { flex: none; box-sizing: border-box; display: flex; flex-direction: column;
+        justify-content: center; gap: 7px; min-width: 0; padding: 12px 18px; margin: 0; border-right: 1px solid var(--regla); }
+body.panel-abajo #panel > .panel-cabecera { width: auto; flex-direction: row; align-items: center; justify-content: flex-start;
+        gap: 8px; padding-bottom: 12px; border-bottom: 0; }
+body.panel-abajo #panel > .panel-cabecera h2 { flex: none; }   /* en columna, el título no estira: se quedaba pegado arriba */
+body.panel-abajo #panel > .field { width: 230px; }
+body.panel-abajo #panel > .panel-pista { display: none; }   /* la pista de teclas no cabe en una franja */
+/* el nombre de lo elegido, solo cuando está contraída */
+.panel-quien { display: none; font-size: 13px; font-weight: 500; color: var(--tinta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel-plegar { margin-left: auto; }
+.panel-plegar svg { transition: transform .15s ease; }
+
+/* Con descripción (el panel de un nodo), manda ella (Leo, 16-09-2026: «es donde pongo muchas notas»): a la izquierda,
+   una columna estrecha con el tipo, el título, dónde está y las acciones; a la derecha, la descripción entera, de arriba
+   abajo, así que agrandar el panel la agranda a ella. */
+body.panel-abajo #panel:has(> .field-crece) {
+        display: grid; grid-template-columns: 250px minmax(260px, 1fr); grid-template-rows: auto auto auto auto 1fr;
+        align-content: start; column-gap: 0; row-gap: 7px; padding: 12px 0; overflow-y: auto; }
+body.panel-abajo #panel:has(> .field-crece) > * { padding: 0 18px; border-right: 0; justify-content: flex-start; }
+body.panel-abajo #panel:has(> .field-crece) > .panel-cabecera { grid-area: 1 / 1; }
+body.panel-abajo #panel:has(> .field-crece) > .field:not(.field-crece) { grid-area: 2 / 1; }
+body.panel-abajo #panel:has(> .field-crece) > .field:not(.field-crece) > label { display: none; }
+body.panel-abajo #panel:has(> .field-crece) > .panel-meta { grid-area: 3 / 1; }
+body.panel-abajo #panel:has(> .field-crece) > .panel-acciones { grid-area: 4 / 1; }
+body.panel-abajo #panel:has(> .field-crece) > p.empty { grid-area: 5 / 1; width: auto; font-size: 11.5px; }
+body.panel-abajo #panel:has(> .field-crece) > .field-crece { grid-area: 1 / 2 / 6 / 3; width: auto; min-width: 0;
+        border-left: 1px solid var(--regla); }
+body.panel-abajo #panel:has(> .field-crece) > .field-crece textarea { flex: 1; min-height: 0; font-size: 14px; line-height: 1.5; }
+body.panel-abajo #panel > .field-crece { flex: 1 1 auto; min-width: 240px; }
+body.panel-abajo #panel .field-crece textarea { flex: 1; min-height: 0; }
+body.panel-abajo #panel > .panel-meta { width: auto; flex-direction: row; align-items: center; }
+body.panel-abajo #panel > .panel-acciones { flex-direction: row; align-items: center; width: auto; }
+body.panel-abajo #panel > .panel-pista { gap: 4px; border-right: 0; color: var(--palido); }
+body.panel-abajo #panel > .swatches, body.panel-abajo #panel > .chips { flex-direction: row; }
+/* los paneles de trama y de acto caben sin desplazar: los 24 tonos en dos filas y los campos con su ancho (Leo, 16-09-2026) */
+body.panel-abajo #panel .swatches { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, 1fr); gap: 5px;
+        max-width: 360px; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }
+/* La trama, el acto y la nota se ven **como el nodo** (Leo, 16-09-2026: «que se parezca al que aparece cuando se
+   presionan los nodos»): la misma rejilla, con lo ancho (el tipo y el color, el ancho y el fondo, el texto) a la
+   derecha. Los tonos van en un bloque de seis columnas, sin desparramarse ni desplazarse. */
+.panel-bloque { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
+.panel-sub { font: 400 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido); }
+body.panel-abajo #panel .panel-bloque .swatches { display: grid; grid-auto-flow: row; grid-template-columns: repeat(8, 22px);
+        grid-template-rows: none; gap: 5px; max-width: none; overflow: visible; }
+/* el color de una nota, **a la vista en el panel** (Leo, 16-09-2026: el botón que abría la paleta «resulta extraño, porque es un
+   combo list»): el papel de nota y los 24 tonos, en dos filas de cuadritos bajo el rótulo */
+body.panel-abajo #panel .swatches.nota-colores { grid-auto-flow: row; grid-template-columns: repeat(13, minmax(0, 1fr)); grid-template-rows: none;
+        gap: 3px; max-width: 214px; overflow: visible; padding: 2px 2px 0; }
+body.panel-abajo #panel .swatches.nota-colores .sw { width: 100%; height: auto; aspect-ratio: 1; border-radius: 3px; }
+.swatches.nota-colores .sw.papel { background: var(--nota); border: 1px solid var(--nota-borde); }
+.swatches.nota-colores .sw.papel.on { border: 2px solid var(--tinta); }
+body.panel-abajo #panel .panel-bloque .swatches .sw { width: 22px; height: 22px; }
+body.panel-abajo #panel[data-panel="nota"] .panel-meta { font-size: 12px; line-height: 1.4; }
+body.panel-abajo #panel .panel-bloque .chips { margin: 0; }
+body.panel-abajo #panel .panel-bloque .chips .btn { padding: 0 10px; font-size: 12px; }
+body.panel-abajo #panel .panel-bloque p.empty { font-size: 12px; margin: 0; }
+body.panel-abajo #panel .panel-acciones .act-btn { width: auto; padding: 0 12px; font-size: 12.5px; white-space: nowrap; }
+body.panel-abajo #panel .panel-acciones .act-btn.danger { width: 36px; padding: 0; }
+body.panel-abajo #panel .chips { flex-wrap: nowrap; }
+body.panel-abajo #panel > .field { width: 230px; min-width: 0; }
+body.panel-abajo #panel > .field:has(.swatches) { width: auto; }
+body.panel-abajo #panel > .btn.act-btn { align-self: center; width: auto; height: 34px; margin: 0 18px; }
+body.panel-abajo #panel > p.empty { width: 240px; justify-content: center; }
+/* sin nada elegido: el rótulo y una línea que dice de qué va */
+body.panel-abajo #panel > p.panel-vacio { flex: 1; width: auto; max-width: 720px; margin: 0; font-size: 12.5px; color: var(--tenue); }
+/* el asa: una franja de 7 px sobre el borde del panel */
+#panelAsa { display: none; }
+body.panel-abajo #panelAsa { display: block; flex: none; height: 7px; margin-bottom: -4px; position: relative; z-index: 7; cursor: ns-resize; }
+body.panel-abajo #panelAsa::after { content: ''; position: absolute; left: 50%; top: 2px; transform: translateX(-50%);
+        width: 46px; height: 3px; border-radius: 2px; background: var(--borde-fuerte); opacity: 0; transition: opacity .15s ease; }
+body.panel-abajo #panelAsa:hover::after, body.redimensionando #panelAsa::after { opacity: 1; background: var(--foco); }
+/* contraída hacia abajo (Leo, 16-09-2026: «una sección fija que pueda contraerse hacia abajo»): solo su cabecera */
+body.panel-abajo.panel-plegado #panel,
+body.panel-abajo.panel-plegado #panel:has(> .field-crece) { display: flex; flex-direction: row; align-items: stretch;
+        height: auto; min-height: 0; padding: 0; overflow: visible; }
+body.panel-abajo.panel-plegado #panel > *:not(.panel-cabecera) { display: none; }
+body.panel-abajo.panel-plegado #panel > .panel-cabecera { flex: 1; flex-direction: row; align-items: center; justify-content: flex-start;
+        gap: 10px; height: 34px; padding: 0 18px; border-right: 0; border-bottom: 0; }
+body.panel-abajo.panel-plegado #panel .panel-quien { display: block; }
+body.panel-abajo.panel-plegado #panel .panel-nav { display: none; }
+body.panel-abajo.panel-plegado .panel-plegar svg { transform: rotate(180deg); }
+body.panel-abajo.panel-plegado #panelAsa { display: none; }
 #panel .panel-cabecera { margin: 0; padding-bottom: 12px; }
 #panel .panel-cabecera h2 { font-size: 10px; letter-spacing: .1em; }
 .panel-nav { gap: 3px; margin: 0; }
@@ -345,43 +448,16 @@ body.con-panel #panel { display: flex; flex-direction: column; gap: 12px; paddin
 .panel-acciones #bBorrar { width: 36px; flex: none; padding: 0; background: var(--lienzo); }
 .panel-pista { margin: 0; font-size: 9.5px; }
 
-/* ---------- Pantalla Personajes (rediseño con personajes): segmentos en carrusel y el tablero de personajes ---------- */
-.per-seg { padding: 14px 18px 14px; border-top: 1px solid var(--regla); background: var(--lienzo); }
-.per-seg-cab { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.per-seg-n { font: 400 10px var(--mono); color: var(--palido); }
-.per-carrusel { display: flex; gap: 16px; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; }
-/* desplazador horizontal normal, morado (sin scrollbar-width: anularía los pseudoelementos) */
-.per-carrusel::-webkit-scrollbar { height: 10px; }
-.per-carrusel::-webkit-scrollbar-track { background: var(--regla); border-radius: 6px; }
-.per-carrusel::-webkit-scrollbar-thumb { background: var(--foco); border-radius: 6px; border: 2px solid var(--regla); min-width: 40px; }
-.per-carrusel > .gd-etq { flex: 0 0 252px; height: 176px; min-height: 0; display: flex; flex-direction: column; }
-.per-carrusel > .gd-etq .gd-etq-body { max-height: none; min-height: 0; }
-.per-carrusel > .gd-etq-nueva { flex: 0 0 200px; height: 176px; align-self: auto; }
-body.vista-personajes .esq-cuerpo { border-top: 1px solid var(--borde); }
-/* el tablero de personajes: columna de 150 px con el círculo y el nombre (sin globo), eje «PERSONAJES», «＋ personaje» */
-body.tablero-personajes #esquema .label { justify-content: flex-start; gap: 10px; padding: 0 12px; }
-/* cada carril lleva el selector de su personaje (`.per-combo`, lo pone app.js) en lugar del nombre de la trama */
-body.tablero-personajes #esquema .label .lbox,
-body.tablero-personajes #esquema .label:hover .lbox,
-body.tablero-personajes #esquema .label:focus-within .lbox { display: none; }
-.per-combo { display: none; }
-body.tablero-personajes #esquema .per-combo { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1; height: 28px; padding: 0 6px 0 8px; margin-right: -4px;
-        border: 1px solid transparent; border-radius: 5px; background: none; color: var(--tinta); font: 400 13px var(--mono); cursor: pointer; text-align: left; }   /* la misma letra que el menú (.gd-per-nom) */
-body.tablero-personajes #esquema .per-combo:hover { border-color: var(--borde); background: var(--papel); }
-.per-combo-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.per-combo svg { color: var(--palido); flex: none; }
-body.tablero-personajes #esquema .per-combo.fijo { cursor: default; border-color: transparent; background: none; }
-body.tablero-personajes #esquema .row.sin-personaje .per-combo { color: var(--palido); }
-body.tablero-personajes #esquema .row.abierto > .label { background: color-mix(in srgb, var(--foco) 6%, var(--lienzo)); box-shadow: inset 2px 0 0 var(--foco); }
-body.tablero-personajes #esquema .row.abierto > .label .per-combo { font-weight: 500; }
-body.tablero-personajes #esquema .row.abierto .track { background-color: var(--foco-banda); }
-body.tablero-personajes #esquema .axis .gutter { justify-content: flex-start; padding-left: 12px; }
-body.tablero-personajes #esquema .axis .gutter::after { content: 'Personajes'; text-transform: uppercase; }
-body.tablero-personajes #esquema .add-linea .label { justify-content: flex-start; padding: 0 12px; }
-body.tablero-personajes #esquema .add-linea button { gap: 9px; }
+/* ---------- El tablero de un esquema de personaje (rediseño con personajes) ----------
+   La misma columna estrecha que en cualquier esquema (Leo, 16-09-2026: la de 250 px ocupaba demasiado): el círculo
+   lleva **las dos primeras letras del personaje** y su color de etiqueta, y al pasar el ratón sale su nombre en el
+   rótulo de siempre; pulsarlo abre el selector de personaje. */
+#esquema .chip.per-tono { color: var(--chd) !important; background: var(--chl) !important; border-color: color-mix(in srgb, var(--chd) 35%, transparent); }
+html[data-theme="dark"] #esquema .chip.per-tono { color: var(--chl) !important; background: var(--chd) !important; border-color: color-mix(in srgb, var(--chl) 35%, transparent); }
+#esquema .chip[data-inicial] { cursor: pointer; }
+body.tablero-personajes #esquema .row.sin-personaje .chip { border-style: dashed; opacity: .8; }
+body.tablero-personajes #esquema .axis .gutter::after { content: 'Personajes'; }
 body.tablero-personajes #esquema .add-linea button::after { content: 'personaje'; font: 400 12px var(--mono); color: var(--palido); }
-/* «Apariciones»: las notas donde se nombra al personaje, con su ruta */
-.per-carrusel > .gd-apariciones { flex-basis: 280px; }
 .gd-apariciones .gd-etq-head { background: var(--foco-suave); color: var(--foco); }
 .gd-aparicion { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 40px; padding: 4px 10px; border: 1px solid var(--borde); border-radius: 5px; background: var(--papel); cursor: pointer; }
 .gd-aparicion:hover, .gd-aparicion:focus-visible { border-color: var(--borde-fuerte); background: var(--lienzo); }
@@ -389,7 +465,11 @@ body.tablero-personajes #esquema .add-linea button::after { content: 'personaje'
 .gd-aparicion-lin .gd-nota-meta { margin-left: auto; flex: none; }
 .gd-aparicion-tit { font-size: 13px; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .gd-aparicion-ruta { font: 400 10px var(--mono); letter-spacing: .02em; color: var(--palido); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.per-vacio { margin: 0; padding: 24px; }
+/* «Esquemas relacionados»: los esquemas donde el personaje tiene carril; un clic lleva al esquema (Leo, 16-09-2026) */
+.gd-esq-rel-fila { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 4px 10px; border: 1px solid var(--borde); border-radius: 5px; background: var(--papel); cursor: pointer; text-align: left; }
+.gd-esq-rel-fila:hover, .gd-esq-rel-fila:focus-visible { border-color: var(--foco); background: var(--foco-suave); }
+.gd-esq-rel-nom { font-size: 13px; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.gd-esq-rel-ruta { margin-left: auto; flex: none; font: 400 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--palido); }
 /* el menú en modo Personajes: punto de color · nombre · ⋯, y «＋ personaje» */
 .gd-per { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 4px 0 10px; border-radius: 5px; cursor: pointer; }
 .gd-per:hover { background: var(--hover); }
@@ -487,6 +567,7 @@ body.tablero-personajes #esquema .add-linea button::after { content: 'personaje'
 .hilo-nodo.pos .hilo-trazo { --tz: var(--foco); }
 .hilo-nodo.caja .hilo-tit, .hilo-nodo.rombo .hilo-tit { top: 75px; font-size: 11px; font-weight: 400; color: var(--palido); }
 .hilo-vacio { font-size: 12.5px; color: var(--palido); }
+.hilo-pista.vacia .hilo-vacio { left: 24px; bottom: 55px; padding: 0; }
 .migas { height: 36px; min-height: 36px; padding: 0 16px; gap: 8px; border-bottom: 1px solid var(--regla); background: var(--chrome); font-size: 12.5px; color: var(--tenue); }
 .migas-sep { display: inline-flex; color: var(--palido); }
 .migas-actual { color: var(--tinta); font-weight: 600; }
@@ -541,6 +622,27 @@ body.lado-plegado .gd-side { width: 44px; flex: 0 0 44px; }
 /* hijos (28 px, 3 px entre filas): punto · etiqueta de tipo · nombre en mono · ⋯ */
 .gd-hijos { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
 .gd-par { position: relative; display: flex; flex-direction: column; gap: 3px; border-radius: 5px; }
+/* ---------- grupos del árbol (Leo, 16-09-2026, docs/diseno/rediseno-14) ----------
+   Un corchete del color del grupo, con su nombre de canto, y dentro sus filas. Solo agrupa: no significa nada más. */
+.gd-arb-grupo { position: relative; display: flex; flex-direction: column; gap: 2px; }
+.gd-arb-grupo::before { content: ''; position: absolute; left: 3px; top: 16px; bottom: 3px; width: 2px; border-radius: 2px; background: var(--gc); }
+.gd-arb-marca { display: flex; align-items: center; gap: 6px; width: 100%; height: 16px; padding: 0 6px 0 9px; border: 0;
+        background: none; cursor: context-menu; text-align: left; }
+.gd-arb-nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        font: 500 8.5px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--gc); }
+.gd-arb-n { font: 400 8.5px var(--mono); color: var(--palido); flex: none; }
+/* el «⋯» del grupo: crear dentro de él (Leo, 16-09-2026). Se ve al pasar el ratón o con el menú abierto */
+.gd-arb-mas { flex: none; margin-left: auto; display: inline-flex; align-items: center; color: var(--palido); opacity: 0; border-radius: 3px; }
+.gd-arb-marca:hover .gd-arb-mas, .gd-arb-mas:focus-visible, .gd-arb-mas.is-active { opacity: 1; }
+.gd-arb-mas:hover { color: var(--tinta); background: rgba(0, 0, 0, .07); }
+.gd-arb-marca:hover .gd-arb-nom { text-decoration: underline; }
+.gd-arb-filas { display: flex; flex-direction: column; gap: 3px; padding-left: 9px; }
+.gd-arb-filas > .gd-sub { margin-left: 0; }
+.gd-arb-grupo.arrastrando { opacity: .4; }
+.gd-arb-grupo.sobre > .gd-arb-marca, .gd-arb-marca.sobre { background: var(--drop-bg); border-radius: 4px; box-shadow: inset 0 0 0 1px var(--gc); }
+.gd-fantasma--grupo { padding: 3px 9px; border-left: 2px solid var(--gc); }
+/* el punto de cada fila era del enlace de antes: sin él caben más letras del nombre (Leo, 16-09-2026) */
+.gd-sub-punto { display: none; }
 .gd-sub { height: 28px; padding: 0 4px 0 10px; gap: 9px; border-radius: 5px; font-weight: 400; }
 .gd-sub:hover { background: var(--hover); }
 .gd-sub.activo { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--foco); }
@@ -556,7 +658,7 @@ body.lado-plegado .gd-side { width: 44px; flex: 0 0 44px; }
 .gd-sub--esquema.montado::after { content: none; }
 .gd-chip { display: inline-flex; align-items: center; justify-content: center; height: 22px; min-width: calc(10ch + 18px); box-sizing: border-box; padding: 0 8px;
            border: 1px solid transparent; border-radius: 5px; font: 500 11px var(--mono); letter-spacing: 0; text-transform: none; flex: none; }
-.gd-sub .gd-chip { justify-content: flex-start; }
+.gd-sub .gd-chip, .gd-per .gd-chip { justify-content: center; min-width: 22px; width: 22px; padding: 0; font-weight: 600; }   /* en el árbol, solo la inicial (Leo, 16-09-2026) */
 .gd-chip--cont { background: var(--p-grafito-bg); color: var(--p-grafito-tinta); }
 .gd-chip--esquema { background: var(--p-violeta-bg); border-color: var(--p-violeta-linea); color: var(--p-violeta-tinta); }
 /* el chip y el punto de un personaje: su par de la paleta según el tema (como el bloque de personaje del editor) */
@@ -615,7 +717,11 @@ html[data-theme="dark"] .gd-per-punto { background: var(--chd); box-shadow: inse
 .gd-etq-head { height: 38px; flex: none; padding: 0 12px; border-bottom: 1px solid var(--regla); background: var(--sbg); color: var(--sink); font-size: 13.5px; font-weight: 600; }
 .gd-etq--bandeja { border-style: solid; border-color: var(--borde); }
 .gd-etq--bandeja .gd-etq-head { background: none; color: var(--tinta); border-bottom-color: var(--regla); }
-.gd-etq-nom { gap: 8px; font-size: 13.5px; }
+/* el nombre del segmento no empuja a la cuenta ni a los botones: se corta con «…» y al pasar el ratón sale entero
+   en el globo (Leo, 16-09-2026: «se ve muy larga la etiqueta, y necesito un tooltip en este y en todos») */
+.gd-etq-nom { gap: 8px; font-size: 13.5px; min-width: 0; overflow: hidden; }
+.gd-etq-nom > span:not(.gd-asa):not(.gd-guion-ico) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.gd-etq-acc { flex: none; }
 .gd-asa { opacity: .55; cursor: grab; display: inline-flex; }
 .gd-cuenta { background: none; padding: 0; font: 400 11px var(--mono); color: inherit; opacity: .75; }
 .gd-etq-acc { gap: 4px; }
@@ -703,7 +809,6 @@ html[data-theme="dark"] .gd-per-punto { background: var(--chd); box-shadow: inse
 .dlg-colores[hidden] { display: none; }
 #dlgNombre .dlg-paleta { width: auto; padding: 0; grid-template-columns: repeat(8, 1fr); }
 #dlgNombre .dlg-paleta button.on { border-color: var(--tinta); box-shadow: 0 0 0 2px var(--foco-halo); }
-body.tablero-personajes #esquema .label .chip { display: none; }
 .dlg-ceja { font: 500 9.5px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido); min-height: 12px; }
 .dlg-titulo { margin: 9px 0 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
 .dlg-campo { display: block; margin-top: 20px; }
@@ -810,12 +915,6 @@ html[data-theme="dark"] .gd-exp-banda-acc button:hover { background: rgba(255, 2
 .gd-exp-nota.agarrado:not(.arrastrando) { transform: translateY(-2px); box-shadow: var(--sombra-alta); border-color: var(--foco-linea); }
 .gd-exp-nota.arrastrando { opacity: .4; border-style: dashed; border-color: var(--foco); box-shadow: none; }
 .gd-exp-grid .gd-nodo { cursor: grab; }
-/* en Personajes el segmento expandido ocupa el lienzo: sin cabecera del tablero, tablero, pie ni carrusel */
-body.vista-personajes.per-expandido #esquema > .esq-cab,
-body.vista-personajes.per-expandido .esq-cuerpo,
-body.vista-personajes.per-expandido .esq-pie { display: none; }
-body.vista-personajes.per-expandido .per-seg { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; border-top: 0; }
-body.vista-personajes.per-expandido .per-seg > [data-per-cuerpo] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* la etiqueta del segmento en la cabecera del editor (nota de biblioteca) y el acto de un documento de nodo: un chip
    de la cabecera con el color del segmento; al pulsarlo, el segmento expandido */
@@ -851,7 +950,7 @@ button.gd-chip-nom:hover:not(:disabled) { box-shadow: 0 0 0 2px var(--foco-halo)
    desplaza en horizontal (las filas no bajan de 200 px). */
 .gd-arbol { overflow-x: auto; }
 .gd-arbol::-webkit-scrollbar { height: 10px; }
-.gd-hijos > .gd-sub, .gd-hijos > .gd-par, .gd-hijos > .gd-carpeta, .gd-hijos > .gd-per { position: relative; flex: none; box-sizing: border-box; margin-left: var(--sangria, 0px); min-width: 200px; }
+.gd-hijos > .gd-sub, .gd-hijos > .gd-par, .gd-hijos > .gd-arb-grupo, .gd-hijos > .gd-carpeta, .gd-hijos > .gd-per { position: relative; flex: none; box-sizing: border-box; margin-left: var(--sangria, 0px); min-width: 200px; }
 .gd-hijos > :not(.sin-guia)::before { content: ''; position: absolute; left: -8px; top: -3px; bottom: 0; width: 1px; background: var(--borde-fuerte); pointer-events: none; }
 .gd-hijos--elenco { gap: 2px; margin-top: 0; }
 .gd-carpeta { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 9px; border-radius: 5px; cursor: pointer; user-select: none;
@@ -905,14 +1004,9 @@ button.gd-chip-nom:hover:not(:disabled) { box-shadow: 0 0 0 2px var(--foco-halo)
 .gd-nota.con-color.sel, .gd-nota.con-color.activa, .gd-exp-nota.con-color.sel { background: var(--tf); border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
 .gd-paleta--nota { grid-template-columns: repeat(6, minmax(0, 1fr)); width: 196px; }
 .gd-paleta--nota button, .gd-paleta--carpeta button { min-width: 0; width: 100%; padding: 0; }   /* el relleno de los botones del menú ensanchaba unas columnas */
-.gd-paleta--nota button.on { box-shadow: inset 0 0 0 2px var(--papel); border-color: var(--tinta); }
+.gd-paleta--nota button.on, .gd-paleta--carpeta button.on { box-shadow: inset 0 0 0 2px var(--papel); border-color: var(--tinta); }
 /* el árbol de Personajes: la etiqueta «Personaje» con el color del personaje, como las de los contenedores */
 .gd-per .gd-chip.per-chip { flex: none; }
-/* el carril de un personaje: el color de su trama (botón, abre los 24 tonos) y la etiqueta «Personaje» delante del nombre */
-.per-color, .per-etq { display: none; }
-body.tablero-personajes #esquema .per-color { display: block; flex: none; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid var(--tc); background: var(--papel); cursor: pointer; }
-body.tablero-personajes #esquema .per-color:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 25%, transparent); }
-body.tablero-personajes #esquema .per-etq { display: inline-flex; flex: none; min-width: 0; height: 20px; padding: 0 6px; font-size: 10.5px; }
 body.tablero-personajes #esquema .label { gap: 8px; }
 /* al pasar el ratón por un nodo (además del globo): se enciende, relleno de su color con halo, y su rótulo va en negrita (Leo, 15-09-2026);
    en el tablero (`.dot` lleva su color en `color`) y en la tira del editor */
@@ -943,125 +1037,29 @@ body.tablero-personajes #esquema .label { gap: 8px; }
 .hilo-nodo.caja.pos .hilo-punto { border-color: var(--escena-trazo); box-shadow: 0 0 0 4px color-mix(in srgb, var(--escena-trazo) 30%, transparent); }
 .hilo-nodo.rombo.pos .hilo-punto { border-color: var(--rombo-trazo); box-shadow: 0 0 0 4px color-mix(in srgb, var(--rombo-trazo) 30%, transparent); }
 
-/* ===================== Revisar guión (Leo, 15-09-2026, docs/diseno/rediseno-11/) ===================== */
-/* la barra de guión, bajo la tira: cuenta, selección, sacar/devolver y «Revisar guión» */
-.guion-barra { height: 40px; flex: none; display: flex; align-items: center; gap: 9px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--borde); overflow: hidden; }
-.guion-barra[hidden] { display: none; }
-.guion-rot { font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); flex: none; }
-.guion-cuenta { font: 400 11.5px var(--mono); text-transform: uppercase; color: var(--tenue); white-space: nowrap; flex: none; }
-.guion-sep { width: 1px; height: 18px; background: var(--regla); flex: none; }
-.guion-sel { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 9px; border-radius: 4px; background: var(--sel-bg); box-shadow: inset 0 0 0 1px var(--foco-linea); font-size: 12px; font-weight: 500; white-space: nowrap; flex: none; }
-.guion-sel[hidden] { display: none; }
-.guion-sel button { width: 13px; height: 13px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 3px; background: var(--foco); color: var(--foco-sobre); cursor: pointer; }
-.guion-barra .btn, .revisar .btn { height: 26px; padding: 0 10px; gap: 7px; font-size: 12px; font-weight: 500; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel); color: var(--tinta); box-shadow: var(--sombra); white-space: nowrap; flex: none; }
-.guion-barra .btn svg, .revisar .btn svg { color: var(--tenue); }
-.guion-barra .btn.btn-foco, .revisar .btn.btn-foco { border-color: var(--foco-linea); background: var(--foco-suave); color: var(--foco); box-shadow: none; }
-.guion-barra .btn.btn-foco svg, .revisar .btn.btn-foco svg { color: var(--foco); }
-.guion-barra .btn[data-guion$="todo"] { font-weight: 400; }
-.guion-barra .btn.primario, .revisar .btn.primario { height: 28px; padding: 0 12px; border-color: var(--foco); background: var(--foco); color: var(--foco-sobre); font-size: 12.5px; box-shadow: none; }
-.guion-barra .btn.primario svg, .revisar .btn.primario svg { color: var(--foco-sobre); }
-.guion-barra .btn:disabled, .revisar .btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
-.guion-barra .spacer { flex: 1; }
-#texto.documento .guion-barra, #texto.sin-tira .guion-barra { display: none; }
-
-/* la tira: casilla en el rótulo, secciones fuera del guion en discontinuo y tachadas */
-.hilo-tit { display: inline-flex; align-items: center; gap: 6px; }
-.hilo-tit-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.hilo-casilla { flex: none; width: 9px; height: 9px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 2px; border: 1px solid var(--borde-fuerte); background: var(--papel); cursor: pointer; }
-.hilo-casilla svg { width: 7px; height: 7px; }
-.hilo-nodo.elegida .hilo-casilla { border-color: var(--foco); background: var(--foco); color: var(--foco-sobre); }
-.hilo-nodo.con-rotulo.elegida .hilo-tit { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); color: var(--tinta); }
-.hilo-nodo.sin-guion .hilo-punto { background: var(--papel) !important; border: 2px dashed var(--t-gris); box-shadow: none !important; opacity: .55; }
-.hilo-nodo.sin-guion .hilo-punto::after { display: none; }
-.hilo-nodo.con-rotulo.sin-guion .hilo-tit { border-style: dashed; border-color: var(--borde-fuerte); box-shadow: none; color: var(--palido); font-weight: 400; }
-.hilo-nodo.sin-guion .hilo-tit-txt { text-decoration: line-through; }
-.hilo-nodo.sin-guion .hilo-casilla { border-style: dashed; border-color: var(--t-gris); }
-.hilo-nodo.con-rotulo.sin-guion::before { background: var(--regla); }
-
-/* la cabecera de la vista en Revisar guión: el esquema, «Revisar guión» y «Volver al texto» */
-.solo-revisar { display: none !important; }
-#texto.revisando .solo-revisar { display: inline-flex !important; }
-#texto.revisando .texto-cab [data-texto-acto], #texto.revisando .texto-cab [data-texto-nom], #texto.revisando .texto-cab > .btn:not(.solo-revisar), #texto.revisando .texto-cab .par-nav { display: none !important; }
-#texto.revisando .texto-cab .esq-nom { font-size: 15px; font-weight: 600; white-space: nowrap; }
-#texto.revisando #hilo, #texto.revisando #editorMarco, #texto.revisando #migas { display: none !important; }
-.revisar { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--lienzo); }
-.revisar[hidden] { display: none; }
-.rv-cuerpo { flex: 1; min-height: 0; display: flex; gap: 18px; padding: 18px 18px 0; overflow: hidden; }
-.rv-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.rv-rot { flex: none; display: flex; align-items: center; gap: 12px; padding: 0 2px 10px; font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); }
-.rv-rot i { flex: 1; height: 1px; background: var(--regla); }
-.rv-rot span:last-child:not(:first-child) { letter-spacing: .08em; }
-.rv-lista { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 1px 2px 16px; overflow-y: auto; }
-.rv-fila { flex: none; height: 54px; box-sizing: border-box; display: flex; align-items: center; gap: 11px; padding: 0 13px; background: var(--papel); border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra); cursor: grab; user-select: none; transition: transform .12s ease, box-shadow .12s ease; }
-.rv-fila:hover { border-color: var(--borde-fuerte); }
-.rv-asa { display: flex; color: var(--palido); flex: none; }
-.rv-casilla { width: 15px; height: 15px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 3px; background: var(--papel); border: 1px solid var(--borde-fuerte); color: var(--foco-sobre); cursor: pointer; }
-.rv-num { font: 400 12px var(--mono); color: var(--palido); width: 16px; flex: none; }
-.rv-glifo { flex: none; width: 9px; height: 9px; box-sizing: content-box; border-radius: 50%; background: var(--papel); border: 2px solid var(--c); }
-.rv-glifo.caja { border-radius: 2px; background: var(--escena); border-color: var(--escena-trazo); }
-.rv-glifo.rombo { width: 8px; height: 8px; border-radius: 1px; background: var(--rombo); border-color: var(--rombo-trazo); transform: rotate(45deg); }
-.rv-tit { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.rv-trama { display: inline-flex; align-items: center; height: 21px; padding: 0 8px; border-radius: 5px; font: 400 10.5px var(--mono); background: var(--tf); color: var(--tc); white-space: nowrap; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.rv-fuera { font: 400 9.5px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--t-gris); white-space: nowrap; flex: none; }
-.rv-hueco { flex: 1; }
-.rv-palabras { font: 400 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--palido); flex: none; white-space: nowrap; }
-.revisar .rv-accion { height: 24px; padding: 0 9px; gap: 6px; font-size: 11.5px; color: var(--tenue); box-shadow: none; }
-.rv-fila.sin-guion { background: var(--f-gris); border-style: dashed; border-color: var(--borde-fuerte); box-shadow: none; }
-.rv-fila.sin-guion .rv-glifo { background: var(--papel); border-style: dashed; border-color: var(--t-gris); opacity: .6; transform: none; border-radius: 50%; width: 9px; height: 9px; }
-.rv-fila.sin-guion .rv-tit { color: var(--palido); text-decoration: line-through; }
-.rv-fila.elegida { background: var(--sel-bg); border-color: var(--foco); border-style: solid; }
-.rv-fila.elegida .rv-casilla { background: var(--foco); border-color: var(--foco); }
-.rv-fila.elegida .rv-num, .rv-fila.elegida .rv-asa { color: var(--tenue); }
-.rv-fila.levantada { transform: rotate(-.5deg); box-shadow: var(--sombra-alta); border-color: var(--foco); background: var(--sel-bg); position: relative; z-index: 2; }
-.rv-fila.levantada .rv-asa { color: var(--foco); }
-body.rv-arrastrando, body.rv-arrastrando * { cursor: grabbing !important; }
-.rv-marca { position: absolute; left: 2px; right: 2px; height: 2px; border-radius: 2px; background: var(--foco); pointer-events: none; z-index: 3; }
-.rv-vacio { color: var(--tenue); font-size: 13px; }
-.rv-lado { width: 296px; flex: none; display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; overflow-y: auto; }
-.rv-ficha { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 15px 16px; background: var(--papel); border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra); }
-.rv-ficha .rv-rot { padding: 0; }
-.rv-nombre { height: 32px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel); color: var(--tinta); font: 400 13px var(--sans); outline: 0; }
-.rv-nombre:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
-.rv-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--regla); }
-.rv-chips span { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 3px; background: var(--lienzo); border: 1px solid var(--regla); font: 400 10.5px var(--mono); color: var(--tenue); white-space: nowrap; }
-.rv-orden { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
-.rv-orden li { display: flex; gap: 9px; font: 400 11.5px var(--mono); color: var(--tinta); min-width: 0; }
-.rv-orden li span { color: var(--palido); width: 13px; flex: none; }
-.rv-no { margin: -4px 0 0; padding-bottom: 12px; border-bottom: 1px solid var(--regla); font: 400 11.5px var(--mono); color: var(--palido); }
-.rv-nada { margin: 0; font-size: 12px; color: var(--palido); line-height: 1.45; }
-.rv-rot-destino { letter-spacing: .06em; }
-.rv-destino { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--tenue); min-width: 0; }
-.rv-destino .gd-chip { height: 20px; min-width: 0; padding: 0 7px; font-size: 10px; flex: none; }
-.rv-destino-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.revisar .rv-generar { height: 34px; justify-content: center; font-size: 13px; }
-.rv-aviso { flex: none; margin: 0; padding: 13px 14px; background: var(--nota); border: 1px solid var(--nota-borde); border-radius: 6px; color: var(--nota-tinta); font-size: 12px; line-height: 1.5; }
-.rv-pie { height: 42px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 16px; background: var(--bb-bg); border-top: 1px solid var(--bb-line); color: var(--bb-fg); }
-.rv-pie-rot { font: 400 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bb-muted); }
-.rv-ultimo { border: 0; padding: 0; background: none; font: 400 12px var(--mono); color: var(--bb-fg); cursor: pointer; }
-.rv-ultimo:hover span { text-decoration: underline; }
-.rv-ultimo-nada { font: 400 12px var(--mono); color: var(--bb-muted); }
-.rv-pie .spacer { flex: 1; }
-.revisar .rv-pie .btn { height: 27px; padding: 0 11px; font-size: 12.5px; background: transparent; border-color: var(--bb-line); color: var(--bb-fg); box-shadow: none; }
-
 /* los guiones generados en la biblioteca: la marca «Generado» y la cuenta del árbol */
 .gd-generado { font: 400 9px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--t-verde); flex: none; margin-right: auto; margin-left: 8px; }
 .gd-guiones-cuenta { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 5px; border-radius: 4px; font: 400 9.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; background: var(--foco-suave); color: var(--foco); flex: none; white-space: nowrap; }
 .gd-sub.activo .gd-guiones-cuenta { background: var(--foco); color: var(--foco-sobre); }
+.gd-guiones-cuenta { border: 0; cursor: pointer; }                 /* es un botón: abre los guiones del esquema (Leo, 16-09-2026) */
+.gd-guiones-cuenta:hover { background: var(--foco); color: var(--foco-sobre); }
+/* ---------- secciones de una biblioteca (Leo, 16-09-2026) ---------- */
+.gd-seccion-acc { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px;
+        padding: 0; border: 0; border-radius: 4px; background: none; color: var(--palido); cursor: pointer; }
+.gd-seccion-acc:hover { background: var(--hover); color: var(--tinta); }
+.gd-seccion-nueva { display: inline-flex; align-items: center; gap: 7px; height: 30px; margin: 22px 0 4px; padding: 0 12px;
+        border: 1px dashed var(--borde-fuerte); border-radius: 5px; background: none; color: var(--tenue);
+        font: 400 12.5px var(--sans); cursor: pointer; }
+.gd-seccion-nueva:hover { color: var(--tinta); border-color: var(--tinta); }
+.gd-seccion-nueva svg { color: var(--palido); }
+.gd-guiones-pie { margin: 14px 0 0; max-width: 620px; font-size: 12px; line-height: 1.5; color: var(--tenue); }
 .gd-miga-origen { font: 400 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* el menú de Exportar */
 .gd-pop .ex-opcion { display: flex; align-items: center; gap: 10px; min-width: 220px; height: 30px; }
 .gd-pop .ex-opcion .ex-ext { margin-left: auto; font: 400 10.5px var(--mono); color: var(--palido); }
-#texto.revisando .guion-barra [data-guion="revisar"], #texto.revisando .guion-barra [data-guion="revisar"] + * { display: none; }
-#texto.revisando .guion-barra .guion-sep:last-of-type { display: none; }
-/* «Armar guión» en la cabecera abre y contrae la barra de guión (Leo, 15-09-2026); el chevrón apunta arriba con ella abierta */
-.texto-cab .guion-mostrar { gap: 7px; }
-.texto-cab .guion-mostrar svg:first-child { color: var(--foco); }
-.guion-mostrar-chev { color: var(--palido); transition: transform .15s ease; }
-.guion-mostrar.abierta .guion-mostrar-chev { transform: rotate(180deg); }
-.guion-plegado .hilo-casilla { display: none; }
 /* Al pasar el ratón por un nodo, su rótulo fijo enseña el nombre entero (Leo, 15-09-2026: en lugar del globo), por encima de los vecinos */
-.pt:hover { z-index: 6; }
-.pt:hover .cap { max-width: none; overflow: visible; }
+.pt:hover { z-index: 9; }                                  /* sobre el eje: el rótulo desplegado no se recorta (Leo, 16-09-2026) */
+.pt:hover .cap { width: max-content; max-width: 300px; overflow: visible; white-space: normal; }
 
 /* ===== «Guiones generados» en la biblioteca (Leo, 15-09-2026, docs/diseno/rediseno-12/): segmentos negros ===== */
 :root { --guion-cab: #111114; --guion-cab-tinta: #ffffff; }
@@ -1191,10 +1189,92 @@ body.sin-proyectos .franja-acc :is(#estadoGuardado, #btnGuardar, #btnGuardarComo
 input.gd-edit { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
 :is(.gd-sub, .gd-carpeta, .gd-cont, .gd-per):has(input.gd-edit) .gd-cont-acc { display: none; }   /* sin «⋯» mientras se renombra: más sitio */
 
-/* Personajes: la sección de segmentos se contrae desde su título (Leo, 15-09-2026) */
-.per-seg-plegar { display: inline-flex; align-items: center; gap: 7px; padding: 0; margin: 0; border: 0; background: none; color: inherit; cursor: pointer; }
-.per-seg-plegar svg { color: var(--palido); transition: transform .15s ease; flex: none; }
-.per-seg-plegar:hover svg, .per-seg-plegar:hover .gd-seccion-tit { color: var(--tinta); }
-.per-seg.plegada .per-seg-plegar svg { transform: rotate(-90deg); }
-.per-seg.plegada { padding-bottom: 4px; }
-.per-seg.plegada .per-carrusel { display: none; }
+
+/* ---------- Biblioteca: contraer y expandir sus secciones (Leo, 16-09-2026) ----------
+   El chevrón del título contrae la sección (Segmentos o Guiones generados) y el botón de la derecha la deja
+   sola en toda la pantalla, con sus tarjetas más altas. */
+.gd-seccion-plegar, .gd-seccion-grande { display: inline-flex; align-items: center; justify-content: center; flex: none;
+        width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--palido); cursor: pointer; }
+.gd-seccion-plegar svg { transition: transform .15s ease; }
+.gd-seccion-grande[hidden] { display: none; }                  /* con una sola sección no hay nada que expandir */
+.gd-seccion-plegar:hover, .gd-seccion-grande:hover { background: var(--hover); color: var(--tinta); }
+.gd-bloque.plegada .gd-seccion-plegar svg { transform: rotate(-90deg); }
+.gd-bloque.plegada > .gd-tablero { display: none; }
+.gd-bloque.grande .gd-seccion-grande { color: var(--foco); background: var(--foco-suave); }
+.gd-cuerpo.con-grande { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.gd-cuerpo.con-grande > .gd-bloque:not(.grande) { display: none; }
+.gd-cuerpo.con-grande > .gd-bloque.grande { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.gd-cuerpo.con-grande > .gd-bloque.grande > .gd-seccion { padding-top: 14px; }
+.gd-cuerpo.con-grande > .gd-bloque.grande > .gd-tablero { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 24px; }
+.gd-cuerpo.con-grande .gd-etq-body { max-height: min(52vh, 480px); }
+
+/* la raya de inserción del árbol: dónde va a caer lo que se arrastra, con la sangría del nivel de destino
+   (Leo, 16-09-2026: el resalte de la caja no decía dónde caía y parecía que todo se metía dentro del grupo) */
+.gd-caida { position: absolute; height: 2px; margin-top: -1px; border-radius: 2px; background: var(--cc, var(--foco));
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--cc, var(--foco)) 22%, transparent); pointer-events: none; z-index: 14; }
+.gd-caida::before { content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%;
+        background: var(--cc, var(--foco)); }
+.gd-caida[hidden] { display: none; }
+
+/* donde cae lo que se acaba de mover en el árbol: un aro que se apaga (Leo, 16-09-2026) */
+.gd-aterriza { animation: gd-aterriza .6s ease-out; border-radius: 6px; }
+@keyframes gd-aterriza {
+  0% { box-shadow: 0 0 0 2px var(--foco), 0 0 0 6px var(--foco-halo); }
+  100% { box-shadow: 0 0 0 2px transparent, 0 0 0 6px transparent; }
+}
+
+/* ---------- versiones de un documento (Leo, 16-09-2026, js/claquedraw/versiones.js) ----------
+   El menú sale del botón «Versiones» de la barra inferior del editor: la lista con su fecha y sus palabras, la que
+   está en el editor marcada como «Actual», y abajo «Guardar versión…» y «Comparar con la actual…». */
+.gd-pop:has(.vs-menu) { padding: 12px 10px 10px; min-width: 330px; }
+.vs-rotulo { font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); padding: 0 8px 10px; }
+.vs-vacio { margin: 0; padding: 2px 8px 10px; font-size: 12.5px; color: var(--tenue); }
+.vs-fila { display: flex; align-items: center; gap: 11px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.vs-fila:hover { background: var(--hover); }
+.vs-fila.actual { background: var(--hover-fuerte); }
+.vs-ic { display: flex; color: var(--palido); flex: none; }
+.vs-fila.actual .vs-ic { color: var(--foco); }
+.vs-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.vs-nom { font-size: 14px; font-weight: 400; color: var(--tinta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-meta { font: 400 11.5px var(--mono); color: var(--palido); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-actual { flex: none; display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 4px;
+        background: var(--foco); color: var(--foco-sobre); font: 500 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; }
+.vs-acc { display: none; gap: 2px; flex: none; }
+.vs-fila:hover .vs-acc { display: inline-flex; }
+.vs-fila:hover .vs-actual { display: none; }
+.vs-mini { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+        border: 0; border-radius: 4px; background: none; color: var(--palido); cursor: pointer; font-size: 15px; }
+.vs-mini:hover { background: var(--papel); color: var(--tinta); box-shadow: var(--sombra); }
+.vs-mini.peligro:hover { color: var(--peligro); }
+.vs-sep { height: 1px; margin: 8px 8px; background: var(--regla); }
+.vs-opcion { display: flex; align-items: center; gap: 12px; width: 100%; height: 36px; padding: 0 8px; border: 0; border-radius: 6px;
+        background: none; color: var(--tinta); font: 400 14px var(--sans); text-align: left; cursor: pointer; }
+.vs-opcion svg { color: var(--tenue); flex: none; }
+.vs-opcion:hover:not(:disabled) { background: var(--hover); }
+.vs-opcion:disabled { opacity: .45; cursor: default; }
+/* la comparación: la versión frente a lo de ahora, párrafo a párrafo */
+.vs-capa { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
+        padding: 40px; background: rgba(12, 12, 16, .45); }
+.vs-caja { display: flex; flex-direction: column; width: min(900px, 100%); max-height: 100%; overflow: hidden;
+        background: var(--papel); border: 1px solid var(--borde); border-radius: 8px; box-shadow: var(--sombra-modal); }
+.vs-cab { flex: none; display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--regla); background: var(--panel); }
+.vs-cab-tit { font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); }
+.vs-chip { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 5px; font: 500 12px var(--sans); }
+.vs-chip--a { background: var(--f-gris); color: var(--tinta); }
+.vs-chip--b { background: var(--foco-suave); color: var(--foco); }
+.vs-flecha { color: var(--palido); }
+.vs-cab .spacer { flex: 1; }
+.vs-cuenta { display: inline-flex; align-items: center; gap: 6px; font: 400 11.5px var(--mono); color: var(--tenue); white-space: nowrap; }
+.vs-punto { width: 8px; height: 8px; border-radius: 2px; }
+.vs-punto.mas { background: var(--t-verde); }
+.vs-punto.menos { background: var(--t-rojo); }
+.vs-cuerpo { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px 24px; }
+.vs-linea { margin: 0 0 6px; padding: 5px 10px 5px 26px; border-radius: 4px; position: relative;
+        font: 400 13px var(--sans); line-height: 1.5; color: var(--tinta); white-space: pre-wrap; }
+.vs-linea::before { position: absolute; left: 9px; top: 5px; font: 400 12px var(--mono); }
+.vs-igual { color: var(--tenue); }
+.vs-igual::before { content: '·'; color: var(--palido); }
+.vs-mas { background: var(--f-verde); }
+.vs-mas::before { content: '+'; color: var(--t-verde); }
+.vs-menos { background: var(--f-rojo); color: var(--tenue); text-decoration: line-through; }
+.vs-menos::before { content: '−'; color: var(--t-rojo); text-decoration: none; }

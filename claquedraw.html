@@ -108,9 +108,9 @@
       <div class="esq-titulo" id="esquemaChip" hidden><span class="esq-cont" data-chip-cont></span><span class="gd-chip gd-chip-nom gd-chip--esquema"><span data-chip-esq></span></span></div>
       <span class="spacer"></span>
       <button type="button" class="btn" id="verDocumentos" title="Abrir la biblioteca enlazada a este esquema" hidden><svg width="15" height="15"><use href="#ic-docs"></use></svg>Ver biblioteca</button>
+      <!-- el documento del esquema: el editor con la tira de la trama encima -->
+      <button type="button" class="btn con-icono" id="abrirDoc" title="Escribir el documento de este esquema (Ctrl+Shift+G)"><svg width="16" height="16"><use href="#ic-script"></use></svg>Abrir documento</button>
     </header>
-    <!-- solo en Personajes: los segmentos de la biblioteca del personaje abierto, en carrusel -->
-    <section class="per-seg" id="personajesSeg" aria-label="Segmentos del personaje"><div data-per-cuerpo></div></section>
     <div class="esq-cuerpo">
       <!-- sin ningún esquema de pasos en el guion: el tablero queda tapado con este aviso -->
       <div id="sinEsquema"><div><b>No hay ningún esquema de pasos</b><span>Créalo con el «＋» de un contenedor del menú.</span></div></div>
@@ -125,7 +125,7 @@
     <footer class="esq-pie">
       <!-- escala horizontal (ancho de celda) y vertical (alto de carril); el botón vuelve a las de partida -->
       <div class="tool escalas"><span>Escala</span>
-        <label class="escala" title="Escala horizontal: ancho de las celdas"><svg width="14" height="14" aria-hidden="true"><use href="#ic-ancho"></use></svg><input type="range" id="zoom" min="0.7" max="6" step="0.05" value="1.7" aria-label="Escala horizontal"></label>
+        <label class="escala" title="Escala horizontal: ancho de las celdas"><svg width="14" height="14" aria-hidden="true"><use href="#ic-ancho"></use></svg><input type="range" id="zoom" min="0.7" max="18" step="0.05" value="1.7" aria-label="Escala horizontal"></label>
         <label class="escala" title="Escala vertical: alto de las tramas"><svg width="14" height="14" aria-hidden="true"><use href="#ic-alto"></use></svg><input type="range" id="altoFila" min="48" max="200" step="2" value="80" aria-label="Escala vertical"></label>
         <button type="button" class="icono" id="escalaReset" title="Restablecer las dos escalas" aria-label="Restablecer las escalas"><svg width="15" height="15"><use href="#ic-reset"></use></svg></button>
       </div>
@@ -137,32 +137,15 @@
   </section>
   <!-- Vista de texto: la tira de la trama y el editor (index.html, sin tocar) en un marco -->
   <section id="texto" aria-label="Editor de texto">
-    <!-- «CONTENEDOR [Acto] Título del nodo», ver en el esquema y ‹ › para recorrer las notas de la trama -->
+    <!-- «CONTENEDOR [Esquema] Título del documento» y ver en el esquema -->
     <header class="esq-cab texto-cab" id="textoCab">
-      <div class="esq-titulo"><span class="esq-cont" data-texto-cont></span><button type="button" class="gd-chip gd-chip-nom gd-chip--esquema" data-texto-esq aria-label="Ver esquema"><span></span></button><button type="button" class="gd-chip gd-chip-nom gd-seg-chip" data-texto-acto><span></span><svg width="12" height="12" aria-hidden="true"><use href="#ic-expand"></use></svg></button><input type="text" class="texto-nom" data-texto-nom readonly spellcheck="false" autocomplete="off" placeholder="Sin título" aria-label="Título del documento"><span class="esq-nom solo-revisar" data-revisar-tit>Revisar guión</span></div>
+      <div class="esq-titulo"><span class="esq-cont" data-texto-cont></span><button type="button" class="gd-chip gd-chip-nom gd-chip--esquema" data-texto-esq aria-label="Ver esquema"><span></span></button><button type="button" class="gd-chip gd-chip-nom gd-seg-chip" data-texto-acto><span></span><svg width="12" height="12" aria-hidden="true"><use href="#ic-expand"></use></svg></button><input type="text" class="texto-nom" data-texto-nom readonly spellcheck="false" autocomplete="off" placeholder="Sin título" aria-label="Título del documento"></div>
       <span class="spacer"></span>
-      <button type="button" class="btn guion-mostrar" data-texto-guion aria-expanded="true" hidden><svg width="15" height="15"><use href="#ic-script"></use></svg>Armar guión<svg width="12" height="12" class="guion-mostrar-chev"><use href="#ic-chev-d"></use></svg></button>
       <button type="button" class="btn" data-texto-biblioteca title="Abrir la biblioteca enlazada al esquema" hidden><svg width="15" height="15"><use href="#ic-docs"></use></svg>Ver biblioteca</button>
-      <button type="button" class="btn solo-revisar" data-revisar-volver title="Volver al documento (Esc)"><svg width="15" height="15"><use href="#ic-arr-l"></use></svg>Volver al texto</button>
-      <button type="button" class="btn" data-texto-esquema title="Ver este nodo en el esquema (Ctrl+Shift+G)"><svg width="15" height="15"><use href="#ic-board"></use></svg>Ver esquema</button>
-      <span class="par-nav"><button type="button" data-texto-mover="-1" title="Sección anterior (Ctrl+Alt+↑)" aria-label="Sección anterior"><svg width="13" height="13"><use href="#ic-arr-l"></use></svg></button><button type="button" data-texto-mover="1" title="Sección siguiente (Ctrl+Alt+↓)" aria-label="Sección siguiente"><svg width="13" height="13"><use href="#ic-arr-r"></use></svg></button></span>
+      <button type="button" class="btn" data-texto-esquema title="Volver al esquema (Ctrl+Shift+G)"><svg width="15" height="15"><use href="#ic-board"></use></svg>Ver esquema</button>
     </header>
     <!-- la tira de la trama; debajo, dentro del marco, la cinta del editor y la hoja -->
     <nav id="hilo" class="hilo" aria-label="Nodos de la trama"></nav>
-    <!-- la barra de guión: sacar y devolver secciones (las marcadas o todas) y «Revisar guión» -->
-    <div id="guionBarra" class="guion-barra" hidden>
-      <span class="guion-rot">Guión</span><span class="guion-cuenta" data-guion-cuenta></span><span class="guion-sep"></span>
-      <span class="guion-sel" data-guion-sel hidden><button type="button" data-guion="deseleccionar" title="Quitar la selección" aria-label="Quitar la selección"><svg width="9" height="9"><use href="#ic-check"></use></svg></button><span></span></span>
-      <button type="button" class="btn" data-guion="sacar" title="Sacar del guión las secciones marcadas"><svg width="13" height="13"><use href="#ic-out"></use></svg>Sacar</button>
-      <button type="button" class="btn btn-foco" data-guion="devolver" title="Devolver al guión las secciones marcadas"><svg width="13" height="13"><use href="#ic-check"></use></svg>Devolver</button>
-      <span class="spacer"></span>
-      <button type="button" class="btn" data-guion="sacar-todo">Sacar todo</button>
-      <button type="button" class="btn" data-guion="devolver-todo">Devolver todo</button>
-      <span class="guion-sep"></span>
-      <button type="button" class="btn primario" data-guion="revisar"><svg width="14" height="14"><use href="#ic-script"></use></svg>Revisar guión</button>
-    </div>
-    <!-- «Revisar guión»: el orden de lectura y el documento a generar (ocupa el lienzo del editor) -->
-    <div id="revisar" class="revisar" hidden></div>
     <!-- con una nota del gestor de documentos: las migas en lugar de la tira -->
     <nav id="migas" class="migas" aria-label="Ruta de la nota"></nav>
     <iframe id="editorMarco" title="Editor de texto"></iframe>
@@ -222,8 +205,8 @@
 <script src="js/claquedraw/plantillas.js"></script>
 <script src="js/claquedraw/relaciones.js"></script>
 <script src="js/claquedraw/guion.js"></script>
+<script src="js/claquedraw/versiones.js"></script>
 <script src="js/claquedraw/texto.js"></script>
-<script src="js/claquedraw/revisar.js"></script>
 <script src="js/claquedraw/exportar.js"></script>
 <script src="js/claquedraw/gestor.js"></script>
 <script src="js/claquedraw/proyectos.js"></script>

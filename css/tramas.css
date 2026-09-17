@@ -12,7 +12,8 @@
 
 :root {
   --gutter: 190px;                        /* ancho de la columna de tramas; T.tablero.gutter() lo cambia */
-  --fila: 120px; --eje: 44px;             /* alto de carril y del eje; tablero.js los lee para colocar los cables */
+  --fila: 120px; --eje: 57px; --eje-col: 13px;   /* alto de carril y del eje (con la tira de columnas); tablero.js lee --fila y --eje */
+  --centro: 50%;                                 /* dónde va el carril dentro de la fila: la mitad, o más arriba si las notas piden sitio */
   --papel: #ffffff; --chrome: #f0eee9; --panel: #fbfaf8; --regla: #dcd7ce; --regla-fuerte: #c9c5bd;
   --cuadricula: #ece8e0;
   --tinta: #1a1a1a; --tenue: #8d8880; --palido: #a8a29a; --foco: #26417f; --foco-suave: #dfe8ff;
@@ -128,7 +129,7 @@ main { flex: 1; display: flex; min-height: 0; }
    El carril va translúcido: es la pista de fondo, la cadena corre encima. */
 .track { position: relative; height: 100%; }
 .track.hot { background-color: var(--pista-hot); }
-.rail { position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%);
+.rail { position: absolute; top: var(--centro, 50%); left: 0; right: 0; height: 3px; transform: translateY(-50%);
         opacity: .22; border-radius: 2px; }
 .row.cortada .rail { background-image: repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 11px) !important;
         background-color: transparent !important; }
@@ -139,7 +140,8 @@ main { flex: 1; display: flex; min-height: 0; }
 .sep { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--regla); }
 
 /* ---------- nodos ---------- */
-.pt { position: absolute; top: 50%; transform: translate(-50%, -50%); touch-action: none; z-index: 3; }
+.pt { position: absolute; top: var(--centro, 50%); transform: translate(-50%, -50%); touch-action: none; z-index: 3; }
+.pt:hover { z-index: 9; }                                              /* el rótulo desplegado, por encima del eje y de los vecinos */
 .dot { display: block; width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--papel);
        box-shadow: 0 0 0 1.5px var(--tinta); cursor: grab; }
 .pt.sel .dot { box-shadow: 0 0 0 2px var(--foco), 0 0 0 6px var(--foco-halo); }
@@ -154,49 +156,67 @@ main { flex: 1; display: flex; min-height: 0; }
 .pt.rombo.arrastrando .dot { transform: rotate(45deg) scale(1.2); }
 .pt.fuera { opacity: .55; }
 /* Cadena: el hilo de la historia de un nodo al siguiente. */
-.cadena { position: absolute; top: 50%; height: 4px; transform: translateY(-50%); border-radius: 2px; z-index: 1; }
+.cadena { position: absolute; top: var(--centro, 50%); height: 4px; transform: translateY(-50%); border-radius: 2px; z-index: 1; }
 .cadena.fuera { opacity: .18; }
+/* el enlace entre dos nodos se elige (Leo, 16-09-2026): una franja invisible más alta que el trazo para acertarle */
+.cadena { cursor: pointer; }
+.cadena::after { content: ''; position: absolute; left: 0; right: 0; top: -7px; bottom: -7px; }
+.cadena:hover { filter: brightness(.85); }
+.cadena.sel { box-shadow: 0 0 0 2px var(--papel), 0 0 0 5px var(--foco-halo); z-index: 2; }
+.sw.trama { background: var(--papel) !important; box-shadow: inset 0 0 0 3px var(--tc); }
+.enlace-notas { overflow-y: auto; gap: 6px !important; }
+.enlace-nota { text-align: left; font: italic 12px var(--mono); color: var(--nota-tinta); background: var(--nota); border: 1px solid var(--nota-borde);
+        border-radius: 4px; padding: 5px 9px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+.enlace-nota.con-color { background: color-mix(in oklab, var(--tc) 11%, var(--papel)); border-color: color-mix(in oklab, var(--tc) 30%, var(--borde, var(--nota-borde)));
+        color: color-mix(in oklab, var(--tc) 55%, var(--tinta)); }
+.enlace-nota:hover { border-color: var(--foco); }
 /* Recorrido: el camino que siguió la historia hasta el nodo seleccionado. */
 .cadena.ruta { height: 8px; z-index: 2; box-shadow: 0 0 0 1.5px var(--papel), 3px 3px 0 var(--sombra-dura); }
 body.con-ruta .cadena:not(.ruta) { opacity: .12; }
 body.con-ruta .cadena.fuera { opacity: .06; }
 body.con-ruta .rail { opacity: .1; }
-body.con-ruta .pt:not(.en-ruta) { opacity: .25; }
-body.con-ruta .pt.en-ruta.fuera { opacity: .25; }
-body.con-ruta .nota { opacity: .2; }
+/* Con el recorrido encendido, lo que queda fuera se apaga… **menos su rótulo**, que se sigue leyendo entero (Leo,
+   16-09-2026: «mantén el texto de los tooltips sin atenuar»): se atenúa el punto, no la etiqueta. */
+body.con-ruta .pt:not(.en-ruta), body.con-ruta .pt.en-ruta.fuera { opacity: 1; }
+body.con-ruta .pt:not(.en-ruta) > :not(.cap), body.con-ruta .pt.en-ruta.fuera > :not(.cap) { opacity: .25; }
+/* las notas tampoco se atenúan: lo que dicen se sigue leyendo con un nodo elegido (Leo, 16-09-2026) */
+body.con-ruta .nota { opacity: 1; }
+/* al pasar el ratón por uno apagado se ve entero */
+body.con-ruta .pt:hover > *, body.con-ruta .pt:focus-within > *, body.con-ruta .pt.sel > * { opacity: 1; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chips .btn { padding: 4px 9px; font-size: 13px; }
 .cap { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
        font-family: var(--sans); font-size: 13.5px; letter-spacing: 0;
-       color: var(--tinta); white-space: nowrap; pointer-events: none; max-width: 190px;
-       overflow: hidden; text-overflow: ellipsis; }
+       color: var(--tinta); white-space: nowrap; pointer-events: auto;
+       /* nunca menos de 190 px, y más si el hueco hasta el nodo de al lado lo permite (`--cap-max`, tablero.js):
+          con más escala horizontal se lee más título (Leo, 16-09-2026) */
+       max-width: max(190px, var(--cap-max, 0px));
+       overflow: hidden; text-overflow: ellipsis; line-height: 17px; }
 .pt.alto .cap { bottom: 27px; }
 .pt.cortado .cap { text-decoration: line-through; color: var(--tenue); }
-.pt:hover .cap { max-width: none; overflow: visible; }                  /* sin globo: el rótulo enseña el nombre entero */
-/* si su nombre choca con el del nodo anterior, se desdobla debajo del eje (tablero.js, `colocarRotulos`) */
-.pt.abajo .cap { bottom: auto; top: 14px; }
-.pt.abajo .cap-edit { bottom: auto; top: 13px; }
+/* al pasar el ratón (también por el propio rótulo, Leo 16-09-2026) enseña el nombre entero, en varias líneas si hace falta */
+.pt:hover .cap { width: max-content; max-width: max(320px, var(--cap-max, 0px)); overflow: visible; white-space: normal; text-align: center;
+       background: var(--papel); border-radius: 4px; box-shadow: 0 0 0 4px var(--papel); z-index: 2; }
 
 /* ---------- notas entre nodos ---------- */
-.nota { position: absolute; top: 50%; margin-top: 13px; height: 22px;
+/* Toda nota va **a su medida y colgada de su sitio** —el nodo, o la mitad del tramo entre dos nodos—, con su guía
+   hasta el carril (Leo, 16-09-2026: antes la de tramo se estiraba de nodo a nodo y crecía con la escala) */
+.nota { position: absolute; top: var(--centro, 50%); margin-top: 13px; height: 22px; box-sizing: border-box;
+        width: auto; padding: 0 2px;
         background: var(--nota); border: 1.5px solid var(--nota-borde); border-radius: 5px;
         box-shadow: 2px 2px 0 var(--sombra-suave); cursor: grab; z-index: 1; touch-action: none; }
+/* la guía que la une a su sitio: continua y del color de su trama, para que se vea de quién es */
+.nota::before { content: ''; position: absolute; left: calc(50% - 1px); width: 2px;
+        top: calc(-1 * var(--guia, 13px)); height: var(--guia, 13px);
+        border-radius: 1px; background: var(--gl, var(--nota-borde)); }
 .nota.arrastrando { cursor: grabbing; border-color: var(--foco); box-shadow: var(--sombra); }
 .nota:hover { border-color: var(--nota-tinta); }
 .nota.sel { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
-.nota span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 100%;
+.nota span { display: block; max-width: 100%; line-height: 19px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         font-family: var(--mono); font-size: 10.5px; font-style: italic;
         color: var(--nota-tinta); padding: 0 7px; }
 .nota.sel span { color: var(--foco); }
-/* una nota entre nodos pegados (o con un rótulo debajo): en el eje queda su marca y el papel se corre a la derecha,
-   unido por una guía discontinua; las guías cuelgan del papel con posiciones negativas (tablero.js) */
-.nota.aparte { width: auto; max-width: 210px; margin-top: 10px; z-index: 2; }   /* corrida sobre el tramo siguiente: por encima de su hueco (z 1), que se comía el clic y creaba otra nota (Leo) */
-.nota.aparte span { position: static; transform: none; display: block; line-height: 20px; }
-.nota-guia { position: absolute; pointer-events: none; }
-.nota-marca { top: -14.5px; width: 7px; height: 7px; margin-left: -4.5px; border-radius: 50%; background: var(--nota-borde); box-shadow: 0 0 0 2px var(--nota); }
-.nota-guia-v { top: -4px; width: 1px; height: 14px; margin-left: -1px; background: repeating-linear-gradient(180deg, var(--nota-borde) 0 3px, transparent 3px 6px); }
-.nota-guia-h { top: 10px; height: 1px; margin-left: -1px; background: repeating-linear-gradient(90deg, var(--nota-borde) 0 3px, transparent 3px 6px); }
 .cap-edit { position: absolute; left: 50%; bottom: 13px; transform: translateX(-50%); pointer-events: auto;
         width: 170px; font-family: var(--sans); font-size: 13.5px; text-align: center;
         color: var(--tinta); background: var(--papel); border: 1.5px solid var(--foco);
@@ -216,7 +236,7 @@ body.con-ruta .nota { opacity: .2; }
         cursor: pointer; padding-bottom: 2px; touch-action: none; }
 #celda.show { display: grid; }
 #celda:hover { border-style: solid; border-color: var(--tinta); color: var(--foco); }
-.hueco { position: absolute; top: 50%; margin-top: 13px; height: 22px; z-index: 1; cursor: copy; }
+.hueco { position: absolute; top: var(--centro, 50%); margin-top: 13px; height: 22px; z-index: 1; cursor: copy; }
 .hueco:hover { background: var(--nota-edit); border-radius: 5px; }
 .add-nota { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: auto;
         width: 22px; height: 20px; border-radius: 5px; border: 1.5px dashed var(--nota-borde);
@@ -246,6 +266,9 @@ aside h2 { font: 9.5px var(--mono); letter-spacing: .08em; text-transform: upper
 .panel-nav .btn, .panel-nav .mini { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; margin: 0; }
 .field.field-crece textarea { min-height: 340px; }
 .field select { width: 100%; font: inherit; font-size: 14px; padding: 6px 8px; border: 1.5px solid var(--regla-fuerte); border-radius: 6px; background: var(--papel); color: var(--tinta); }
+/* los paneles de trama, acto y nota tienen la misma forma que el del nodo (Leo, 16-09-2026): lo ancho va en un bloque */
+.panel-bloque { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
+.panel-sub { font-size: 12px; color: var(--tenue); }
 .panel-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--tenue); font-size: 13.5px; }
 .panel-meta-punto { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .panel-meta-sep { color: var(--palido); }
@@ -266,6 +289,8 @@ aside h2 { font: 9.5px var(--mono); letter-spacing: .08em; text-transform: upper
 .swatches { display: flex; flex-wrap: wrap; gap: 7px; }
 .sw { width: 25px; height: 25px; border-radius: 50%; border: 2px solid transparent; padding: 0; }
 .sw.on { border-color: var(--tinta); }
+.sw.papel { background: var(--nota); border-color: var(--nota-borde); }
+.sw.papel.on { border-color: var(--tinta); }
 .sw.hereda { width: auto; border-radius: 13px; padding: 0 11px; background: var(--hover-fuerte);
         border: 1.5px solid var(--regla-fuerte); font-size: 12.5px; color: var(--tenue); }
 .sw.hereda.on { border-color: var(--tinta); color: var(--tinta); }
@@ -326,6 +351,8 @@ html[data-theme="dark"] #dlg::backdrop { background: rgba(0, 0, 0, .55); }
 .pt.multi .dot { box-shadow: 0 0 0 2px var(--foco), 0 0 0 6px var(--foco-halo); outline: 2px solid var(--foco); outline-offset: 3px; }
 .pt.multi:not(.caja) .dot { outline: 0; }
 .pt.multi.con-rotulo .cap { border-color: var(--foco-linea); }
+/* notas elegidas con Mayús (Leo, 16-09-2026) */
+.nota.multi { border-color: var(--foco) !important; box-shadow: 0 0 0 2px var(--foco-halo) !important; }
 .multi-barra { position: fixed; z-index: 40; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 12px;
   background: var(--papel); border: 1px solid var(--borde, var(--regla-fuerte)); border-radius: 8px; box-shadow: var(--sombra-alta, 0 6px 18px rgba(0,0,0,.15));
   font: 500 12.5px var(--sans); color: var(--tinta); white-space: nowrap; }
@@ -333,6 +360,28 @@ html[data-theme="dark"] #dlg::backdrop { background: rgba(0, 0, 0, .55); }
 .multi-barra button:hover { background: var(--hover); }
 .multi-barra button.peligro { color: var(--peligro); border-color: color-mix(in srgb, var(--peligro) 45%, transparent); }
 .multi-barra button.peligro:hover { background: var(--peligro-bg); }
+/* ---------- columnas: la tira de cabeceras del eje (Leo, 16-09-2026, «como en Excel web») ----------
+   Bajo los actos, una cabecera por celda: clic para elegirla, arrastre o Mayús para varias, Cmd/Ctrl para
+   sueltas, clic derecho para insertar a un lado o eliminar. Lo elegido se tiñe de arriba abajo del tablero. */
+.eje-cuerpo { position: relative; display: flex; flex-direction: column; height: 100%; }
+.acts { flex: 1; min-height: 0; }
+.cols { position: relative; flex: none; height: var(--eje-col); border-top: 1px solid var(--regla); }
+.col { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; overflow: hidden;
+       font: 9px var(--mono); color: var(--palido); cursor: pointer; user-select: none; }
+.col > span { padding: 0 3px; border-radius: 3px; line-height: 1.4; }
+.col::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 1px; height: 3px; background: var(--regla-fuerte); }
+.col:hover > span { background: var(--hover-fuerte); color: var(--tinta); }
+.col.sel > span { background: var(--foco); color: var(--papel); }
+.col.sel { cursor: grab; }                                      /* elegidas, se arrastran para moverlas con lo que tengan */
+body.moviendo-columnas, body.moviendo-columnas * { cursor: grabbing !important; user-select: none; }
+.col.sel::after { background: var(--foco); width: 2px; height: 100%; }
+#colsCapa { position: absolute; left: 0; right: 0; z-index: 6; pointer-events: none; }
+/* la columna elegida es la raya donde se posan los nodos, no el hueco de al lado (Leo, 16-09-2026) */
+.col-marca { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--foco);
+       box-shadow: 0 0 0 3px var(--foco-banda); }
+.pt.en-columna .dot { box-shadow: 0 0 0 2px var(--foco), 0 0 0 6px var(--foco-halo); }
+.pt.en-columna.con-rotulo .cap { border-color: var(--foco-linea); }
+.multi-barra-que { font-style: normal; font-size: 11.5px; color: var(--tenue); margin-left: 8px; }
 /* reordenar tramas arrastrando su etiqueta (Leo, 15-09-2026) */
 #board .row[data-linea] > .label { cursor: grab; }
 body.moviendo-fila, body.moviendo-fila * { cursor: grabbing !important; user-select: none; }

@@ -5,7 +5,7 @@ nodos), escribes el texto de cada paso en un **editor de guion** y organizas el 
 **bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
 navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-**Versión 1.0.47**
+**Versión 1.1.0**
 
 ## Instalar
 
@@ -22,11 +22,15 @@ vez, clic derecho → Abrir. Los archivos `.clapcraft` quedan asociados: un dobl
 - Se **pliega** a un riel estrecho con el botón junto a la marca o `Cmd/Ctrl+Shift+B`, y cambia de ancho
   arrastrando su borde (si lo estrechas mucho, se pliega).
 - Un **contenedor** (por ejemplo, un capítulo) guarda **esquemas de pasos** y **bibliotecas**. Uno nuevo
-  trae un esquema enlazado a su biblioteca. Su `⋯` ofrece Nuevo esquema…, Nueva biblioteca…, Renombrar,
-  Fijar y Eliminar.
-- **Enlace esquema ↔ biblioteca**: un esquema y su biblioteca van unidos por una guía; se renombran por
-  separado, pero se mueven juntos. Clic derecho sobre la guía quita el enlace; sobre un esquema o una
-  biblioteca sueltos, permite enlazarlos con otro del mismo contenedor.
+  trae un esquema con su biblioteca; los esquemas que crees después nacen solos. Su `⋯` ofrece Nuevo esquema…,
+  Nueva biblioteca…, Renombrar, Fijar y Eliminar.
+- **Grupos**: con «Agrupar con…» en el `⋯` de una pieza se juntan las que quieras (esquemas, bibliotecas y, en
+  Personajes, personajes) bajo una cabecera con nombre y color, y un grupo puede ir dentro de otro. Se entra y se
+  sale de un grupo arrastrando, y su cabecera se arrastra para mover el grupo entero. También se crean **vacíos**
+  («Nuevo grupo…» en el `⋯` de un contenedor o de una carpeta) y el **`⋯` de la propia cabecera** crea dentro del
+  grupo: esquemas y bibliotecas, en Personajes personajes, u otro grupo. Un grupo vacío se queda hasta que uses
+  «Deshacer el grupo».
+- **Doble clic renombra** cualquier cosa del árbol: contenedores, carpetas, grupos, esquemas, bibliotecas y personajes.
 - **Carpetas**: dentro de un contenedor se crean carpetas con «Nueva carpeta…» en su `⋯` (nombre y color) y se anidan
   sin límite; esquemas y bibliotecas van en cualquier nivel (arrastrándolos a la carpeta o con «Mover a carpeta…»).
   Pulsar una carpeta la despliega o la pliega; si la jerarquía no cabe, el menú se desplaza en horizontal. En
@@ -41,38 +45,47 @@ vez, clic derecho → Abrir. Los archivos `.clapcraft` quedan asociados: un dobl
 El tablero donde se estructura la historia.
 
 - **Actos**: columnas con su color de fondo (automático o elegido). Clic en el encabezado abre su panel
-  (nombre, ancho, fondo); el «+» del final añade uno.
+  (nombre, ancho, fondo); el «+» del final añade uno. Un acto puede quedarse en **una sola columna**, con la barra del
+  panel o arrastrando su divisor.
 - **Tramas**: carriles. Una **principal**, las **secundarias** que hagan falta y las **alternativas**
   (exploraciones, punteadas). Se **reordenan arrastrando su etiqueta**; las flechas de los saltos se ajustan al nuevo orden.
 - **Nodos**: pasa el cursor por una celda y pulsa el «+». Clic selecciona e ilumina el camino que siguió la
-  historia hasta ahí; arrastrar cambia de celda o de trama, y **soltarlo sobre otro nodo los intercambia** (también en
-  Personajes). En el panel se escriben título y descripción. **Doble clic abre su documento** en el editor.
+  historia hasta ahí (lo que queda fuera se apaga, pero **los nombres y las notas siguen legibles**); arrastrar cambia de celda o de trama, y **soltarlo sobre otro nodo los intercambia** (también en
+  Personajes). En el panel de abajo se escriben su título y su descripción (el panel se agranda arrastrando su borde y
+  se contrae con el chevrón). El texto del guion no va por nodo: está en el documento del esquema («Abrir documento»).
 - **Varios a la vez**: arrastra desde un hueco del tablero para dibujar un rectángulo y elegir los nodos, cuadros y rombos que
   quedan dentro (con Mayús se suman). Arrastrando uno de ellos se mueve el bloque entero: si hacen falta tramas se añaden
   secundarias y, si cae sobre otros nodos, lo que había se corre a la derecha. Con la barra que aparece abajo (o Supr) se
   eliminan todos a la vez. Esc suelta la selección. Todos los borrados piden confirmación.
 - **Saltos**: el cambio de escena (cuadro) y el salto a una alternativa (rombo) unen dos tramas en la misma
-  celda; su nombre va sobre su línea vertical (doble clic lo cambia) y se mueven arrastrándola. Lo que queda fuera del
+  celda; su nombre va sobre su línea vertical (doble clic lo cambia) y se mueven arrastrándola. **Al elegir su línea se
+  abre su panel**, con su título y su descripción, como si eligieras uno de sus nodos. Lo que queda fuera del
   hilo de la historia se ve apagado.
-- **Notas** en post-it entre dos nodos; se arrastran de tramo en tramo y, sobre otra nota, se cambian de lugar con ella;
-  con clic derecho se les da uno de los 24 colores de la paleta. Al pasar el
-  ratón por una nota corrida a un lado se marca la guía que la une a su trama.
+- El **rótulo** de un nodo funciona como el nodo: al pulsarlo queda elegido y desde ahí también se arrastra.
+- **Notas** en post-it: colgadas de un nodo («Nota en este nodo», en su menú) o **de la mitad del tramo entre dos
+  nodos**, con una guía de su color hasta la línea de la trama; caben varias en el mismo sitio. Se arrastran de tramo en tramo y **se ordenan arrastrándolas encima o debajo de las otras** —también
+  una de enlace sobre las de un nodo, y al revés—, que se apartan con animación. **Arriba, a la altura de la línea de
+  la trama, la nota se cuelga del nodo; más abajo, entre las notas, solo cambia de orden.** La guía que une una nota con su nodo va del color de su trama. Con clic
+  derecho se les da uno de los 24 colores de la paleta; su texto va en **itálica**, para no confundirlas con los
+  nombres de los nodos.
+- **Los nombres se guardan al salir del campo**: al renombrar un nodo, una nota, una trama, un acto o algo del árbol
+  basta con pulsar fuera; `Esc` es lo que lo deja como estaba.
+- **Cuanto más abres la escala horizontal, más texto se lee**: los nombres de los nodos y las notas de nodo usan el
+  hueco que hay hasta el nodo de al lado, en vez de cortarse siempre a lo mismo.
 - Abajo: **escala horizontal y vertical**, restablecer, deshacer y rehacer (`Cmd/Ctrl+Z`,
   `Cmd/Ctrl+Shift+Z`). **«Ver biblioteca»** abre la biblioteca enlazada.
 
 ### Biblioteca
 
 - Si la biblioteca está enlazada a un esquema, **«Ver esquema»** en su cabecera lo abre.
-- **Guiones generados** (si está enlazada a un esquema): los documentos que salen de «Revisar guión» caen en su
-  bandeja; se pueden crear segmentos de guiones (cabecera negra) y documentos a mano, y se mueven entre ellos, pero no
-  a la sección de segmentos (ni las notas a esta).
+- **Secciones**: cada biblioteca empieza con «Segmentos» y se crean más con «＋ Nueva sección»; un segmento se lleva a
+  otra arrastrándolo o con «Mover a sección…», y las secciones se ordenan arrastrando su título.
 - **Segmentos**: la **bandeja** y un segmento por color con sus notas. «＋ nota» crea una arriba; cada nota puede
-  llevar uno de los 24 colores (⋯ › «Color…»); las notas se arrastran para ordenarlas o moverlas de segmento, y los segmentos se ordenan arrastrando su cabecera.
-  Guiones generados y segmentos se intercambian arrastrando su título.
+  llevar uno de los 24 colores (⋯ › «Color…»); las notas se arrastran para ordenarlas o moverlas de segmento, y los
+  segmentos se ordenan arrastrando su cabecera.
 - **Segmento expandido**: el icono de expandir de cualquier segmento (bandeja, segmentos, actos, momentos y
   Apariciones) lo abre a todo el lienzo, con sus notas en rejilla, sus primeras líneas y su fecha; se ordenan
   arrastrando y «Contraer» (o Esc) vuelve.
-- Doble clic en un documento de la cronología o de un momento lleva a su sección en el documento del esquema.
 - Doble clic en una nota la abre en el editor, con las migas encima (contenedor › biblioteca › segmento). La
   etiqueta del segmento abre ese segmento expandido, con la nota marcada.
 - **Papelera**: guarda lo que tiras con su origen; se restaura arrastrándolo a una biblioteca y se vacía
@@ -80,27 +93,16 @@ El tablero donde se estructura la historia.
 
 ### Texto: el editor
 
-- **Guión**: cada sección se puede **sacar del guión** (se queda en su sitio, gris y tachada; nada se borra) y
-  plegar. Se hace desde su cabecera, desde la casilla de su rótulo en la línea de tiempo o, para varias a la vez,
-  desde la barra de guión («Sacar», «Devolver», «Sacar todo», «Devolver todo»). «Armar guión», en la cabecera, abre y
-  contrae la barra; contraída, las secciones tampoco enseñan sus casillas ni «Sacar / Devolver».
-- **Revisar guión**: la lista de secciones en el orden de lectura del documento final (se reordena arrastrando sin
-  tocar el esquema), cuántas palabras y páginas salen, qué no se copia y **Generar documento**: un guion sin
-  secciones ni línea de tiempo que se guarda en la biblioteca del esquema, en la bandeja de «Guiones generados», y se
-  abre en el editor normal.
-- **Exportar** (barra inferior): PDF, Word (.docx) y texto sin formato. En un guion generado exporta el documento; en
-  el editor con secciones, lo que está dentro del guion.
-
-- **Un documento por esquema**: cada nodo es una sección del documento, en el orden del tiempo, con su
-  cabecera (punto del nodo, nombre, trama y tipo); la sección en la que escribes va resaltada. Las secciones
-  no se borran desde el editor (se borran eliminando el nodo en el esquema); doble clic en su cabecera
-  cambia el nombre (Enter guarda, Esc o un clic fuera cancelan) y, si el nombre no cabe, al pasar el ratón
-  sale entero.
-- **Cabecera**: el nodo de la sección en la que escribes (doble clic en su título para renombrarlo),
-  «Ver biblioteca», «Ver esquema» y ‹ › para ir a la sección anterior o siguiente (`Cmd/Ctrl+Alt+↑/↓`).
-- **Línea de tiempo**: la trama de la sección en la que escribes; sus nodos son anclas: al pulsar uno, la
-  hoja va a su sección. Los saltos llevan una flecha que indica si suben o bajan a otra trama y, al
-  pulsarlos, la línea pasa a esa trama.
+- **Un documento por esquema**: se abre con **«Abrir documento»** en la cabecera del esquema y es un editor
+  normal, sin secciones ni cabeceras intercaladas. Lo que se hubiera escrito antes en cada nodo se juntó dentro
+  la primera vez que se abrió.
+- **Línea de tiempo**: encima de la hoja se queda la tira de la trama, **de referencia**: enseña los nodos con su
+  nombre y, al pulsar un salto, pasa a la trama del otro extremo. Ya no lleva a ninguna parte.
+- **Versiones**: el botón con el nombre de la versión (barra inferior) abre la lista, con su fecha y sus palabras y
+  la **Actual** marcada. **«Guardar versión…»** pide un nombre; pulsar una la carga (avisa si lo de ahora no está
+  guardado), el doble clic la renombra y la «×» la borra. **«Comparar con la actual…»** enfrenta las dos por
+  párrafos: lo igual apagado, lo añadido en verde y lo quitado tachado.
+- **Exportar** (barra inferior): PDF, Word (.docx) y texto sin formato, de lo que tengas abierto.
 - **Elementos de guion**: encabezado de escena, acción, personaje, paréntico, diálogo, transición y toma,
   con su sangría y mayúsculas. **Enter** pasa al elemento que suele seguir (escena → acción, personaje →
   diálogo, diálogo → personaje…); en uno vacío lo convierte en acción. **Tab** cambia el elemento de la
@@ -110,6 +112,13 @@ El tablero donde se estructura la historia.
 - **Personajes**: cada nombre lleva su color, como un marcatextos; al escribir un personaje aparecen
   sugerencias (`Tab` completa, `Enter` completa y pasa al diálogo). Clic derecho sobre el nombre cambia su
   color en todo el guion.
+- **Anotaciones del personaje** («V.O.», «CONT'D», «(O.S.)»…): al **elegir un personaje de las sugerencias** (Enter,
+  Tab o con el ratón) el nombre queda fijo y el cursor se pone detrás, listo para la anotación, que se escribe como
+  texto normal fuera del color; el **siguiente** Enter es el de siempre y pasa al diálogo. Un **doble espacio** tras el
+  nombre hace lo mismo. El nombre conserva su etiqueta de color y sigue siendo el mismo personaje, no uno nuevo; si no
+  escribes nada detrás, al salir del bloque queda solo el nombre.
+- **Escribir en un hueco**: un clic en el espacio en blanco de la hoja, debajo de lo escrito, baja hasta ahí
+  con las líneas que hagan falta; ya no hay que pulsar Intro hasta llegar (`Cmd/Ctrl+Z` lo deshace).
 - **Páginas**: la hoja se ve partida en páginas numeradas y la barra inferior dice cuántas lleva y cuánto
   duraría (una página ≈ un minuto). Se cuenta como una página de guion impresa (Carta, Courier 12 pt, unas
   54 líneas de 60 caracteres), sea cual sea el ancho de la hoja en pantalla.
@@ -131,16 +140,24 @@ Se entra desde el pie del menú lateral.
   **«Nuevo personaje»** (nombre y color). Los creados aquí también se sugieren en el editor.
 - Desde su `⋯`: abrir, renombrar, cambiar de color o eliminar. **Renombrar o cambiar el color lo aplica en
   todas las notas** que lo nombran. No se puede eliminar un personaje mientras alguna nota lo nombre.
-- **Cada personaje tiene su tablero**: el primer carril es él (fijo) y «＋ personaje» añade un carril con otro
-  personaje existente, que se cambia con su selector (que también lo quita o elimina el carril); doble clic en un carril (o «Ir a…» en su selector) abre el tablero de ese personaje. El círculo delante de cada carril cambia el color de su trama. Los actos se llaman **momentos**, los nodos
+- **Esquemas de personaje**: el primer carril es el personaje con el que se crea el esquema y «＋ personaje» añade un
+  carril con otro. Cada carril lleva un círculo con **las dos primeras letras del personaje** en el color de su etiqueta
+  y, al pasar el ratón, se asoma su nombre entero; el clic en el círculo cambia de personaje, lo quita o elimina el
+  carril, y el **doble clic lleva al esquema de ese personaje** (si aún no tiene ninguno, a su biblioteca; «Ir a…» en el
+  menú del círculo sigue llevando a su biblioteca). Los actos se llaman **momentos**, los nodos
   **eventos** y los cuadros **relaciones**; los dos cuadros de una relación comparten un mismo documento. Una relación con
   otro personaje aparece también al final de la línea del tiempo de ese personaje, con su nombre; si se renombra o se borra en uno, cambia también en el otro.
   El editor de estos documentos no lleva línea de tiempo.
-- Encima, el **carrusel**: **Apariciones** (las notas donde se le nombra, con su ruta; doble clic abre),
-  la **bandeja** y sus **segmentos**, que empiezan con **«Hoja de personaje»**; la sección se contrae desde su título «Segmentos». Segmentos y notas se ordenan y se mueven arrastrando; al acercar lo
-  arrastrado a un borde, el carrusel se desplaza solo.
+- **Cada personaje es una biblioteca**: se abre desde el árbol y empieza con la sección **Apariciones**, que trae
+  **Apariciones** (las notas donde se le nombra, con su ruta; doble clic abre) y **Esquemas relacionados** (los
+  esquemas donde tiene carril: el suyo primero y luego los demás, con un clic para ir allí; desde ahí no se añaden ni
+  se quitan, un esquema entra en cuanto le das carril). Debajo, la **bandeja** y sus **segmentos**, que empiezan con
+  **«Hoja de personaje»**; segmentos y notas se ordenan y se mueven arrastrando.
 
 ### Proyectos, archivos y pestañas
+
+- Al abrir el programa vuelves a **la última pantalla de cada proyecto**: la vista en la que estabas, el esquema
+  montado, la biblioteca abierta y hasta la nota que tenías delante.
 
 - Cada **proyecto** abierto es una **pestaña**; `Ctrl+Tab` pasa de una a otra.
 - **Nuevo proyecto** (`Cmd/Ctrl+N`, el «+» de las pestañas): se abre en una pestaña propia, que se puede dejar a medias

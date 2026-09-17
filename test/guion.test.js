@@ -11,12 +11,12 @@ function montaje() {
   const d = new C.Documentos(undefined, { ahora: () => (t += 10), idNuevo: () => 'x' + (++n) });
   const cap = d.crearContenedor('Capítulo', { vacio: true }).contenedor;
   const tm = new T.Modelo(T.inicial());
-  const [pr, sec] = tm.datos.lineas, [a1, a2] = tm.datos.actos;
+  const pr = tm.datos.lineas[0], sec = tm.nuevaLinea('secundaria').linea, [a1, a2] = tm.datos.actos;
+  const inicio = tm.nuevoPunto(pr.id, a1.id, 2, { titulo: 'Inicio' }).punto;
   const duda = tm.nuevoPunto(sec.id, a1.id, 1, { titulo: 'Duda' }).punto;      // antes que «Inicio» (celda 2)
   const enc = tm.nuevoPunto(pr.id, a1.id, 6, { titulo: 'Encuentro' }).punto;
   const salto = tm.nuevoPunto(pr.id, a2.id, 3, { titulo: 'Cambio' }).punto; tm.crearSalto(salto.id, sec.id, 'cuadro');
   const e = d.crearEsquema(cap.id, tm.toJSON(), 'Escaleta').esquema;
-  const inicio = tm.datos.puntos.find(p => p.titulo === 'Inicio');
   d.guardarNotaEsquema(e.id, inicio.id, { title: 'Inicio', html: '<p class="sp-scene">EXT. FERRY - AMANECER</p><p>Ana baja del ferry.</p>', characters: {} });
   d.guardarNotaEsquema(e.id, duda.id, { title: 'Duda', html: '<p>No sabe si volver.</p>', characters: {} });
   d.guardarNotaEsquema(e.id, enc.id, { title: 'Encuentro', html: '<p class="sp-character">ANA</p><p class="sp-dialogue">No pensaba volver.</p>', characters: { ana: { name: 'ANA', color: 2 } } });

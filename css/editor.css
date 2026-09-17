@@ -280,6 +280,11 @@ html[data-theme="dark"] .page mark { background: #6b5d16; color: #fff; }
 .page p.sp-character { width: fit-content; max-width: 100%; padding: 0 6px; border-radius: 4px; }
 .page p.sp-character[data-ch] { background: var(--chl); color: var(--chd); }
 html[data-theme="dark"] .page p.sp-character[data-ch] { background: var(--chd); color: var(--chl); }
+/* Con anotación («MARA  (V.O.)», doble espacio): el color es solo del nombre y lo de detrás va como texto normal
+   (Leo, 16-09-2026: «el personaje debe mantener su color de etiqueta y luego lo que escriba, en texto normal»). */
+.page p.sp-character[data-ch]:has(> .ch-nom) { background: none; color: inherit; padding: 0; }
+.page p.sp-character[data-ch] > .ch-nom { background: var(--chl); color: var(--chd); padding: 0 6px; border-radius: 4px; }
+html[data-theme="dark"] .page p.sp-character[data-ch] > .ch-nom { background: var(--chd); color: var(--chl); }
 .char-menu { min-width: 200px; }
 .char-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
 

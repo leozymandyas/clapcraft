@@ -31,21 +31,21 @@ test('los documentos creados son exactamente el árbol de la vista previa', () =
     assert.deepEqual(c.esquemas.map(e => [e.nombre, carpetaDe(e)]), esperado.esquema, p.id + ' esquemas');
     assert.deepEqual(c.subs.map(s => [s.nombre, carpetaDe(s)]).sort(), esperado.biblioteca.sort(), p.id + ' bibliotecas');
     c.esquemas.forEach(e => {
-      const i = filas.findIndex(f => f.tipo === 'esquema' && f.nombre === e.nombre), enl = filas[i + 1];
-      assert.ok(enl && enl.enlazada && c.subs.some(s => s.id === e.subId && s.nombre === enl.nombre), p.id + ': cada esquema con su biblioteca enlazada, con el nombre de la vista previa');
+      assert.ok(filas.some(f => f.tipo === 'esquema' && f.nombre === e.nombre), p.id + ': el esquema sale en la vista previa');
+      assert.equal((c.grupos || []).length, 0, p.id + ': un esquema ya no estrena biblioteca ni grupo (Leo, 16-09-2026)');
       assert.deepEqual(e.datos.lineas.map(l => [l.nombre, l.tipo, l.color]), p.tramas, p.id + ': las tramas de la plantilla');
-      assert.ok(e.datos.puntos.some(q => q.id === 'p1'), p.id + ': el primer nodo');
+      assert.deepEqual(e.datos.puntos, [], p.id + ': sin nodos (Leo, 16-09-2026: el «Inicio» de antes había que borrarlo)');
     });
     assert.ok(d.datos.migrado, 'no hay esquema antiguo que migrar');
   }
 });
 
-test('en blanco: «Contenedor» con «Esquema» y su biblioteca «Biblioteca» (Leo)', () => {
+test('en blanco: «Contenedor» con un «Esquema» y nada más (Leo, 16-09-2026)', () => {
   const c = P.documentos('blanco').contenedores[0];
   assert.equal(c.nombre, 'Contenedor');
   assert.deepEqual(c.esquemas.map(e => e.nombre), ['Esquema']);
-  assert.deepEqual(c.subs.map(s => s.nombre), ['Biblioteca']);
-  assert.equal(c.esquemas[0].subId, c.subs[0].id);
+  assert.deepEqual(c.subs.map(s => s.nombre), []);                                // sin biblioteca: la crea quien la quiera
+  assert.deepEqual(c.grupos || [], []);
 });
 
 test('resumen de un proyecto y «visto»', () => {

@@ -19,10 +19,6 @@ body.vista-texto #texto { display: flex; }
 .esq-cuerpo { position: relative; flex: 1; min-height: 0; display: flex; }
 .esq-pie { flex: none; display: flex; align-items: center; }
 body.vista-texto #esquema, body.vista-documentos #esquema { display: none; }
-/* Personajes: la vista del esquema con el carrusel de segmentos encima del tablero */
-.per-seg { display: none; flex: none; }
-body.vista-personajes .per-seg { display: block; }
-body.vista-personajes #verDocumentos { display: none !important; }
 body.vista-texto .solo-esquema { display: none; }
 #editorMarco { flex: 1; width: 100%; border: 0; background: var(--chrome); }
 
@@ -86,6 +82,8 @@ body.vista-texto .solo-esquema { display: none; }
 .hilo-nodo.arriba::after { top: 0; bottom: 50px; }
 .hilo-nodo.rombo::after { background: var(--rombo-trazo); }
 .hilo-vacio { align-self: center; color: var(--tenue); font-size: 14px; padding: 0 8px; }
+/* sin nodos, el aviso va encima de la raya, donde irían los títulos (centrado, la raya lo tachaba) */
+.hilo-pista.vacia .hilo-vacio { position: absolute; left: 8px; bottom: 50px; white-space: nowrap; }
 /* el botón para pasar a la cinta del editor (el de vuelta vive en la cinta, montado desde texto.js) */
 .hilo-pin { flex: none; align-self: flex-start; margin: 8px 0 0 auto; padding: 4px 5px; border: 1.5px solid var(--regla-fuerte);
         border-radius: 6px; background: var(--papel); color: var(--tenue); display: flex; align-items: center; }
@@ -125,8 +123,6 @@ body.escritorio #temaBtn { display: none; }
 #sinEsquema b { color: var(--tinta); font-size: 16px; }
 body.sin-esquema:not(.vista-documentos):not(.vista-texto) #sinEsquema { display: flex; }
 body.sin-esquema #panel, body.sin-esquema #verDocumentos { display: none; }
-/* Personajes sin ningún personaje: no hay tablero, solo el aviso del carrusel */
-body.vista-personajes.sin-personajes .esq-cuerpo, body.vista-personajes.sin-personajes .esq-pie { display: none; }
 
 /* ---------- vista Documentos: barra lateral (solo aquí) y tablero de etiquetas ----------
    Adaptación del prototipo «gestor-guiones-2a» a los tokens de Tramas. Prefijo gd-. */
@@ -173,7 +169,7 @@ body.vista-documentos.nota-abierta #texto { display: flex; }
 .migas-actual { color: var(--tinta); }
 .migas .gd-tag { margin-left: 2px; }
 
-.gd-side { width: 292px; flex: 0 0 292px; display: flex; flex-direction: column; gap: 11px; padding: 14px 12px;
+.gd-side { position: relative; width: 292px; flex: 0 0 292px; display: flex; flex-direction: column; gap: 11px; padding: 14px 12px;
         background: var(--panel); border-right: 1.5px solid var(--tinta); overflow-y: auto; overflow-x: hidden;
         scrollbar-width: thin; user-select: none; }   /* la barra entera se desplaza: ninguna lista queda recortada */
 .gd-side [hidden] { display: none !important; }
@@ -275,9 +271,10 @@ html[data-theme="dark"] .gd-etq-acc button:hover { background: rgba(0, 0, 0, .3)
 .gd-pop button.peligro { color: var(--tenue); }
 .gd-pop button.peligro:hover { background: var(--peligro-bg); color: var(--peligro); }
 .gd-pop button.on::after { content: " ✓"; color: var(--foco); margin-left: auto; }
+.gd-pop .gd-paleta button.on::after { content: none; }        /* en una paleta el check sobra: manda el borde (Leo, 16-09-2026) */
 .gd-pop-sep { height: 1px; background: var(--linea-menu); margin: 3px 6px; }
 .gd-pop-tit { font: 9.5px var(--mono); color: var(--palido); padding: 3px 8px 5px; letter-spacing: .06em; text-transform: uppercase; }
-.gd-pop-punto { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.gd-pop-punto { width: 12px; height: 12px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
 .gd-paleta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 2px 4px 5px; width: 190px; }
 .gd-paleta button { height: 26px; padding: 0; border-radius: 5px; border: 1.5px solid rgba(26, 26, 26, .18); }
 .gd-paleta button:hover, .gd-paleta button.on { border-color: var(--tinta); }
@@ -294,11 +291,7 @@ html[data-theme="dark"] .gd-etq-acc button:hover { background: rgba(0, 0, 0, .3)
 .gd-fantasma { position: fixed; z-index: 60; pointer-events: none; opacity: .85; display: flex; align-items: center; gap: 9px;
         padding: 7px 9px; border: 1.5px solid var(--tinta); border-radius: 6px; background: var(--papel); color: var(--tinta);
         box-shadow: 3px 3px 0 var(--sombra-dura); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#documentos.arrastrando, #documentos.arrastrando *, #gdSide.arrastrando, #gdSide.arrastrando *,
-.per-seg.arrastrando, .per-seg.arrastrando * { user-select: none; cursor: grabbing; }
-/* en el carrusel se arrastran notas y segmentos: sin seleccionar su texto al empezar */
-.per-carrusel .gd-nota, .per-carrusel .gd-etq-head { user-select: none; }
-.per-carrusel .gd-etq[data-etq] > .gd-etq-head { cursor: grab; }
+#documentos.arrastrando, #documentos.arrastrando *, #gdSide.arrastrando, #gdSide.arrastrando * { user-select: none; cursor: grabbing; }
 .gd-nota.arrastrando, .gd-nota-fila.arrastrando { opacity: .4; }
 .gd-nota.sel { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
 .gd-nota-fila.sel { background: var(--foco-suave); }

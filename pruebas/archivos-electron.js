@@ -80,7 +80,7 @@ app.whenReady().then(async () => {
     /* ---------- 1. un guion con contenido y «Guardar como…» ---------- */
     await js(`
       const G = Claquedraw.gestor, d = G.documentos(), A = Claquedraw.app;
-      const c = d.datos.contenedores[0], s = c.subs[0];
+      const c = d.datos.contenedores[0], s = c.subs[0] || d.crearSub(c.id, 'Biblioteca').sub;   // la plantilla en blanco ya no trae biblioteca
       const lug = d.crearEtiqueta(s.id, 'Lugares', 2).etiqueta; d.crearEtiqueta(s.id, 'Tono', 5);
       const n1 = d.crearNota(s.id, lug.id, 'Casa del padre').nota; d.crearNota(s.id, lug.id, 'La cacería'); d.crearNota(s.id, null, 'Ideas sueltas');
       /* texto escrito en el editor de verdad: se abre la nota, se pone el documento y se cierra (vuelca) */
@@ -88,10 +88,11 @@ app.whenReady().then(async () => {
       const E = document.getElementById('editorMarco').contentWindow.Ed;
       E.document.set({ title: 'Casa del padre', html: '<p>Tres hermanos y un título sin dinero. ¿Ñandú? «comillas» — 日本</p><p class="sp-character" data-ch="0">LESTAT</p><p class="sp-dialogue">No volveré.</p>', characters: { LESTAT: { name: 'LESTAT', color: 4 } } });
       document.querySelector('#migas [data-gd-volver].btn').click(); await W(400);
-      /* la sección de un nodo en el documento del esquema (se escribe como en el editor, dentro de su sección) */
-      A.vista('texto', 'p1'); await W(900);
-      { const w = document.getElementById('editorMarco').contentWindow, cab = w.document.querySelector('#editor > .cd-seccion[data-seccion="p1"]');
-        w.Ed.setCaret(cab.nextElementSibling, 0); w.document.execCommand('insertHTML', false, '<p class="sp-scene">EXT. PUERTO – NOCHE</p>'); await W(500); }
+      /* el documento del esquema: el editor normal, con la tira de la trama encima (Leo, 16-09-2026) */
+      A.vista('esquema'); await W(300);
+      document.querySelector('#abrirDoc').click(); await W(900);
+      { const w = document.getElementById('editorMarco').contentWindow;
+        w.Ed.document.set({ title: 'Documento del esquema', html: '<p class="sp-scene">EXT. PUERTO – NOCHE</p>', characters: {} }); await W(600); }
       A.vista('esquema'); await W(300);
       G.abrirSub(s.id); await W(300);
     `);
@@ -101,7 +102,7 @@ app.whenReady().then(async () => {
     const doc1 = JSON.parse(f1.texto);
     comprobar('el guion toma el nombre del archivo', doc1.nombre === 'Mi guion', doc1.nombre);
     comprobar('lleva el texto de la nota (acentos, comillas, japonés)', /¿Ñandú\? «comillas» — 日本/.test(f1.texto));
-    comprobar('lleva la sección del nodo en su nota', /EXT\. PUERTO – NOCHE/.test(f1.texto));
+    comprobar('lleva el documento del esquema', /EXT\. PUERTO – NOCHE/.test(f1.texto));
     comprobar('el personaje escrito en el editor entró al elenco', doc1.documentos.elenco.some(p => p.nombre === 'LESTAT'));
     comprobar('el indicador dice guardado (✓)', (await indicador()).includes('ok'), await indicador());
 
@@ -117,16 +118,8 @@ app.whenReady().then(async () => {
       band.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: ra.left + 60, clientY: ra.top + 15, button: 0, pointerId: 1 }));
       for (let i = 1; i <= 12; i++) { window.dispatchEvent(new PointerEvent('pointermove', { clientX: ra.left + 60 + (rb.right - 20 - ra.left - 60) * i / 12, clientY: rb.top + 40, pointerId: 1 })); await W(16); }
       window.dispatchEvent(new PointerEvent('pointerup', { clientX: rb.right - 20, clientY: rb.top + 40, pointerId: 1 })); await W(600);   // el clic justo después de soltar no cuenta (400 ms)
-      /* «Guiones generados»: un segmento de guiones con nombre, arrastrado delante de su bandeja */
-      document.querySelector('#gdMain [data-gd-nuevo-seg-guiones]').click(); await W(300);
-      const inpS = document.activeElement; inpS.value = 'Versiones'; inpS.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await W(300);
-      const tg = document.querySelector('#gdMain .gd-tablero[data-grupo="guiones"]');
-      const [g1, g2] = tg.querySelectorAll(':scope > [data-clave]');
-      const cab2 = g2.querySelector('.gd-etq-head'), q1 = g1.getBoundingClientRect(), q2 = cab2.getBoundingClientRect();
-      cab2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: q2.left + 60, clientY: q2.top + 15, button: 0, pointerId: 1 }));
-      for (let i = 1; i <= 12; i++) { window.dispatchEvent(new PointerEvent('pointermove', { clientX: q2.left + 60 + (q1.left + 20 - q2.left - 60) * i / 12, clientY: q1.top + 20, pointerId: 1 })); await W(16); }
-      window.dispatchEvent(new PointerEvent('pointerup', { clientX: q1.left + 20, clientY: q1.top + 20, pointerId: 1 })); await W(600);
       /* segmento expandido: ordenar sus notas y crear una con nombre */
+      G.abrirSub(d.datos.contenedores[0].subs[0].id); await W(300);
       document.querySelector('#gdMain [data-seccion="segmentos"] [data-clave^="etq:"] [data-gd-expandir]').click(); await W(300);
       const grid = document.querySelector('#gdMain .gd-exp-grid'), [a, b] = grid.querySelectorAll('[data-nota]');
       const r1 = a.getBoundingClientRect(), r2 = b.getBoundingClientRect();
@@ -142,88 +135,151 @@ app.whenReady().then(async () => {
     const f2 = await mismo(ARCHIVO, 'el archivo sigue siendo exactamente el guion abierto');
     const d2 = JSON.parse(f2.texto).documentos, sub2 = d2.contenedores[0].subs[0];
     comprobar('guarda el orden de las tarjetas (bandeja al final)', Array.isArray(sub2.ordenSegmentos) && sub2.ordenSegmentos[sub2.ordenSegmentos.length - 1] === 'bandeja', JSON.stringify(sub2.ordenSegmentos));
-    const versiones = d2.etiquetas.find(x => x.guiones && x.nombre === 'Versiones');
-    comprobar('guarda el segmento de guiones delante de su bandeja', !!versiones && Array.isArray(sub2.ordenGuiones) && sub2.ordenGuiones[0] === 'etq:' + versiones.id, JSON.stringify(sub2.ordenGuiones));
+    const subG = d2.contenedores[0].subs.find(x => x.guionEid);
+    comprobar('el documento del esquema vive en su biblioteca oculta, fuera del árbol',
+      !!subG && d2.notas.some(n => n.subId === subG.id && n.guion && n.guion.principal), JSON.stringify(subG));
     comprobar('guarda la nota nueva creada en el segmento expandido', d2.notas.some(n => n.titulo === 'El cura del pueblo'));
     comprobar('el indicador vuelve a guardado (✓)', (await indicador()).includes('ok'), await indicador());
 
-    /* ---------- personajes: tablero, relación, carrusel con orden propio, nota del evento ---------- */
+    /* ---------- 2b. el tablero: notas apiladas, su orden, renombrar sin Enter y un grupo vacío ---------- */
+    const antes2b = fs.statSync(ARCHIVO).mtimeMs;
+    const board = await js(`
+      const C = Claquedraw, T = Tramas, d = C.gestor.documentos();
+      const eid = d.datos.contenedores[0].esquemas[0].id;
+      C.app.montarEsquema(eid); C.app.vista('esquema'); await W(700);   // con la vista Documentos delante, el tablero no mide
+      const m = T.tablero.modelo();
+      const l = m.datos.lineas[0].id;
+      if (m.puntosDe(l).length < 2) {                          // el esquema de la prueba puede traer un solo nodo
+        m.nuevoPunto(l, m.datos.actos[0].id, 3, { titulo: 'Uno' });
+        m.nuevoPunto(l, m.datos.actos[0].id, 7, { titulo: 'Dos' });
+      }
+      const ps = m.puntosDe(l);
+      m.crearNota(ps[0].id, null, 'Nota de nodo A');
+      m.crearNota(ps[0].id, null, 'Nota de nodo B');
+      m.crearNota(ps[0].id, ps[1].id, 'Nota de enlace');
+      T.tablero.render(); await W(400);
+      /* la de enlace, arrastrada encima de las del nodo (como con el ratón) */
+      const nota = [...document.querySelectorAll('#board .nota')].find(n => /Nota de enlace/.test(n.textContent));
+      const arriba = [...document.querySelectorAll('#board .nota')].find(n => /Nota de nodo A/.test(n.textContent));
+      const rn = nota.getBoundingClientRect(), ra = arriba.getBoundingClientRect();
+      const x = Math.round(ra.left + ra.width / 2);
+      const x0 = Math.round(rn.left + 40), y0 = Math.round(rn.top + rn.height / 2), y1 = Math.round(ra.top + 2);
+      nota.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x0, clientY: y0, button: 0, pointerId: 7 }));
+      for (let i = 1; i <= 6; i++) {                           // como el ratón: varios pasos hasta la altura de la primera
+        document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: Math.round(x0 + (x - x0) * i / 6), clientY: Math.round(y0 + (y1 - y0) * i / 6), pointerId: 7 }));
+        await W(30);
+      }
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y1, pointerId: 7 })); await W(400);
+      const ordenTrasArrastrar = T.tablero.modelo().datos.notas.map(n => n.texto);
+      /* renombrar un nodo y salir con un clic fuera: sin pulsar Enter */
+      const cap = document.querySelector('#board .pt[data-punto="' + ps[0].id + '"] .cap');
+      cap.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, detail: 2 })); await W(250);
+      const campo = document.querySelector('#board .cap-edit');
+      if (campo) { campo.value = 'Nombre sin Enter'; campo.dispatchEvent(new FocusEvent('blur')); }
+      await W(400);
+      /* un grupo vacío en el árbol, de los que ahora se quedan */
+      d.crearGrupo(d.datos.contenedores[0].id, [], 'Pendientes', 'verde');
+      C.gestor.render(); C.app.guardar ? null : null; await W(200);
+      return JSON.stringify({ campo: !!campo, notas: m.datos.notas.map(n => n.texto), ordenTrasArrastrar, titulo: m.punto(ps[0].id).titulo });
+    `);
+    const bo = JSON.parse(board);
+    await espera(2500);
+    comprobar('el tablero se escribió solo tras tocar notas y nombres', fs.statSync(ARCHIVO).mtimeMs > antes2b);
+    const f2b = await mismo(ARCHIVO, 'el archivo sigue siendo exactamente el guion abierto (tras el tablero)');
+    const d2b = JSON.parse(f2b.texto).documentos, e2b = d2b.contenedores[0].esquemas[0];
+    const notas2b = e2b.datos.notas.map(n => n.texto);
+    comprobar('guarda las notas del tablero, de nodo y de enlace', notas2b.length === 3 && notas2b.includes('Nota de enlace') && notas2b.includes('Nota de nodo A'), JSON.stringify(notas2b));
+    comprobar('guarda el orden en que se apilan (la de enlace, arrastrada arriba)', notas2b[0] === 'Nota de enlace',
+      'en el archivo ' + JSON.stringify(notas2b) + ' · al soltar ' + JSON.stringify(bo.ordenTrasArrastrar));
+    const deNodo = e2b.datos.notas.find(n => n.texto === 'Nota de nodo A'), deEnlace = e2b.datos.notas.find(n => n.texto === 'Nota de enlace');
+    comprobar('la de nodo cuelga de un nodo y la de enlace conserva sus dos extremos', !deNodo.aId && !!deEnlace.aId, JSON.stringify([deNodo.aId, deEnlace.aId]));
+    comprobar('el nombre escrito y soltado con un clic fuera se guardó', bo.campo && e2b.datos.puntos.some(p => p.titulo === 'Nombre sin Enter'), bo.titulo);
+    const gr2b = (d2b.contenedores[0].grupos || []).find(g => g.nombre === 'Pendientes');
+    comprobar('un grupo vacío se guarda en el archivo', !!gr2b && gr2b.items.length === 0, JSON.stringify(d2b.contenedores[0].grupos));
+
+    /* ---------- personajes: su biblioteca, un esquema de personaje y el documento de un evento ---------- */
     await js(`
       const G = Claquedraw.gestor, d = G.documentos(), T = window.Tramas;
       document.querySelector('[data-gd-ir-personajes]').click(); await W(600);
+      /* un personaje es su biblioteca: se abre y se le crea una nota en la bandeja */
+      document.querySelector('#gdSide [data-personaje]').click(); await W(400);
+      document.querySelector('#gdMain [data-clave="bandeja"] [data-gd-crear-nota]').click(); await W(200);
+      const inp = document.activeElement; inp.value = 'Ficha de Lestat'; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await W(300);
+      /* el «＋» del contenedor «Esquemas»: se elige el personaje y nace su esquema con la primera trama */
+      const cont = [...document.querySelectorAll('#gdSide .gd-cont')].find(x => x.dataset.id === 'personajes:esquemas');
+      cont.querySelector('[data-gd-nuevo-hijo]').click(); await W(250);
+      [...document.querySelectorAll('.gd-pop button')].find(b => /Nuevo esquema/.test(b.textContent)).click(); await W(250);
+      [...document.querySelectorAll('.gd-pop button')].find(b => /LESTAT/i.test(b.textContent)).click(); await W(700);
       const m = T.tablero.modelo();
       const ev = m.nuevoPunto(m.datos.lineas[0].id, m.datos.actos[0].id, 3).punto;
-      T.tablero.render();
-      const sub = G.subActual().id;
-      document.querySelector('#personajesSeg [data-clave="bandeja"] [data-gd-crear-nota]').click(); await W(200);
-      const inp = document.activeElement; inp.value = 'Ficha de Lestat'; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await W(200);
-      /* Apariciones detrás de la bandeja, arrastrando */
-      const car = document.querySelector('#personajesSeg .per-carrusel');
-      const ap = car.querySelector('[data-clave="apariciones"] .gd-etq-head'), ba = car.querySelector('[data-clave="bandeja"]');
-      const ra = ap.getBoundingClientRect(), rb = ba.getBoundingClientRect();
-      ap.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: ra.left + 60, clientY: ra.top + 15, button: 0, pointerId: 1 }));
-      for (let i = 1; i <= 10; i++) { window.dispatchEvent(new PointerEvent('pointermove', { clientX: ra.left + 60 + (rb.right - 20 - ra.left - 60) * i / 10, clientY: rb.top + 40, pointerId: 1 })); await W(16); }
-      window.dispatchEvent(new PointerEvent('pointerup', { clientX: rb.right - 20, clientY: rb.top + 40, pointerId: 1 })); await W(600);   // el clic justo después de soltar no cuenta (400 ms)
-      /* el documento del tablero: una sección por nodo; se escribe en la del evento y se renombra con doble clic en su cabecera */
-      Claquedraw.app.vista('texto', ev.id); await W(900);
-      const w = document.getElementById('editorMarco').contentWindow, ed = w.document.getElementById('editor');
-      const cab = ed.querySelector('.cd-seccion[data-seccion="' + ev.id + '"]');
-      w.Ed.setCaret(cab.nextElementSibling, 0); w.document.execCommand('insertText', false, 'Invierno de 1760.');
-      cab.dispatchEvent(new w.MouseEvent('dblclick', { bubbles: true }));
-      const campo = w.document.querySelector('.cd-sec-renombrar'); campo.value = 'Nace en Auvernia';
-      campo.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      await W(900);                                                        // con 500 ms, alguna vez el guardado aún no había llegado
-      document.querySelector('#textoCab [data-texto-esquema]').click(); await W(400);
+      T.tablero.render(); await W(300);
+      m.editarPunto(ev.id, { titulo: 'Nace en Auvernia', descripcion: 'Invierno de 1760.' }); T.tablero.render(); await W(400);
+      /* un esquema de personaje no tiene documento: su cabecera no enseña «Abrir documento» (Leo, 16-09-2026) */
+      if (!document.querySelector('#abrirDoc').hidden) throw new Error('un esquema de personaje no debe ofrecer «Abrir documento»');
     `);
     await espera(3500);
     const f3 = await mismo(ARCHIVO, 'personajes: el archivo es exactamente el guion abierto');
     const d3 = JSON.parse(f3.texto).documentos, per = d3.contenedores.find(c => c.id === 'personajes');
+    const ces = d3.contenedores.find(c => c.id === 'personajes:esquemas');
     const lestat = d3.elenco.find(p => p.nombre === 'LESTAT');
-    const ep = per && per.esquemas.find(e => e.id === 'personajes:esquema:' + (lestat && lestat.id));
-    comprobar('guarda el tablero del personaje con su carril', !!ep && ep.datos.lineas[0].personaje === lestat.id);
-    comprobar('guarda el evento y su documento', !!ep && ep.datos.puntos.some(p => p.titulo === 'Nace en Auvernia') && Object.values(ep.notas).some(n => /Invierno de 1760/.test(n.html)));
-    const sp = per && per.subs.find(s => s.lineaId === lestat.id);
-    comprobar('guarda la nota del carrusel y el orden de sus tarjetas', !!sp && d3.notas.some(n => n.titulo === 'Ficha de Lestat' && n.subId === sp.id)
-      && Array.isArray(sp.ordenSegmentos) && sp.ordenSegmentos.indexOf('apariciones') > sp.ordenSegmentos.indexOf('bandeja'), sp && JSON.stringify(sp.ordenSegmentos));
+    const ep = ces && ces.esquemas[0];
+    comprobar('guarda el esquema de personaje con su primera trama', !!ep && ep.datos.lineas[0].personaje === (lestat && lestat.id));
+    const docPer = ep && d3.notas.find(n => n.guion && n.guion.eid === ep.id && n.guion.principal);
+    comprobar('guarda el evento del esquema de personaje, y ese esquema no tiene documento',
+      !!ep && ep.datos.puntos.some(p => p.titulo === 'Nace en Auvernia' && /Invierno de 1760/.test(p.descripcion || '')) && !docPer);
+    const sp = per && per.subs.find(s => s.lineaId === (lestat && lestat.id));
+    comprobar('guarda la nota de la biblioteca del personaje', !!sp && d3.notas.some(n => n.titulo === 'Ficha de Lestat' && n.subId === sp.id));
 
-    /* ---------- revisar guión: sacar una sección, generar el documento plano y exportarlo ---------- */
+    /* ---------- el documento del esquema, sus versiones y las exportaciones ---------- */
     const gen = await js(`
       const G = Claquedraw.gestor, d = G.documentos(), A = Claquedraw.app;
-      const e = d.datos.contenedores.filter(c => !c.oculto).flatMap(c => c.esquemas).find(x => x.subId);
-      A.montarEsquema(e.id); A.vista('texto'); await W(900);
-      const secs = Claquedraw.texto.secciones();
-      document.querySelector('#guionBarra [data-guion="sacar-todo"]').click(); await W(200);
-      document.querySelector('#guionBarra [data-guion="devolver-todo"]').click(); await W(200);
-      const w = document.getElementById('editorMarco').contentWindow, cab = w.document.querySelector('#editor > .cd-seccion[data-seccion="' + secs[secs.length - 1] + '"]');
-      if (secs.length > 1) cab.querySelector('[data-sec-accion="sacar"]').dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1 }));
-      await W(200);
-      document.querySelector('#guionBarra [data-guion="revisar"]').click(); await W(300);
-      const inp = document.querySelector('[data-rv-nombre]'); inp.value = 'Guion de prueba'; inp.dispatchEvent(new Event('input', { bubbles: true }));
-      document.querySelector('[data-rv="generar"]').click(); await W(900);
-      const n = d.datos.notas.find(x => x.guion && x.titulo === 'Guion de prueba');
-      const doc = { titulo: n.titulo, html: n.html }, abierta = G.notaAbierta() === n.id;
+      const e = d.datos.contenedores.filter(c => !c.oculto).flatMap(c => c.esquemas)[0];
+      A.montarEsquema(e.id); A.vista('esquema'); await W(400);
+      const tm = window.Tramas.tablero.modelo();                               // un nodo, para ver la tira con algo
+      tm.nuevoPunto(tm.datos.lineas[0].id, tm.datos.actos[0].id, 3, { titulo: 'Zarpan' });
+      window.Tramas.tablero.render(); await W(300);
+      document.querySelector('#abrirDoc').click(); await W(900);
+      const conTira = Claquedraw.texto.conTira() && !document.getElementById('texto').classList.contains('sin-tira') && !!document.querySelector('#hilo .hilo-nodo');
+      const w = document.getElementById('editorMarco').contentWindow;
+      /* «Guardar versión…» pide el nombre en el modal */
+      const abrirMenu = async () => { w.document.getElementById('cdVersiones').click(); await W(350); };
+      await abrirMenu();
+      [...document.querySelectorAll('.gd-pop .vs-opcion')].find(b => /Guardar versión/.test(b.textContent)).click(); await W(500);
+      const dlg = document.querySelector('#dlgNombre'), inp = dlg.querySelector('input');
+      inp.value = 'v1'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+      [...dlg.querySelectorAll('button')].find(b => /Guardar/.test(b.textContent)).click(); await W(600);
+      const conVersion = w.document.getElementById('cdVersiones').textContent.trim();
+      /* se escribe encima y se guarda otra versión */
+      w.Ed.document.set({ title: 'Documento del esquema', html: '<p class="sp-scene">INT. CAMAROTE – NOCHE</p><p>Y zarpan.</p>', characters: {} });
+      Claquedraw.texto.volcar(); await W(400);
+      await abrirMenu();
+      [...document.querySelectorAll('.gd-pop .vs-opcion')].find(b => /Guardar versión/.test(b.textContent)).click(); await W(500);
+      const dlg2 = document.querySelector('#dlgNombre'), inp2 = dlg2.querySelector('input');
+      inp2.value = 'v2'; inp2.dispatchEvent(new Event('input', { bubbles: true }));
+      [...dlg2.querySelectorAll('button')].find(b => /Guardar/.test(b.textContent)).click(); await W(600);
+      /* comparar la primera con lo de ahora */
+      await abrirMenu();
+      const fila = [...document.querySelectorAll('.gd-pop .vs-fila')].find(f => /v1/.test(f.textContent));
+      fila.querySelector('[data-vs-comparar]').click(); await W(500);
+      const capa = document.querySelector('.vs-capa');
+      const cmp = capa ? [...capa.querySelectorAll('.vs-linea')].map(l => l.className) : [];
+      if (capa) capa.querySelector('[data-vs-cerrar]').click();
+      await W(300);
+      /* y cargar la primera versión deja su texto en el documento */
+      await abrirMenu();
+      [...document.querySelectorAll('.gd-pop .vs-fila')].find(f => /v1/.test(f.textContent)).click(); await W(1200);
+      const n = d.documentoEsquema(e.id);
+      const doc = { titulo: n.titulo, html: n.html };
       const pdf = await Claquedraw.exportar.exportar('pdf', doc), docx = await Claquedraw.exportar.exportar('docx', doc), txt = await Claquedraw.exportar.exportar('txt', doc);
-      /* en la biblioteca, arrastrarlo a la bandeja de segmentos (no entra) y a «Versiones» (sí) */
-      G.cerrarNota(); A.vista('documentos'); G.abrirSub(n.subId); await W(400);
-      const arrastrar = async (desde, hasta) => {
-        const a = desde.getBoundingClientRect(), b = hasta.getBoundingClientRect(), x0 = a.left + 30, y0 = a.top + a.height / 2, x1 = b.left + 40, y1 = b.top + b.height - 12;
-        desde.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x0, clientY: y0, button: 0, pointerId: 1 }));
-        for (let i = 1; i <= 12; i++) { window.dispatchEvent(new PointerEvent('pointermove', { clientX: x0 + (x1 - x0) * i / 12, clientY: y0 + (y1 - y0) * i / 12, pointerId: 1 })); await W(16); }
-        window.dispatchEvent(new PointerEvent('pointerup', { clientX: x1, clientY: y1, pointerId: 1 })); await W(600);
-      };
-      const cuerpoDe = sel => document.querySelector('#gdMain ' + sel + ' .gd-etq-body');
-      await arrastrar(document.querySelector('#gdMain [data-nota="' + n.id + '"]'), cuerpoDe('[data-seccion="segmentos"] [data-clave="bandeja"]'));
-      const enBandejaNormal = d.nota(n.id).etiquetaId;
-      const vers = d.guionesSegmentosDe(n.subId).find(x => x.nombre === 'Versiones');
-      await arrastrar(document.querySelector('#gdMain [data-nota="' + n.id + '"]'), cuerpoDe('[data-grupo="guiones"] [data-clave="etq:' + vers.id + '"]'));
-      return { eid: e.id, secs: secs.length, fuera: d.guionEsquema(e.id).fuera, nota: !!n, abierta, pdf, docx, txt, html: n.html, id: n.id, enBandejaNormal, versiones: vers.id };`);
+      return { eid: e.id, conTira, conVersion, cmp, id: n.id, html: n.html, boton: w.document.getElementById('cdVersiones').textContent.trim(), pdf, docx, txt };`);
     await espera(2500);
-    const f4 = await mismo(ARCHIVO, 'revisar guión: el archivo es exactamente el guion abierto');
-    const d4 = JSON.parse(f4.texto).documentos, e4 = d4.contenedores.flatMap(c => c.esquemas).find(e => e.id === gen.eid);
-    comprobar('guarda la sección sacada del guion', gen.secs < 2 || (e4 && e4.guion && e4.guion.fuera.length === 1), JSON.stringify(e4 && e4.guion));
-    comprobar('guarda el guion generado en «Guiones generados» y lo abre', gen.nota && gen.abierta && d4.notas.some(n => n.titulo === 'Guion de prueba' && n.guion && n.guion.eid === gen.eid));
-    comprobar('el guion no entra en la sección de segmentos y sí en un segmento de guiones', gen.enBandejaNormal === null && d4.notas.some(n => n.id === gen.id && n.etiquetaId === gen.versiones), JSON.stringify(d4.notas.find(n => n.id === gen.id)));
-    comprobar('el guion generado no lleva cabeceras de sección', !/cd-seccion/.test(gen.html) && /EXT\. PUERTO/.test(gen.html), gen.html.slice(0, 200));
+    const f4 = await mismo(ARCHIVO, 'documentos: el archivo es exactamente el guion abierto');
+    const d4 = JSON.parse(f4.texto).documentos;
+    const princ = d4.notas.find(n => n.id === gen.id);
+    comprobar('«Abrir documento» abre el documento del esquema con su tira', gen.conTira && !!princ && princ.guion.principal === true && princ.guion.eid === gen.eid, JSON.stringify(princ && princ.guion));
+    comprobar('«Guardar versión…» guarda con el nombre del modal', gen.conVersion === 'v1' && (princ.versiones || []).map(v => v.nombre).join() === 'v1,v2', JSON.stringify((princ.versiones || []).map(v => v.nombre)));
+    comprobar('comparar enseña lo quitado y lo añadido', gen.cmp.some(c => /vs-menos/.test(c)) && gen.cmp.some(c => /vs-mas/.test(c)), JSON.stringify(gen.cmp));
+    comprobar('cargar una versión deja su texto en el documento', gen.boton === 'v1' && !/zarpan/.test(gen.html) && princ.html === gen.html, gen.html.slice(0, 80));
     const pdfB = fs.existsSync(gen.pdf) ? fs.readFileSync(gen.pdf) : null, docxB = fs.existsSync(gen.docx) ? fs.readFileSync(gen.docx) : null;
     comprobar('exporta a PDF', pdfB && pdfB.slice(0, 5).toString() === '%PDF-' && pdfB.length > 1000, gen.pdf);
     comprobar('exporta a Word (.docx)', docxB && docxB[0] === 0x50 && docxB[1] === 0x4b && docxB.includes(Buffer.from('word/document.xml')), gen.docx);
@@ -300,13 +356,14 @@ app.whenReady().then(async () => {
       const inp = document.activeElement; inp.value = ${JSON.stringify(titulo)}; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await W(150);`);
     await notaNueva('Nota en la plantilla');
     await js(`const d = Claquedraw.gestor.documentos(), e = d.datos.contenedores[0].esquemas[0];
-      Claquedraw.app.montarEsquema(e.id); Claquedraw.app.vista('texto', 'p1'); await W(900);
-      const w = document.getElementById('editorMarco').contentWindow, cab = w.document.querySelector('#editor > .cd-seccion[data-seccion="p1"]');
-      w.Ed.setCaret(cab.nextElementSibling, 0); w.document.execCommand('insertHTML', false, '<p class="sp-scene">INT. BARCO – DÍA</p>'); await W(600);
+      Claquedraw.app.montarEsquema(e.id); Claquedraw.app.vista('esquema'); await W(400);
+      document.querySelector('#abrirDoc').click(); await W(900);
+      const w = document.getElementById('editorMarco').contentWindow;
+      w.Ed.document.set({ title: 'Documento', html: '<p class="sp-scene">INT. BARCO – DÍA</p>', characters: {} }); await W(700);
       Claquedraw.app.vista('esquema'); await W(300);`);
     await espera(2500);
     await mismo(NUEVO, 'lo editado en el proyecto de la plantilla se escribe solo en su archivo');
-    comprobar('lleva la nota y el texto de la sección', /Nota en la plantilla/.test(leerArchivo(NUEVO).texto) && /INT\. BARCO – DÍA/.test(leerArchivo(NUEVO).texto));
+    comprobar('lleva la nota y el documento del esquema', /Nota en la plantilla/.test(leerArchivo(NUEVO).texto) && /INT\. BARCO – DÍA/.test(leerArchivo(NUEVO).texto));
     comprobar('el indicador dice guardado', (await indicador()).includes('ok'), await indicador());
 
     /* un cambio y cerrar enseguida (antes del segundo de espera del autoguardado): cerrar lo escribe */

@@ -8,15 +8,15 @@
   const C = raiz.Claquedraw = raiz.Claquedraw || {};
   const ROMANOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
 
-  /* Árbol: { carpeta, hijos } · { esquema, biblioteca? } (con su biblioteca enlazada: del mismo nombre, o `biblioteca` si
-     la lleva) · { biblioteca } (suelta).
+  /* Árbol: { carpeta, hijos } · { esquema } · { biblioteca }. Un esquema ya no estrena biblioteca (Leo, 16-09-2026):
+     cada plantilla dice exactamente las que crea.
      `tono` pinta la tarjeta (uno de los 24 de las tramas); `carpeta` es el color de sus carpetas (los seis de las carpetas).
      Tramas: [nombre, tipo, color]. */
   const PLANTILLAS = [
     { id: 'blanco', nombre: 'En blanco', tono: 'gris', carpeta: 'gris', contenedor: 'Contenedor',
       resumen: 'Un contenedor con un esquema y nada más. Para empezar sin estructura impuesta.',
       chips: ['1 CONTENEDOR', '1 ESQUEMA'],
-      arbol: [{ esquema: 'Esquema', biblioteca: 'Biblioteca' }],   // Leo: «Esquema» y «Biblioteca», no «Esquema 1»
+      arbol: [{ esquema: 'Esquema' }],                             // Leo: «Esquema», no «Esquema 1»
       tramas: [['Trama', 'principal', 'violeta']] },
     { id: 'largo', nombre: 'Largometraje', tono: 'violeta', carpeta: 'violeta', contenedor: 'Película',
       resumen: 'Tres actos, cada uno con su esquema de secuencias, y las localizaciones.',
@@ -54,15 +54,14 @@
   ];
   const plantilla = id => PLANTILLAS.find(p => p.id === id) || PLANTILLAS[0];
 
-  /* El tablero de cada esquema: los tres actos de siempre (los de `inicial()` de las tramas) con las tramas de la plantilla
-     y el primer nodo, «Inicio», en la principal. */
+  /* El tablero de cada esquema: los tres actos de siempre (los de `inicial()` de las tramas) con las tramas de la
+     plantilla y **sin nodos** (Leo, 16-09-2026: el «Inicio» de antes había que borrarlo siempre). */
   function tablero(p) {
     return {
       actos: [{ id: 'a1', nombre: 'Acto I', celdas: 14, fondo: null }, { id: 'a2', nombre: 'Acto II', celdas: 22, fondo: null },
               { id: 'a3', nombre: 'Acto III', celdas: 15, fondo: null }],
       lineas: p.tramas.map(([nombre, tipo, color], i) => ({ id: 'l' + (i + 1), nombre, tipo, color, cortada: false })),
-      puntos: [{ id: 'p1', lineaId: 'l1', actoId: 'a1', celda: 2, titulo: 'Inicio', descripcion: '', color: null, cortado: false }],
-      saltos: [], notas: [], formato: 1
+      puntos: [], saltos: [], notas: [], formato: 1
     };
   }
 
@@ -75,7 +74,6 @@
       if (n.carpeta) { const k = d.crearCarpeta(c.id, n.carpeta, p.carpeta, carpetaId).carpeta; poner(n.hijos || [], k.id); }
       else if (n.esquema) {
         const r = d.crearEsquema(c.id, tablero(p), n.esquema);
-        if (n.biblioteca) d.renombrarSub(r.sub.id, n.biblioteca);
         if (carpetaId) d.moverACarpeta('esquema', r.esquema.id, carpetaId);
       }
       else if (n.biblioteca) { const r = d.crearSub(c.id, n.biblioteca); if (carpetaId) d.moverACarpeta('sub', r.sub.id, carpetaId); }
@@ -90,7 +88,7 @@
     const p = plantilla(id), filas = [{ tipo: 'contenedor', nivel: 0, nombre: p.contenedor }];
     const poner = (nodos, nivel) => nodos.forEach(n => {
       if (n.carpeta) { filas.push({ tipo: 'carpeta', nivel, nombre: n.carpeta }); poner(n.hijos || [], nivel + 1); }
-      else if (n.esquema) { filas.push({ tipo: 'esquema', nivel, nombre: n.esquema }); filas.push({ tipo: 'biblioteca', nivel, nombre: n.biblioteca || n.esquema, enlazada: true }); }
+      else if (n.esquema) filas.push({ tipo: 'esquema', nivel, nombre: n.esquema });
       else filas.push({ tipo: 'biblioteca', nivel, nombre: n.biblioteca });
     });
     poner(p.arbol, 1);
@@ -101,7 +99,8 @@
   function estructura(docs) {
     const conts = ((docs && docs.contenedores) || []).filter(c => !c.oculto);
     const esquemas = conts.reduce((n, c) => n + (c.esquemas || []).length, 0);
-    const bibliotecas = conts.reduce((n, c) => n + (c.subs || []).filter(s => !(c.esquemas || []).some(e => e.subId === s.id)).length, 0);
+    const juntas = new Set(conts.flatMap(c => (c.grupos || []).flatMap(g => g.items)));
+    const bibliotecas = conts.reduce((n, c) => n + (c.subs || []).filter(s => !s.guionEid && !juntas.has(s.id)).length, 0);
     const cuenta = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
     return [cuenta(conts.length, 'CONTENEDOR', 'CONTENEDORES'), cuenta(esquemas, 'ESQUEMA', 'ESQUEMAS')]
       .concat(bibliotecas ? [cuenta(bibliotecas, 'BIBLIOTECA', 'BIBLIOTECAS')] : []).join(' · ');
