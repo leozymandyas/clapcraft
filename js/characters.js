@@ -111,7 +111,7 @@
     const r = document.createRange(); r.selectNodeContents(b); r.collapse(false); Ed.restoreSelection(r);
   }
   function separar(b, editando) {
-    const txt = b.textContent.replace(/​/g, '');
+    const txt = b.textContent.replace(/\u200B/g, '');
     const span = b.querySelector(':scope > .ch-nom');
     /* soltado pero sin anotación y ya fuera del bloque: se recoge el doble espacio y vuelve a ser solo el nombre */
     if (C.suelto(txt) && !editando && !txt.split(DOBLE).slice(1).join('').trim()) {
@@ -196,7 +196,9 @@
       const r = Ed.getRange(); if (!r || !r.collapsed) return;
       const pre = document.createRange(); pre.selectNodeContents(b); pre.setEnd(r.startContainer, r.startOffset);
       const antes = pre.toString();
-      if (!antes.trim() || !/[  ]$/.test(antes)) return;   // solo justo detrás de un espacio
+      if (!antes.trim() || !/[ \u00A0]$/.test(antes)) return;   // solo justo detrás de un espacio
+      /* «LAURA (V.O.)»: un paréntesis tras el nombre abre su extensión (especificación de guion, Leo 17-09-2026) */
+      if (e.data === '(') { e.preventDefault(); soltar(b, clean(antes)); Ed.cmd('insertText', '('); return; }
       if (e.data !== ' ' && !/^\.\s?$/.test(e.data)) return;     // el segundo espacio, o el punto que pone macOS
       e.preventDefault();
       soltar(b, clean(antes));
@@ -212,14 +214,21 @@
   function close() { if (menu) menu.hidden = true; items = []; activeBlock = null; }
   C.isOpen = () => !!menu && !menu.hidden;
 
+  /* Las extensiones de un personaje (especificación de guion, Leo 17-09-2026): con el nombre ya escrito entero, la lista ofrece
+     «Sin extensión» (Enter sigue al diálogo como siempre) y V.O., O.S. y CONT'D (Tab, flechas o clic). */
+  const EXTENSIONES = ['V.O.', 'O.S.', "CONT'D"];
   function render(q) {
     const nq = key(q);
-    items = nq ? C.list().filter(n => key(n).startsWith(nq) && key(n) !== nq) : [];
+    const nombres = nq && !/\(/.test(q) ? C.list().filter(n => key(n).startsWith(nq)) : [];
+    items = nombres.filter(n => key(n) !== nq).map(n => ({ name: n }));
+    const exacto = nombres.find(n => key(n) === nq);
+    if (exacto && !items.length) items = [{ name: exacto, plano: true }].concat(EXTENSIONES.map(x => ({ name: exacto, ext: x })));
     if (!items.length) { close(); return; }
     index = Math.min(index, items.length - 1);
-    menu.innerHTML = '<div class="ctx-title">Personajes</div>' + items.map((n, i) => {
-      const col = C.colorOf(n);
-      return `<button type="button" data-i="${i}" class="${i === index ? 'active' : ''}"><span><i class="char-dot" style="background:${col ? col[2] : '#888'}"></i>${Ed.escapeHtml(n.toUpperCase())}</span>${i === 0 ? '<kbd>Tab</kbd>' : ''}</button>`;
+    menu.innerHTML = '<div class="ctx-title">' + (items[0].plano ? 'Extensión' : 'Personajes') + '</div>' + items.map((it, i) => {
+      const col = C.colorOf(it.name);
+      const txt = it.plano ? 'Sin extensión' : it.name.toUpperCase() + (it.ext ? ' (' + it.ext + ')' : '');
+      return `<button type="button" data-i="${i}" class="${i === index ? 'active' : ''}"><span><i class="char-dot" style="background:${col ? col[2] : '#888'}"></i>${Ed.escapeHtml(txt)}</span>${i === 0 && !it.plano ? '<kbd>Tab</kbd>' : ''}</button>`;
     }).join('');
     menu.hidden = false;
     const r = Ed.getRange();
@@ -254,11 +263,12 @@
   /* rellena el bloque con el nombre elegido y lo suelta: ahí mismo se escribe la anotación, y el siguiente Enter ya
      pasa al diálogo como siempre (Leo, 16-09-2026: «al seleccionar con Enter hace el Enter de inmediato») */
   function accept(i) {
-    const name = items[i];
+    const it = items[i];
     const block = activeBlock;
     close();
-    if (!name || !block) return;
-    soltar(block, name);
+    if (!it || !block || it.plano) return;
+    soltar(block, it.name);
+    if (it.ext) { Ed.cmd('insertText', '(' + it.ext + ')'); if (Ed.afterChange) Ed.afterChange(); }
   }
 
   C.onInput = function (e) {
@@ -278,7 +288,9 @@
     if (!menu || menu.hidden) return false;
     if (e.key === 'ArrowDown') { e.preventDefault(); index = (index + 1) % items.length; render(clean(activeBlock.textContent)); return true; }
     if (e.key === 'ArrowUp') { e.preventDefault(); index = (index - 1 + items.length) % items.length; render(clean(activeBlock.textContent)); return true; }
+    if (e.key === 'Tab' && items[index] && items[index].plano) { close(); return false; }   // «Sin extensión»: el Tab de siempre
     if (e.key === 'Tab') { e.preventDefault(); accept(index); return true; }
+    if (e.key === 'Enter' && !e.shiftKey && items[index] && items[index].plano) { close(); return false; }   // «Sin extensión»: el Enter de siempre, al diálogo
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); accept(index); return true; }   // elige y suelta: el Enter al diálogo es el siguiente
     if (e.key === 'Escape') { e.preventDefault(); close(); return true; }
     return false;

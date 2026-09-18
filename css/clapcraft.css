@@ -237,13 +237,15 @@ body.con-ruta .rail { opacity: .15; }
 .nota.sel { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
 .nota span { line-height: 22px; padding: 0 8px; }
 /* continua, de 2 px y del color de la trama del nodo; con un punto donde toca el carril (Leo, 16-09-2026) */
-.nota::before { background: var(--gl, var(--borde-fuerte)); }
-.nota::after { content: ''; position: absolute; left: 50%; top: calc(-2px - var(--guia, 13px)); width: 5px; height: 5px; margin-left: -2.5px;
-        border-radius: 50%; background: var(--gl, var(--borde-fuerte)); box-shadow: 0 0 0 2px var(--lienzo); }
+.nota::before { background: var(--nc); }
+.nota::after { content: ''; position: absolute; left: var(--gx, 50%); top: calc(-2px - var(--guia, 13px)); width: 5px; height: 5px; margin-left: -2.5px;
+        border-radius: 50%; background: var(--nc); box-shadow: 0 0 0 2px var(--lienzo); }
 .nota:hover::after, .nota.sel::after { box-shadow: 0 0 0 2px var(--lienzo), 0 0 0 4px var(--foco-halo); }
-/* Una nota con color (rediseño 9): fondo pálido y borde de su tono (--tf/--tc, tablero.js), texto en tinta. Al pasar el
-   ratón se marca la guía que la une a la trama: raya continua de su tono, marca con halo y sombra alta. */
-.nota { --nc: var(--nota-tinta); --nh: var(--nota); }
+/* Una nota con color (rediseño 9): fondo pálido y borde de su tono (--tf/--tc, tablero.js), texto en tinta. **La guía que la
+   une a la trama y su punto van siempre del color de la nota** (`--nc`: su tono, o el dorado de la nota de papel; 1.1.18, Leo:
+   «deben ser del mismo color que la nota todo el tiempo, no solo al hacer hover»; antes, quieta, del color de la trama). Al
+   pasar el ratón, marca con halo y sombra alta. */
+.nota { --nc: var(--nota-tenue); --nh: var(--nota); }
 /* **Una nota con color sigue siendo papel de nota** (Leo, 16-09-2026: con el fondo pálido y el borde del tono entero «se
    ven más como nodos que notas»): un papel apenas teñido de su tono (sobre el papel amarillo, los fríos salían turbios),
    con el borde suave y la letra en cursiva de la nota */
@@ -254,7 +256,6 @@ body.con-ruta .rail { opacity: .15; }
 .nota.con-color:hover { border-color: color-mix(in oklab, var(--tc) 50%, var(--borde)); }
 .nota.con-color.sel { border-color: var(--foco); }
 .nota:hover { box-shadow: var(--sombra-alta); }
-.nota:hover::before, .nota.sel::before { background: var(--nc); }
 .nota-edit { font: 400 10.5px var(--sans); font-style: normal; border: 1px solid var(--foco); border-radius: 3px; box-shadow: 0 0 0 3px var(--foco-halo); }
 .hueco:hover { border-radius: 3px; }
 .add-nota { border: 1px dashed var(--nota-borde); border-radius: 3px; }
@@ -526,6 +527,12 @@ body.tablero-personajes #esquema .add-linea button::after { content: 'personaje'
 /* la trama: fondo opaco sin color (como la columna del tablero); los nodos pasan por debajo */
 .hilo-trama { position: sticky; left: 0; z-index: 3; width: 48px; flex: 0 0 48px; margin: 0; padding: 0; justify-content: center; border-right: 1px solid var(--regla);
               background: var(--lienzo); }
+/* las flechas que pasan a la trama de arriba o de abajo (texto.js), encima y debajo del círculo */
+.hilo-trama.con-flechas { flex-direction: column; gap: 3px; }
+.hilo-cambiar { width: 26px; height: 17px; padding: 0; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel); color: var(--tinta);
+  display: grid; place-items: center; cursor: pointer; box-shadow: var(--sombra); }
+.hilo-cambiar:hover:not(:disabled) { color: var(--foco); border-color: var(--foco); background: var(--foco-suave); }
+.hilo-cambiar:disabled { opacity: .35; cursor: default; box-shadow: none; }
 .hilo-pista { flex: 1 0 auto; padding: 0 24px; }                /* tan ancha como sus nodos: la raya llega al último */
 .hilo-pista::before { left: 24px; right: 24px; bottom: 45px; height: 2px; opacity: .62; }
 .hilo-pista.alterna::before { opacity: .45; }
@@ -1278,3 +1285,75 @@ input.gd-edit { box-sizing: border-box; width: 100%; min-width: 0; max-width: 10
 .vs-mas::before { content: '+'; color: var(--t-verde); }
 .vs-menos { background: var(--f-rojo); color: var(--tenue); text-decoration: line-through; }
 .vs-menos::before { content: '−'; color: var(--t-rojo); text-decoration: none; }
+
+/* el rótulo de un nodo, **también quieto**, del color del nodo (el suyo o el de su trama): antes solo lo tomaba al pasar el
+   ratón y al cambiar el color del nodo el rótulo seguía igual (Leo, 18-09-2026). Al pasar el ratón, algo más intenso. Lo mismo
+   en la tira del editor. Gana a las reglas de la piel de arriba. */
+#board .pt.con-rotulo .cap { background: color-mix(in oklab, var(--c) 7%, var(--papel)); border-color: color-mix(in oklab, var(--c) 32%, var(--borde)); }
+#board .pt.con-rotulo:hover .cap { background: color-mix(in oklab, var(--c) 11%, var(--papel)); border-color: color-mix(in oklab, var(--c) 45%, var(--borde)); }
+#board .pt.con-rotulo.sel .cap { background: color-mix(in oklab, var(--c) 11%, var(--papel)); border-color: color-mix(in oklab, var(--c) 60%, var(--borde)); }
+.hilo-nodo.con-rotulo .hilo-tit { background: color-mix(in oklab, var(--c, var(--t-azul)) 7%, var(--papel)); border-color: color-mix(in oklab, var(--c, var(--t-azul)) 32%, var(--borde)); }
+.hilo-nodo.con-rotulo:hover .hilo-tit { background: color-mix(in oklab, var(--c, var(--t-azul)) 11%, var(--papel)); border-color: color-mix(in oklab, var(--c, var(--t-azul)) 45%, var(--borde)); }
+#board .nota:hover:not(.arrastrando) { height: auto; min-height: 24px; }
+
+/* las notas del esquema en la tira del editor, como puntos (texto.js; Leo, 18-09-2026, 1.1.17: las tarjetas ocupaban mucho):
+   bajo el nodo, uno por nota y del color de la nota (papel si no lleva); bajo la mitad de un enlace o en su raya, los de sus
+   notas, que al pasar el ratón las enseñan en el globo (las del nodo, al pasar por el nodo) */
+.hilo-notas { position: absolute; top: 57px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 3px;
+  pointer-events: none; white-space: nowrap; }
+.hilo-nodo.caja .hilo-notas, .hilo-nodo.rombo .hilo-notas { left: calc(50% + 7px); transform: none; }   /* al lado del trazo del salto */
+.hilo-np { display: block; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--nc);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--nc) 60%, var(--tinta)); }
+.hilo-np.papel { background: var(--nota); box-shadow: 0 0 0 1px var(--nota-borde); }
+.hilo-notas b { font: 600 9px/1 var(--mono); color: var(--tenue); }
+.hilo-notas-enlace { z-index: 2; pointer-events: auto; padding: 5px 6px; margin-top: -5px; border-radius: 8px; cursor: default; }
+.hilo-notas-enlace:hover { background: color-mix(in srgb, var(--hover) 60%, transparent); }
+.hilo-notas-enlace:hover .hilo-np { transform: scale(1.25); }
+/* un rótulo que va debajo del eje baja un poco más si el nodo lleva puntos */
+.hilo-nodo.con-rotulo.rotulo-abajo.con-notas::before { top: 64px; height: 4px; }
+.hilo-nodo.con-rotulo.rotulo-abajo.con-notas .hilo-tit { top: 68px; }
+/* en el globo: las notas debajo de la descripción del nodo (o solas, las de un enlace), un renglón por nota */
+#tip .tip-notas { margin-top: 7px; padding-top: 6px; border-top: 1px solid color-mix(in srgb, currentColor 22%, transparent); display: grid; gap: 5px; }
+#tip .tip-notas.sola { margin-top: 0; padding-top: 0; border-top: 0; }
+#tip .tip-notas .tip-t { margin: 0; font: 400 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+#tip .tip-nota { display: flex; align-items: baseline; gap: 7px; font-style: italic; }
+#tip .tip-nota .hilo-np { position: relative; top: -1px; }
+#tip .tip-nota span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+
+
+/* el panel lateral de una nota en el segmento expandido y en la biblioteca (Leo, 18-09-2026): su nombre y la descripción,
+   que es el documento en texto plano (las tablas, como tablas) y ocupa todo lo demás. El color se cambia en el «⋯» de la nota
+   (1.1.17, Leo: «que se siga haciendo desde los tres puntos, para no afectar al campo descripción, que es el importante»). */
+.gd-exp-medio { flex: 1; min-height: 0; display: flex; }
+.gd-exp-medio > .gd-exp-cuerpo { flex: 1; min-width: 0; }
+.gd-bib-medio > .gd-cuerpo { min-width: 0; }                /* la biblioteca, con el panel de la nota a su derecha */
+.gd-exp-lado { position: relative; flex: 0 0 var(--lado-nota, 360px); max-width: max(280px, calc(100% - 320px)); min-height: 0; display: flex;
+  flex-direction: column; gap: 14px; padding: 14px 16px 16px; border-top: 1px solid var(--regla); border-left: 1px solid var(--borde); background: var(--papel);
+  overflow: hidden; }                                          /* `aside` de tramas.css le daba `overflow: auto` y recortaba medio borde */
+/* su borde izquierdo se arrastra para ensancharlo (gestor.js, `--lado-nota`): una franja de 8 px por dentro, que al pasar el
+   ratón se marca en acento */
+.gd-lado-asa { position: absolute; left: 0; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 3; touch-action: none; }
+.gd-lado-asa::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; transition: background .12s; }
+.gd-lado-asa:hover::after, .gd-lado-asa.activa::after { background: var(--foco); }
+body.redimensionando-lado, body.redimensionando-lado * { cursor: ew-resize !important; user-select: none !important; }
+.gd-exp-lado[hidden] { display: none; }
+.gd-lado-cab { display: flex; align-items: center; gap: 4px; }
+.gd-lado-rot, .gd-lado-campo > span { font: 400 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido); }
+.gd-lado-campo { display: flex; flex-direction: column; gap: 6px; }
+.gd-lado-titulo { height: 32px; padding: 0 9px; border: 1px solid var(--borde); border-radius: 5px; background: var(--lienzo); color: var(--tinta); font: 500 14px var(--sans); }
+.gd-lado-titulo:focus, .gd-lado-texto:focus { outline: none; border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.gd-lado-crece { flex: 1; min-height: 0; }
+.gd-lado-texto { flex: 1; min-height: 120px; overflow: auto; padding: 10px 11px; border: 1px solid var(--borde); border-radius: 5px; background: var(--lienzo);
+  color: var(--tinta); font: 400 13px/1.5 var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+.gd-lado-texto:has(> p:only-child > br:only-child)::before { content: attr(data-vacio); position: absolute; color: var(--palido); pointer-events: none; }
+.gd-lado-texto { position: relative; }
+.gd-lado-texto p { margin: 0 0 4px; }
+.gd-lado-texto table { border-collapse: collapse; margin: 6px 0 10px; width: 100%; font-size: 12px; white-space: normal; }
+.gd-lado-texto td, .gd-lado-texto th { border: 1px solid var(--borde-fuerte); padding: 3px 6px; vertical-align: top; min-width: 2em; }
+.gd-lado-texto th { background: var(--panel); font-weight: 600; }
+.gd-lado-fijo { display: inline-block; margin: 4px 0 8px; padding: 2px 8px; border: 1px dashed var(--borde-fuerte); border-radius: 4px;
+  font: 400 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--palido); user-select: none; }
+/* la papelera (18-09-2026): lo tirado entero —esquemas, bibliotecas y personajes— arriba, con su etiqueta de tipo */
+.gd-pieza { display: flex; align-items: center; gap: 8px; }
+.gd-nota.gd-pieza > .gd-chip { flex: none; min-width: 22px; width: 22px; padding: 0; font-weight: 600; }   /* no es el título: no crece */
+.gd-pieza-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

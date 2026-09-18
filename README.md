@@ -5,7 +5,7 @@ nodos), escribes el texto de cada paso en un **editor de guion** y organizas el 
 **bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
 navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-**Versión 1.1.0**
+**Versión 1.1.18**
 
 ## Instalar
 
@@ -39,6 +39,11 @@ vez, clic derecho → Abrir. Los archivos `.clapcraft` quedan asociados: un dobl
   (que siempre van juntos) o de una carpeta. En Personajes, los personajes y sus carpetas también se ordenan arrastrando.
 - Todo el árbol se **ordena arrastrando**: contenedores, esquemas y bibliotecas, también de un contenedor
   a otro. Doble clic renombra.
+- **Duplicar**: el `⋯` de un esquema o de una biblioteca hace una copia con todo lo que tiene dentro (nodos, notas y documento
+  con sus versiones; segmentos, secciones y notas), justo debajo del original y en su mismo grupo.
+- **Papelera**: los esquemas, las bibliotecas y los personajes van **enteros** a la papelera («Mover a la papelera»), con todo
+  lo suyo, y se restauran desde ahí (doble clic o su `⋯`) a su contenedor, su carpeta y su grupo. Un personaje restaurado
+  recupera sus carriles. Eliminar un contenedor manda sus esquemas y bibliotecas a la papelera.
 
 ### Esquema de pasos
 
@@ -61,11 +66,14 @@ El tablero donde se estructura la historia.
   celda; su nombre va sobre su línea vertical (doble clic lo cambia) y se mueven arrastrándola. **Al elegir su línea se
   abre su panel**, con su título y su descripción, como si eligieras uno de sus nodos. Lo que queda fuera del
   hilo de la historia se ve apagado.
-- El **rótulo** de un nodo funciona como el nodo: al pulsarlo queda elegido y desde ahí también se arrastra.
-- **Notas** en post-it: colgadas de un nodo («Nota en este nodo», en su menú) o **de la mitad del tramo entre dos
+- El **rótulo** de un nodo funciona como el nodo: al pulsarlo queda elegido y desde ahí también se arrastra. Lleva el color
+  del nodo (el suyo o el de su trama).
+- **Copiar y pegar**: lo copiado se lleva las notas de sus enlaces y de las rayas de alrededor, y al pegarlo no se mete
+  entre nodos que ya estaban (se corre a la derecha hasta un sitio libre).
+- **Notas** en post-it: colgadas de un nodo («Agregar nota», en su menú o en su panel) o **de la mitad del tramo entre dos
   nodos**, con una guía de su color hasta la línea de la trama; caben varias en el mismo sitio. Se arrastran de tramo en tramo y **se ordenan arrastrándolas encima o debajo de las otras** —también
   una de enlace sobre las de un nodo, y al revés—, que se apartan con animación. **Arriba, a la altura de la línea de
-  la trama, la nota se cuelga del nodo; más abajo, entre las notas, solo cambia de orden.** La guía que une una nota con su nodo va del color de su trama. Con clic
+  la trama, la nota se cuelga del nodo; más abajo, entre las notas, solo cambia de orden.** La guía que une una nota con su nodo va siempre del color de la nota. Con clic
   derecho se les da uno de los 24 colores de la paleta; su texto va en **itálica**, para no confundirlas con los
   nombres de los nodos.
 - **Los nombres se guardan al salir del campo**: al renombrar un nodo, una nota, una trama, un acto o algo del árbol
@@ -86,10 +94,15 @@ El tablero donde se estructura la historia.
 - **Segmento expandido**: el icono de expandir de cualquier segmento (bandeja, segmentos, actos, momentos y
   Apariciones) lo abre a todo el lienzo, con sus notas en rejilla, sus primeras líneas y su fecha; se ordenan
   arrastrando y «Contraer» (o Esc) vuelve.
+- **Panel de la nota**: un clic en una nota (en la biblioteca o en un segmento expandido) abre a la derecha su panel, con su
+  nombre y un campo de descripción amplio de texto plano (las tablas se ven como tablas). Lo que escribes ahí es el texto del
+  documento: se ve igual al abrirlo en el editor. El botón de **expandir** lo abre en el editor, el panel se **ensancha
+  arrastrando su borde izquierdo** (doble clic en el borde vuelve al ancho de partida) y el color se cambia en el `⋯` de la
+  nota. Un clic fuera o Esc lo cierra.
 - Doble clic en una nota la abre en el editor, con las migas encima (contenedor › biblioteca › segmento). La
   etiqueta del segmento abre ese segmento expandido, con la nota marcada.
-- **Papelera**: guarda lo que tiras con su origen; se restaura arrastrándolo a una biblioteca y se vacía
-  sola a los 30 días.
+- **Papelera**: guarda lo que tiras con su origen; una nota se restaura arrastrándola a una biblioteca, y un esquema, una
+  biblioteca o un personaje, con doble clic o su `⋯`. Se vacía sola a los 30 días.
 
 ### Texto: el editor
 
@@ -97,21 +110,47 @@ El tablero donde se estructura la historia.
   normal, sin secciones ni cabeceras intercaladas. Lo que se hubiera escrito antes en cada nodo se juntó dentro
   la primera vez que se abrió.
 - **Línea de tiempo**: encima de la hoja se queda la tira de la trama, **de referencia**: enseña los nodos con su
-  nombre y, al pulsar un salto, pasa a la trama del otro extremo. Ya no lleva a ninguna parte.
+  nombre y, al pulsar un salto, pasa a la trama del otro extremo. **Las notas del esquema** se marcan con puntos de su color:
+  bajo el nodo (al pasar el ratón por el nodo se leen, con su descripción) o bajo la mitad del enlace (al pasar por esos puntos
+  se leen las del enlace). Las **flechas** de encima y de debajo del círculo de la trama pasan a la trama de arriba o de abajo.
 - **Versiones**: el botón con el nombre de la versión (barra inferior) abre la lista, con su fecha y sus palabras y
   la **Actual** marcada. **«Guardar versión…»** pide un nombre; pulsar una la carga (avisa si lo de ahora no está
   guardado), el doble clic la renombra y la «×» la borra. **«Comparar con la actual…»** enfrenta las dos por
   párrafos: lo igual apagado, lo añadido en verde y lo quitado tachado.
-- **Exportar** (barra inferior): PDF, Word (.docx) y texto sin formato, de lo que tengas abierto.
-- **Elementos de guion**: encabezado de escena, acción, personaje, paréntico, diálogo, transición y toma,
-  con su sangría y mayúsculas. **Enter** pasa al elemento que suele seguir (escena → acción, personaje →
-  diálogo, diálogo → personaje…); en uno vacío lo convierte en acción. **Tab** cambia el elemento de la
-  línea (Mayús+Tab, al anterior).
+- **Exportar** (barra inferior): PDF, Word (.docx) y texto sin formato, de lo que tengas abierto, con el mismo formato de
+  guion; el menú deja **ocultar las notas del guion**. El **PDF se maqueta como un guion impreso**: 54 renglones por página,
+  numeradas arriba a la derecha desde la segunda, y un diálogo que no cabe se parte al final de una oración con «(MORE)» abajo
+  y «NOMBRE (CONT'D)» arriba de la página siguiente; un encabezado nunca queda solo al pie ni una transición al principio.
+- **Elementos de guion** (formato de TV, Courier 12): encabezado de escena, **encabezado secundario** (las entrevistas a
+  cámara, sin número), acción, personaje, paréntesis, diálogo, transición, toma, **acto / sección** (centrado y subrayado;
+  empieza página nueva, salvo los «FIN…»), **nota** (gris y entre corchetes) y **montaje**. Las sangrías son las de un guion
+  impreso, en caracteres: el personaje empieza siempre en el mismo sitio (no se centra), el paréntesis y el diálogo tienen
+  su ancho, y personaje → paréntesis → diálogo van pegados. **Enter** pasa al elemento que sigue (escena → acción,
+  personaje → diálogo, diálogo → acción, transición → escena, acto → escena…) y **en una línea vacía abre el menú «/»**
+  (Esc lo cierra). **Tab** al final de una línea con texto abre la siguiente (acción → personaje, personaje →
+  paréntesis, diálogo → paréntesis); en una línea vacía, o a mitad, cambia su tipo (en los demás elementos, al siguiente;
+  Mayús+Tab, al anterior). **Ctrl+1…6**: escena, acción, personaje, paréntesis,
+  diálogo, transición.
+- **Conversiones y sugerencias**: «int», «ext» o «int/ext» al principio de una escena pasan a «INT.», «EXT.» o «INT./EXT.»;
+  los paréntesis del paréntesis y los corchetes de la nota los pone el editor; una transición sin «:» lo recibe al salir de
+  ella («FADE IN:» va a la izquierda). Al escribir una escena se sugieren los lugares ya usados y, tras « - », el momento
+  (DÍA, NOCHE, MÁS TARDE…); también transiciones, tomas, actos y encabezados secundarios.
+- **Nº escenas** (barra inferior): numera las escenas («ESCENA 1 - INT. …»); los secundarios no cuentan.
+- **Diálogo doble** (dos personajes que hablan a la vez): «/dialogo-doble» (o el clic derecho) en un diálogo lo junta con el
+  de antes en dos columnas; en una línea vacía pone uno en blanco, y dentro de uno lo vuelve a separar. Enter va del personaje
+  al diálogo, del diálogo de la izquierda a la columna de la derecha y de ahí a una acción debajo; Retroceso no mezcla las
+  columnas. No se parte entre páginas y sale igual en el PDF, en Word y en texto.
+- **Portada**: «/portada» abre un formulario (título, episodio, escrito por, basado en, versión, fecha y contacto) y la pone
+  como una hoja propia antes del guion, sin número; un clic en ella la edita o la quita.
+- **Sangrías de un guion real de TV** (medidas sobre el piloto de *The Office*): diálogo a 2,25 in con 42 caracteres de ancho,
+  paréntesis a 2,7 in y personaje a 3,3 in.
 - **Menú «/»**: escribe `/` al principio de una línea para elegir elemento (con Modo guion activo) o
   bloques de texto: títulos, listas, cita, código, tabla, base de datos, línea y enlace.
 - **Personajes**: cada nombre lleva su color, como un marcatextos; al escribir un personaje aparecen
   sugerencias (`Tab` completa, `Enter` completa y pasa al diálogo). Clic derecho sobre el nombre cambia su
   color en todo el guion.
+- **Extensiones del personaje**: con el nombre escrito entero, las sugerencias ofrecen «Sin extensión» (Enter sigue al
+  diálogo), **(V.O.)**, **(O.S.)** y **(CONT'D)**; escribir «(» detrás del nombre también la empieza.
 - **Anotaciones del personaje** («V.O.», «CONT'D», «(O.S.)»…): al **elegir un personaje de las sugerencias** (Enter,
   Tab o con el ratón) el nombre queda fijo y el cursor se pone detrás, listo para la anotación, que se escribe como
   texto normal fuera del color; el **siguiente** Enter es el de siempre y pasa al diálogo. Un **doble espacio** tras el
@@ -119,9 +158,10 @@ El tablero donde se estructura la historia.
   escribes nada detrás, al salir del bloque queda solo el nombre.
 - **Escribir en un hueco**: un clic en el espacio en blanco de la hoja, debajo de lo escrito, baja hasta ahí
   con las líneas que hagan falta; ya no hay que pulsar Intro hasta llegar (`Cmd/Ctrl+Z` lo deshace).
-- **Páginas**: la hoja se ve partida en páginas numeradas y la barra inferior dice cuántas lleva y cuánto
-  duraría (una página ≈ un minuto). Se cuenta como una página de guion impresa (Carta, Courier 12 pt, unas
-  54 líneas de 60 caracteres), sea cual sea el ancho de la hoja en pantalla.
+- **Páginas**: la hoja se ve partida en páginas, numeradas arriba a la derecha («2.»; la primera no lleva número), y la barra inferior dice cuántas lleva y cuánto
+  duraría (una página ≈ un minuto). **Las reparte el mismo maquetador que el PDF**, así que el contador y los saltos coinciden
+  con lo que sale al exportar (con las escenas numeradas y sin las notas si así lo exportas), sea cual sea el ancho de la hoja
+  en pantalla. Donde el PDF parte un diálogo o una acción, la hoja lleva una raya.
 - **Barra inferior**: tamaño del texto, ancho de la hoja, páginas, **Modo guion**, **Typewriter** (la línea
   del cursor se queda centrada), **Ortografía** (español e inglés, sin conexión; no marca nombres de
   personajes) y plegar el menú.
@@ -197,6 +237,7 @@ Se entra desde el pie del menú lateral.
 | `Cmd+Shift+↑` / `Cmd+Shift+↓` · `Cmd+D` | Mover bloque · duplicar bloque |
 | `Cmd` + `+` / `-` / `0` o `Cmd+rueda` | Tamaño del texto |
 | `Tab` / `Shift+Tab` | Elemento de guion siguiente / anterior (en tablas, celda; en listas, sangría) |
+| `Ctrl+1` … `Ctrl+6` | Escena, acción, personaje, paréntesis, diálogo, transición |
 
 ## Atajos Markdown
 
@@ -250,8 +291,9 @@ espacio global `window.Claquedraw`. Las decisiones de diseño y las reglas que c
 | `js/claquedraw/biblioteca.js` | Modelo de las pestañas (proyectos abiertos) |
 | `js/claquedraw/relaciones.js` | Refleja las relaciones entre personajes en el tablero de cada uno |
 | `js/claquedraw/plantillas.js`, `js/claquedraw/proyectos.js` | Plantillas de proyecto; pantallas «Nuevo proyecto» y «Sin proyectos» |
+| `js/claquedraw/maquetar.js`, `js/claquedraw/exportar.js` | Reparto en páginas de un guion impreso (lo usan el PDF y el contador del editor); exportar a PDF, Word y texto |
 | `js/tramas/modelo.js`, `js/tramas/tablero.js` | Esquema de pasos: modelo puro y tablero |
-| `index.html`, `js/*.js` | El editor: formato, guion, personajes, páginas, bloques, tablas, bases de datos, corrector |
+| `index.html`, `js/*.js` | El editor: formato, guion (y diálogo doble, `doble.js`), personajes, portada, páginas, bloques, tablas, bases de datos, corrector |
 | `css/clapcraft.css`, `css/clapcraft-editor.css` | La piel de ClapCraft sobre las hojas base (`claquedraw.css`, `tramas.css`, `editor.css`): grises neutros, acento violeta (#6141C9 / #B3A6F7) y los 24 tonos de tramas, nodos y notas |
 | `electron/` | Proceso principal (menú, diálogos, lectura y escritura de archivos) y preload |
 | `test/` | Pruebas de `documentos.js`, `modelo.js` y `biblioteca.js` |

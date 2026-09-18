@@ -162,8 +162,8 @@ app.whenReady().then(async () => {
       const nota = [...document.querySelectorAll('#board .nota')].find(n => /Nota de enlace/.test(n.textContent));
       const arriba = [...document.querySelectorAll('#board .nota')].find(n => /Nota de nodo A/.test(n.textContent));
       const rn = nota.getBoundingClientRect(), ra = arriba.getBoundingClientRect();
-      const x = Math.round(ra.left + ra.width / 2);
-      const x0 = Math.round(rn.left + 40), y0 = Math.round(rn.top + rn.height / 2), y1 = Math.round(ra.top + 2);
+      /* solo hacia arriba, sin acercarla al nodo: desde la 1.0.80, cerca de un nodo la nota se cuelga de él */
+      const x0 = Math.round(rn.left + rn.width / 2), y0 = Math.round(rn.top + rn.height / 2), y1 = Math.round(ra.top + 2), x = x0;
       nota.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x0, clientY: y0, button: 0, pointerId: 7 }));
       for (let i = 1; i <= 6; i++) {                           // como el ratón: varios pasos hasta la altura de la primera
         document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: Math.round(x0 + (x - x0) * i / 6), clientY: Math.round(y0 + (y1 - y0) * i / 6), pointerId: 7 }));

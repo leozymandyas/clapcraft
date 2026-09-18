@@ -106,7 +106,7 @@
     calcularRuta();
     document.body.classList.toggle('con-ruta', !!ruta);
     const g = G(), W = totalW(), d = m.datos;
-    $canvas.style.width = (GUTTER + W + 46) + 'px';
+    $canvas.style.width = (GUTTER + W + g + 46) + 'px';          // una columna de más al final: ahí el «+» alarga el tablero
 
     $axis.innerHTML = `<div class="gutter">Tramas</div>
       <div class="eje-cuerpo" style="width:${W + 46}px">
@@ -116,7 +116,7 @@
               <input class="aname" readonly data-acto-nombre="${a.id}" title="Clic: seleccionar · doble clic: renombrar">
               ${d.actos.length > 1 ? `<button class="mini" data-acto-del="${a.id}" title="Eliminar ${esc(m.nombre('acto').toLowerCase())}">×</button>` : ''}
               <span class="handle" data-handle="${a.id}" title="Arrastra para cambiar el ancho"></span></div>`).join('')}
-          <button class="add-acto" id="addActo" style="left:${W}px" title="Nuevo ${esc(m.nombre('acto').toLowerCase())}">+</button>
+          <button class="add-acto" id="addActo" style="left:${W + 10}px" title="Nuevo ${esc(m.nombre('acto').toLowerCase())}">+</button>
         </div>
         <div class="cols">${columnasHtml()}</div>
       </div>`;
@@ -138,7 +138,7 @@
             <span class="ltipo">${ETIQUETA[l.tipo]}</span></span>
           ${l.tipo === 'principal' ? '' : `<button class="mini" data-linea-del="${l.id}" title="Eliminar trama">×</button>`}
         </div>
-        <div class="track" data-linea="${l.id}" style="width:${W}px;background-image:${rejilla}">
+        <div class="track" data-linea="${l.id}" style="width:${W + g}px;background-image:${rejilla}">
           ${d.actos.map(a => `<div class="banda"
              style="left:${offsetDe(a.id)}px;width:${anchoDe(a)}px;background:${fondoActo(a)}"></div>`).join('')}
           ${actoSel ? `<div class="banda sel" style="left:${offsetDe(actoSel.id)}px;width:${anchoDe(actoSel)}px"></div>` : ''}
@@ -155,7 +155,7 @@
       m.notasDeLinea(l.id).forEach(nt => {
         const a = m.punto(nt.deId), b = nt.aId && m.punto(nt.aId);
         const el = document.createElement('div');
-        el.className = 'nota' + (b ? '' : ' de-nodo') + (esSel('nota', nt.id) ? ' sel' : '') + (nt.color ? ' con-color' : '');
+        el.className = 'nota' + (b || nt.abierta ? '' : ' de-nodo') + (nt.abierta ? ' abierta' : '') + (esSel('nota', nt.id) ? ' sel' : '') + (nt.color ? ' con-color' : '');
         el.dataset.nota = nt.id;
         if (nt.color) { el.style.setProperty('--tc', tono(nt.color)); el.style.setProperty('--tf', `var(--f-${nt.color})`); }   // su tono: trazo y fondo pálido
         el.style.setProperty('--gl', tono(l.color));           // el color de su trama: la guía que la une a su nodo (Leo, 16-09-2026)
@@ -182,6 +182,11 @@
         track.appendChild(seg);
       }
 
+      if (sel && sel.tipo === 'raya' && sel.id.split('|')[0] === l.id) {   // la raya elegida, como un enlace elegido
+        const c = +sel.id.split('|')[1], ra = document.createElement('div');
+        ra.className = 'cadena raya sel'; ra.style.left = px(c) + 'px'; ra.style.width = G() + 'px';
+        ra.style.background = tono(l.color); ra.style.color = tono(l.color); track.appendChild(ra);
+      }
       props.forEach((p, i) => track.appendChild(nodo(p, l, i)));
       $rows.appendChild(row);
       filas.push(row);
@@ -348,6 +353,7 @@
     el.dataset.punto = p.id;
     el.innerHTML = `<span class="dot" style="background:${tono(p.color || l.color)};color:${tono(p.color || l.color)}" tabindex="0"></span><span class="cap"></span>`;
     el.querySelector('.cap').textContent = p.titulo;
+    ponerResumen(el.querySelector('.cap'), p);
     return el;
   }
 
@@ -368,6 +374,15 @@
     const hueco = Math.min(izq ? (x - xDe(izq)) : Infinity, der ? (xDe(der) - x) : Infinity);
     const libre = hueco === Infinity ? ANCHO_TOPE : Math.round(hueco - HOLGURA_ROTULO * 2);   // sin llegar al nodo vecino
     return Math.max(minimo, Math.min(ANCHO_TOPE, libre));
+  }
+  /* Dónde cuelga una nota (`x`) y lo ancho que puede ser (`max`): de un nodo, en el nodo; de un enlace, a mitad del tramo; y
+     **de una raya** (Leo, 17-09-2026: «las rayas son enlaces, los puntos son los nodos»), a mitad de su raya, entre su columna
+     y la siguiente. */
+  function sitioNota(nt) {
+    if (nt.abierta) return m.lineaDeNota(nt) ? { x: px(m.colNota(nt)) + G() / 2, max: NOTA_MAX } : null;
+    const a = m.punto(nt.deId), b = nt.aId && m.punto(nt.aId); if (!a) return null;
+    if (b) return { x: (xDe(a) + xDe(b)) / 2, max: Math.max(NOTA_MAX, Math.min(ANCHO_TOPE, Math.round(Math.abs(xDe(b) - xDe(a)) - HOLGURA_NOTA))) };
+    return { x: xDe(a), max: sitioDe(a, m.puntosDe(a.lineaId), NOTA_MAX) };
   }
   function colocarRotulos(row) {
     const track = row.querySelector('.track'); if (!track) return { arriba: 0, abajo: 0 };
@@ -395,7 +410,7 @@
     const piezas = [];
     Array.from(track.querySelectorAll(':scope > .nota')).forEach(el => {
       const nt = m.nota(el.dataset.nota); if (!nt) return;
-      const a = m.punto(nt.deId), b = nt.aId && m.punto(nt.aId); if (!a) return;
+      const sitio = sitioNota(nt); if (!sitio) return;
       el.style.marginTop = ''; el.style.left = ''; el.style.width = ''; el.style.maxWidth = '';
       /* `orden`: el de la lista, que es el que se cambia arrastrando una nota sobre otra (Leo, 16-09-2026); `clave`
          ordena por sitio —el tramo o el nodo—, no por el borde de cada nota, que cambia con lo larga que sea */
@@ -403,12 +418,10 @@
       /* Las dos clases de nota se ponen igual: **a su medida y colgadas de su sitio** —el nodo, o la mitad del tramo
          que une dos nodos (Leo, 16-09-2026: «su ancla debe ser la mitad de la unión entre dos nodos»)—, con su guía
          hasta el carril. Antes la de tramo se estiraba de nodo a nodo y crecía con la escala. */
-      const x = b ? (xDe(a) + xDe(b)) / 2 : xDe(a);
-      const hueco = b ? Math.abs(xDe(b) - xDe(a)) - HOLGURA_NOTA : null;
-      el.style.maxWidth = (b ? Math.max(NOTA_MAX, Math.min(ANCHO_TOPE, Math.round(hueco)))
-                             : sitioDe(a, m.puntosDe(a.lineaId), NOTA_MAX)) + 'px';   // con más escala, más texto a la vista
-      const w = Math.max(44, el.offsetWidth);
-      piezas.push({ el, x1: x - w / 2, ancho: w, centro: x, clave: x, orden });
+      const x = sitio.x;
+      el.style.maxWidth = sitio.max + 'px';                    // con más escala, más texto a la vista
+      const real = el.offsetWidth, w = Math.max(44, real);
+      piezas.push({ el, x1: x - w / 2, ancho: w, real, centro: x, clave: x, orden });
     });
     Array.from(track.querySelectorAll(':scope > .hueco')).forEach(h => {
       const [d, a] = (h.dataset.tramo || '').split('|'), p = m.punto(d), q = m.punto(a);
@@ -429,12 +442,17 @@
       let n = 0;
       while ((usados[n] || []).some(([i, d]) => izq < d + HOLGURA_NOTA && der + HOLGURA_NOTA > i)) n++;
       (usados[n] || (usados[n] = [])).push([izq, der]);
-      z.el.style.left = Math.round(izq) + 'px';
+      /* una nota más estrecha que su hueco mínimo, en medio de él (antes quedaba a la izquierda y su guía, corrida) */
+      const left = Math.round(izq + (z.hueco ? 0 : Math.max(0, (z.ancho - z.real) / 2)));
+      z.el.style.left = left + 'px';
       const arriba = BASE_NOTA + n * ALTO_NOTA;
       z.el.style.marginTop = arriba + 'px';
       /* la guía hasta el carril mide lo que la nota se haya bajado: con la altura fija se veía cortada en cuanto la
          nota caía a un segundo nivel (Leo, 16-09-2026) */
       if (!z.hueco) z.el.style.setProperty('--guia', arriba + 'px');
+      /* y sale de su nodo aunque la nota se corra para no salirse por la izquierda (la del primer nodo; Leo, 18-09-2026: «se
+         ven ligeramente separadas del nodo»): antes iba siempre en medio de la nota */
+      if (!z.hueco) z.el.style.setProperty('--gx', Math.round(z.centro - left) + 'px');
       z.nivel = n;
     });
     return { arriba: BASE_ROTULO + Math.max(0, niveles.length - 1) * ALTO_ROTULO + ALTO_ROTULO,
@@ -571,8 +589,14 @@
     if (Math.abs(e.clientY - rc.top - yFila(id)) > 9) return null;
     const x = e.clientX - tr.getBoundingClientRect().left, props = m.puntosDe(id);
     for (let i = 0; i < props.length - 1; i++)
-      if (x > xDe(props[i]) + 7 && x < xDe(props[i + 1]) - 7) return [props[i], props[i + 1]];
-    return null;
+      if (x > xDe(props[i]) + 7 && x < xDe(props[i + 1]) - 7) return { a: props[i], b: props[i + 1], lineaId: id };
+    /* fuera de los tramos entre nodos, **cada raya entre dos columnas es un enlace** (Leo, 17-09-2026): tras el último nodo,
+       antes del primero o en una trama sin nodos */
+    const fuera = !props.length || x > xDe(props[props.length - 1]) + 7 || x < xDe(props[0]) - 7;
+    if (!fuera) return null;
+    const col = Math.floor(celdaEn(x));
+    if (col < 0 || col > m.totalCeldas() - 1) return null;
+    return { a: null, b: null, lineaId: id, col };
   }
   /* ¿empieza aquí un rectángulo? en un hueco de una trama (no sobre un nodo, una nota o un control) o, con Mayús, sobre el «+» */
   function empiezaMarquesina(e) {
@@ -641,7 +665,7 @@
     const dotB = e.target.closest && e.target.closest('#board .dot');
     if (dotB && e.button === 2 && multi.has(dotB.parentElement.dataset.punto)) return;   // clic derecho sobre lo elegido: su menú ofrece borrarlo todo
     if (dotB && e.button === 0 && multi.size > 1 && multi.has(dotB.parentElement.dataset.punto)) {
-      bloque = { x0: e.clientX, y0: e.clientY, ids: [...multi], movido: false, dc: 0, dl: 0, id: dotB.parentElement.dataset.punto };
+      bloque = { x0: e.clientX, y0: e.clientY, ids: [...multi], movido: false, dc: 0, dl: 0, id: dotB.parentElement.dataset.punto, alt: e.altKey };
       try { dotB.setPointerCapture(e.pointerId); } catch (_) {}
       e.preventDefault(); return;
     }
@@ -675,7 +699,7 @@
     // divisor entre actos
     const h = e.target.closest && e.target.closest('[data-handle]');
     if (h) {
-      const a = m.acto(h.dataset.handle); res = { a, x0: e.clientX, c0: a.celdas };
+      const a = m.acto(h.dataset.handle); res = { a, x0: e.clientX, n: 0, pila: [a.id] };   // `pila`: el acto y los que nazcan al crecer
       h.classList.add('activo'); try { h.setPointerCapture(e.pointerId); } catch (_) {}
       e.preventDefault(); return;
     }
@@ -683,6 +707,18 @@
     const nt0 = bajoNota || (e.target.closest && e.target.closest('#board [data-nota]'));   // solo las del tablero (en ClapCraft hay otras `data-nota` fuera)
     if (nt0 && !(e.target.classList && e.target.classList.contains('nota-edit'))) {
       const n0 = m.nota(nt0.dataset.nota);
+      /* **Opción al arrastrar una nota la duplica** (Leo, 17-09-2026, «como en Figma»): nace la copia en su sitio y lo que se
+         arrastra es la copia; si no se llega a mover, la copia se quita */
+      if (e.altKey && e.button === 0 && n0) {
+        const r = m.pegarNotas(m.copiarNotas([n0.id]));
+        if (r.ok) {
+          m.colocarNota(r.ids[0], n0.id);                         // la copia, justo delante del original en la pila
+          render();
+          notaArr = { id: r.ids[0], movido: false, dup: true, origen: [n0.deId, n0.aId] };
+          const nv = document.querySelector(`#board [data-nota="${CSS.escape(r.ids[0])}"]`); if (nv) nv.classList.add('arrastrando');
+          e.preventDefault(); return;
+        }
+      }
       notaArr = { id: nt0.dataset.nota, movido: false, origen: n0 ? [n0.deId, n0.aId] : null };
       if (bajoNota) seleccionSuave('nota', nt0.dataset.nota, nt0);   // el clic cayó en el «+»: no llegará a la nota
       nt0.classList.add('arrastrando');
@@ -695,7 +731,7 @@
     if (!dot) return;
     const el = dot.parentElement, p = m.punto(el.dataset.punto);
     if (!p) return;
-    arr = { p, el, track: el.parentElement, movido: false, x0: e.clientX, y0: e.clientY, destino: null, pos: null };
+    arr = { p, el, track: el.parentElement, movido: false, x0: e.clientX, y0: e.clientY, destino: null, pos: null, alt: e.altKey };
     el.classList.add('arrastrando'); el.style.pointerEvents = 'none';
     try { dot.setPointerCapture(e.pointerId); } catch (_) {}
     seleccionSuave('punto', p.id, el);
@@ -786,7 +822,8 @@
       let destino = cerca ? [cerca, null] : null;
       if (!destino) for (let i = 0; i < props.length - 1; i++)
         if (px >= xDe(props[i]) && px <= xDe(props[i + 1])) { destino = [props[i], props[i + 1]]; break; }
-      if (!destino) return;                                   // fuera de todo tramo: no se mueve
+      /* fuera de todo tramo: el carril abierto (tras el último nodo, antes del primero o una trama sin nodos) */
+      if (!destino) destino = { abierta: true, lineaId: id, col: clamp(Math.floor(celdaEn(px)), 0, m.totalCeldas() - 1) };   // la raya donde cae
       const antes = rectsNotas();
       const cambio = colocarNotaArrastrada(destino);
       const orden = reordenarNotaArrastrada(destino, e.clientY);   // arriba o debajo de las que ya están ahí
@@ -837,15 +874,42 @@
       return;
     }
     if (res) {
-      m.fijarAncho(res.a.id, Math.round((res.c0 * G() + (e.clientX - res.x0)) / G()));
+      /* **columna a columna** (Leo, 17-09-2026): a la derecha se añaden al final del acto (el último, lleno, abre otro); a la
+         izquierda se quitan las vacías y lo de detrás se junta. Si ya no se puede comprimir, seguir a la izquierda no hace nada
+         y volver a la derecha crece al momento. */
+      if (e.buttons === 0) return onPointerUp(e);               // se soltó fuera de la ventana
+      res.ultX = e.clientX;
+      autoCrecer();                                             // pegado al borde derecho, sigue creciendo solo
+      const meta = Math.round((e.clientX - res.x0) / G());
+      let cambio = false;
+      while (res.n < meta) {
+        const r = m.crecerActo(res.pila[res.pila.length - 1]); if (!r.ok) { avisar(r.aviso); break; }
+        if (r.creado) res.pila.push(r.creado);
+        res.n++; cambio = true;
+      }
+      while (res.n > meta) {
+        const top = res.pila[res.pila.length - 1], a = m.acto(top);
+        let r;
+        if (res.pila.length > 1 && a && a.celdas === 1 && !m.datos.puntos.some(p => p.actoId === top) && !m.datos.notas.some(x => x.abierta && x.actoId === top)) {
+          r = m.borrarActo(top); if (r.ok) res.pila.pop();          // el acto que nació al crecer, vacío, se va
+        } else r = m.encogerActo(top);
+        if (!r.ok) { res.x0 = e.clientX - res.n * G(); break; }  // ya no se comprime: se queda donde está
+        res.n--; cambio = true;
+      }
+      if (!cambio) return;
       render();
-      const h = document.querySelector(`[data-handle="${res.a.id}"]`); if (h) h.classList.add('activo');
+      const h = document.querySelector(`[data-handle="${res.pila[res.pila.length - 1]}"]`); if (h) h.classList.add('activo');
       return;
     }
     if (!arr) return;
     if (Math.abs(e.clientX - arr.x0) <= 3 && Math.abs(e.clientY - arr.y0) <= 3) return;   // temblor del clic
     if (e.clientX < zonaUtil()) return;                       // sobre la columna de nombres: no se coloca
     arr.movido = true;
+    if ((arr.alt || e.altKey) && !arr.fantasma) {             // al duplicar, el original se queda a la vista
+      arr.alt = true;
+      arr.fantasma = arr.el.cloneNode(true); arr.fantasma.classList.remove('arrastrando', 'sel'); arr.fantasma.classList.add('original-dup');
+      arr.fantasma.style.pointerEvents = 'none'; arr.track.appendChild(arr.fantasma);
+    }
     const bajo = document.elementFromPoint(e.clientX, e.clientY);
     const destino = (bajo && bajo.closest && bajo.closest('.track')) || arr.track;
     quitarHot();
@@ -854,14 +918,24 @@
     const pos = m.ubicarCelda(celdaEn(e.clientX - r.left));
     arr.destino = destino; arr.pos = pos;
     arr.el.style.left = px(m.celdasAntes(pos.actoId) + pos.celda) + 'px';
-    previaIntercambio(arr.p, destino.dataset.linea, pos);
+    /* sus notas de nodo lo acompañan mientras se arrastra (Leo, 16-09-2026), también a otra trama */
+    const dxN = px(m.celdasAntes(pos.actoId) + pos.celda) - xDe(arr.p);
+    const dyN = destino !== arr.track ? destino.getBoundingClientRect().top - arr.track.getBoundingClientRect().top : 0;
+    m.datos.notas.forEach(n => {
+      if (n.deId !== arr.p.id || n.aId) return;
+      const el = arr.track.querySelector(`:scope > .nota[data-nota="${CSS.escape(n.id)}"]`);
+      if (el) { el.style.transform = `translate(${dxN}px, ${dyN}px)`; el.classList.add('con-nodo'); }
+    });
+    if (!arr.alt) previaIntercambio(arr.p, destino.dataset.linea, pos);   // duplicando no se intercambia
   }
 
   /* Una nota arrastrada a otro sitio: un tramo (`[a, b]`) o un nodo (`[p, null]`). Donde caiga se apila con las que ya
      haya (Leo, 16-09-2026: caben varias). Devuelve si cambió algo. */
   function colocarNotaArrastrada(destino) {
     const n = m.nota(notaArr.id); if (!n) return false;
+    if (destino.abierta) return m.moverNotaAbierta(n.id, destino.lineaId, destino.col).movida === true;
     const [a, b] = destino;
+    if (n.abierta) return m.moverNota(notaArr.id, a.id, b ? b.id : null).ok;
     if (!b ? (n.deId === a.id && !n.aId) : ((n.deId === a.id && n.aId === b.id) || (n.deId === b.id && n.aId === a.id))) return false;
     return m.moverNota(notaArr.id, a.id, b ? b.id : null).ok;
   }
@@ -869,16 +943,20 @@
   /* **Reordenar notas apiladas** (Leo, 16-09-2026): en el sitio donde cae, la nota se pone encima o debajo de las que
      ya hay según la altura del puntero; vale igual para las de un nodo y las de un tramo. */
   function reordenarNotaArrastrada(destino, y) {
-    const [a, b] = destino, aId = b ? b.id : null;
     const n = m.nota(notaArr.id); if (!n) return false;
-    const aqui = (n.deId === a.id && (n.aId || null) === aId) || (aId && n.deId === aId && n.aId === a.id);
+    let aqui, lid;
+    if (destino.abierta) { aqui = !!n.abierta && n.lineaId === destino.lineaId && m.colNota(n) === destino.col; lid = destino.lineaId; }
+    else {
+      const [a, b] = destino, aId = b ? b.id : null;
+      aqui = !n.abierta && ((n.deId === a.id && (n.aId || null) === aId) || (aId && n.deId === aId && n.aId === a.id)); lid = a.lineaId;
+    }
     if (!aqui) return false;                                  // aún no ha caído en este sitio
     /* se ordena contra **las notas que comparten sitio con ella** —las que se pisan en horizontal—, sean de nodo o de
        enlace: ahora cada una es una cajita colgada de su sitio, así que las de un mismo sitio caen una sobre otra */
     const mio = document.querySelector(`#board [data-nota="${n.id}"]`); if (!mio) return false;
     const caja = mio.getBoundingClientRect();
     const izq = caja.left, der = caja.right;
-    const vecinas = m.notasDeLinea(a.lineaId).filter(z => {
+    const vecinas = m.notasDeLinea(lid).filter(z => {
       if (z.id === n.id) return false;
       const el = document.querySelector(`#board [data-nota="${z.id}"]`); if (!el) return false;
       const q = el.getBoundingClientRect();
@@ -931,10 +1009,15 @@
       const el = x && document.querySelector(`.pt[data-punto="${x.id}"]`); if (!el) return;
       el.classList.add('intercambio'); el.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${y}px))`;
       arr.previa.push(el);
+      m.datos.notas.forEach(n => {                             // y sus notas de nodo, con él
+        if (n.deId !== x.id || n.aId) return;
+        const ne = document.querySelector(`#board .nota[data-nota="${CSS.escape(n.id)}"]`); if (!ne) return;
+        ne.classList.add('intercambio'); ne.style.transform = `translate(${dx}px, ${y}px)`; arr.previa.push(ne);
+      });
     });
   }
 
-  function onPointerUp() {
+  function onPointerUp(e) {
     if (panelArr) {
       const movido = panelArr.movido; panelArr = null;
       document.body.classList.remove('redimensionando');
@@ -972,23 +1055,30 @@
       return;
     }
     if (bloque) {
-      const { ids, movido, dc, dl, id } = bloque; bloque = null;
+      const { ids, movido, dc, dl, id } = bloque, bloque0 = bloque; bloque = null;
       if (!movido) { limpiarMulti(); const el = document.querySelector(`#board .pt[data-punto="${CSS.escape(id)}"]`); seleccionSuave('punto', id, el); return; }
       soltarClic = true; setTimeout(() => { soltarClic = false; }, 0);
+      if (bloque0.alt || (e && e.altKey)) {                   // con Opción, se duplica el bloque donde se suelta
+        const clip = m.copiar(ids), r = clip && m.pegar(clip, clip.c0 + dc, clip.f0 + dl);
+        if (r && r.ok) { multi.clear(); r.ids.forEach(x => multi.add(x)); avisar(r.ids.length === 1 ? 'Nodo duplicado' : r.ids.length + ' nodos duplicados'); }
+        render(); return;
+      }
       if (dc || dl) { const r = m.moverBloque(ids, dc, dl); if (r.aviso) avisar(r.aviso); }
       render(); return;                                       // con rechazo, el dibujo vuelve a su sitio
     }
     if (notaArr) {
-      const movida = notaArr.movido; notaArr = null;
+      const movida = notaArr.movido, { dup, id: nid } = notaArr; notaArr = null;
       document.querySelectorAll('.nota.arrastrando').forEach(x => x.classList.remove('arrastrando'));
+      if (dup && !movida) { m.borrarNota(nid); render(); return; }   // Opción sin arrastrar: no se duplica
+      if (dup) { avisar('Nota duplicada'); sel = { tipo: 'nota', id: nid }; render(); return; }
       if (movida) render();                                   // clic seco: no se redibuja nada
       return;
     }
     if (cel) {
-      const { lineaId, actoId, celda, destino, movido } = cel;
+      const { lineaId, actoId, celda, destino, movido } = cel, cel0 = cel;
       cel.tmp.remove(); quitarHot();
       cel = null; celArrastrado = movido;
-      const nuevo = destino ? saltoDesdeCruce({ lineaId, actoId, celda }, destino) : null;
+      const nuevo = destino ? saltoDesdeCruce(extender({ lineaId, actoId, celda, extender: cel0.extender }), destino) : null;
       render(); if (nuevo) nombrarRecien(nuevo); return;
     }
     if (mov) {
@@ -999,13 +1089,20 @@
     }
     if (res) {
       document.querySelectorAll('.handle.activo').forEach(h => h.classList.remove('activo'));
-      res = null; render(); return;
+      clearInterval(res.auto); res = null; render(); return;
     }
     if (!arr) return;
     const { p, el, destino, pos, movido } = arr;
     el.classList.remove('arrastrando'); el.style.pointerEvents = '';
     quitarHot();
     if (!movido) { arr = null; return; }                      // clic seco: nada que recolocar
+    if (pos && (arr.alt || (e && e.altKey))) {                // **con Opción, se duplica donde se suelta** (Leo, 17-09-2026)
+      const clip = m.copiar([p.id]), yo = clip && clip.puntos.find(x => x.ref === p.id);
+      const fila = m.datos.lineas.findIndex(l => l.id === destino.dataset.linea);
+      const r = yo && m.pegar(clip, m.celdasAntes(pos.actoId) + pos.celda - yo.dc, fila - yo.df);
+      if (r && r.ok) { const nuevo = r.ids.find(x => m.punto(x) && m.punto(x).titulo === p.titulo) || r.ids[0]; sel = { tipo: 'punto', id: nuevo }; avisar('Nodo duplicado'); }
+      arr = null; render(); return;
+    }
     if (pos) {
       const nueva = destino.dataset.linea;
       /* encima de otro nodo, se cambian de lugar (Leo, 15-09-2026) */
@@ -1014,6 +1111,37 @@
       else if (r.cambioTrama) avisar(`«${p.titulo}» pasó a ${m.linea(nueva).nombre}`);
     }
     arr = null; render();
+  }
+
+  /* Un sitio del «+» pasado el final: se abre esa columna (el último acto crece o, lleno, nace otro) y se devuelve dónde quedó. */
+  function extender(q) {
+    if (!q || !q.extender) return q;
+    const t = m.totalCeldas();
+    m.asegurarCeldas(t);
+    const u = m.ubicarCelda(t);
+    return { lineaId: q.lineaId, actoId: u.actoId, celda: u.celda };
+  }
+
+  /* **Crecer pegado al borde** (Leo, 17-09-2026: «para que funcione tengo que arrastrar a la izquierda y luego a la derecha»):
+     el final del último acto suele quedar junto al borde derecho del tablero y ya no hay sitio para llevar el puntero más allá.
+     Mientras se arrastra un borde de acto con el puntero a menos de 40 px del borde del tablero, cada 110 ms nace otra columna y
+     el tablero se desplaza lo mismo, así el borde sigue bajo el puntero; al alejarse o soltar, se para. */
+  const BORDE_AUTO = 40;
+  function autoCrecer() {
+    if (!res || !$board) return;
+    const cerca = () => res && res.ultX >= $board.getBoundingClientRect().right - BORDE_AUTO;
+    if (!cerca()) { clearInterval(res.auto); res.auto = null; return; }
+    if (res.auto) return;
+    res.auto = setInterval(() => {
+      if (!cerca()) { if (res) { clearInterval(res.auto); res.auto = null; } return; }
+      const r = m.crecerActo(res.pila[res.pila.length - 1]);
+      if (!r.ok) { avisar(r.aviso); clearInterval(res.auto); res.auto = null; return; }
+      if (r.creado) res.pila.push(r.creado);
+      res.n++; res.x0 -= G();                                   // el puntero no se mueve: la referencia sí
+      render();
+      $board.scrollLeft += G();
+      const h = document.querySelector(`[data-handle="${res.pila[res.pila.length - 1]}"]`); if (h) h.classList.add('activo');
+    }, 110);
   }
 
   /* Arrastre del "+" del cruce hasta otra trama: nacen los dos extremos y el salto. */
@@ -1094,6 +1222,7 @@
     quien.className = 'panel-quien';
     quien.textContent = !sel ? '' : sel.tipo === 'punto' ? ((m.punto(sel.id) || {}).titulo || '')
       : sel.tipo === 'nota' ? ((m.nota(sel.id) || {}).texto || '')
+      : sel.tipo === 'raya' ? (() => { const [lid, c] = sel.id.split('|'); return `${(m.linea(lid) || {}).nombre || ''} · ${+c + 1}–${+c + 2}`; })()
       : sel.tipo === 'enlace' ? (() => { const a = m.punto(sel.id), b = a && m.siguienteEnTrama(a.id); return a && b ? `${a.titulo} → ${b.titulo}` : ''; })()
       : sel.tipo === 'linea' ? ((m.linea(sel.id) || {}).nombre || '') : ((m.acto(sel.id) || {}).nombre || '');
     const h2 = cab.querySelector('h2');
@@ -1119,7 +1248,7 @@
        descripción, como en cualquier nodo (Leo, 16-09-2026: «si selecciono la diagonal, no se abre el texto en la
        descripción; debe poderse escribir como si eligiera uno de sus nodos»). */
     const saltoSel = sel && sel.tipo === 'salto' ? m.salto(sel.id) : null;
-    const abre = sel && (['punto', 'linea', 'acto', 'nota', 'enlace'].includes(sel.tipo) || !!saltoSel);
+    const abre = sel && (['punto', 'linea', 'acto', 'nota', 'enlace', 'raya'].includes(sel.tipo) || !!saltoSel);
     document.body.classList.toggle('con-panel', !!abre);
     $panel.dataset.panel = abre ? (saltoSel ? 'punto' : sel.tipo) : 'vacio';          // la piel compacta el de la trama y el del acto
     if (!abre) {
@@ -1150,6 +1279,7 @@
           <textarea id="fNota" placeholder="Qué pasa aquí"></textarea></div>
         <div class="panel-meta"><span class="panel-meta-punto" style="background:${tono(l.color)}"></span>${esc(l.nombre)}<span class="panel-meta-sep">·</span>${esc((m.acto(p.actoId) || {}).nombre || '')}</div>
         <div class="panel-acciones">
+          <button class="btn act-btn" data-nota-nodo="${p.id}" title="Agregar una nota a este ${esc(m.nombre('nodo').toLowerCase())}">＋ Nota</button>
           <button class="btn act-btn danger" id="bBorrar" title="${forma ? 'Eliminar salto' : 'Eliminar punto'} (Supr)" aria-label="${forma ? 'Eliminar salto' : 'Eliminar punto'}">${ICONO.borrar}</button></div>
         <div class="panel-pista"><span>Supr elimina</span><span>${abajo ? 'Esc apaga el recorrido' : 'Esc cierra'}</span></div>`;
       $panel.querySelector('#fTitulo').value = p.titulo;
@@ -1161,7 +1291,7 @@
         if (pareja) m.editarPunto(pareja, { titulo: e.target.value });
         rapido(p); tocar();
       };
-      $panel.querySelector('#fNota').oninput = e => { m.editarPunto(p.id, { descripcion: e.target.value }); tocar(); };
+      $panel.querySelector('#fNota').oninput = e => { m.editarPunto(p.id, { descripcion: e.target.value }); ponerResumen(document.querySelector(`#board [data-punto="${CSS.escape(p.id)}"] .cap`), p); tocar(); };
       /* (Leo, 14-09-2026: el panel ya no lleva «Estado»; descartar sigue en el menú del nodo) */
       $panel.querySelector('#bBorrar').onclick = () => pedirBorrarPunto(p.id);
     }
@@ -1169,9 +1299,10 @@
     /* el panel de una nota: su texto, dónde está y su color (Leo, 16-09-2026: «que se vea su contenido en el panel») */
     if (sel.tipo === 'nota') {
       const n = m.nota(sel.id); if (!n) { sel = null; return panel(); }
-      const a = m.punto(n.deId), b = n.aId && m.punto(n.aId), l = a && m.linea(a.lineaId);
+      const a = n.deId ? m.punto(n.deId) : null, b = n.aId && m.punto(n.aId), l = m.linea(m.lineaDeNota(n));
       const corto = q => { const t = (q.titulo || m.nombre('nodo')).trim(); return t.length > 22 ? t.slice(0, 21) + '…' : t; };
-      const donde = !a ? '' : b ? `entre «${corto(a)}» y «${corto(b)}»` : `en «${corto(a)}»`;
+      const donde = n.abierta ? `entre las columnas ${m.colNota(n) + 1} y ${m.colNota(n) + 2}`
+        : !a ? '' : b ? `entre «${corto(a)}» y «${corto(b)}»` : `en «${corto(a)}»`;
       $panel.innerHTML = `
         <div class="panel-cabecera"><h2>Nota</h2>
           <span class="panel-nav"><button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)" aria-label="Cerrar el panel">${ICONO.cerrar}</button></span></div>
@@ -1217,6 +1348,24 @@
           <div class="panel-bloque enlace-notas">
             ${notas.length ? notas.map(n => `<button type="button" class="enlace-nota${n.color ? ' con-color' : ''}" data-ir-nota="${n.id}"${n.color ? ` style="--tc:${tono(n.color)}"` : ''}>${esc(n.texto || 'Nota')}</button>`).join('')
               : '<p class="empty">Sin notas. «＋ Nota» o el clic secundario sobre el enlace ponen las que hagan falta.</p>'}
+          </div></div>`;
+    }
+
+    /* el panel de una raya sin nodos (Leo, 17-09-2026): su trama, entre qué columnas va, «＋ Nota» y a la derecha sus notas */
+    if (sel.tipo === 'raya') {
+      const [lid, c] = sel.id.split('|'), col = +c, l = m.linea(lid);
+      if (!l || col < 0 || col >= m.totalCeldas()) { sel = null; return panel(); }
+      const notas = m.notasAbiertas(lid, col);
+      $panel.innerHTML = `
+        <div class="panel-cabecera"><h2>Enlace</h2>
+          <span class="panel-nav"><button class="mini" data-panel-cerrar title="Cerrar el panel (Esc)" aria-label="Cerrar el panel">${ICONO.cerrar}</button></span></div>
+        <div class="panel-meta"><span class="panel-meta-punto" style="background:${tono(l.color)}"></span>${esc(l.nombre)}<span class="panel-meta-sep">·</span>entre las columnas ${col + 1} y ${col + 2}</div>
+        <div class="panel-acciones">
+          <button class="btn act-btn" data-abierta-nota="${lid}|${col}" title="Agregar una nota a esta raya">＋ Nota</button></div>
+        <div class="field field-crece"><label>Notas</label>
+          <div class="panel-bloque enlace-notas">
+            ${notas.length ? notas.map(n => `<button type="button" class="enlace-nota${n.color ? ' con-color' : ''}" data-ir-nota="${n.id}"${n.color ? ` style="--tc:${tono(n.color)}"` : ''}>${esc(n.texto || 'Nota')}</button>`).join('')
+              : '<p class="empty">Sin notas. «＋ Nota» o el clic secundario sobre la raya ponen las que hagan falta.</p>'}
           </div></div>`;
     }
 
@@ -1384,6 +1533,15 @@
     if (dot && dot.scrollIntoView) dot.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
 
+  /* **Al pasar el ratón, unas líneas de la descripción** (Leo, 17-09-2026: «que aparezca su descripción en varias líneas, no
+     toda, sino lo suficiente para que se entienda de qué trata… que no afecte mucho visualmente; para verla completa, clic al
+     nodo y el panel inferior»): el rótulo la lleva en `data-desc` y el CSS la enseña solo en `:hover`, debajo del título y cortada
+     a tres líneas. Se recorta aquí a un párrafo corto para no cargar el atributo. */
+  function ponerResumen(cap, p) {
+    if (!cap) return;
+    const t = String(p.descripcion || '').replace(/\s+/g, ' ').trim();
+    if (t) cap.dataset.desc = t.length > 220 ? t.slice(0, 219) + '…' : t; else delete cap.dataset.desc;
+  }
   function rapido(p) {
     const el = document.querySelector(`[data-punto="${p.id}"] .cap`);
     if (el) { el.textContent = p.titulo; colocarRotulos(el.closest('.row')); }
@@ -1406,8 +1564,9 @@
     }
     const cr = cl('[data-crear]');
     if (cr) {
-      const v = cr.dataset.crear, q = pendiente; cerrarMenu();
+      const v = cr.dataset.crear; let q = pendiente; cerrarMenu();
       if (!q) return;
+      q = extender(q);
       let nuevo = null;
       if (v === 'nodo') {
         const r = m.nuevoPunto(q.lineaId, q.actoId, q.celda);
@@ -1478,6 +1637,15 @@
       if (aplicar(m.colorearEnlace(id, c || null))) { if (cl('#menu')) cerrarMenu(); render(); }
       return;
     }
+    const ab = cl('[data-abierta-nota]');                      // nota de enlace abierta (Leo, 17-09-2026)
+    if (ab) {
+      cerrarMenu(); const [lid, col] = ab.dataset.abiertaNota.split('|');
+      const r = m.crearNotaAbierta(lid, +col, 'Nota nueva'); if (!aplicar(r)) return;
+      elegir('nota', r.nota.id);
+      const el = document.querySelector(`[data-nota="${r.nota.id}"] span`);
+      if (el) editarEnSitio(el, r.nota.texto, 'nota-edit', v => { if (v) m.editarNota(r.nota.id, v); return r.nota.texto; });
+      return;
+    }
     const en2 = cl('[data-enlace-nota]');                      // «Agregar nota» a un enlace: caben varias
     if (en2) { cerrarMenu(); const [d, a] = en2.dataset.enlaceNota.split('|'); ponerNota(d, a); return; }
     const irn = cl('[data-ir-nota]');
@@ -1511,7 +1679,7 @@
     if (tp) { const [id, tipo] = tp.dataset.tipo.split('|'); aplicar(m.fijarTipo(id, tipo)); render(); return; }
     const lc = cl('[data-lcolor]');
     if (lc) { const [id, c] = lc.dataset.lcolor.split('|'); m.editarLinea(id, { color: c }); render(); return; }
-    const nn = cl('[data-nota-nodo]');                         // «Nota en este nodo» (Leo, 16-09-2026)
+    const nn = cl('[data-nota-nodo]');                         // «Agregar nota» del menú del nodo (Leo, 16-09-2026; el texto, 17-09-2026)
     if (nn) { cerrarMenu(); ponerNota(nn.dataset.notaNodo, null); return; }
     const nt = cl('[data-nota]');
     if (nt) { seleccionSuave('nota', nt.dataset.nota, nt); return; }
@@ -1528,6 +1696,10 @@
     }
     const ac = cl('[data-acto]');
     if (ac && !cl('.mini') && !t.matches('.aname')) { elegir('acto', ac.dataset.acto); return; }
+
+    /* una raya sin nodos (tras el último, antes del primero o en una trama vacía) se elige como un enlace (Leo, 17-09-2026) */
+    const ra = cl('#board .track') && enlaceEn(e);
+    if (ra && !ra.a) { elegir('raya', ra.lineaId + '|' + ra.col); return; }
 
     // clic en blanco: se suelta la selección y se cierra el panel
     if (cl('aside') || cl('header') || cl('#menu') || cl('#panelAsa')) return;   // el asa del panel no es un clic en blanco (Leo, 16-09-2026: se cerraba al agrandarlo)
@@ -1570,8 +1742,8 @@
     const en = cl('#board') && enlaceEn(e);
     if (en) {
       e.preventDefault(); cerrarMenu(); limpiarMulti();
-      sel = { tipo: 'enlace', id: en[0].id }; sinRuta = false; render();
-      menuEnlace(en[0], en[1], e.clientX, e.clientY);
+      if (en.a && en.b) { sel = { tipo: 'enlace', id: en.a.id }; sinRuta = false; render(); menuEnlace(en.a, en.b, e.clientX, e.clientY); }
+      else { sel = { tipo: 'raya', id: en.lineaId + '|' + en.col }; sinRuta = false; render(); menuAbierto(en, e.clientX, e.clientY); }   // una raya sin nodos: «Agregar nota»
     }
   }
 
@@ -1628,6 +1800,12 @@
       const nuevo = guardar ? alGuardar(inp.value.trim()) : viejo;
       if (inp.parentNode) inp.replaceWith(el);
       el.textContent = nuevo == null ? viejo : nuevo;
+      /* con su texto de verdad, la nota (o el rótulo) se vuelve a centrar bajo su sitio: se había colocado con el ancho del
+         campo y quedaba corrida hacia un lado, «al lado del nodo y no abajo» (Leo, 17-09-2026) */
+      const row = el.isConnected && el.closest('#board .row');
+      if (row) colocarRotulos(row);
+      const ta = $panel && $panel.querySelector('#fNotaTexto');   // y el panel de la nota dice lo mismo que el tablero
+      if (ta && sel && sel.tipo === 'nota' && m.nota(sel.id)) ta.value = m.nota(sel.id).texto;
       registrar();
     };
     /* un clic fuera **guarda** lo escrito, como Enter; solo Esc lo deja como estaba (Leo, 16-09-2026: «cuando escribo
@@ -1688,7 +1866,7 @@
 
   /* Menú de creación: nodo, cambio de escena a…, salto alternativo a… */
   function abrirMenuCrear(cx, cy, lineaId, pos) {
-    pendiente = { lineaId, actoId: pos.actoId, celda: pos.celda };
+    pendiente = { lineaId, actoId: pos.actoId, celda: pos.celda, extender: !!pos.extender };
     const l = m.linea(lineaId);
     const cuadros = m.datos.lineas.filter(x => x.id !== lineaId && x.tipo !== 'alterna');
     const rombos = m.datos.lineas.filter(x => x.id !== lineaId);
@@ -1716,6 +1894,11 @@
     const r = $menu.getBoundingClientRect();
     $menu.style.top = Math.max(8, y - r.height - 8) + 'px';    // encima de la barra
   }
+  /* Clic secundario en el carril abierto (tras el último nodo, antes del primero o sin nodos): una nota de enlace abierta. */
+  function menuAbierto(en, cx, cy) {
+    abrirMenuEn(cx, cy, `<div class="mt">Enlace</div>
+      <button data-abierta-nota="${en.lineaId}|${en.col}"><span class="ic" style="border:1.5px solid var(--nota-borde);background:var(--nota)"></span>Agregar nota</button>`);
+  }
   /* Clic secundario en un enlace: agregar nota (caben varias) y su color (Leo, 16-09-2026). */
   function menuEnlace(a, b, cx, cy) {
     abrirMenuEn(cx, cy, `<div class="mt">Enlace</div>
@@ -1736,7 +1919,7 @@
            <button class="sw hereda${p.color ? '' : ' on'}" data-mcolor="${p.id}|" title="Hereda el color de la trama">trama</button>
          </div>`}<div class="sep"></div>
          <button data-mcortar="${p.id}"><span class="ic" style="border:1.5px dashed var(--tenue);background:none"></span>${p.cortado ? 'Quitar el descarte' : 'Descartar'}</button>`)
-      + `<button data-nota-nodo="${p.id}"><span class="ic" style="border:1.5px solid var(--nota-borde);background:var(--nota)"></span>Nota en este nodo</button>`
+      + `<button data-nota-nodo="${p.id}"><span class="ic" style="border:1.5px solid var(--nota-borde);background:var(--nota)"></span>Agregar nota</button>`
       + (multi.size > 1 && multi.has(p.id) ? `<button class="peligro" data-mborrar-varios>Eliminar los ${multi.size} elegidos</button>` : '')
       + `<button class="peligro" data-mborrar="${p.id}">Eliminar</button>`;
     const r = el.getBoundingClientRect();
@@ -1777,7 +1960,22 @@
   /* ¿Hay una nota del tablero bajo el puntero? Una nota corrida a un lado (dos nodos muy juntos) cae sobre celdas
      libres: el «+» de la celda se ponía encima y el clic creaba un nodo en lugar de elegir la nota (Leo). */
   const notaBajo = e => { for (const x of document.elementsFromPoint(e.clientX, e.clientY)) { const n = x.closest && x.closest('#board .nota'); if (n) return n; } return null; };
+  /* La raya sin nodos bajo el puntero se enciende como un enlace (Leo, 17-09-2026): así se ve que ahí se puede elegir y poner notas. */
+  function rayaBajo(e) {
+    let h = document.getElementById('rayaHover');
+    const en = !arrastrando() && e.target.closest && e.target.closest('#board .track') ? enlaceEn(e) : null;
+    if (!en || en.a) { if (h) h.remove(); return; }
+    const tr = document.querySelector(`#board .track[data-linea="${CSS.escape(en.lineaId)}"]`); if (!tr) return;
+    if (!h) { h = document.createElement('div'); h.id = 'rayaHover'; h.className = 'cadena raya hover'; }
+    if (h.parentElement !== tr) tr.appendChild(h);
+    const l = m.linea(en.lineaId);
+    h.style.left = px(en.col) + 'px'; h.style.width = G() + 'px'; h.style.background = tono(l.color);
+  }
   function onMouseMove(e) {
+    rayaBajo(e);
+    /* dónde está el puntero en el tablero: ahí se pega (Leo, 17-09-2026) */
+    const trP = e.target.closest && e.target.closest('#board .track');
+    ultimoSitio = trP ? { lineaId: trP.dataset.linea, cg: Math.max(0, Math.round(celdaEn(e.clientX - trP.getBoundingClientRect().left))) } : null;
     if (cel) return;                                                       // se está arrastrando
     const sobreNota = notaBajo(e);
     if (e.target.closest && e.target.closest('#celda') && !sobreNota) return;   // ya está encima de la marca
@@ -1787,8 +1985,19 @@
     if (!libre) { $celda.classList.remove('show'); celdaObj = null; return; }
     const r = tr.getBoundingClientRect();
     if (celdaEn(e.clientX - r.left) < 0) { $celda.classList.remove('show'); celdaObj = null; return; }   // el hueco de delante no es una celda
-    const pos = m.ubicarCelda(celdaEn(e.clientX - r.left));
     const id = tr.dataset.linea;
+    /* **pasado el final, una columna más** (Leo, 17-09-2026: «cuando llego al final de una trama ya no se me sugiere agregar
+       nodos; tengo que aumentar el tamaño desde el panel»): el «+» sale ahí y, al crear, el último acto crece (o nace otro) */
+    const total = m.totalCeldas();
+    if (Math.round(celdaEn(e.clientX - r.left)) >= total) {
+      const ult = m.datos.actos[m.datos.actos.length - 1];
+      celdaObj = { lineaId: id, actoId: ult.id, celda: ult.celdas, extender: true };
+      $celda.style.left = (GUTTER + px(total)) + 'px';
+      $celda.style.top = yFila(id) + 'px';
+      $celda.classList.add('show');
+      return;
+    }
+    const pos = m.ubicarCelda(celdaEn(e.clientX - r.left));
     if (m.datos.puntos.some(p => p.lineaId === id && p.actoId === pos.actoId && p.celda === pos.celda)) {
       $celda.classList.remove('show'); celdaObj = null; return;
     }
@@ -1820,7 +2029,7 @@
   function onMouseOver(e) {
     if (arrastrando()) return;
     const n = e.target.closest && e.target.closest('.nota');
-    if (n) { const nt = m.nota(n.dataset.nota); if (nt) mostrarTip(n, null, nt.texto, null); return; }
+    if (n) return;                                             // la nota se abre ella misma al pasar el ratón (CSS), sin globo
     /* los nodos no llevan globo (Leo, 15-09-2026): al pasar el ratón, su rótulo enseña el nombre entero (CSS, `.pt:hover .cap`) */
   }
   function onMouseOut(e) {
@@ -1830,11 +2039,69 @@
     $tip.classList.remove('show');
   }
 
+  /* ---------- copiar, pegar y duplicar (Leo, 17-09-2026) ----------
+     «Copiar y pegar nodos y notas… por medio de selecciones como las que tenemos… duplicarlos… con contenido y color». Se copia
+     lo elegido: los nodos elegidos (rectángulo o Mayús) o el nodo elegido (un salto, sus dos extremos), o las notas elegidas o
+     la nota elegida. El portapapeles es del tablero (vale de un esquema a otro) y va aparte del del sistema, donde solo queda el
+     texto. Pegar nodos: donde esté el puntero sobre el tablero (el primero en esa columna y esa trama) o, si no, donde estaban,
+     corridos a la derecha hasta un sitio libre. Pegar notas: en el nodo, el enlace o la raya elegidos o, si no, donde estaban.
+     Cmd/Ctrl+D duplica lo elegido sin tocar el portapapeles, y Opción al arrastrar un nodo, un bloque o una nota también. */
+  let portapapeles = null, ultimoSitio = null;
+  function queCopiar() {
+    if (multiNotas.size) return m.copiarNotas([...multiNotas]);
+    if (multi.size) return m.copiar([...multi]);
+    if (!sel) return null;
+    if (sel.tipo === 'punto') return m.copiar([sel.id]);
+    if (sel.tipo === 'salto') { const s = m.salto(sel.id); return s && m.copiar([s.deId]); }
+    if (sel.tipo === 'nota') return m.copiarNotas([sel.id]);
+    return null;
+  }
+  const tableroActivo = t => !!($board && $board.offsetParent && !(t instanceof Element && t.closest('input, textarea, [contenteditable="true"], #dlg')));
+  function copiar(e) {
+    if (!tableroActivo(e.target)) return;
+    const clip = queCopiar(); if (!clip) return;
+    e.preventDefault();
+    portapapeles = clip;
+    const texto = clip.tipo === 'notas' ? clip.notas.map(n => n.texto).join('\n') : clip.puntos.map(x => x.titulo).join('\n');
+    try { e.clipboardData.setData('text/plain', texto); } catch (_) {}
+    const n = clip.tipo === 'notas' ? clip.notas.length : clip.puntos.length;
+    avisar(clip.tipo === 'notas' ? (n === 1 ? 'Nota copiada' : n + ' notas copiadas') : (n === 1 ? 'Nodo copiado' : n + ' nodos copiados'));
+  }
+  function pegar(e) {
+    if (!portapapeles || !tableroActivo(e.target)) return;
+    e.preventDefault();
+    pegarClip(portapapeles, false);
+  }
+  /* `duplicar`: nodos a la derecha de los originales; notas en su mismo sitio */
+  function pegarClip(clip, duplicar) {
+    if (clip.tipo === 'notas') {
+      let destino = null;
+      if (!duplicar && sel && sel.tipo === 'punto') destino = { deId: sel.id };
+      else if (!duplicar && sel && sel.tipo === 'enlace') { const b = m.siguienteEnTrama(sel.id); if (b) destino = { deId: sel.id, aId: b.id }; }
+      else if (!duplicar && sel && sel.tipo === 'raya') { const [lineaId, c] = sel.id.split('|'); destino = { lineaId, cg: +c }; }
+      const r = m.pegarNotas(clip, destino); if (!aplicar(r)) return;
+      multi.clear(); multiNotas.clear(); r.ids.forEach(id => multiNotas.add(id)); sel = null;
+      render(); return;
+    }
+    let c0 = clip.c0, f0 = clip.f0;
+    if (duplicar) c0 = clip.c0 + Math.max(...clip.puntos.map(x => x.dc)) + 1;
+    else if (ultimoSitio && m.linea(ultimoSitio.lineaId)) { c0 = ultimoSitio.cg; f0 = m.datos.lineas.findIndex(l => l.id === ultimoSitio.lineaId); }
+    const r = m.pegar(clip, c0, f0); if (!r.ok) return avisar(r.aviso);
+    avisar(duplicar ? (r.ids.length === 1 ? 'Nodo duplicado' : r.ids.length + ' nodos duplicados') : r.aviso);
+    multiNotas.clear(); multi.clear(); r.ids.forEach(id => multi.add(id)); sel = null;
+    render();
+  }
+  function duplicar() {
+    const clip = queCopiar(); if (!clip) return false;
+    pegarClip(clip, true); return true;
+  }
+
   /* ---------- teclado ---------- */
   function onKeyDown(e) {
     const cmd = e.metaKey || e.ctrlKey, enCampo = e.target instanceof Element && e.target.matches('input,textarea');
     if (cmd && e.key.toLowerCase() === 'z' && !enCampo) { e.preventDefault(); e.shiftKey ? rehacer() : deshacer(); return; }
     if (cmd && e.key.toLowerCase() === 'y' && !enCampo) { e.preventDefault(); rehacer(); return; }
+    if (cmd && !e.shiftKey && e.key.toLowerCase() === 'd' && !enCampo && tableroActivo(e.target)) { if (duplicar()) e.preventDefault(); return; }
     if (enCampo) return;
     if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && sel && sel.tipo === 'punto') {
       const v = m.vecinos(sel.id), id = v && (e.key === 'ArrowLeft' ? v.anterior : v.siguiente);
@@ -1916,6 +2183,10 @@
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('pointerup', onPointerUp);
+    document.addEventListener('copy', copiar);
+    document.addEventListener('paste', pegar);
+    /* si el puntero sale de la ventana, el borde de acto deja de crecer solo (un botón soltado fuera no llega) */
+    document.documentElement.addEventListener('mouseleave', () => { if (res && res.auto) { clearInterval(res.auto); res.auto = null; } });
     document.addEventListener('click', onClick);
     document.addEventListener('contextmenu', onContextMenu);
     document.addEventListener('dblclick', onDblClick);

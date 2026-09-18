@@ -5,23 +5,36 @@
   const S = {};
   Ed.screenplay = S;
 
+  /* Los elementos y lo que hace cada uno siguen la «Especificación de formato de guion» que entregó Leo (17-09-2026):
+     formato de TV, Courier 12, sangrías fijas en caracteres, Enter y Tab que predicen el siguiente elemento. */
   S.KINDS = [
-    { id: 'scene', label: 'Encabezado de escena', hint: 'INT./EXT. LUGAR - DÍA', keys: 'escena encabezado int ext slugline' },
-    { id: 'action', label: 'Acción', hint: 'Descripción de la acción', keys: 'accion descripcion' },
-    { id: 'character', label: 'Personaje', hint: 'PERSONAJE', keys: 'personaje nombre' },
-    { id: 'paren', label: 'Paréntico', hint: 'en voz baja', keys: 'parentico parentesis acotacion' },
-    { id: 'dialogue', label: 'Diálogo', hint: 'Diálogo', keys: 'dialogo' },
-    { id: 'transition', label: 'Transición', hint: 'CORTE A:', keys: 'transicion corte fundido' },
-    { id: 'shot', label: 'Toma', hint: 'PRIMER PLANO DE...', keys: 'toma plano shot' }
+    { id: 'scene', label: 'Encabezado de escena', hint: 'INT./EXT. LUGAR - DÍA', keys: 'escena encabezado int ext slugline', atajo: '1' },
+    { id: 'subscene', label: 'Encabezado secundario', hint: 'TALKING HEAD - INT. - DÍA', keys: 'subescena secundario talking' },
+    { id: 'action', label: 'Acción', hint: 'Descripción de la acción', keys: 'accion descripcion', atajo: '2' },
+    { id: 'character', label: 'Personaje', hint: 'PERSONAJE', keys: 'personaje nombre', atajo: '3' },
+    { id: 'paren', label: 'Paréntesis', hint: 'en voz baja', keys: 'parentesis parentico acotacion', atajo: '4' },
+    { id: 'dialogue', label: 'Diálogo', hint: 'Diálogo', keys: 'dialogo', atajo: '5' },
+    { id: 'transition', label: 'Transición', hint: 'CORTE A:', keys: 'transicion corte fundido', atajo: '6' },
+    { id: 'shot', label: 'Toma', hint: 'ÁNGULO SOBRE…', keys: 'toma plano shot angulo' },
+    { id: 'act', label: 'Acto / Sección', hint: 'ACTO UNO', keys: 'acto seccion cold tag fin' },
+    { id: 'note', label: 'Nota', hint: '[nota]', keys: 'nota comentario' },
+    { id: 'montage', label: 'Montaje', hint: 'MONTAJE:', keys: 'montaje serie tomas' }
   ];
-  /* Qué elemento sigue al pulsar Enter al final de cada uno (convención de los editores de guion) */
-  const NEXT = { scene: 'action', action: 'action', character: 'dialogue', paren: 'dialogue', dialogue: 'character', transition: 'scene', shot: 'action' };
+  /* Qué elemento sigue al pulsar Enter al final de cada uno (tabla de la especificación) */
+  const NEXT = { scene: 'action', subscene: 'action', action: 'action', character: 'dialogue', paren: 'dialogue', dialogue: 'action',
+                 transition: 'scene', shot: 'action', act: 'scene', note: 'action', montage: 'action' };
+  /* Tab: a qué pasa (especificación); en los que no dice nada, sigue el orden de siempre (`ORDEN`) */
+  const TAB = { action: 'character', character: 'paren', dialogue: 'paren' };
 
+  /* el tipo de un párrafo de guion (no el del diálogo doble ni sus columnas, que envuelven párrafos: js/doble.js) */
   S.kindOf = function (block) {
     if (!block || !block.classList) return null;
-    const c = Array.from(block.classList).find(k => k.startsWith('sp-'));
+    const c = Array.from(block.classList).find(k => k.startsWith('sp-') && k !== 'sp-doble' && k !== 'sp-col');
     return c ? c.slice(3) : null;
   };
+  /* dentro de una columna de un diálogo doble solo caben personaje, paréntesis y diálogo */
+  const enColumna = b => !!(Ed.doble && b && Ed.doble.col(b));
+  const cabeEn = (b, kind) => !enColumna(b) || Ed.doble.KINDS.includes(kind);
 
   function toParagraph(block) {
     if (block.tagName === 'P') return block;
@@ -41,6 +54,7 @@
     if (!p.firstChild) p.appendChild(document.createElement('br'));
     return p;
   }
+  S.aplicar = apply;
 
   /* Aplica un formato (o null = texto normal) a los bloques seleccionados */
   S.set = function (kind) {
@@ -53,6 +67,7 @@
     let last = null;
     blocks.forEach(b => {
       if (b.closest('blockquote') && b.tagName !== 'BLOCKQUOTE') return;
+      if (b.matches('.sp-doble, .sp-col') || !cabeEn(b, kind)) return;
       const p = apply(b, kind);
       if (p) last = p;
     });
@@ -84,14 +99,29 @@
   /* Tab dentro de un elemento de guion cambia de elemento (Mayús+Tab, al anterior) en lugar de sangrar:
      la sangría deformaba el formato. Orden: escena → acción → personaje → paréntico → diálogo →
      transición → toma → escena. */
-  const ORDEN = ['scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'shot'];
+  const ORDEN = ['scene', 'subscene', 'action', 'character', 'paren', 'dialogue', 'transition', 'shot', 'act', 'note', 'montage'];
   S.onTab = function (e) {
     const editor = Ed.editor, r = Ed.getRange();
     if (!r || !editor.contains(r.startContainer)) return false;
     const block = Ed.closestBlock(r.startContainer, editor), kind = S.kindOf(block);
     if (!kind || block.closest('td, th, li')) return false;
     e.preventDefault();
-    const i = ORDEN.indexOf(kind), sig = ORDEN[(i + (e.shiftKey ? -1 : 1) + ORDEN.length) % ORDEN.length];
+    /* **al final de una línea con texto, Tab abre la siguiente** del tipo de la tabla (acción → personaje, personaje o diálogo →
+       paréntesis), como en los editores de guion: cambiar la propia línea convertía el nombre o lo dicho en un paréntesis */
+    const vacio = !block.textContent.replace(/\u200B/g, '').trim();
+    if (!e.shiftKey && TAB[kind] && !vacio && r.collapsed) {
+      const post = document.createRange(); post.setStart(r.startContainer, r.startOffset); post.setEnd(block, block.childNodes.length);
+      if (!post.toString().replace(/\u200B/g, '').trim()) {
+        Ed.cmd('insertParagraph');
+        const r2 = Ed.getRange(), nb = r2 && Ed.closestBlock(r2.startContainer, editor);
+        if (nb && nb !== block) { apply(nb, TAB[kind]); Ed.setCaret(nb, 0); }
+        if (Ed.afterChange) Ed.afterChange();
+        if (Ed.updateToolbar) Ed.updateToolbar();
+        return true;
+      }
+    }
+    const orden = enColumna(block) ? Ed.doble.KINDS : ORDEN;       // en un diálogo doble, solo sus tres
+    const i = orden.indexOf(kind), sig = (!e.shiftKey && TAB[kind]) || orden[(i + (e.shiftKey ? -1 : 1) + orden.length) % orden.length];
     const antes = r.cloneRange();
     S.set(sig);
     /* S.set deja el cursor al final: se devuelve a donde estaba (el párrafo es el mismo, solo cambia su clase) */
@@ -108,10 +138,13 @@
     const block = Ed.closestBlock(r.startContainer, editor);
     const kind = S.kindOf(block);
     if (!kind) return false;
+    if (enColumna(block)) return Ed.doble.onEnter(e, block);     // en un diálogo doble, de columna en columna
     const text = block.textContent.replace(/\u200B/g, '').trim();
     if (!text) {
-      /* elemento vacío: pasa a acción; una acción vacía vuelve a texto normal */
+      /* **Enter en una línea vacía abre el menú de comandos** (especificación, 4): se elige ahí qué elemento es.
+         Sin el menú («/»), como antes: pasa a acción, y una acción vacía vuelve a texto normal. */
       e.preventDefault();
+      if (Ed.slash && Ed.slash.abrirAqui && Ed.slash.abrirAqui()) return true;
       apply(block, kind === 'action' ? null : 'action');
       Ed.setCaret(block, 0);
       if (Ed.afterChange) Ed.afterChange();

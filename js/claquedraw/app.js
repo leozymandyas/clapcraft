@@ -358,7 +358,7 @@
     const m = d.menciones(id);
     if (m.length) { T.tablero.avisar('«' + p.nombre + '» aparece en ' + m.length + (m.length === 1 ? ' nota' : ' notas') + ': no se puede eliminar mientras lo nombren'); return; }
     const c = d.contenedor(C.ID_PERSONAJES), sub = c && c.subs.find(s => s.lineaId === id), n = sub ? d.notasDe(sub.id).length : 0;
-    if (!await T.tablero.confirmar('¿Eliminar a «' + p.nombre + '»?' + (n ? ' Sus ' + n + (n === 1 ? ' nota va' : ' notas van') + ' a la papelera.' : '') + ' En los esquemas de personaje, sus carriles quedan sin personaje.', 'Eliminar')) return;
+    if (!await T.tablero.confirmar('¿Mover a «' + p.nombre + '» a la papelera?' + (n ? ' Con su biblioteca (' + n + (n === 1 ? ' nota).' : ' notas).') : '') + ' En los esquemas de personaje, sus carriles quedan sin personaje; si lo restauras, vuelven a ser suyos.', 'Mover a la papelera')) return;
     volcar();
     const r = d.eliminarPersonaje(id); if (!r.ok) { T.tablero.avisar(r.aviso); return; }
     carrilesDe(id, l => { delete l.personaje; l.nombre = 'Sin personaje'; });
@@ -425,9 +425,9 @@
     vista.arbol = p.arbol === 'personajes' ? 'personajes' : 'contenedores';
     montarEsquema(p.esquema && refEsquema(p.esquema) ? p.esquema : primerEsquema());
     const d = docs();
-    if (p.nota && d && d.nota(p.nota)) { C.gestor.abrirNota(p.nota); return; }
+    if (p.nota && d && d.nota(p.nota)) { verVista('documentos'); C.gestor.abrirNota(p.nota); return; }
     /* el gestor recuerda la biblioteca aunque delante esté el esquema: solo se abre si era lo que se veía */
-    if (p.modo === 'documentos' && p.sub && d && d.sub(p.sub)) { C.gestor.abrirSub(p.sub); return; }
+    if (p.modo === 'documentos' && p.sub && d && d.sub(p.sub)) { verVista('documentos'); C.gestor.abrirSub(p.sub); return; }
     if (p.modo === 'texto' && esquemaId && !esPersonajes(esquemaId)) { abrirTexto(null); return; }
     verVista(p.modo === 'documentos' ? 'documentos' : 'esquema');
   }
@@ -1153,8 +1153,22 @@
     nuevoEsquemaPersonaje: (trigger, carpetaId) => nuevoEsquemaPersonaje(trigger, carpetaId),
     enPersonajes, verArbol: cual => { vista.arbol = cual === 'personajes' ? 'personajes' : 'contenedores'; guardarVista(); },
     /* lo elegido en la barra se enseña en la vista Documentos (la barra está en todas) */
-    mostrarTablero: () => { if (vista.modo !== 'documentos') verVista('documentos'); },
+    /* la vista Documentos también cuando ya se creía en ella (al volver a la última pantalla, `vista.modo` viene guardado
+       como «documentos» pero la página aún no la ha puesto: se veía el esquema detrás) */
+    mostrarTablero: () => { if (vista.modo !== 'documentos' || !document.body.classList.contains('vista-documentos')) verVista('documentos'); },
     alternarLado: () => alternarLado(),
+    volcar: () => { volcar(); C.texto.volcar(); },             // antes de duplicar o tirar: el tablero y el editor, a sus datos
+    /* lo restaurado de la papelera: un personaje recupera sus carriles también en el esquema montado; un esquema, sin ninguno
+       montado, se monta */
+    restaurado: r => {
+      if (r.personaje) {
+        if ((r.carriles || []).some(cr => cr.eid === esquemaId)) {
+          r.carriles.filter(cr => cr.eid === esquemaId).forEach(cr => { if (modelo.linea(cr.lineaId)) modelo.editarLinea(cr.lineaId, { personaje: r.personaje.id, nombre: r.personaje.nombre }); });
+          T.tablero.render(); volcar();
+        }
+        C.gestor.render();
+      } else if (r.esquema && !esquemaId) montarEsquema(r.esquema.id);
+    },
     esquemaEliminado: eid => { if (esquemaId === eid) montarEsquema(primerEsquema()); },
     esquemaCreado: eid => { if (!esquemaId) montarEsquema(eid); },   // con el tablero vacío, el nuevo se monta solo
     guardar: () => { if (abiertoId) biblioteca.marcar(abiertoId); persistir(); },

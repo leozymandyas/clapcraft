@@ -1,33 +1,75 @@
 /* Páginas: la hoja continua del editor se ve partida en hojas, como en un procesador de textos, para
    saber cuántas páginas lleva el guion y cuánto duraría (una página de guion ≈ un minuto en pantalla).
 
-   No toca el documento ni el Deshacer: los bloques no se parten ni se mueven en el DOM. Se mide dónde cae
-   cada bloque en la hoja continua y, cuando uno no cabe en la página, se le da margen superior con una
-   hoja de estilos propia (`#editor > :nth-child(n) { margin-top }`) para que empiece en la siguiente; entre
-   hoja y hoja se dibuja el hueco (capa `.pag-capa` dentro de #pageWrap, fuera del contenteditable). Un
-   bloque más alto que una página no se puede empujar: la página se corta por dentro con una raya. Cada
-   hoja lleva su número en la esquina inferior derecha, desde la primera (que existe entera desde el
-   principio: la hoja tiene como mínimo el alto de las páginas que ocupa). El
-   encabezado de escena, el personaje y el paréntico pasan de hoja con lo que les sigue.
+   **Las reparte el mismo maquetador que el PDF** (js/claquedraw/maquetar.js; Leo, 18-09-2026: «verifica que el contador de
+   páginas del editor coincida con lo del pdf»): en renglones de un guion impreso (Carta, Courier 12, 60 caracteres por renglón y
+   54 renglones por página), con sus reglas de corte (un encabezado no se queda solo al pie, una transición no abre página, un acto
+   empieza página, un diálogo largo se parte al final de una oración con «(MORE)» y «(CONT'D)»). Los bloques los arma
+   `bloquesDe`, igual que para el PDF (con las escenas numeradas si «Nº escenas» está encendido y sin las notas si la exportación
+   las oculta), así que el número de páginas no depende del ancho de la hoja en pantalla ni del tamaño de letra.
 
-   Capacidad de una página: la de un guion en Carta (11 in con 1 in de margen arriba y abajo) en Courier
-   12 pt, unas 54 líneas; se cuenta con el interlineado real de la hoja, así que con interlineado 1.5 la
-   hoja se ve más alta que un Carta pero cuenta lo mismo. El ancho se compensa: la página mide 54 líneas
-   × (576 px / ancho de la columna), es decir, lo que ocuparía el texto a 60 caracteres por línea. */
+   Aquí solo se dibuja, sin tocar el documento ni el Deshacer: cuando una página empieza en un bloque, ese bloque recibe margen
+   superior con una hoja de estilos propia (`#editor > :nth-child(n) { margin-top }`) para que empiece en la hoja siguiente; entre
+   hoja y hoja se dibuja el hueco (capa `.pag-capa` dentro de #pageWrap, fuera del contenteditable). Cuando empieza a mitad de un
+   bloque (un diálogo o una acción partidos), una raya marca dónde se corta. Cada hoja mide al menos 54 renglones de la hoja y crece
+   si lo que cabe en una página impresa ocupa más en pantalla. El número va arriba a la derecha, «2.», sin el de la primera. */
 (function (Ed) {
   'use strict';
   const P = {};
   Ed.paginas = P;
-  const LINEAS = 54;           // líneas por página de guion
-  const COLUMNA = 576;         // px de la columna de texto de una página real: 6 in a 12 pt Courier (60 caracteres × 9,6 px)
+  const LINEAS = 54;           // renglones por página de guion
   const HUECO = 26;            // px de lienzo entre hoja y hoja
-  let estilo, alto, capa, contador, pendiente = null, ancho = 0, total = 1;
+  const CLAVE_SIN_NOTAS = 'guiones.claquedraw.exportar.sinNotas';   // la casilla «Ocultar las notas del guion» de Exportar
+  let estilo, alto, capa, contador, pendiente = null, ancho = 0, total = 1, portada = false;
 
   const num = v => parseFloat(v) || 0;
+  const sinNotas = () => { try { return localStorage.getItem(CLAVE_SIN_NOTAS) === '1'; } catch (_) { return false; } };
+
+  /* el nodo y el desplazamiento del carácter `off` del texto de un bloque, contado como en el maquetador (un <br> es un carácter;
+     los espacios de anchura cero no cuentan) */
+  function posicion(el, off) {
+    let visto = 0, res = null;
+    const ir = n => {
+      for (const x of Array.from(n.childNodes)) {
+        if (res) return;
+        if (x.nodeType === 3) {
+          const v = x.nodeValue;
+          for (let i = 0; i < v.length; i++) {
+            if (v[i] === '\u200B') continue;
+            if (visto === off) { res = { n: x, o: i }; return; }
+            visto++;
+          }
+        } else if (x.nodeName === 'BR') {
+          if (visto === off) { res = { n: x.parentNode, o: Array.prototype.indexOf.call(x.parentNode.childNodes, x) }; return; }
+          visto++;
+        } else if (x.nodeType === 1) ir(x);
+      }
+    };
+    ir(el);
+    return res;
+  }
+  /* a qué altura del bloque (en px sin zoom, desde su borde de arriba) empieza el renglón de ese carácter: se mide el propio
+     carácter (un rango plegado al principio de un renglón puede dar el final del anterior) */
+  function alturaEn(el, off) {
+    const p = posicion(el, off), caja = el.getBoundingClientRect();
+    if (!p || !caja.height) return el.offsetHeight / 2;
+    const r = document.createRange();
+    r.setStart(p.n, p.o);
+    if (p.n.nodeType === 3 && p.o < p.n.nodeValue.length) r.setEnd(p.n, p.o + 1); else r.collapse(true);
+    const rc = r.getClientRects()[0] || r.getBoundingClientRect();
+    if (!rc || !rc.height) return el.offsetHeight / 2;
+    return Math.max(0, Math.min(el.offsetHeight, (rc.top - caja.top) / caja.height * el.offsetHeight));
+  }
+  /* el selector de un elemento del documento (o de un elemento de una lista) para su margen de salto */
+  function selector(ed, k) {
+    const idx = n => Array.prototype.indexOf.call(n.parentNode.children, n) + 1;
+    return k.parentNode === ed ? `#editor > :nth-child(${idx(k)})` : `#editor > :nth-child(${idx(k.parentNode)}) > :nth-child(${idx(k)})`;
+  }
 
   function calcular() {
     pendiente = null;
     const ed = Ed.editor; if (!ed || !ed.isConnected || !ed.offsetWidth) return;   // escondido: se calcula al verse (ResizeObserver)
+    const M = window.Claquedraw && window.Claquedraw.maquetar; if (!M) return;
     /* posiciones naturales: sin los márgenes de salto (leer y volver a escribir ocurre antes de pintar).
        El alto mínimo de la hoja (otra hoja de estilos) se queda mientras se mide: si se quitara, la hoja
        encogería, el navegador recortaría el desplazamiento y al volver la vista saltaría al escribir.
@@ -38,60 +80,46 @@
     const cs = getComputedStyle(ed);
     const lh = num(cs.lineHeight) || num(cs.fontSize) * 1.5 || 24;
     const padT = num(cs.paddingTop), padB = num(cs.paddingBottom), bordeT = num(cs.borderTopWidth), bordeB = num(cs.borderBottomWidth);
-    /* Se cuenta en renglones de una página real, no en píxeles de la hoja en pantalla, que casi nunca tiene su
-       ancho (depende de la ventana y de ANCHO): con la columna más estrecha que los 60 caracteres de un guion,
-       un párrafo ocupa más renglones de los que ocuparía impreso. Cada bloque cuenta
-       · sus renglones de texto divididos por la escala (576 px / ancho de la columna; uno de un solo renglón,
-         como el nombre de un personaje, sigue siendo uno);
-       · una tabla, una base de datos o una imagen, su alto tal cual;
-       · y un renglón en blanco si lo separa un margen del anterior (en un guion impreso, la línea en blanco).
-       La página tiene 54 renglones. Así el número de páginas no cambia con el ancho (antes, con la hoja
-       estrecha, salía del doble o más). Cada hoja en pantalla mide al menos 54 líneas y crece si lo que cabe en
-       una página real ocupa más. */
-    const columna = ed.clientWidth - num(cs.paddingLeft) - num(cs.paddingRight);
-    const escala = columna > 0 ? Math.min(4, Math.max(0.5, COLUMNA / columna)) : 1;
-    const renglonesDe = k => {
-      const h = k.offsetHeight;
-      if (k.matches('table, hr, .db') || k.querySelector('img, table')) return h / lh;
-      const lhk = num(getComputedStyle(k).lineHeight) || lh;
-      const vis = Math.max(1, Math.round(h / lhk));
-      return Math.max(1, Math.ceil(vis / escala - 0.2)) * (lhk / lh);
-    };
-    const blancoEntre = (a, b) => (b.offsetTop - (a.offsetTop + a.offsetHeight)) > 2 ? 1 : 0;
+    /* los bloques, como para el PDF (la portada es una hoja aparte, sin número y fuera de la cuenta) */
     const hijos = Array.from(ed.children).filter(k => k.offsetParent !== null);   // sin los ocultos
-    const reglas = [], saltos = [], finales = [];   // finales: el borde inferior de cada hoja (para su número)
+    const portadaEl = hijos[0] && hijos[0].matches('.portada') ? hijos[0] : null;
+    const els = M.elementos(hijos.filter(k => k !== portadaEl));
+    const { bloques, indices, prefijos } = M.bloquesDe(els, {
+      numerar: ed.classList.contains('numerar-escenas'), sinNotas: sinNotas(),
+      fijo: el => Math.ceil(el.offsetHeight / lh - 0.2)              // una tabla o una imagen: su alto en renglones
+    });
+    const pags = M.paginar(bloques);
+    /* dónde empieza cada página: `null`, antes de un elemento; un número, a mitad de él (en ese carácter de su texto) */
+    const cortes = new Map();
+    const cortar = (el, off) => { if (!cortes.has(el)) cortes.set(el, []); cortes.get(el).push(off); };
+    if (portadaEl && els.length) cortar(els[0], null);
+    pags.slice(1).forEach(pg => {
+      const x = pg.find(y => y.i !== undefined); if (!x) return;
+      const off = x.desde - prefijos[x.i];
+      cortar(els[indices[x.i]], off > 0 ? off : null);
+    });
+    const reglas = [], saltos = [], finales = [];   // finales: el borde inferior de cada hoja
     const minimoHoja = LINEAS * lh;
-    let desplaza = 0, inicio = padT, usados = 0, previo = null;
-    hijos.forEach((k, i) => {
-      const arriba = k.offsetTop + desplaza, altoK = k.offsetHeight;
-      const r = renglonesDe(k);
-      let blanco = previo && usados > 0 ? blancoEntre(previo, k) : 0;
-      /* como en un guion impreso, el encabezado de escena, el personaje y el paréntico no se quedan solos al
-         pie: cuentan con lo que les sigue (el paréntico y el diálogo del personaje), que tampoco se parte */
-      let grupo = r;
-      if (k.matches('.sp-scene, .sp-character, .sp-paren')) {
-        let j = i + 1;
-        while (hijos[j] && hijos[j].matches('.sp-paren') && !k.matches('.sp-paren')) j++;
-        const n = hijos[j];
-        if (n) grupo += blancoEntre(hijos[j - 1], n) + Math.min(renglonesDe(n), LINEAS);
-      }
-      if (previo && usados > 0 && usados + blanco + grupo > LINEAS) {
-        /* no cabe: empieza en la hoja siguiente */
-        const hueco = k.offsetTop - (previo.offsetTop + previo.offsetHeight);   // el hueco natural con el anterior (márgenes ya colapsados)
-        const limite = Math.max(previo.offsetTop + previo.offsetHeight + desplaza, inicio + minimoHoja);
-        const nuevo = limite + padB + HUECO + padT;
-        const extra = nuevo - arriba;
-        reglas.push(`#editor > :nth-child(${Array.prototype.indexOf.call(ed.children, k) + 1}) { margin-top: ${Math.max(0, hueco) + extra}px !important; }`);
-        saltos.push({ y: limite + padB }); finales.push(limite + padB);
-        desplaza += extra; inicio = nuevo; usados = 0; blanco = 0;
-      }
-      usados += blanco + r;
-      /* un bloque más largo que una página: la corta por dentro, donde se acaban sus 54 renglones */
-      while (usados > LINEAS) {
-        const sobra = usados - LINEAS;
-        const y = k.offsetTop + desplaza + altoK * Math.max(0, Math.min(1, 1 - sobra / r));
-        saltos.push({ y, dentro: true }); finales.push(y); inicio = y; usados = sobra;
-      }
+    let desplaza = 0, inicio = padT, previo = null;
+    (portadaEl ? [portadaEl] : []).concat(els).forEach(k => {
+      (cortes.get(k) || []).forEach(off => {
+        if (off === null) {
+          if (!previo) return;                                   // la primera hoja ya empieza aquí
+          /* empieza en la hoja siguiente: un margen con el hueco natural más lo que falta hasta ella */
+          const arriba = k.offsetTop + desplaza;
+          const hueco = k.offsetTop - (previo.offsetTop + previo.offsetHeight);   // el hueco natural con el anterior (márgenes colapsados)
+          const limite = Math.max(previo.offsetTop + previo.offsetHeight + desplaza, inicio + minimoHoja);
+          const nuevo = limite + padB + HUECO + padT;
+          const extra = nuevo - arriba;
+          reglas.push(`${selector(ed, k)} { margin-top: ${Math.max(0, hueco) + extra}px !important; }`);
+          saltos.push({ y: limite + padB }); finales.push(limite + padB);
+          desplaza += extra; inicio = nuevo;
+        } else {
+          /* se parte por dentro: la raya, en el renglón donde sigue la página siguiente */
+          const y = k.offsetTop + desplaza + alturaEn(k, off);
+          saltos.push({ y, dentro: true }); finales.push(y); inicio = y;
+        }
+      });
       previo = k;
     });
     const fin = previo ? previo.offsetTop + previo.offsetHeight + desplaza : padT;
@@ -102,9 +130,12 @@
     const minimo = `#editor { min-height: ${Math.ceil(limite + padB + bordeT + bordeB)}px !important; }`;
     if (alto.textContent !== minimo) alto.textContent = minimo;
     if (ws && ws.scrollTop !== desp) ws.scrollTop = desp;
-    if (nuevo === antes && capa.childElementCount === saltos.length + finales.length) { actualizarContador(finales.length); return; }   // nada cambió
+    const firma = saltos.map(x => Math.round(x.y) + (x.dentro ? 'd' : '')).join(',');
+    if (nuevo === antes && !!portadaEl === portada && capa.dataset.firma === firma) { actualizarContador(pags.length); return; }   // nada cambió
+    portada = !!portadaEl;
     pintar(saltos, finales, ed.offsetTop + bordeT);
-    actualizarContador(finales.length);
+    capa.dataset.firma = firma;
+    actualizarContador(pags.length);
     if (Ed.blocks && Ed.blocks.reubicar) Ed.blocks.reubicar();   // los márgenes de salto movieron bloques: el asa los sigue
   }
   function actualizarContador(n) {
@@ -115,7 +146,8 @@
     }
   }
 
-  /* los huecos entre hojas y, en la esquina inferior derecha de cada hoja (desde la primera), su número */
+  /* los huecos entre hojas y el número de cada hoja **arriba a la derecha, «2.», sin el de la primera** (especificación de
+     guion, Leo 17-09-2026; antes iba abajo y desde la primera) */
   function pintar(saltos, finales, base) {
     const huecos = saltos.map(s => {
       const el = document.createElement('div');
@@ -124,14 +156,19 @@
       if (!s.dentro) el.style.height = HUECO + 'px';
       return el;
     });
-    const numeros = finales.map((y, i) => {
-      const n = document.createElement('span');
-      n.className = 'pag-num'; n.textContent = i + 1;
-      n.title = 'Página ' + (i + 1) + ' de ' + finales.length;
-      n.style.top = (base + y) + 'px';
+    /* con portada, esa hoja no cuenta: la primera del guion es la 1 (sin número) y la siguiente, la «2.» */
+    const quita = portada ? 1 : 0;
+    const numeros = finales.slice(1 + quita).map((y, j) => {
+      const i = j + 1 + quita, n = document.createElement('span');
+      n.className = 'pag-num'; n.textContent = (i + 1 - quita) + '.';
+      n.title = 'Página ' + (i + 1 - quita) + ' de ' + (finales.length - quita);
+      /* arriba de su hoja: justo tras el hueco que la separa de la anterior (o tras la raya, si una página larga se corta) */
+      const s = saltos[i - 1];
+      n.style.top = (base + (s ? s.y + (s.dentro ? 0 : HUECO) : y)) + 'px';
       return n;
     });
     capa.replaceChildren(...huecos, ...numeros);
+    capa.dataset.hojas = String(finales.length);
   }
 
   /* con setTimeout y no requestAnimationFrame: el marco de ClapCraft se precarga escondido y ahí no hay frames */
@@ -152,6 +189,8 @@
     new MutationObserver(P.programar).observe(ed, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'class'] });
     /* el ancho de la hoja cambia los renglones (zoom, ANCHO, ventana); el alto lo cambia este módulo, así que se ignora */
     new ResizeObserver(() => { const w = ed.offsetWidth; if (w !== ancho) { ancho = w; P.programar(); } }).observe(ed);
+    /* la casilla de exportar sin notas se cambia desde ClapCraft (otra ventana del mismo origen): el PDF cambia de páginas */
+    window.addEventListener('storage', e => { if (e.key === CLAVE_SIN_NOTAS) P.programar(); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(P.programar);
     P.programar();
   }

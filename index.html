@@ -27,12 +27,16 @@
     <option value="pre">Código</option>
     <optgroup label="Guion">
       <option value="sp-scene">Encabezado de escena</option>
+      <option value="sp-subscene">Encabezado secundario</option>
       <option value="sp-action">Acción</option>
       <option value="sp-character">Personaje</option>
-      <option value="sp-paren">Paréntico</option>
+      <option value="sp-paren">Paréntesis</option>
       <option value="sp-dialogue">Diálogo</option>
       <option value="sp-transition">Transición</option>
       <option value="sp-shot">Toma</option>
+      <option value="sp-act">Acto / Sección</option>
+      <option value="sp-note">Nota</option>
+      <option value="sp-montage">Montaje</option>
     </optgroup>
   </select>
   <select id="fontFamily" title="Tipo de letra">
@@ -145,6 +149,7 @@
   <div class="fb-item fb-paginas"><span id="fbPaginas" class="fb-paginas-n">1 página · ≈ 1 min</span></div>
   <span class="fb-sep"></span>
   <div class="fb-item row"><button data-action="script" id="fbScript" title="Modo guion: el menú / solo muestra elementos de guion">✎</button><span>Modo guion</span></div>
+  <div class="fb-item row"><button data-action="numerar" id="fbNumerar" title="Numerar las escenas: «ESCENA 1 - INT. …» (no cuentan los encabezados secundarios)">#</button><span>Nº escenas</span></div>
   <div class="fb-item row"><button data-action="typewriter" id="fbTypewriter" title="Typewriter">⌨</button><span>Typewriter</span></div>
   <div class="fb-item row"><button data-action="theme" id="fbTheme" title="Modo claro / oscuro">◑</button><span>Modo oscuro</span></div>
   <div class="fb-item row"><button data-action="spell" id="fbSpell" title="Ortografía">A✓</button><span>Ortografía</span></div>
@@ -184,13 +189,17 @@
   <button data-cmd="formatBlock" data-value="blockquote"><span>Cita</span></button>
   <hr>
   <div class="ctx-title">Guion (también con «/»)</div>
-  <button data-action="sp" data-kind="scene"><span>Encabezado de escena</span></button>
-  <button data-action="sp" data-kind="action"><span>Acción</span></button>
-  <button data-action="sp" data-kind="character"><span>Personaje</span></button>
-  <button data-action="sp" data-kind="paren"><span>Paréntico</span></button>
-  <button data-action="sp" data-kind="dialogue"><span>Diálogo</span></button>
-  <button data-action="sp" data-kind="transition"><span>Transición</span></button>
+  <button data-action="sp" data-kind="scene"><span>Encabezado de escena</span><kbd>Ctrl+1</kbd></button>
+  <button data-action="sp" data-kind="subscene"><span>Encabezado secundario</span></button>
+  <button data-action="sp" data-kind="action"><span>Acción</span><kbd>Ctrl+2</kbd></button>
+  <button data-action="sp" data-kind="character"><span>Personaje</span><kbd>Ctrl+3</kbd></button>
+  <button data-action="sp" data-kind="paren"><span>Paréntesis</span><kbd>Ctrl+4</kbd></button>
+  <button data-action="sp" data-kind="dialogue"><span>Diálogo</span><kbd>Ctrl+5</kbd></button>
+  <button data-action="doble"><span>Diálogo doble</span></button>
+  <button data-action="sp" data-kind="transition"><span>Transición</span><kbd>Ctrl+6</kbd></button>
   <button data-action="sp" data-kind="shot"><span>Toma</span></button>
+  <button data-action="sp" data-kind="act"><span>Acto / Sección</span></button>
+  <button data-action="sp" data-kind="note"><span>Nota</span></button>
   <hr>
   <button data-cmd="insertUnorderedList"><span>Lista con viñetas</span><kbd>Ctrl+Shift+8</kbd></button>
   <button data-cmd="insertOrderedList"><span>Lista numerada</span><kbd>Ctrl+Shift+7</kbd></button>
@@ -241,9 +250,13 @@
 <script src="js/database.js"></script>
 <script src="js/blocks.js"></script>
 <script src="js/fijos.js"></script>
+<script src="js/doble.js"></script>
+<script src="js/claquedraw/maquetar.js"></script>
 <script src="js/paginas.js"></script>
 <script src="js/slash.js"></script>
 <script src="js/characters.js"></script>
+<script src="js/formato.js"></script>
+<script src="js/portada.js"></script>
 <script src="js/vendor/typo.js"></script>
 <script src="js/dict/es.js"></script>
 <script src="js/dict/en.js"></script>

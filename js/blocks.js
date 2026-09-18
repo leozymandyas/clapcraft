@@ -42,7 +42,10 @@
     const w = $('#pageWrap').getBoundingClientRect();
     return { left: (rect.left - w.left) / z, top: (rect.top - w.top) / z, width: rect.width / z, height: rect.height / z };
   }
-  const anyMenuOpen = () => ['#ctxMenu', '#colorPop', '.tbl-menu', '.db-pop', '.blk-menu', '.slash-menu'].some(s => { const el = $(s); return el && !el.hidden; });
+  /* con las sugerencias de personajes o de formato abiertas, Esc es para cerrarlas (antes seleccionaba el bloque y el editor
+     se quedaba sin cursor: el Enter siguiente no hacía nada) */
+  const anyMenuOpen = () => ['#ctxMenu', '#colorPop', '.tbl-menu', '.db-pop', '.blk-menu', '.slash-menu', '.char-menu']
+    .some(s => Array.from(document.querySelectorAll(s)).some(el => !el.hidden));
 
   /* ---------- selección de bloques ---------- */
   B.selected = () => selected.slice();
@@ -104,6 +107,7 @@
       else if (op === 'up') moveGroup(targets, -1);
       else if (op === 'down') moveGroup(targets, 1);
       else if (op === 'del') removeAll(targets);
+      else if (op === 'separar' && Ed.doble) targets.filter(t => t.matches('.sp-doble')).forEach(t => Ed.doble.separar(t));
     });
     document.addEventListener('mousedown', e => {
       if (!menu.hidden && !(e.target.closest && e.target.closest('.blk-menu, .blk-grip'))) closeMenu(true);
@@ -215,10 +219,11 @@
 
   const CONVERTS = [
     ['p', 'Texto'], ['h1', 'Título 1'], ['h2', 'Título 2'], ['h3', 'Título 3'], ['blockquote', 'Cita'], ['pre', 'Código'], ['ul', 'Lista con viñetas'], ['ol', 'Lista numerada'],
-    ['sp-scene', 'Encabezado de escena'], ['sp-action', 'Acción'], ['sp-character', 'Personaje'], ['sp-paren', 'Paréntico'], ['sp-dialogue', 'Diálogo'], ['sp-transition', 'Transición'], ['sp-shot', 'Toma']
+    /* los elementos de guion, los mismos que el menú «/» (Ed.screenplay.KINDS) */
+    ...Ed.screenplay.KINDS.map(x => ['sp-' + x.id, x.label])
   ];
   function convert(b, to) {
-    if (!b.isConnected || b.matches('table, hr, .db')) return;
+    if (!b.isConnected || b.matches('table, hr, .db, .sp-doble')) return;
     editor().focus({ preventScroll: true });
     if (b.matches('ul, ol')) {
       if ((to === 'ul' || to === 'ol') && b.tagName.toLowerCase() !== to) {
@@ -256,10 +261,12 @@
   function openMenu(anchor) {
     const targets = selected.length ? selected : (current ? [current] : []);
     if (!targets.length) return;
-    const convertible = targets.some(b => !b.matches('table, hr, .db'));
+    const convertible = targets.some(b => !b.matches('table, hr, .db, .sp-doble'));
+    const dobles = targets.some(b => b.matches('.sp-doble'));   // un diálogo doble no se convierte: se separa (js/doble.js)
     const n = targets.length;
     let html = n > 1 ? `<div class="ctx-title">${n} bloques seleccionados</div>` : '';
     if (convertible) html += '<div class="ctx-title">Convertir en</div><div class="blk-convert">' + CONVERTS.map(([v, l]) => `<button type="button" data-op="convert" data-arg="${v}"><span>${l}</span></button>`).join('') + '</div><hr>';
+    if (dobles) html += '<button type="button" data-op="separar"><span>Separar el diálogo doble</span></button><hr>';
     html += `<button type="button" data-op="dup"><span>Duplicar</span><kbd>Ctrl+D</kbd></button>
       <button type="button" data-op="up"><span>Mover arriba</span><kbd>Ctrl+Shift+↑</kbd></button>
       <button type="button" data-op="down"><span>Mover abajo</span><kbd>Ctrl+Shift+↓</kbd></button><hr>

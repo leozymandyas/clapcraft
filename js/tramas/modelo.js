@@ -131,7 +131,20 @@
     /* Una nota va en un tramo (entre dos nodos consecutivos) o **en un nodo** (`aId: null`), y **caben varias**
        (Leo, 16-09-2026: «quiero poder agregar varias notas apiladas… también agregar notas por nodo»). */
     lista(e.notas).forEach(n => {
-      if (!n || !n.id || !puntoIds.has(n.deId)) return;
+      if (!n || !n.id) return;
+      const col = PALETA.some(c => c.id === n.color) ? { color: n.color } : {};
+      /* **nota de una raya** (Leo, 17-09-2026: «velo como rayas: las rayas son enlaces, los puntos son los nodos»): cuelga de la
+         raya de su trama que va de la columna (`actoId`, `celda`) a la siguiente, haya nodos o no. Las de la 1.1.6 colgaban
+         de un nodo (`deId`): pasan a la raya que sale de él. */
+      if (n.abierta) {
+        const p = puntoIds.has(n.deId) ? punto(n.deId) : null;
+        const lid = lineaIds.has(n.lineaId) ? n.lineaId : p ? p.lineaId : null; if (!lid) return;
+        const ac = d.actos.find(x => x.id === n.actoId) || (p && d.actos.find(x => x.id === p.actoId)) || d.actos[0];
+        const celda = clamp(Math.round(+(d.actos.find(x => x.id === n.actoId) ? n.celda : p ? p.celda : 0) || 0), 0, ac.celdas - 1);
+        d.notas.push({ id: String(n.id), deId: null, aId: null, abierta: true, lineaId: lid, actoId: ac.id, celda, texto: String(n.texto ?? ''), ...col });
+        return;
+      }
+      if (!puntoIds.has(n.deId)) return;
       const suelta = !n.aId || n.aId === n.deId;                   // nota de un nodo
       if (!suelta && (!puntoIds.has(n.aId) || punto(n.deId).lineaId !== punto(n.aId).lineaId)) return;
       d.notas.push({ id: String(n.id), deId: n.deId, aId: suelta ? null : n.aId, texto: String(n.texto ?? ''), ...(PALETA.some(c => c.id === n.color) ? { color: n.color } : {}) });
@@ -170,13 +183,30 @@
     notaDe(deId, aId) { return this.notasDe(deId, aId)[0] || null; }
     /* Las notas de un tramo (dos nodos) o, con `aId` null, las de un nodo. Caben varias (Leo, 16-09-2026). */
     notasDe(deId, aId) {
-      if (!aId) return this.datos.notas.filter(n => !n.aId && n.deId === deId);
+      if (!aId) return this.datos.notas.filter(n => !n.aId && !n.abierta && n.deId === deId);
       return this.datos.notas.filter(n => n.aId && ((n.deId === deId && n.aId === aId) || (n.deId === aId && n.aId === deId)));
     }
     /* Todas las notas de una trama, en el orden del tiempo (las de nodo, en el nodo). */
     notasDeLinea(lineaId) {
-      const x = n => { const a = this.punto(n.deId), b = n.aId && this.punto(n.aId); return a ? Math.min(this.cg(a), b ? this.cg(b) : Infinity) : Infinity; };
-      return this.datos.notas.filter(n => { const a = this.punto(n.deId); return a && a.lineaId === lineaId; }).sort((p, q) => x(p) - x(q));
+      const x = n => { const a = this.punto(n.deId), b = n.aId && this.punto(n.aId);
+        if (n.abierta) return this.colNota(n) + .5;
+        return a ? Math.min(this.cg(a), b ? this.cg(b) : Infinity) : Infinity; };
+      return this.datos.notas.filter(n => this.lineaDeNota(n) === lineaId).sort((p, q) => x(p) - x(q));
+    }
+    /* La trama de una nota: la de su nodo o, en la de una raya, la suya. */
+    lineaDeNota(n) {
+      if (!n) return null;
+      if (n.abierta) return this.linea(n.lineaId) ? n.lineaId : null;
+      const a = this.punto(n.deId); return a ? a.lineaId : null;
+    }
+    /* La columna global donde empieza la raya de una nota de raya (va de ahí a la siguiente). */
+    colNota(n) {
+      const a = this.acto(n.actoId); if (!a) return 0;
+      return this.celdasAntes(a.id) + clamp(n.celda, 0, a.celdas - 1);
+    }
+    /* Las notas de la raya que empieza en la columna `cg` de la trama `lineaId`. */
+    notasAbiertas(lineaId, cg) {
+      return this.datos.notas.filter(n => n.abierta && n.lineaId === lineaId && this.colNota(n) === cg);
     }
     /* ¿Un salto entre estas dos tramas sería rombo o cuadro? */
     formaEntre(lineaA, lineaB) {
@@ -309,9 +339,12 @@
         vistas.add(clave);
       }
       mueven.forEach(([x, d]) => { x.lineaId = d.lineaId; x.actoId = d.actoId; x.celda = d.celda; });
-      /* las notas se quedan en su sitio: la que iba de P a otro nodo va ahora del que ocupa el lugar de P (Q), y al revés */
+      /* **las notas de un nodo se van con él** (Leo, 16-09-2026: «si una nota está relacionada a un nodo, al mover el nodo se
+         debe mover con todo y sus notas»); las de un enlace se quedan en su tramo: la que iba de P a otro nodo va ahora del
+         que ocupa el lugar de P (Q), y al revés */
       const cambia = id => id === P.id ? Q.id : id === Q.id ? P.id : id;
       this.datos.notas.forEach(n => {
+        if (!n.aId) return;
         if (![n.deId, n.aId].some(id => id === P.id || id === Q.id)) return;
         n.deId = cambia(n.deId); if (n.aId) n.aId = cambia(n.aId);
         const de = this.punto(n.deId), a = n.aId && this.punto(n.aId);
@@ -395,6 +428,7 @@
       const n = Math.min(cuantas, sitio);
       const pos = u.celda + (lado === 'derecha' ? 1 : 0);
       this.datos.puntos.filter(p => p.actoId === a.id && p.celda >= pos).forEach(p => { p.celda += n; });
+      this.datos.notas.filter(x => x.abierta && x.actoId === a.id && x.celda >= pos).forEach(x => { x.celda += n; });   // las de una raya, igual
       a.celdas += n;
       const desde = this.celdasAntes(a.id) + pos;
       return si({ insertadas: n, desde,
@@ -428,6 +462,7 @@
       for (let i = donde.length - 1; i >= 0; i--) {
         const a = this.acto(donde[i].actoId); if (!a) continue;
         this.datos.puntos.filter(p => p.actoId === a.id && p.celda > donde[i].celda).forEach(p => { p.celda -= 1; });
+        this.datos.notas.filter(x => x.abierta && x.actoId === a.id && x.celda > donde[i].celda).forEach(x => { x.celda -= 1; });
         a.celdas -= 1;
       }
       const vacios = this.datos.actos.filter(a => a.celdas < 1);
@@ -456,10 +491,12 @@
       const orden = [...resto.slice(0, inicio), ...cs, ...resto.slice(inicio)];
       const mapa = new Map(); orden.forEach((viejo, nuevo) => mapa.set(viejo, nuevo));
       const dest = new Map(this.datos.puntos.map(p => [p.id, mapa.get(this.cg(p))]));
+      const destN = new Map(this.datos.notas.filter(x => x.abierta).map(x => [x.id, mapa.get(this.colNota(x))]));
       this.datos.puntos.forEach(p => {
         const u = this.ubicarCelda(dest.get(p.id));
         p.actoId = u.actoId; p.celda = u.celda;
       });
+      this.datos.notas.filter(x => x.abierta).forEach(x => { const u = this.ubicarCelda(destN.get(x.id)); x.actoId = u.actoId; x.celda = u.celda; });
       this._repararNotas();
       return si({ movidas: cs.length, desde: inicio,
         aviso: (cs.length === 1 ? '1 columna movida' : cs.length + ' columnas movidas') + ' a la posición ' + (inicio + 1) });
@@ -478,6 +515,12 @@
       const d = this.datos;
       const vecinos = p => { const l = this.puntosDe(p.lineaId), i = l.findIndex(x => x.id === p.id); return [l[i + 1], l[i - 1]].filter(Boolean); };
       d.notas = d.notas.filter(n => {
+        if (n.abierta) {                                           // la de una raya: con su trama, y en una columna que exista
+          if (!this.linea(n.lineaId)) return false;
+          if (!this.acto(n.actoId)) { const u = this.ubicarCelda(0); n.actoId = u.actoId; n.celda = u.celda; }
+          n.celda = clamp(n.celda, 0, this.acto(n.actoId).celdas - 1);
+          return true;
+        }
         const a = this.punto(n.deId), b = n.aId && this.punto(n.aId);
         if (a && !n.aId) return true;                              // nota de un nodo: le basta con su nodo
         if (a && b && !this._tramoValido(n.deId, n.aId)) { if (this.cg(a) > this.cg(b)) [n.deId, n.aId] = [n.aId, n.deId]; return true; }
@@ -546,13 +589,13 @@
       saltos.forEach(s => { juntos.add(s.deId); juntos.add(s.aId); });
       const enSalto = new Set(saltos.flatMap(s => [s.deId, s.aId]));
       return { nodos: [...juntos].filter(id => !enSalto.has(id)).length, saltos: saltos.length,
-               notas: this.datos.notas.filter(n => juntos.has(n.deId) || (n.aId && juntos.has(n.aId))).length, total: juntos.size };
+               notas: this.datos.notas.filter(n => !n.abierta && (juntos.has(n.deId) || (n.aId && juntos.has(n.aId)))).length, total: juntos.size };
     }
 
     _quitarPuntos(ids) {
       const d = this.datos;
       d.saltos = d.saltos.filter(s => !ids.has(s.deId) && !ids.has(s.aId));
-      d.notas = d.notas.filter(n => !ids.has(n.deId) && !(n.aId && ids.has(n.aId)));
+      d.notas = d.notas.filter(n => n.abierta || (!ids.has(n.deId) && !(n.aId && ids.has(n.aId))));
       d.puntos = d.puntos.filter(p => !ids.has(p.id));
     }
 
@@ -636,6 +679,7 @@
       if (this.datos.lineas.length <= 1) return no('Tiene que quedar al menos una trama');
       this._quitarPuntos(new Set(this.datos.puntos.filter(p => p.lineaId === id).map(p => p.id)));
       this.datos.lineas = this.datos.lineas.filter(x => x.id !== id);
+      this.datos.notas = this.datos.notas.filter(n => !(n.abierta && n.lineaId === id));
       return si({ aviso: 'Trama eliminada' });
     }
 
@@ -670,6 +714,128 @@
       return si({ acto: a });
     }
 
+    /* **Arrastrar el borde de un acto** (Leo, 17-09-2026: «cuando arrastre hacia la derecha en la última línea vertical, que se
+       vayan agregando más líneas… a la izquierda, que vaya quitando líneas y moviendo los nodos y notas; si ya no se puede
+       comprimir más, ya no pasa nada»). Crecer añade una columna al final del acto; el último, lleno, abre otro acto de una
+       columna. Encoger quita la columna vacía más a la derecha del acto (ni nodos en ninguna trama ni notas de raya), así lo
+       de detrás se junta; sin ninguna vacía, no hace nada. */
+    crecerActo(id) {
+      const a = this.acto(id); if (!a) return no('Ese acto no existe');
+      if (a.celdas < MAX_CELDAS) { a.celdas += 1; return si({ acto: a, creado: null }); }
+      if (this.datos.actos[this.datos.actos.length - 1] !== a) return no(`«${a.nombre}» ya tiene el máximo de columnas (${MAX_CELDAS})`);
+      const na = this.nuevoActo().acto; na.celdas = 1;
+      return si({ acto: na, creado: na.id });
+    }
+    encogerActo(id) {
+      const a = this.acto(id); if (!a) return no('Ese acto no existe');
+      if (a.celdas <= MIN_CELDAS) return no('No se puede comprimir más');
+      const desde = this.celdasAntes(a.id), ocupada = new Set(this.datos.puntos.map(p => this.cg(p)));
+      this.datos.notas.forEach(n => { if (n.abierta) ocupada.add(this.colNota(n)); });
+      for (let c = desde + a.celdas - 1; c >= desde; c--) {
+        if (ocupada.has(c)) continue;
+        this.borrarColumnas([c]);
+        return si({ acto: a, quitada: c });
+      }
+      return no('No se puede comprimir más: todas sus columnas tienen algo');
+    }
+
+    /* ====================================================================
+       Copiar, pegar y duplicar (Leo, 17-09-2026: «copiar y pegar nodos y notas… duplicarlos… con contenido y color»)
+       ==================================================================== */
+    /* Lo que se lleva copiar unos nodos: cada uno con su contenido y su color y dónde está respecto al primero (columnas y
+       tramas), los saltos cuyos dos extremos van (un extremo suelto se lleva a su pareja, como al mover un bloque) y las notas
+       que cuelgan solo de ellos (de nodo, o de un enlace entre dos que van). Sin identificadores del tablero: vale en otro. */
+    copiar(ids) {
+      const set = new Set((ids || []).filter(id => this.punto(id)));
+      if (!set.size) return null;
+      this.datos.saltos.forEach(sa => { if (set.has(sa.deId) || set.has(sa.aId)) { set.add(sa.deId); set.add(sa.aId); } });
+      const orden = this.datos.lineas.map(l => l.id), pts = this.datos.puntos.filter(p => set.has(p.id));
+      /* las notas de las rayas (sin enlace) que van con lo elegido (Leo, 18-09-2026: «no copia las de enlace»): las que quedan
+         entre dos nodos elegidos de la misma trama y, si el último (o el primero) de la trama va, las de detrás (o delante) */
+      const abiertas = this.datos.notas.filter(n => {
+        if (!n.abierta) return false;
+        const props = this.puntosDe(n.lineaId), c = this.colNota(n);
+        const antes = props.filter(p => this.cg(p) <= c).pop(), despues = props.find(p => this.cg(p) > c);
+        return antes && despues ? set.has(antes.id) && set.has(despues.id) : !!((antes && set.has(antes.id)) || (despues && set.has(despues.id)));
+      });
+      const c0 = Math.min(...pts.map(p => this.cg(p)), ...abiertas.map(n => this.colNota(n))), f0 = Math.min(...pts.map(p => orden.indexOf(p.lineaId)));
+      return {
+        tipo: 'puntos', c0, f0,
+        puntos: pts.map(p => ({ ref: p.id, dc: this.cg(p) - c0, df: orden.indexOf(p.lineaId) - f0, titulo: p.titulo, descripcion: p.descripcion,
+          color: p.color || null, cortado: !!p.cortado, ...(p.colorEnlace ? { colorEnlace: p.colorEnlace } : {}) })),
+        saltos: this.datos.saltos.filter(sa => set.has(sa.deId) && set.has(sa.aId)).map(sa => ({ de: sa.deId, a: sa.aId, tipo: sa.tipo })),
+        notas: this.datos.notas.filter(n => !n.abierta && set.has(n.deId) && (!n.aId || set.has(n.aId)))
+          .map(n => ({ de: n.deId, a: n.aId || null, texto: n.texto, ...(n.color ? { color: n.color } : {}) }))
+          .concat(abiertas.map(n => ({ abierta: true, dc: this.colNota(n) - c0, df: orden.indexOf(n.lineaId) - f0, texto: n.texto, ...(n.color ? { color: n.color } : {}) })))
+      };
+    }
+    /* Pega lo copiado con su primer nodo en la columna `c0` y la trama número `f0` (por abajo nacen las tramas que falten y por
+       la derecha las columnas). Si algo caería sobre otro nodo, todo se corre a la derecha hasta el primer sitio libre. */
+    pegar(clip, c0, f0) {
+      if (!clip || clip.tipo !== 'puntos' || !clip.puntos.length) return no('No hay nada que pegar');
+      c0 = Math.max(0, Math.round(c0)); f0 = Math.max(0, Math.round(f0));
+      const L = this.datos.lineas;
+      while (L.length <= f0 + Math.max(...clip.puntos.map(x => x.df))) this.nuevaLinea('secundaria');
+      const lineaDe = x => L[f0 + x.df].id;
+      /* lo pegado no se mete entre nodos que ya hay: en cada trama, de su primer nodo al último, el sitio tiene que estar libre
+         (si no, un enlace pegado quedaba cortado por otro nodo y su nota pasaba a ser de nodo; antes solo se miraban sus celdas) */
+      const tramos = new Map();
+      clip.puntos.forEach(x => { const t = tramos.get(x.df) || [Infinity, -Infinity]; tramos.set(x.df, [Math.min(t[0], x.dc), Math.max(t[1], x.dc)]); });
+      const colsDe = new Map([...tramos.keys()].map(df => [df, this.datos.puntos.filter(p => p.lineaId === L[f0 + df].id).map(p => this.cg(p))]));
+      const choca = dx => [...tramos].some(([df, [a, b]]) => colsDe.get(df).some(c => c >= c0 + a + dx && c <= c0 + b + dx));
+      let dx = 0;
+      while (choca(dx) && dx < 2000) dx++;
+      const ancho = Math.max(...clip.puntos.map(x => x.dc), ...clip.notas.filter(n => n.abierta).map(n => n.dc));
+      this.asegurarCeldas(c0 + ancho + dx);
+      const mapa = new Map(), extremosA = new Set(clip.saltos.map(sa => sa.a));
+      const vestir = (p, x) => { Object.assign(p, { titulo: x.titulo, descripcion: x.descripcion, color: x.color, cortado: x.cortado }); if (x.colorEnlace) p.colorEnlace = x.colorEnlace; };
+      const poner = x => {
+        const u = this.ubicarCelda(c0 + x.dc + dx), r = this.nuevoPunto(lineaDe(x), u.actoId, u.celda);
+        if (r.ok) { vestir(r.punto, x); mapa.set(x.ref, r.punto.id); }
+      };
+      clip.puntos.filter(x => !extremosA.has(x.ref)).forEach(poner);
+      clip.saltos.forEach(sa => {
+        const de = mapa.get(sa.de), xa = clip.puntos.find(x => x.ref === sa.a); if (!xa) return;
+        const r = de ? this.crearSalto(de, lineaDe(xa), sa.tipo) : no('');
+        if (r.ok) { const b = this.punto(r.salto.aId); vestir(b, xa); b.cortado = false; this.punto(de).cortado = false; mapa.set(sa.a, b.id); }
+        else poner(xa);                                              // si el salto no cabe ahí, su extremo va como nodo suelto
+      });
+      const notas = [];
+      clip.notas.forEach(n => {
+        if (n.abierta) {                                             // la de una raya, en su sitio respecto a lo pegado
+          while (L.length <= f0 + n.df) this.nuevaLinea('secundaria');
+          const r = this.crearNotaAbierta(L[f0 + n.df].id, c0 + n.dc + dx, n.texto);
+          if (r.ok) { if (n.color) r.nota.color = n.color; notas.push(r.nota.id); }
+          return;
+        }
+        const de = mapa.get(n.de), a = n.a ? mapa.get(n.a) : null; if (!de) return;
+        let r = this.crearNota(de, a, n.texto); if (!r.ok && a) r = this.crearNota(de, null, n.texto);
+        if (r.ok) { if (n.color) r.nota.color = n.color; notas.push(r.nota.id); }
+      });
+      const ids = [...mapa.values()];
+      return si({ ids, notas, aviso: ids.length === 1 ? '1 nodo pegado' : ids.length + ' nodos pegados' });
+    }
+    /* Copiar notas: su texto, su color y dónde estaban (por si se pegan sin elegir otro sitio). */
+    copiarNotas(ids) {
+      const ns = this.datos.notas.filter(n => (ids || []).includes(n.id));
+      if (!ns.length) return null;
+      return { tipo: 'notas', notas: ns.map(n => ({ texto: n.texto, ...(n.color ? { color: n.color } : {}),
+        sitio: n.abierta ? { abierta: true, lineaId: n.lineaId, cg: this.colNota(n) } : { deId: n.deId, aId: n.aId || null } })) };
+    }
+    /* Pega las notas en `destino` —un nodo `{ deId }`, un enlace `{ deId, aId }` o una raya `{ lineaId, cg }`— o, sin él, donde
+       estaban las copiadas (si ese sitio ya no existe, se saltan). */
+    pegarNotas(clip, destino) {
+      if (!clip || clip.tipo !== 'notas') return no('No hay notas que pegar');
+      const ids = [];
+      clip.notas.forEach(n => {
+        const d = destino || n.sitio;
+        const r = d.abierta || (d.lineaId && d.cg !== undefined) ? this.crearNotaAbierta(d.lineaId, d.cg, n.texto) : this.crearNota(d.deId, d.aId || null, n.texto);
+        if (r.ok) { if (n.color) r.nota.color = n.color; ids.push(r.nota.id); }
+      });
+      if (!ids.length) return no('Ahí no se pueden pegar');
+      return si({ ids, aviso: ids.length === 1 ? '1 nota pegada' : ids.length + ' notas pegadas' });
+    }
+
     /* Sus nodos pasan al acto vecino conservando la celda, recortada al nuevo ancho. */
     borrarActo(id) {
       const actos = this.datos.actos, i = actos.findIndex(a => a.id === id);
@@ -678,6 +844,7 @@
       const vecino = actos[i + 1] || actos[i - 1];
       const mudados = this.datos.puntos.filter(p => p.actoId === id);
       mudados.forEach(p => { p.actoId = vecino.id; p.celda = clamp(p.celda, 0, vecino.celdas - 1); });
+      this.datos.notas.filter(x => x.abierta && x.actoId === id).forEach(x => { x.actoId = vecino.id; x.celda = clamp(x.celda, 0, vecino.celdas - 1); });
       actos.splice(i, 1);
       return si({ mudados: mudados.length, aviso: mudados.length
         ? `Acto eliminado · ${mudados.length} punto(s) pasaron a ${vecino.nombre}` : 'Acto eliminado' });
@@ -769,6 +936,24 @@
       return si({ nota: n });
     }
 
+    /* Una nota en una raya (Leo, 17-09-2026): la de la trama `lineaId` que va de la columna global `cg` a la siguiente, haya
+       nodos o no. */
+    crearNotaAbierta(lineaId, cg, texto) {
+      if (!this.linea(lineaId)) return no('Esa trama no existe');
+      const u = this.ubicarCelda(cg);
+      const n = { id: this._nid('n'), deId: null, aId: null, abierta: true, lineaId, actoId: u.actoId, celda: u.celda, texto: String(texto ?? 'Nota nueva') };
+      this.datos.notas.push(n);
+      return si({ nota: n });
+    }
+    moverNotaAbierta(id, lineaId, cg) {
+      const n = this.nota(id); if (!n) return no('Esa nota no existe');
+      if (!this.linea(lineaId)) return no('Esa trama no existe');
+      const u = this.ubicarCelda(cg);
+      if (n.abierta && n.lineaId === lineaId && n.actoId === u.actoId && n.celda === u.celda) return si({ nota: n, movida: false });
+      Object.assign(n, { deId: null, aId: null, abierta: true, lineaId, actoId: u.actoId, celda: u.celda });
+      return si({ nota: n, movida: true });
+    }
+
     /* **Reordenar notas apiladas** (Leo, 16-09-2026: «déjame reordenar notas, una encima o debajo de otras… y que no
        importe si es del nodo o del enlace»): el orden en que se apilan es el de la lista, así que basta con recolocar
        la nota delante de otra (`antesDe`) o al final. Solo entre las que comparten sitio. */
@@ -780,8 +965,8 @@
       /* La referencia puede ser **cualquier nota de la misma trama**, de nodo o de enlace: en el tablero se apilan
          juntas y Leo quiere ordenarlas entre sí (16-09-2026). De otra trama, no: ahí no se ven una al lado de otra. */
       if (ref) {
-        const suya = this.punto(ref.deId), mia = this.punto(n.deId);
-        if (!suya || !mia || suya.lineaId !== mia.lineaId) return no('Esa nota está en otra trama');
+        const suya = this.lineaDeNota(ref), mia = this.lineaDeNota(n);
+        if (!suya || !mia || suya !== mia) return no('Esa nota está en otra trama');
       }
       lista.splice(i, 1);
       const j = ref ? lista.indexOf(ref) : lista.length;
@@ -806,13 +991,14 @@
     moverNota(id, deId, aId) {
       const n = this.nota(id); if (!n) return no('Esa nota no existe');
       const destino = aId === deId ? null : (aId || null);
-      if (n.deId === deId && (n.aId || null) === destino) return si({ nota: n, movida: false });
+      if (!n.abierta && n.deId === deId && (n.aId || null) === destino) return si({ nota: n, movida: false });
       if (destino && n.deId === destino && n.aId === deId) return si({ nota: n, movida: false });
       const problema = this._tramoValido(deId, destino);
       if (problema) return no(problema);
       const a = this.punto(deId), b = destino ? this.punto(destino) : null;
       const [de, hasta] = !b ? [a, null] : (this.cg(a) <= this.cg(b) ? [a, b] : [b, a]);
       n.deId = de.id; n.aId = hasta ? hasta.id : null;
+      delete n.abierta; delete n.lineaId; delete n.actoId; delete n.celda;
       return si({ nota: n, movida: true });
     }
 
@@ -822,6 +1008,8 @@
       if (!A || !B) return no('Esa nota no existe');
       if (A === B) return si({ nota: A, movida: false });
       [A.deId, B.deId] = [B.deId, A.deId]; [A.aId, B.aId] = [B.aId, A.aId];
+      ['abierta', 'lineaId', 'actoId', 'celda'].forEach(k => { [A[k], B[k]] = [B[k], A[k]]; });
+      [A, B].forEach(x => { if (!x.abierta) ['abierta', 'lineaId', 'actoId', 'celda'].forEach(k => delete x[k]); });
       return si({ nota: A, movida: true, intercambio: B });
     }
 

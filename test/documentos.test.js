@@ -38,8 +38,9 @@ test('contenedores: crear (con un «Documentos» dentro) con nombre libre, renom
   const r = d.eliminarContenedor('x1');
   assert.equal(r.notas, 2);
   assert.equal(d.datos.etiquetas.length, 0); assert.equal(d.datos.notas.length, 0);
-  assert.equal(d.papelera().length, 2);                                        // sus notas van a la papelera
-  assert.equal(d.papelera()[0].origenNombre, 'El faro › Biblioteca');
+  assert.equal(d.papelera().length, 1);                                        // su biblioteca va entera a la papelera (18-09-2026)
+  assert.equal(d.papelera()[0].tipo, 'sub'); assert.equal(d.papelera()[0].notas.length, 2);
+  assert.equal(d.papelera()[0].origenNombre, 'El faro');
   assert.equal(d.contenedores({}).total, 2);
 });
 
@@ -64,8 +65,8 @@ test('subcontenedores: crear con nombre libre, renombrar, ordenar y mover a otro
   assert.equal(d.colocarSub(s.id, 'nada').ok, false);
   const e = d.crearEtiqueta(s.id, 'Lugares').etiqueta; d.crearNota(s.id, e.id, 'Faro'); d.crearNota(s.id, null, 'Tono');
   const x = d.eliminarSub(s.id);
-  assert.equal(x.notas, 2); assert.equal(d.sub(s.id), null); assert.equal(d.etiqueta(e.id), null); assert.equal(d.papelera().length, 2);
-  assert.equal(d.papelera()[0].origenNombre, 'B › Fichas');
+  assert.equal(x.notas, 2); assert.equal(d.sub(s.id), null); assert.equal(d.etiqueta(e.id), null); assert.equal(d.papelera().length, 1);
+  assert.equal(d.papelera()[0].origenNombre, 'B'); assert.equal(d.piezaEnPapelera(s.id).etiquetas.length, 1);
 });
 
 test('etiquetas: nombre y color libres por subcontenedor, orden, color a mano y eliminar manda a la bandeja', () => {
@@ -172,8 +173,8 @@ test('papelera: tirar, restaurar al origen o a otro sitio, eliminar del todo, va
   assert.equal(d.restaurarNota(n.id).contenedor.nombre, 'C');                    // al primero que haya
   d.tirarNota(n.id);
   assert.equal(d.eliminarDefinitivo(n.id).ok, true); assert.equal(d.enPapelera(n.id), null); assert.equal(d.eliminarDefinitivo(n.id).ok, false);
-  assert.equal(d.papelera().length, 1);                                          // «Tono», de eliminar A
-  assert.equal(d.vaciarPapelera().eliminadas, 1); assert.equal(d.vaciarPapelera().eliminadas, 0);
+  assert.equal(d.papelera().length, 2);                                          // las bibliotecas de A (con «Tono») y de B
+  assert.equal(d.vaciarPapelera().eliminadas, 2); assert.equal(d.vaciarPapelera().eliminadas, 0);
   /* purga: una nota tirada hace más de 30 días desaparece; una reciente se queda */
   const sub = d.subsDe(d.datos.contenedores[0].id)[0].id;
   const viejo = d.crearNota(sub, null, 'Vieja').nota; d.tirarNota(viejo.id);
@@ -769,4 +770,96 @@ test('los esquemas donde el personaje tiene carril (Leo, 16-09-2026: «Esquemas 
   m.datos.lineas = m.datos.lineas.filter(l => l.personaje !== lo.id);
   d.guardarEsquema(normal.id, m.datos);
   assert.deepEqual(d.esquemasDePersonaje(lo.id).map(x => x.nombre), ['Louis', 'Lestat']);
+});
+
+test('duplicar una biblioteca y un esquema con todo su contenido, detrás del original (Leo, 18-09-2026)', () => {
+  const d = nuevo();
+  const c = d.crearContenedor('Serie', { vacio: true }).contenedor;
+  const { esquema: e, sub } = conBiblioteca(d, c.id, TABLERO, 'Piloto', 'Ideas');
+  const k = d.crearSeccion(sub.id, 'Personajes').seccion;
+  const etq = d.crearEtiqueta(sub.id, 'Escenas', 2).etiqueta;
+  const etq2 = d.crearEtiqueta(sub.id, 'Fichas', 3, { seccionId: k.id }).etiqueta;
+  const n1 = d.crearNota(sub.id, etq.id, 'Café').nota; d.guardarNota(n1.id, { title: 'Café', html: '<p>hola</p>', characters: {} }); d.colorearNota(n1.id, 'cielo');
+  d.crearNota(sub.id, etq2.id, 'Laura');
+  d.crearNota(sub.id, null, 'Suelta');
+  d.colocarSegmento(sub.id, 'etq:' + etq.id, 'bandeja', ['bandeja', 'etq:' + etq.id]);
+  /* la biblioteca */
+  const r = d.duplicarSub(sub.id);
+  assert.equal(r.ok, true); assert.equal(r.sub.nombre, 'Ideas (copia)');
+  const copia = r.sub;
+  assert.equal(d.notasDe(copia.id).length, 3);
+  assert.equal(d.notasDe(sub.id).length, 3, 'el original no pierde nada');
+  const cafe = d.notasDe(copia.id).find(n => n.titulo === 'Café');
+  assert.notEqual(cafe.id, n1.id); assert.equal(cafe.html, '<p>hola</p>'); assert.equal(cafe.color, 'cielo');
+  const e1 = d.etiqueta(cafe.etiquetaId);
+  assert.equal(e1.subId, copia.id); assert.equal(e1.nombre, 'Escenas'); assert.notEqual(e1.id, etq.id);
+  const laura = d.notasDe(copia.id).find(n => n.titulo === 'Laura'), fichas = d.etiqueta(laura.etiquetaId);
+  assert.equal(d.seccion(fichas.seccionId).sub.id, copia.id, 'el segmento, en la copia de su sección');
+  assert.deepEqual(copia.ordenSegmentos, ['etq:' + e1.id, 'bandeja'], 'el orden de las tarjetas, con los segmentos nuevos');
+  assert.equal(d.grupoDe(copia.id).grupo.id, d.grupoDe(sub.id).grupo.id, 'en el grupo del original');
+  const orden = d.nivelGrupo(d.grupoDe(sub.id).grupo.id).map(x => x.id);
+  assert.equal(orden.indexOf(copia.id), orden.indexOf(sub.id) + 1, 'justo detrás');
+  /* el esquema, con su documento y sus versiones */
+  const doc = d.crearDocumentoEsquema(e.id, 'Piloto', { title: 'Piloto', html: '<p>FADE IN:</p>', characters: {} }).nota;
+  d.guardarVersion(doc.id, 'v1');
+  const re = d.duplicarEsquema(e.id);
+  assert.equal(re.ok, true); assert.equal(re.esquema.nombre, 'Piloto (copia)');
+  assert.deepEqual(re.esquema.datos, d.esquema(e.id).esquema.datos);
+  const doc2 = d.documentoEsquema(re.esquema.id);
+  assert.ok(doc2 && doc2.id !== doc.id); assert.equal(doc2.html, '<p>FADE IN:</p>'); assert.equal(doc2.versiones.length, 1);
+  assert.equal(d.documentoEsquema(e.id).id, doc.id, 'el original conserva el suyo');
+  assert.equal(d.duplicarSub(e.id + ':guiones').ok, false, 'la biblioteca oculta no se duplica sola');
+});
+
+test('esquemas, bibliotecas y personajes van enteros a la papelera y se restauran (Leo, 18-09-2026)', () => {
+  const d = nuevo();
+  const c = d.crearContenedor('Serie', { vacio: true }).contenedor;
+  const k = d.crearCarpeta(c.id, 'Temporada 1', 'azul').carpeta;
+  const { esquema: e, sub } = conBiblioteca(d, c.id, TABLERO, 'Piloto', 'Ideas');
+  d.moverACarpeta('esquema', e.id, k.id);
+  const etq = d.crearEtiqueta(sub.id, 'Escenas', 2).etiqueta;
+  const n1 = d.crearNota(sub.id, etq.id, 'Café').nota;
+  d.crearDocumentoEsquema(e.id, 'Piloto', { title: 'Piloto', html: '<p>FADE IN:</p>', characters: {} });
+  const g = d.grupoDe(e.id).grupo;
+  /* un esquema: fuera del árbol, con su documento */
+  const r = d.eliminarEsquema(e.id);
+  assert.equal(r.ok, true); assert.equal(d.esquema(e.id), null); assert.equal(d.documentoEsquema(e.id), null);
+  const x = d.piezaEnPapelera(e.id);
+  assert.equal(x.tipo, 'esquema'); assert.equal(x.guiones.notas.length, 1); assert.equal(x.carpetaId, k.id); assert.equal(x.grupoId, g.id);
+  /* sobrevive a guardar y abrir el archivo */
+  const d2 = new C.Documentos(JSON.parse(JSON.stringify(d.toJSON())));
+  assert.deepEqual(d2.toJSON(), d.toJSON());
+  /* vuelve a su contenedor, su carpeta y su grupo, con su documento */
+  const v = d.restaurarPieza(e.id);
+  assert.equal(v.ok, true); assert.equal(d.esquema(e.id).contenedor.id, c.id);
+  assert.equal(d.esquema(e.id).esquema.carpetaId, k.id); assert.equal(d.grupoDe(e.id).grupo.id, g.id);
+  assert.equal(d.documentoEsquema(e.id).html, '<p>FADE IN:</p>');
+  assert.equal(d.piezaEnPapelera(e.id), null);
+  /* una biblioteca, con sus segmentos y sus notas */
+  d.eliminarSub(sub.id);
+  assert.equal(d.nota(n1.id), null); assert.equal(d.etiqueta(etq.id), null);
+  d.restaurarPieza(sub.id);
+  assert.equal(d.nota(n1.id).etiquetaId, etq.id); assert.equal(d.etiqueta(etq.id).subId, sub.id);
+  /* borrar el contenedor manda lo suyo a la papelera; al restaurar, vuelve a uno con su nombre (uno solo para todo) */
+  d.eliminarContenedor(c.id);
+  assert.equal(d.papelera().length, 2);
+  d.restaurarPieza(e.id); d.restaurarPieza(sub.id);
+  const serie = d.contenedores({}).sueltos.filter(q => q.nombre === 'Serie');
+  assert.equal(serie.length, 1); assert.equal(d.esquema(e.id).contenedor.id, d.sub(sub.id).contenedor.id);
+  /* un personaje: su biblioteca y sus carriles, que recupera si siguen sin personaje */
+  const p = d.crearPersonaje('Laura', 1).personaje;
+  const bp = d.bibliotecaPersonaje(p.id, p.nombre); d.crearNota(bp.id, null, 'Ficha');
+  const ep = d.crearEsquemaPersonaje({ actos: [{ id: 'a1', nombre: 'Momento', celdas: 5 }], lineas: [{ id: 'l1', tipo: 'principal', personaje: p.id, nombre: 'Laura' }], puntos: [], saltos: [], notas: [] }, 'De Laura').esquema;
+  const rp = d.eliminarPersonaje(p.id);
+  assert.equal(rp.ok, true); assert.equal(d.personaje(p.id), null); assert.equal(rp.carriles.length, 1);
+  assert.equal(d.esquema(ep.id).esquema.datos.lineas[0].personaje, undefined);
+  const vp = d.restaurarPieza(p.id);
+  assert.equal(vp.ok, true); assert.equal(vp.carriles.length, 1);
+  assert.equal(d.esquema(ep.id).esquema.datos.lineas[0].personaje, p.id);
+  assert.equal(d.notasDe(d.bibliotecaPersonaje(p.id).id).length, 1);
+  /* con otro «Laura» ya creado, no se restaura encima */
+  d.eliminarPersonaje(p.id); d.crearPersonaje('LAURA', 2);
+  assert.equal(d.restaurarPieza(p.id).ok, false);
+  /* eliminar del todo */
+  assert.equal(d.eliminarDefinitivo(p.id).ok, true); assert.equal(d.piezaEnPapelera(p.id), null);
 });

@@ -77,7 +77,7 @@
       d = new C.Documentos(g.documentos); g.documentos = d.datos; guionId = g.id;
       actual = null;
       const p = d.purgarPapelera(C.DIAS_PAPELERA);
-      if (p.purgadas) { if (o.avisar) o.avisar('Papelera: ' + p.purgadas + (p.purgadas === 1 ? ' nota antigua eliminada' : ' notas antiguas eliminadas') + ' (más de ' + C.DIAS_PAPELERA + ' días)'); if (o.guardar) o.guardar(); }
+      if (p.purgadas) { if (o.avisar) o.avisar('Papelera: ' + p.purgadas + (p.purgadas === 1 ? ' elemento antiguo eliminado' : ' elementos antiguos eliminados') + ' (más de ' + C.DIAS_PAPELERA + ' días)'); if (o.guardar) o.guardar(); }
     }
     const primero = d.datos.contenedores.find(c => !c.oculto);   // los de Personajes tienen su propio árbol
     if (!valido(actual)) actual = primero ? entradaDe(primero) : null;
@@ -435,7 +435,7 @@
         <button type="button" class="esq-cont gd-miga" data-gd-contraer title="Volver"></button>${cab.chip}
         ${chipNombre(x.nombre, 'gd-seg-chip' + (x.guiones ? ' gd-seg-chip--guiones' : x.tipo === 'bandeja' ? ' gd-seg-chip--bandeja' : '') + (x.tipo === 'apariciones' ? ' gd-seg-chip--apariciones' : ''), { estilo: estiloBanda, title: x.rotulo + ' «' + x.nombre + '»' })}
       </div></header>
-      <div class="gd-exp-cuerpo">
+      <div class="gd-exp-medio"><div class="gd-exp-cuerpo">
         <div class="gd-exp-banda${x.tipo === 'bandeja' ? ' gd-exp-banda--bandeja' : ''}${x.guiones ? ' gd-exp-banda--guiones' : ''}${x.tipo === 'apariciones' ? ' gd-exp-banda--apariciones' : ''}"${x.e ? ` data-etq="${esc(x.e.id)}"` : ''} style="${esc(estiloBanda)}">
           <span class="gd-exp-banda-nom"><span ${x.e ? 'data-gd-etq-nombre' : ''}></span></span><span class="gd-exp-banda-n">${n} ${n === 1 ? docs.slice(0, -1) : docs}</span>
           ${acciones ? '<i class="gd-exp-banda-sep"></i>' + acciones : ''}
@@ -444,7 +444,7 @@
         </div>
         <div class="gd-exp-rot"><span>${x.nodos ? 'Documentos del ' + esc(x.rotulo.toLowerCase()) : 'Notas del segmento'}</span><i></i>${x.apariciones ? '' : `<span>Orden manual</span>${ic('sort', 14)}`}</div>
         ${rejilla}
-      </div>`;
+      </div>${x.notas ? '<aside class="gd-exp-lado" hidden></aside>' : ''}</div>`;
     $('.esq-cont', el).textContent = cab.cont;
     $('.gd-exp-banda-nom > span', el).textContent = x.nombre;
     /* títulos y primeras líneas */
@@ -456,7 +456,177 @@
       $('.gd-exp-tit', c).textContent = ap.titulo; $('.gd-exp-texto', c).textContent = textoDe(doc && doc.html); $('.gd-exp-ruta', c).textContent = 'en «' + ap.ruta + '»';
     });
     $$('.gd-exp-texto', el).forEach(t => { if (!t.textContent) { t.textContent = 'Sin texto'; t.classList.add('vacio'); } });
+    if (x.notas && notaSel && x.notas.some(nt => nt.id === notaSel)) setTimeout(() => mostrarLado(notaSel), 0);   // la nota que ya estaba elegida
     return el;
+  }
+
+  /* ---------- el panel lateral de una nota, en el segmento expandido (Leo, 18-09-2026) ----------
+     «Al hacer clic en una nota, que aparezca un panel lateral con el nombre del documento, opciones para cambiar color y un
+     campo de descripción amplio (parecido al del esquema); el texto que escriba ahí debe verse si abro el documento normal.
+     No necesito los comandos del editor, es solo un campo de texto plano» (y después: «que las tablas sí se vean
+     formateadas»). El campo **es el documento**: cada párrafo, un renglón de texto plano (sin comandos ni estilos: pegar pega
+     texto, Cmd+B no hace nada), y las tablas, tablas con sus celdas editables; lo demás (imágenes, bases de datos, portada) va
+     como una marca que no se toca. Al guardar, los párrafos que no se tocaron conservan su formato (un personaje sigue siendo
+     personaje), los que cambian se quedan con el tipo del que había en su sitio y los nuevos son párrafos normales. */
+  function lineasDeHtml(html) {
+    const t = document.createElement('template'); t.innerHTML = html || '';
+    const lineas = [];
+    const bloque = el => {
+      let txt = ''; const partes = [];
+      const ir = n => n.childNodes.forEach(x => { if (x.nodeType === 3) txt += x.nodeValue; else if (x.nodeName === 'BR') { partes.push(txt); txt = ''; } else if (x.nodeType === 1) ir(x); });
+      ir(el); partes.push(txt);
+      const limpio = partes.map(p => p.replace(/\u200B/g, '').replace(/\u00A0/g, ' '));
+      if (limpio.length > 1 && limpio[limpio.length - 1] === '') limpio.pop();   // el <br> del final de un párrafo vacío
+      limpio.forEach(txt2 => lineas.push({ txt: txt2, el, sola: limpio.length === 1 }));
+    };
+    Array.from(t.content.childNodes).forEach(n => {
+      if (n.nodeType === 3) { if (n.nodeValue.trim()) lineas.push({ txt: n.nodeValue, el: null, sola: true }); return; }
+      if (n.nodeType !== 1) return;
+      if (n.matches('ul, ol')) { Array.from(n.children).forEach(bloque); return; }
+      if (n.matches('table, .db, .portada, img, hr, figure, .sp-doble')) { lineas.push({ fijo: true, el: n }); return; }   // no es texto: tal cual
+      bloque(n);
+    });
+    return lineas;
+  }
+  /* lo que se ve en el campo: los párrafos en texto plano, las tablas como tablas y lo demás como una marca */
+  function htmlDeLado(html) {
+    const partes = lineasDeHtml(html).map((x, k) => {
+      if (!x.fijo) return `<p>${x.txt ? esc(x.txt) : '<br>'}</p>`;
+      if (x.el.matches('table')) { const tb = x.el.cloneNode(true); tb.setAttribute('data-f', k); return tb.outerHTML; }
+      const nombres = x.el.matches('.sp-doble') ? Array.from(x.el.querySelectorAll('.sp-character')).map(p => p.textContent.replace(/\s+/g, ' ').trim().toUpperCase()).filter(Boolean).join(' / ') : '';
+      const que = x.el.matches('.db') ? 'Base de datos' : x.el.matches('.portada') ? 'Portada' : x.el.matches('hr') ? 'Línea'
+        : x.el.matches('.sp-doble') ? 'Diálogo doble' + (nombres ? ' · ' + esc(nombres) : '') : 'Imagen';
+      return `<div class="gd-lado-fijo" contenteditable="false" data-f="${k}">${que}</div>`;
+    });
+    return partes.join('') || '<p><br></p>';
+  }
+  /* del campo al documento, conservando el formato de lo que no cambió */
+  function htmlDeLadoEditado(campo, htmlViejo) {
+    const viejas = lineasDeHtml(htmlViejo), viejosTxt = viejas.filter(x => !x.fijo);
+    const items = [];
+    Array.from(campo.childNodes).forEach(n => {
+      if (n.nodeType === 3) { if (n.nodeValue.trim()) items.push({ txt: n.nodeValue }); return; }
+      if (n.nodeType !== 1) return;
+      if (n.hasAttribute('data-f')) { items.push({ fijo: viejas[+n.dataset.f], tabla: n.matches('table') ? n : null }); return; }
+      if (n.matches('table')) { items.push({ tabla: n }); return; }
+      /* un párrafo (o un div de Chrome): sus renglones */
+      let txt = ''; const ls = [];
+      const ir = x => x.childNodes.forEach(y => { if (y.nodeType === 3) txt += y.nodeValue; else if (y.nodeName === 'BR') { ls.push(txt); txt = ''; } else if (y.nodeType === 1 && !y.matches('table')) ir(y); });
+      ir(n); ls.push(txt);
+      if (ls.length > 1 && ls[ls.length - 1] === '') ls.pop();
+      ls.forEach(t => items.push({ txt: t.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') }));
+    });
+    const nuevas = items.filter(x => x.txt !== undefined).map(x => x.txt);
+    /* subsecuencia común más larga entre los renglones de antes y los de ahora */
+    const n = viejosTxt.length, k = nuevas.length, L = Array.from({ length: n + 1 }, () => new Array(k + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = k - 1; j >= 0; j--) L[i][j] = viejosTxt[i].txt === nuevas[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    const clase = el => el && el.className ? ` class="${esc(el.className)}"` : '';
+    const nuevo = (txt, ref) => { const tag = ref && /^(P|H[1-6]|BLOCKQUOTE)$/.test(ref.tagName) ? ref.tagName.toLowerCase() : 'p';
+      return `<${tag}${clase(ref)}>${txt ? esc(txt) : '<br>'}</${tag}>`; };
+    /* qué renglón de antes es cada uno de ahora (-1: ninguno) */
+    const par = new Array(k).fill(-1);
+    for (let a = 0, b = 0; a < n && b < k;) {
+      if (viejosTxt[a].txt === nuevas[b] && L[a][b] === L[a + 1][b + 1] + 1) { par[b] = a; a++; b++; }
+      else if (L[a + 1][b] >= L[a][b + 1]) a++; else b++;
+    }
+    /* un renglón cambiado se queda con el tipo del renglón de antes al que más se parece, dentro de su tramo de cambios
+       (entre dos renglones iguales): lo que empieza o termina igual. Uno nuevo sin parecido es un párrafo normal. */
+    const parecido = (x, y) => {
+      if (!x || !y) return 0;
+      let pre = 0; while (pre < x.length && pre < y.length && x[pre] === y[pre]) pre++;
+      let suf = 0; while (suf < x.length - pre && suf < y.length - pre && x[x.length - 1 - suf] === y[y.length - 1 - suf]) suf++;
+      return (pre + suf) / Math.max(x.length, y.length);
+    };
+    const refDe = new Array(k).fill(null);
+    for (let b = 0; b < k;) {
+      if (par[b] >= 0) { b++; continue; }
+      let fin = b; while (fin < k && par[fin] < 0) fin++;                        // renglones nuevos b..fin-1
+      const antes = b > 0 ? par[b - 1] : -1, despues = fin < k ? par[fin] : n;
+      const idos = []; for (let a = antes + 1; a < despues; a++) idos.push(a);   // los de antes que se fueron
+      const usados = new Set();
+      for (let c = b; c < fin; c++) {
+        let mejor = -1, puntos = .3;
+        idos.forEach(a => { if (usados.has(a)) return; const p2 = parecido(viejosTxt[a].txt, nuevas[c]); if (p2 > puntos) { puntos = p2; mejor = a; } });
+        if (mejor >= 0) { usados.add(mejor); refDe[c] = viejosTxt[mejor].el; }
+      }
+      b = fin;
+    }
+    const hechos = new Set(), salida = [];
+    for (let b = 0; b < k; b++) {
+      if (par[b] >= 0) {
+        const v = viejosTxt[par[b]];
+        if (v.sola && v.el && v.el.tagName !== 'LI' && !hechos.has(v.el)) { salida.push(v.el.outerHTML); hechos.add(v.el); }
+        else salida.push(nuevo(v.txt, v.el && v.el.tagName !== 'LI' ? v.el : null));
+        continue;
+      }
+      const ref = refDe[b];
+      salida.push(nuevo(nuevas[b], ref && ref.tagName !== 'LI' ? ref : null));
+    }
+    /* y todo junto en el orden del campo */
+    let t2 = 0;
+    const out = items.map(x => {
+      if (x.txt !== undefined) return salida[t2++];
+      if (x.tabla) { const tb = x.tabla.cloneNode(true); tb.removeAttribute('data-f'); return tb.outerHTML; }
+      return x.fijo && x.fijo.el ? x.fijo.el.outerHTML : '';
+    });
+    return out.join('') || '<p><br></p>';
+  }
+  let ladoId = null, ladoT = null;
+  function mostrarLado(id) {
+    const m = modelo(), nt = m && m.nota(id);
+    const lado = $$('.gd-exp-lado').find(x => x.offsetParent !== null || x.isConnected);
+    if (!lado || !nt) return;
+    ladoId = id;
+    lado.hidden = false;
+    lado.innerHTML = `<div class="gd-lado-asa" data-gd-lado-asa title="Arrastra para ensanchar el panel · doble clic: ancho de partida"></div>
+      <header class="gd-lado-cab"><span class="gd-lado-rot">Nota</span><span class="spacer"></span>
+        <button type="button" class="icono" data-gd-lado-abrir title="Expandir: abrir el documento en el editor">${ic('expand', 15)}</button>
+        <button type="button" class="icono" data-gd-lado-cerrar title="Cerrar (Esc)">${ic('close', 15)}</button></header>
+      <label class="gd-lado-campo"><span>Nombre</span><input type="text" class="gd-lado-titulo" data-gd-lado-titulo></label>
+      <div class="gd-lado-campo gd-lado-crece"><span>Descripción</span><div class="gd-lado-texto" data-gd-lado-texto contenteditable="true" spellcheck="true" data-vacio="Escribe aquí; se ve igual al abrir el documento"></div></div>`;
+    $('.gd-lado-titulo', lado).value = nt.titulo || '';
+    const campo = $('.gd-lado-texto', lado);
+    campo.innerHTML = htmlDeLado(nt.html);
+    campo.dataset.base = campo.innerHTML;                          // lo que había, para saber si se tocó
+  }
+  /* **El ancho del panel se arrastra** por su borde izquierdo (Leo, 18-09-2026: «quiero poder hacer más ancho el sidepane… el
+     de los segmentos»): de 280 a 900 px, sin dejar el tablero por debajo de 320; se recuerda en la vista (`vista.ladoNota`) y
+     el doble clic en el borde vuelve al de partida. Vale también en la biblioteca, que usa el mismo panel. */
+  const LADO_NOTA = { partida: 360, min: 280, max: 900 };
+  function anchoLadoNota(px) {
+    const w = Math.round(Math.max(LADO_NOTA.min, Math.min(LADO_NOTA.max, px || LADO_NOTA.partida)));
+    document.documentElement.style.setProperty('--lado-nota', w + 'px');
+    return w;
+  }
+  function arrastrarLadoNota(e, asa) {
+    const panel = asa.parentNode, medio = panel.parentNode;
+    const x0 = e.clientX, w0 = panel.getBoundingClientRect().width;
+    const tope = () => Math.max(LADO_NOTA.min, Math.min(LADO_NOTA.max, medio.clientWidth - 320));
+    asa.classList.add('activa'); document.body.classList.add('redimensionando-lado');
+    const mover = ev => anchoLadoNota(Math.min(tope(), w0 + (x0 - ev.clientX)));   // hacia la izquierda, más ancho
+    const soltar = () => {
+      window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); window.removeEventListener('pointercancel', soltar);
+      asa.classList.remove('activa'); document.body.classList.remove('redimensionando-lado');
+      suprimirClic = Date.now();                                 // el clic que cierra el arrastre (cae en el tablero) no cierra el panel
+      if (o.vista && panel.isConnected) { o.vista.ladoNota = Math.round(panel.getBoundingClientRect().width); guardarVista(); }
+    };
+    window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar); window.addEventListener('pointercancel', soltar);
+  }
+  function cerrarLado() {
+    guardarLadoYa();
+    ladoId = null;
+    $$('.gd-exp-lado').forEach(x => { x.hidden = true; x.innerHTML = ''; });
+  }
+  /* lo escrito en el panel, a la nota (y a su tarjeta, sin redibujar la rejilla) */
+  function guardarLadoYa() {
+    clearTimeout(ladoT); ladoT = null;
+    const m = modelo(), nt = ladoId && m && m.nota(ladoId); if (!nt) return;
+    const campo = $$('.gd-lado-texto').find(x => x.isConnected); if (!campo) return;
+    if (campo.innerHTML === campo.dataset.base) return;            // sin tocar: el documento no se reescribe
+    const r = m.guardarNota(nt.id, { title: nt.titulo, html: htmlDeLadoEditado(campo, nt.html), characters: nt.characters || {} });
+    campo.dataset.base = campo.innerHTML;
+    if (r.ok && r.cambio && o.guardar) o.guardar();
+    $$(`.gd-exp-nota[data-nota="${CSS.escape(nt.id)}"] .gd-exp-texto`).forEach(t => { t.textContent = textoDe(nt.html) || 'Sin texto'; t.classList.toggle('vacio', !textoDe(nt.html)); });
   }
   /* Expandir un segmento (con `sel`, la nota que queda marcada). En Personajes se abre en su pantalla. */
   function expandir(subId, claveSeg, sel) {
@@ -468,6 +638,7 @@
     irAlTablero(true);
   }
   function contraer() {
+    if (ladoId) cerrarLado();
     if (!expandido) return;
     expandido = null;
     render();
@@ -514,11 +685,29 @@
     if (!actual) { main.innerHTML = '<div class="gd-nada"><b>No hay contenedores</b><br>Crea uno con «＋ Nuevo contenedor» en el menú.</div>'; return; }
     const seccion = t => `<div class="gd-seccion"><span class="gd-seccion-tit">${t}</span></div>`;
     if (esPapelera()) {
-      const lista = m.papelera();
-      main.innerHTML = cabeceraHtml(null, '', 'Papelera') + `<div class="gd-cuerpo">${seccion(`Notas tiradas · ${lista.length} · se eliminan solas a los ${C.DIAS_PAPELERA} días`)}
-        <section class="gd-etq gd-etq--bandeja gd-papelera"><div class="gd-etq-body" data-gd-drop-cont="${PAPELERA}">${lista.length ? '' : '<div class="gd-etq-vacia">La papelera está vacía</div>'}</div></section></div>`;
+      const todo = m.papelera(), lista = todo.filter(x => x.nota), piezas = todo.filter(x => !x.nota);
+      const hace = x => { const dias = diasEn(x.eliminadoEn); return dias ? 'hace ' + dias + (dias === 1 ? ' día' : ' días') : 'hoy'; };
+      /* arriba, lo tirado entero (Leo, 18-09-2026): esquemas, bibliotecas y personajes, cada uno con su «⋯» para restaurarlo */
+      main.innerHTML = cabeceraHtml(null, '', 'Papelera') + `<div class="gd-cuerpo">`
+        + (piezas.length ? `${seccion(`Esquemas, bibliotecas y personajes · ${piezas.length} · se eliminan solos a los ${C.DIAS_PAPELERA} días`)}
+        <section class="gd-etq gd-etq--bandeja gd-papelera gd-papelera--piezas"><div class="gd-etq-body"></div></section>` : '')
+        + `${seccion(`Notas tiradas · ${lista.length} · se eliminan solas a los ${C.DIAS_PAPELERA} días`)}
+        <section class="gd-etq gd-etq--bandeja gd-papelera gd-papelera--notas"><div class="gd-etq-body" data-gd-drop-cont="${PAPELERA}">${todo.length ? (lista.length ? '' : '<div class="gd-etq-vacia">No hay notas sueltas</div>') : '<div class="gd-etq-vacia">La papelera está vacía</div>'}</div></section></div>`;
       ponerCabecera('', 'Papelera');
-      const cuerpo = $('.gd-papelera .gd-etq-body', main);
+      const cajaP = $('.gd-papelera--piezas .gd-etq-body', main);
+      piezas.forEach(x => {
+        const id = x.tipo === 'esquema' ? x.esquema.id : x.tipo === 'sub' ? x.sub.id : x.personaje.id;
+        const par = x.tipo === 'personaje' ? (PAL[x.personaje.color] || PAL[0]) : null;
+        const chip = x.tipo === 'esquema' ? CHIPS.esquema : x.tipo === 'sub' ? CHIPS.sub : `<span class="gd-chip per-chip" style="--chl:${par[1]};--chd:${par[2]}" title="Personaje">P</span>`;
+        const n = x.tipo === 'esquema' ? (x.esquema.datos.puntos || []).length : (x.notas || []).length;
+        const cuanto = x.tipo === 'esquema' ? n + (n === 1 ? ' nodo' : ' nodos') : n + (n === 1 ? ' nota' : ' notas');
+        const donde = x.tipo === 'personaje' ? 'de Personajes' : 'de «' + (x.origenNombre || '?') + '»';
+        cajaP.insertAdjacentHTML('beforeend', `<div class="gd-nota gd-pieza" role="button" tabindex="0" data-pieza="${esc(id)}" title="Doble clic: restaurar">
+            ${chip}<span class="gd-pieza-nom"></span><span class="gd-nota-meta">${esc(donde + ' · ' + cuanto + ' · ' + hace(x))}</span>
+            <button type="button" class="gd-nota-acc" data-gd-menu="pieza" title="Opciones">${ic('more', 13)}</button></div>`);
+        cajaP.lastElementChild.querySelector('.gd-pieza-nom').textContent = C.nombreEnPapelera(x);
+      });
+      const cuerpo = $('.gd-papelera--notas .gd-etq-body', main);
       lista.forEach(x => {
         const dias = diasEn(x.eliminadoEn);
         cuerpo.insertAdjacentHTML('beforeend', notaHtml(x.nota, 'de «' + (x.origenNombre || '?') + '» · ' + (dias ? 'hace ' + dias + (dias === 1 ? ' día' : ' días') : 'hoy'), true));
@@ -537,7 +726,9 @@
       const eid = enl && enl.esquema ? enl.esquema.id : null;
       const verEsq = eid ? `<button type="button" class="btn" data-gd-ver-esquema="${esc(eid)}" title="Abrir el esquema enlazado a esta biblioteca">${ic('board', 15)}Ver esquema</button>` : '';
       const chipSub = chipNombre(s.nombre, estiloHijo(s.id, 'gd-chip--sub').clase, { estilo: estiloHijo(s.id).estilo, title: 'Biblioteca «' + s.nombre + '»' });
-      main.innerHTML = cabeceraHtml(c.nombre, chipSub, null, verEsq) + '<div class="gd-cuerpo"></div>';
+      /* a la derecha, el panel de la nota elegida, como en un segmento expandido (Leo, 18-09-2026: «pon el mismo panel en las
+         bibliotecas») */
+      main.innerHTML = cabeceraHtml(c.nombre, chipSub, null, verEsq) + '<div class="gd-exp-medio gd-bib-medio"><div class="gd-cuerpo"></div><aside class="gd-exp-lado" hidden></aside></div>';
       const cuerpo = $('.gd-cuerpo', main);
       {
         /* la biblioteca de un personaje estrena la sección «Apariciones» (Leo, 16-09-2026: los personajes son
@@ -555,6 +746,9 @@
       }
       aplicarSecciones();                                      // lo contraído y lo expandido de la vista
       ponerCabecera(c.nombre, null);
+      const elegida = notaSel && m.nota(notaSel);
+      if (elegida && elegida.subId === s.id && !m.enPapelera(elegida.id)) setTimeout(() => { if (notaSel === elegida.id) mostrarLado(notaSel); }, 0);
+      else if (ladoId) ladoId = null;
     }
   }
   /* Una sección de la biblioteca: su título, sus segmentos (y la bandeja, en la de partida) y «＋ nuevo segmento».
@@ -1005,20 +1199,27 @@
     const grupo = d.grupoDe(s.id);
     const enlace = [opcion('Cambiar color', () => abrirPop(t, paletaHijo(s.id))),
       grupo ? opcion('Sacar del grupo', () => tras(d.quitarEnlace(s.id))) : opcion('Agrupar con…', () => abrirPop(t, menuEnlazar(s)))];
+    const duplicar = opcion('Duplicar', () => duplicarHijo(s));
     if (s.tipo === 'esquema') return frag(
       opcion('Abrir esquema', () => abrirEsquema(s.id)),
       opcion('Renombrar', () => renombrarHijo(s, t)),
-      mover,
+      duplicar, mover,
       separador(), ...enlace,
-      opcion('Eliminar esquema', () => eliminarEsquema(s.id), { clase: 'peligro' }));
+      opcion('Mover a la papelera', () => eliminarEsquema(s.id), { clase: 'peligro' }));
     return frag(
       opcion('Nueva nota', () => nuevaNota(s.id, null)),
       opcion('Nuevo segmento', () => abrirPop(t, paleta(null, s.id))),
       separador(),
       opcion('Renombrar', () => renombrarHijo(s, t)),
-      mover,
+      duplicar, mover,
       separador(), ...enlace,
-      opcion('Eliminar biblioteca', () => eliminarSub(s.id), { clase: 'peligro' }));
+      opcion('Mover a la papelera', () => eliminarSub(s.id), { clase: 'peligro' }));
+  }
+  /* una copia con todo su contenido, detrás del original (el esquema montado y el documento abierto se guardan antes: la copia
+     lleva lo último) */
+  function duplicarHijo(s) {
+    if (o.volcar) o.volcar();
+    tras(s.tipo === 'esquema' ? d.duplicarEsquema(s.id) : d.duplicarSub(s.id));
   }
   const MENUS = {
     grupo: t => {
@@ -1065,9 +1266,10 @@
         opcion(c.fijado ? 'Quitar de fijados' : 'Fijar', () => tras(d.fijarContenedor(c.id, !c.fijado))),
         separador(),
         opcion('Eliminar contenedor', async () => {
-          const n = d.notasContenedor(c.id).length, ne = c.esquemas.length;
-          if (await o.confirmar('¿Eliminar «' + c.nombre + '»?' + (n ? ' Sus ' + n + (n === 1 ? ' nota va' : ' notas van') + ' a la papelera.' : '') + (ne ? ' Se pierden sus ' + ne + (ne === 1 ? ' esquema' : ' esquemas') + ' de pasos.' : ''), 'Eliminar')) {
+          const ne = c.esquemas.length, nb = d.subsDe(c.id).length;
+          if (await o.confirmar('¿Eliminar «' + c.nombre + '»?' + (ne + nb ? ' Sus esquemas y bibliotecas van a la papelera, de donde se pueden restaurar.' : ''), 'Eliminar')) {
             if (d.notasContenedor(c.id).some(x => x.id === notaAbierta)) cerrarNota();
+            if (o.volcar) o.volcar();
             const eids = c.esquemas.map(e => e.id);
             tras(d.eliminarContenedor(c.id));
             if (o.esquemaEliminado) eids.forEach(eid => o.esquemaEliminado(eid));
@@ -1099,7 +1301,7 @@
         opcion('Mover a carpeta…', () => abrirPop(t, menuMoverCarpeta('personaje', id, C.ELENCO_CARPETAS, (d.personaje(id) || {}).carpetaId || null))),
         ...(d.grupoDe(id) ? [opcion('Sacar del grupo', () => tras(d.quitarEnlace(id)))] : [opcion('Agrupar con…', () => abrirPop(t, menuAgruparPersonaje(id)))]),
         separador(),
-        opcion('Eliminar personaje', () => o.eliminarPersonaje && o.eliminarPersonaje(id), { clase: 'peligro' }));
+        opcion('Mover a la papelera', () => o.eliminarPersonaje && o.eliminarPersonaje(id), { clase: 'peligro' }));
     },
     paleta: t => paleta(null, null, t.dataset.seccionId || null),
     /* el ⋯ de una sección de la biblioteca (las que crea Leo): renombrar y eliminar */
@@ -1133,6 +1335,14 @@
         opcion('Eliminar nodo…', () => eliminarNodo(eid, id), { clase: 'peligro' }));
     },
     mover: t => { const id = t.closest('[data-nota]').dataset.nota, n = d.nota(id); if (!n) return null; return menuDestinos('Mover a…', eid => tras(d.moverNota(id, eid)), n.etiquetaId, n.subId); },
+    pieza: t => {
+      const id = t.closest('[data-pieza]').dataset.pieza, x = d.piezaEnPapelera(id); if (!x) return null;
+      const nombre = C.nombreEnPapelera(x);
+      return frag(
+        opcion('Restaurar' + (x.tipo === 'personaje' ? ' en Personajes' : x.origenNombre ? ' en «' + x.origenNombre + '»' : ''), () => restaurarPieza(id)),
+        separador(),
+        opcion('Eliminar del todo', async () => { if (await o.confirmar('¿Eliminar «' + nombre + '» del todo, con todo lo que tiene dentro? No se puede deshacer.', 'Eliminar')) tras(d.eliminarDefinitivo(id)); }, { clase: 'peligro' }));
+    },
     nota: t => {
       const id = t.closest('[data-nota]').dataset.nota;
       if (d.enPapelera(id)) {
@@ -1169,18 +1379,15 @@
     const actualNombre = s.tipo === 'esquema' ? (d.esquema(s.id) || {}).esquema : (d.sub(s.id) || {}).sub; if (!actualNombre) return;
     editarEnSitio(el, actualNombre.nombre, v => { if (v !== null && v.trim()) tras(s.tipo === 'esquema' ? d.renombrarEsquema(s.id, v) : d.renombrarSub(s.id, v)); else render(); });
   }
-  async function eliminarEsquema(eid) {
-    const r = d.esquema(eid); if (!r) return;
-    const n = Object.keys(r.esquema.notas).length;
-    const x = d.enlace(eid);
-    if (!await o.confirmar('¿Eliminar el esquema «' + r.esquema.nombre + '» de «' + r.contenedor.nombre + '»?' + (n ? ' Se pierden las notas de sus ' + n + (n === 1 ? ' nodo.' : ' nodos.') : '') + (x ? ' Su biblioteca «' + x.sub.nombre + '» se queda, suelta.' : ''), 'Eliminar')) return;
+  /* A la papelera enteros, sin preguntar: desde ahí se restauran (Leo, 18-09-2026). El esquema montado y lo abierto en el
+     editor se guardan antes, para que lo tirado lleve lo último. */
+  function eliminarEsquema(eid) {
+    if (!d.esquema(eid)) return;
+    if (o.volcar) o.volcar();
     if (tras(d.eliminarEsquema(eid)) && o.esquemaEliminado) o.esquemaEliminado(eid);
   }
-  async function eliminarSub(id) {
+  function eliminarSub(id) {
     const r = d.sub(id); if (!r) return;
-    const n = d.notasDe(id).length;
-    const x = d.enlace(id);
-    if (!await o.confirmar('¿Eliminar la biblioteca «' + r.sub.nombre + '» de «' + r.contenedor.nombre + '»?' + (n ? ' Sus ' + n + (n === 1 ? ' nota va' : ' notas van') + ' a la papelera.' : '') + (x ? ' Su esquema «' + x.esquema.nombre + '» se queda, suelto.' : ''), 'Eliminar')) return;
     if (d.notasDe(id).some(x => x.id === notaAbierta)) cerrarNota();
     if (actual && actual.id === id) actual = null;
     tras(d.eliminarSub(id));
@@ -1205,7 +1412,13 @@
   }
   async function vaciarPapelera() {
     const n = d.papelera().length; if (!n) { tras(d.vaciarPapelera()); return; }
-    if (await o.confirmar('¿Vaciar la papelera? Sus ' + n + (n === 1 ? ' nota se elimina' : ' notas se eliminan') + ' del todo.', 'Vaciar')) tras(d.vaciarPapelera());
+    if (await o.confirmar('¿Vaciar la papelera? ' + (n === 1 ? 'Lo que hay en ella se elimina' : 'Sus ' + n + ' elementos se eliminan') + ' del todo.', 'Vaciar')) tras(d.vaciarPapelera());
+  }
+  /* devuelve un esquema, una biblioteca o un personaje de la papelera (la app vuelve a atar los carriles del esquema montado) */
+  function restaurarPieza(id) {
+    const r = d.restaurarPieza(id);
+    if (!tras(r)) return;
+    if (o.restaurado) o.restaurado(r);
   }
   async function eliminarEtiqueta(id) {
     const e = d.etiqueta(id); if (!e) return;
@@ -1695,6 +1908,19 @@
     seccion.style.position = 'relative';
     const zonas = [seccion, lado];                              // la barra vive fuera de la sección: mismos oyentes
     const oir = (tipo, fn) => zonas.forEach(z => z.addEventListener(tipo, fn));
+    /* el borde del panel de la nota: arrastrar lo ensancha, doble clic lo devuelve (en captura, antes que los arrastres del tablero) */
+    anchoLadoNota(o.vista && o.vista.ladoNota);
+    seccion.addEventListener('pointerdown', e => {
+      const asa = e.button === 0 && e.target.closest && e.target.closest('[data-gd-lado-asa]'); if (!asa) return;
+      e.preventDefault(); e.stopPropagation();
+      arrastrarLadoNota(e, asa);
+    }, true);
+    seccion.addEventListener('dblclick', e => {
+      if (!(e.target.closest && e.target.closest('[data-gd-lado-asa]'))) return;
+      e.stopPropagation();
+      anchoLadoNota(LADO_NOTA.partida);
+      if (o.vista) { delete o.vista.ladoNota; guardarVista(); }
+    }, true);
 
     oir('click', e => {
       const t = e.target.closest('[data-gd-menu]');
@@ -1709,7 +1935,8 @@
       cerrarPop();                                           // un clic en cualquier otro sitio cierra el menú
       e.stopPropagation();                                   // y no llega al tablero (lo tomaría por un clic en blanco)
       if (Date.now() - suprimirClic < 400) return;           // el clic que cierra un arrastre no es un clic
-      if (!e.target.closest('[data-nota]:not(.gd-nota-fila), [data-nodo]')) soltarSeleccion();   // un clic fuera de las notas quita la marca (Leo)
+      /* un clic fuera de las notas quita la marca (Leo) y cierra el panel de la nota (salvo en el propio panel) */
+      if (!e.target.closest('[data-nota]:not(.gd-nota-fila), [data-nodo], .gd-exp-lado')) { if (ladoId) cerrarLado(); soltarSeleccion(); }
       if (e.target.closest('[data-gd-nueva-seccion]')) { if (actual && actual.tipo === 'sub') nuevaSeccion(actual.id); return; }
       const ps = e.target.closest('[data-gd-plegar-seccion]'); // biblioteca: contraer una sección
       if (ps) {
@@ -1774,8 +2001,13 @@
         notaSel = nota.dataset.nota;
         $$('[data-nota].sel').forEach(x => x.classList.remove('sel'));
         $$(`[data-nota="${notaSel}"]`).forEach(x => x.classList.add('sel'));
+        if ((nota.classList.contains('gd-exp-nota') || nota.classList.contains('gd-nota')) && ladoId !== notaSel) { guardarLadoYa(); mostrarLado(notaSel); }   // en el segmento expandido y en la biblioteca, su panel
         return;
       }
+      /* el panel lateral de la nota (segmento expandido) */
+      if (e.target.closest('[data-gd-lado-cerrar]')) { cerrarLado(); soltarSeleccion(); return; }
+      if (e.target.closest('[data-gd-lado-abrir]')) { const id = ladoId; cerrarLado(); if (id) abrirNota(id); return; }
+      if (e.target.closest('.gd-exp-lado')) return;
       const carp = e.target.closest('.gd-carpeta');
       if (carp) {                                            // pulsar la carpeta la despliega o la pliega (con espera: el doble clic la renombra)
         clearTimeout(clicArbol); const id = carp.dataset.carpeta;
@@ -1797,6 +2029,7 @@
     const sinClicPendiente = () => { clearTimeout(clicArbol); clicArbol = null; };
     oir('dblclick', e => {
       const ap = e.target.closest('[data-ap-tipo]'); if (ap) { e.stopPropagation(); abrirAparicion(ap); return; }
+      const pz = e.target.closest('[data-pieza]'); if (pz && !e.target.closest('button')) { e.stopPropagation(); restaurarPieza(pz.dataset.pieza); return; }   // en la papelera: restaurar
       const nodo = e.target.closest('[data-nodo]');
       if (nodo && !e.target.closest('button')) { e.stopPropagation(); o.abrirNodo(nodo.dataset.eid, nodo.dataset.nodo); return; }
       const nota = e.target.closest('[data-nota]');
@@ -1838,11 +2071,29 @@
       const ir = e.target.closest('[data-gd-ir]');
       if (ir) { e.stopPropagation(); const s = desclave(ir.dataset.gdIr); if (valido(s)) { navegar(s); cerrarNota(); irAlTablero(); } }
     });
-    document.addEventListener('click', e => { if (!e.target.closest('.gd-pop,[data-gd-menu]')) { cerrarPop(); soltarSeleccion(); } });
+    document.addEventListener('click', e => { if (!e.target.closest('.gd-pop,[data-gd-menu]')) { cerrarPop(); if (!e.target.closest('.gd-exp-lado, .gd-exp-nota, .gd-bib-medio .gd-nota')) { if (ladoId) cerrarLado(); soltarSeleccion(); } } });
+    /* lo que se escribe en el panel de la nota: el nombre al momento, la descripción poco después (y siempre al salir) */
+    oir('input', e => {
+      const t = e.target;
+      if (t.matches && t.matches('[data-gd-lado-titulo]')) {
+        const m = modelo(), nt = ladoId && m && m.nota(ladoId); if (!nt) return;
+        const v = t.value.trim(); if (!v) return;                 // vacío no: se queda el que había
+        const r = m.renombrarNota(nt.id, v);
+        if (r.ok) { if (o.guardar) o.guardar(); $$(`.gd-exp-nota[data-nota="${CSS.escape(nt.id)}"] .gd-exp-tit, .gd-nota[data-nota="${CSS.escape(nt.id)}"] > span:first-child`).forEach(x => { x.textContent = nt.titulo; }); }
+        return;
+      }
+      if (t.closest && t.closest('[data-gd-lado-texto]')) { clearTimeout(ladoT); ladoT = setTimeout(guardarLadoYa, 400); }
+    });
+    /* el campo de descripción es texto plano: pegar pega texto, soltar no suelta nada y los atajos de formato no hacen nada */
+    oir('paste', e => { const c = e.target.closest && e.target.closest('[data-gd-lado-texto]'); if (!c) return; e.preventDefault(); const t = (e.clipboardData && e.clipboardData.getData('text/plain')) || ''; document.execCommand('insertText', false, t); });
+    oir('drop', e => { if (e.target.closest && e.target.closest('[data-gd-lado-texto]')) e.preventDefault(); });
+    oir('keydown', e => { if ((e.metaKey || e.ctrlKey) && /^[biu]$/i.test(e.key) && e.target.closest && e.target.closest('[data-gd-lado-texto]')) e.preventDefault(); });
+    oir('focusin', e => { if (e.target.closest && e.target.closest('[data-gd-lado-texto]')) document.execCommand('defaultParagraphSeparator', false, 'p'); });
+    oir('focusout', e => { if (e.target.closest && e.target.closest('[data-gd-lado-texto]')) guardarLadoYa(); if (e.target.matches && e.target.matches('[data-gd-lado-titulo]')) { const m = modelo(), nt = ladoId && m && m.nota(ladoId); if (nt && !e.target.value.trim()) e.target.value = nt.titulo; } });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && abierto) { e.preventDefault(); e.stopPropagation(); const t = disparador; cerrarPop(); if (t && t.focus) t.focus(); } }, true);   // Esc cierra cualquier menú, también los que van fuera del gestor (Exportar)   // fuera del gestor (cabecera, tablero, editor)
     /* Esc con el segmento expandido a la vista (y sin menú, campo ni diálogo): contraer */
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && notaSel && !abierto && !pd && !editando && !e.defaultPrevented && !(e.target.closest && e.target.closest('input, textarea, [contenteditable], dialog'))) { soltarSeleccion(); return; }   // Esc quita primero la marca de la nota
+      if (e.key === 'Escape' && notaSel && !abierto && !pd && !editando && !e.defaultPrevented && !(e.target.closest && e.target.closest('input, textarea, [contenteditable], dialog'))) { if (ladoId) cerrarLado(); soltarSeleccion(); return; }   // Esc quita primero la marca de la nota (y su panel)
       if (e.key !== 'Escape' || !expandido || abierto || pd || editando || e.defaultPrevented) return;
       if (e.target.closest && e.target.closest('input, textarea, [contenteditable], dialog')) return;
       if ([...document.querySelectorAll('.gd-exp')].some(x => x.offsetParent !== null)) contraer();
@@ -1854,7 +2105,8 @@
         e.stopPropagation();
         if (pd) { terminarArrastre(false); return; }
         if (abierto) { const t = disparador; cerrarPop(); if (t) t.focus(); return; }
-        if (notaSel && !editando) { soltarSeleccion(); return; }
+        if (ladoId && e.target.closest && e.target.closest('.gd-exp-lado')) { cerrarLado(); soltarSeleccion(); return; }   // Esc en el panel: lo cierra
+        if (notaSel && !editando) { if (ladoId) cerrarLado(); soltarSeleccion(); return; }
         if (expandido && !editando && e.target.closest && e.target.closest('.gd-exp')) contraer();
         return;
       }

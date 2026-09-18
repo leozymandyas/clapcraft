@@ -85,6 +85,9 @@
           const m = text.match(rule.re);
           if (!m) continue;
           if (block.tagName === 'LI') return; /* dentro de listas no se convierte */
+          /* ni en un elemento de guion: «- Ya sé…» es un guion de interrupción y «- Andrés…» una toma de montaje (especificación
+             de guion); convertirlos en lista, título o cita rompía el formato */
+          if (Ed.screenplay && Ed.screenplay.kindOf(block)) return;
           const r = Ed.getRange();
           const del = document.createRange();
           del.setStart(block, 0);

@@ -253,31 +253,73 @@ html[data-theme="dark"] .page mark { background: #6b5d16; color: #fff; }
 .page mark { background: #ffeb3b; color: #000; padding: 0 1px; }
 .page h6 { color: var(--page-muted); }
 
-/* ===== Formatos de guion ===== */
+/* ===== Formatos de guion =====
+   Courier 12 (10 caracteres por pulgada), así que las sangrías van en caracteres (`ch`) desde el margen izquierdo, y en
+   porcentaje si la hoja es más estrecha que 60 caracteres. **Medidas de un guion real de TV** (The Office, piloto de 2005,
+   medido el 18-09-2026; Leo: «ve si podríamos replicarlo»): diálogo en el 7,5 (2,25 in) con 42 de ancho, paréntesis en el
+   12 (2,7 in) con 26, personaje en el 18 (3,3 in); la especificación decía 10/35, 16/23 y 22. Una línea en blanco antes de cada
+   elemento, salvo personaje → paréntesis → diálogo, que van pegados. **El personaje no se centra**: empieza siempre en el mismo
+   sitio. Los mismos valores, en exportar.js (PDF, Word y el maquetador). */
 .page p[class^="sp-"] { margin: 0 0 12pt; }
-.page p.sp-scene { text-transform: uppercase; font-weight: 700; margin-top: 12pt; }
+.page p.sp-scene, .page p.sp-subscene { text-transform: uppercase; font-weight: 700; }
+.page p.sp-scene { margin-top: 12pt; }
 /* el primer bloque no deja hueco arriba: el margen de un encabezado parecía un salto de línea imborrable */
 .page > :first-child { margin-top: 0 !important; }
-.page p.sp-shot { text-transform: uppercase; }
-.page p.sp-character { text-transform: uppercase; margin-left: auto; margin-right: auto; margin-bottom: 0; }   /* centrado */
-.page p.sp-paren { margin-left: min(4.1cm, 28%); margin-right: min(5cm, 25%); margin-bottom: 0; }
+.page p.sp-shot, .page p.sp-montage { text-transform: uppercase; }
+.page p.sp-character { text-transform: uppercase; margin-left: calc(min(18ch, 30%) - 6px); margin-right: 0; max-width: calc(38ch + 12px); margin-bottom: 0; }   /* el chip de color lleva 6 px de relleno: el nombre empieza en el 18 */
+.page p.sp-paren { margin-left: min(12ch, 20%); margin-right: 0; max-width: 26ch; margin-bottom: 0; padding-left: 1ch; text-indent: -1ch; }   /* la 2.ª línea, con el texto */
 .page p.sp-paren::before { content: "("; }
 .page p.sp-paren::after { content: ")"; }
-.page p.sp-dialogue { margin-left: min(2.5cm, 17%); margin-right: min(3.8cm, 20%); }
+.page p.sp-dialogue { margin-left: min(7.5ch, 12.5%); margin-right: 0; max-width: 42ch; }
+.page p.sp-dialogue:has(+ p.sp-paren) { margin-bottom: 0; }        /* un paréntesis a mitad del diálogo va pegado */
 .page p.sp-transition { text-transform: uppercase; text-align: right; }
+.page p.sp-transition[data-izq] { text-align: left; }             /* FADE IN: va a la izquierda */
+.page p.sp-act { text-transform: uppercase; text-align: center; text-decoration: underline; text-underline-offset: 3px; }
+.page p.sp-note { color: var(--page-muted); }
+.page p.sp-note::before { content: "["; }
+.page p.sp-note::after { content: "]"; }
+/* diálogo doble (js/doble.js; especificación, 2.7): dos columnas de 28 caracteres con 4 de separación y, en cada una, el personaje
+   en el 8, el paréntesis en el 4 y el diálogo desde el principio, todo pegado. Mientras se escribe en él se marca su contorno. */
+.page .sp-doble { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: min(4ch, 6.7%); max-width: 60ch; margin: 0 0 12pt; border-radius: 3px; }
+.page .sp-doble:focus-within { outline: 1px dashed var(--page-line); outline-offset: 5px; }
+.page .sp-doble > .sp-col { margin: 0; min-width: 0; }
+.page .sp-col > p[class^="sp-"] { margin-bottom: 0; }
+.page .sp-col > p.sp-character { margin-left: calc(min(8ch, 28.6%) - 6px); max-width: calc(20ch + 12px); }
+.page .sp-col > p.sp-paren { margin-left: min(4ch, 14.3%); max-width: 20ch; }
+.page .sp-col > p.sp-dialogue { margin-left: 0; max-width: 28ch; }
+/* numeración de escenas (se enciende en la barra inferior): «ESCENA 1 - INT. …»; los secundarios no cuentan */
+#editor { counter-reset: escena; }
+#editor.numerar-escenas p.sp-scene { counter-increment: escena; }
+#editor.numerar-escenas p.sp-scene:not(:has(> br:only-child))::before { content: "ESCENA " counter(escena) " - "; }
 /* pista en los elementos vacíos */
-.page p[class^="sp-"]:has(> br:only-child)::before { color: var(--page-muted); text-transform: none; font-weight: 400; pointer-events: none; }
+.page p[class^="sp-"]:has(> br:only-child)::before { color: var(--page-muted); text-transform: none; font-weight: 400; pointer-events: none; text-decoration: none; }
 .page p.sp-scene:has(> br:only-child)::before { content: "INT./EXT. LUGAR - DÍA"; }
+.page p.sp-subscene:has(> br:only-child)::before { content: "TALKING HEAD - INT. - DÍA"; }
 .page p.sp-action:has(> br:only-child)::before { content: "Acción"; }
 .page p.sp-character:has(> br:only-child)::before { content: "PERSONAJE"; }
-.page p.sp-paren:has(> br:only-child)::before { content: "(paréntico)"; }
-.page p.sp-paren:has(> br:only-child)::after { content: none; }
+.page p.sp-paren:has(> br:only-child)::before { content: "(paréntesis)"; }
+.page p.sp-paren:has(> br:only-child)::after, .page p.sp-note:has(> br:only-child)::after { content: none; }
 .page p.sp-dialogue:has(> br:only-child)::before { content: "Diálogo"; }
 .page p.sp-transition:has(> br:only-child)::before { content: "CORTE A:"; }
-.page p.sp-shot:has(> br:only-child)::before { content: "TOMA"; }
+.page p.sp-shot:has(> br:only-child)::before { content: "ÁNGULO SOBRE…"; }
+.page p.sp-act:has(> br:only-child)::before { content: "ACTO UNO"; }
+.page p.sp-note:has(> br:only-child)::before { content: "[Nota]"; }
+.page p.sp-montage:has(> br:only-child)::before { content: "MONTAJE:"; }
+
+/* ===== Portada (js/portada.js): una hoja entera antes del guion, sin número; se edita con un clic ===== */
+.page > .portada { position: relative; height: 54lh; margin: 0 !important; cursor: pointer; user-select: none; text-align: center; border-radius: 4px; }
+.page > .portada:hover { outline: 1px dashed var(--page-line); outline-offset: 6px; }
+.portada div { margin: 0; }
+.portada .pt-centro { position: absolute; left: 0; right: 0; top: 17lh; }
+.portada .pt-titulo { font-weight: 700; }
+.portada .pt-por { margin-top: 4lh; }
+.portada .pt-basado { margin-top: 2lh; }
+.portada .pt-contacto { position: absolute; left: 0; bottom: 0; text-align: left; max-width: 48%; }
+.portada .pt-version { position: absolute; right: 0; bottom: 0; text-align: right; max-width: 48%; }
+.portada .pt-vacio { color: var(--page-muted); font-weight: 400; }
 
 /* ===== Personajes: resaltado de color por personaje (como el marcatextos) ===== */
-.page p.sp-character { width: fit-content; max-width: 100%; padding: 0 6px; border-radius: 4px; }
+.page p.sp-character { width: fit-content; padding: 0 6px; border-radius: 4px; }
 .page p.sp-character[data-ch] { background: var(--chl); color: var(--chd); }
 html[data-theme="dark"] .page p.sp-character[data-ch] { background: var(--chd); color: var(--chl); }
 /* Con anotación («MARA  (V.O.)», doble espacio): el color es solo del nombre y lo de detrás va como texto normal
@@ -474,5 +516,5 @@ html[data-theme="dark"] dialog menu button.primary { background: var(--fg); bord
 .pag-capa { position: absolute; left: 0; right: 0; top: 0; height: 0; pointer-events: none; z-index: 4; }
 .pag-salto { position: absolute; left: -2px; right: -2px; background: var(--canvas); border-top: 1px solid var(--page-line); border-bottom: 1px solid var(--page-line); }
 .pag-salto.dentro { height: 0; background: none; border-bottom: 0; border-top: 1px dashed var(--page-line); }
-.pag-num { position: absolute; right: 18px; transform: translateY(calc(-100% - 16px)); font: 500 11px var(--mono); letter-spacing: .04em; color: var(--muted-2); }
+.pag-num { position: absolute; right: 28px; transform: translateY(.45in); font: 400 12pt "Courier Prime", "Courier New", monospace; color: var(--muted-2); }   /* arriba a la derecha, a media pulgada del borde */
 .fb-paginas-n { font: 500 11px var(--mono); letter-spacing: .04em; color: var(--bb-fg); white-space: nowrap; }

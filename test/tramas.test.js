@@ -608,3 +608,127 @@ test('el enlace entre dos nodos tiene color propio y admite varias notas; varias
   assert.deepEqual(m.datos.notas.map(n => n.id), [b.id]);
   assert.equal(m.borrarNotas([]).ok, false);
 });
+
+test('las notas de un nodo van con él: al moverlo, al intercambiarlo y al borrarlo (Leo, 16-09-2026)', () => {
+  const m = base();
+  const p = m.nuevoPunto('l1', 'a1', 2).punto, q = m.nuevoPunto('l1', 'a1', 8).punto, r = m.nuevoPunto('l1', 'a1', 12).punto;
+  const np = m.crearNota(p.id, null, 'De P').nota, nq = m.crearNota(q.id, null, 'De Q').nota;
+  const enlace = m.crearNota(q.id, r.id, 'Enlace').nota;
+  assert.equal(m.moverPunto(p.id, { actoId: 'a1', celda: 5 }).ok, true);
+  assert.equal(m.nota(np.id).deId, p.id, 'moverlo a una celda libre');
+  assert.equal(m.moverPunto(p.id, { actoId: 'a1', celda: 8, lineaId: 'l1' }, { intercambiar: true }).intercambio, m.punto(q.id));
+  assert.equal(m.nota(np.id).deId, p.id, 'intercambiado, su nota sigue con él');
+  assert.equal(m.nota(nq.id).deId, q.id, 'y la del otro, con el otro');
+  assert.deepEqual([m.nota(enlace.id).deId, m.nota(enlace.id).aId], [p.id, r.id], 'la de un enlace se queda en su tramo');
+  m.borrarPunto(p.id);
+  assert.equal(m.nota(np.id), undefined, 'al borrarlo se van sus notas');
+  assert.ok(m.nota(nq.id));
+});
+
+test('notas de una raya: en cualquier tramo de la trama, haya nodos o no (Leo, 17-09-2026)', () => {
+  const m = corto();
+  /* en una trama sin nodos, en la raya de la columna 4 a la 5 */
+  const vacia = m.crearNotaAbierta('l2', 4, 'Sin nodos').nota;
+  assert.equal(m.lineaDeNota(vacia), 'l2'); assert.equal(m.colNota(vacia), 4);
+  assert.deepEqual(m.notasDeLinea('l2').map(n => n.texto), ['Sin nodos']);
+  assert.deepEqual(m.notasAbiertas('l2', 4).map(n => n.texto), ['Sin nodos']);
+  /* tras el último nodo, justo en la raya que sigue: no es una nota del nodo */
+  const p = m.nuevoPunto('l1', 'a1', 3).punto;
+  const tras = m.crearNotaAbierta('l1', 3, 'Después').nota;
+  assert.equal(m.notasDe(p.id, null).length, 0, 'no es una nota del nodo');
+  /* viaja en los datos */
+  const copia = new T.Modelo(JSON.parse(JSON.stringify(m.toJSON())));
+  assert.equal(copia.colNota(copia.nota(tras.id)), 3); assert.equal(copia.nota(vacia.id).lineaId, 'l2');
+  /* borrar el nodo no la toca */
+  m.borrarPunto(p.id);
+  assert.equal(m.colNota(m.nota(tras.id)), 3);
+  /* las columnas la mueven como a un nodo */
+  m.insertarColumnas(1, 2, 'izquierda');
+  assert.equal(m.colNota(m.nota(tras.id)), 5, 'insertar delante la corre');
+  m.moverColumnas([5], -5);
+  assert.equal(m.colNota(m.nota(tras.id)), 0, 'mover su columna la lleva');
+  /* moverla a un enlace de verdad le quita la raya, y al revés */
+  const a = m.nuevoPunto('l1', 'a1', 2).punto, b = m.nuevoPunto('l1', 'a1', 6).punto;
+  assert.equal(m.moverNota(tras.id, a.id, b.id).ok, true);
+  assert.equal('abierta' in m.nota(tras.id), false); assert.equal('celda' in m.nota(tras.id), false);
+  assert.equal(m.moverNotaAbierta(tras.id, 'l1', 9).ok, true);
+  assert.equal(m.nota(tras.id).abierta, true); assert.equal(m.colNota(m.nota(tras.id)), 9);
+  /* las de la 1.1.6 (colgadas de un nodo) pasan a la raya que sale de él */
+  const vieja = new T.Modelo({ actos: [{ id: 'a1', nombre: 'A', celdas: 20 }], lineas: [{ id: 'l1', nombre: 'P', tipo: 'principal', color: 'azul' }],
+    puntos: [{ id: 'x', lineaId: 'l1', actoId: 'a1', celda: 7, titulo: 'X' }], saltos: [], notas: [{ id: 'n', deId: 'x', aId: null, abierta: true, texto: 'T' }] });
+  assert.equal(vieja.nota('n').lineaId, 'l1'); assert.equal(vieja.colNota(vieja.nota('n')), 7); assert.equal(vieja.nota('n').deId, null);
+  /* borrar la trama se lleva las suyas */
+  m.borrarLinea('l2');
+  assert.equal(m.nota(vacia.id), undefined);
+});
+
+test('arrastrar el borde de un acto: crece columna a columna y encoge quitando las vacías (Leo, 17-09-2026)', () => {
+  const m = corto();                                                   // un acto de 20 columnas
+  P(m, 'x', 'l1', 2); P(m, 'y', 'l2', 10); P(m, 'z', 'l1', 12);
+  const n = m.crearNotaAbierta('l3', 16, 'raya').nota;
+  assert.equal(m.crecerActo('a1').ok, true); assert.equal(m.acto('a1').celdas, 21);
+  /* encoger quita primero las vacías de la derecha (20, 19, 18, 17) y luego junta lo de detrás */
+  for (let i = 0; i < 4; i++) assert.equal(m.encogerActo('a1').ok, true);
+  assert.equal(m.acto('a1').celdas, 17); assert.equal(m.colNota(m.nota(n.id)), 16);
+  assert.equal(m.encogerActo('a1').ok, true);                          // la 15, vacía: la nota pasa a la 15
+  assert.equal(m.colNota(m.nota(n.id)), 15);
+  while (m.encogerActo('a1').ok);                                      // hasta que no quede ninguna vacía
+  assert.equal(m.acto('a1').celdas, 4, 'quedan solo las columnas con algo');
+  assert.deepEqual(['x', 'y', 'z'].map(id => m.cg(m.punto(id))), [0, 1, 2], 'en su orden, juntos');
+  assert.equal(m.colNota(m.nota(n.id)), 3);
+  assert.equal(m.encogerActo('a1').ok, false, 'sin columnas vacías no hace nada');
+  /* el último acto lleno abre otro acto de una columna */
+  const lleno = base();
+  const r = lleno.crecerActo('a1');
+  assert.equal(r.ok, true); assert.equal(lleno.datos.actos.length, 2); assert.equal(lleno.datos.actos[1].celdas, 1);
+});
+
+test('copiar, pegar y duplicar nodos y notas, con contenido y color (Leo, 17-09-2026)', () => {
+  const m = corto();
+  P(m, 'a', 'l1', 2, { titulo: 'A', descripcion: 'desc A', color: 'rojo', colorEnlace: 'verde' });
+  P(m, 'b', 'l1', 5, { titulo: 'B' });
+  P(m, 'x', 'l1', 8, { titulo: 'X' }); P(m, 'y', 'l2', 8, { titulo: 'Y' }); S(m, 's', 'x', 'y', 'cuadro');
+  m.datos.notas.push({ id: 'n1', deId: 'a', aId: null, texto: 'de A', color: 'azul' }, { id: 'n2', deId: 'a', aId: 'b', texto: 'A→B' });
+  const clip = m.copiar(['a', 'b']);
+  assert.equal(clip.puntos.length, 2); assert.equal(clip.notas.length, 2);
+  /* pegar sobre un nodo: se corre a la derecha hasta el primer sitio libre */
+  const r = m.pegar(clip, 8, 0);
+  assert.equal(r.ok, true); assert.equal(r.ids.length, 2);
+  const [na, nb] = r.ids.map(id => m.punto(id));
+  assert.deepEqual([na.titulo, na.descripcion, na.color, na.colorEnlace], ['A', 'desc A', 'rojo', 'verde']);
+  assert.equal(m.cg(nb) - m.cg(na), 3, 'conserva la distancia');
+  assert.ok(!m.datos.puntos.some(p => p !== na && p.lineaId === na.lineaId && m.cg(p) === m.cg(na)), 'sin pisar a nadie');
+  assert.equal(m.notasDe(na.id, null)[0].color, 'azul');
+  assert.equal(m.notasDe(na.id, nb.id).length, 1);
+  /* un extremo de salto se lleva a su pareja y el salto */
+  const r2 = m.pegar(m.copiar(['x']), 16, 0);
+  assert.equal(r2.ids.length, 2); assert.ok(m.saltoDe(r2.ids[0]));
+  /* en otro tablero, con más tramas de las que tiene */
+  const otro = corto(); otro.datos.lineas.splice(1);
+  const r3 = otro.pegar(m.copiar(['x']), 0, 0);
+  assert.equal(r3.ok, true); assert.equal(otro.datos.lineas.length, 2, 'nace la trama que falta');
+  /* notas: donde estaban, en otro nodo o en una raya */
+  const cn = m.copiarNotas(['n1', 'n2']);
+  assert.equal(m.pegarNotas(cn).ids.length, 2);
+  assert.equal(m.notasDe('a', null).length, 2);
+  assert.equal(m.pegarNotas(cn, { deId: 'b' }).ids.length, 2);
+  assert.equal(m.notasDe('b', null).length, 2);
+  const enRaya = m.pegarNotas(cn, { lineaId: 'l3', cg: 4 });
+  assert.equal(m.notasAbiertas('l3', 4).length, 2); assert.equal(m.nota(enRaya.ids[0]).color, 'azul');
+});
+
+test('lo pegado no se mete entre nodos y se lleva las notas de sus enlaces y de sus rayas (Leo, 18-09-2026)', () => {
+  const m = corto();
+  P(m, 'a', 'l1', 0, { titulo: 'A' }); P(m, 'b', 'l1', 3, { titulo: 'B' }); P(m, 'c', 'l1', 6, { titulo: 'C' });
+  m.datos.notas.push({ id: 'e1', deId: 'b', aId: 'c', texto: 'B→C' });
+  const raya = m.crearNotaAbierta('l1', 8, 'tras C').nota;
+  const clip = m.copiar(['b', 'c']);
+  assert.equal(clip.notas.length, 2, 'la del enlace y la de la raya de detrás del último');
+  /* pegado en la columna 1 de la misma trama: se intercalaría con B y C, así que se corre hasta después de C */
+  const r = m.pegar(clip, 1, 0);
+  const [nb, nc] = r.ids.map(id => m.punto(id));
+  assert.ok(m.cg(nb) > 6, 'después de lo que ya había');
+  assert.equal(m.notasDe(nb.id, nc.id).length, 1, 'la nota sigue en su enlace (antes pasaba a ser del nodo)');
+  const abiertas = m.datos.notas.filter(n => n.abierta && n !== raya);
+  assert.equal(abiertas.length, 1); assert.equal(m.colNota(abiertas[0]) - m.cg(nc), 2, 'la de la raya, a su distancia');
+});

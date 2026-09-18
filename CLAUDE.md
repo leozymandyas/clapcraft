@@ -16,7 +16,8 @@ La interfaz está en español; los comentarios del código también.
 
 - Todo cuelga del espacio global `window.Ed`. Cada módulo es un IIFE `(function (Ed) { ... })(window.Ed)`
   cargado por `<script>` en `index.html`, en este orden: `utils`, `markdown`, `page`, `editor`, `table`,
-  `screenplay`, `database`, `blocks`, `fijos`, `paginas`, `slash`, `characters`, `vendor/typo`, `dict/es`, `dict/en`, `spell`.
+  `screenplay`, `database`, `blocks`, `fijos`, `doble`, `claquedraw/maquetar` (el maquetador del PDF, para el contador de
+  páginas), `paginas`, `slash`, `characters`, `formato`, `portada`, `vendor/typo`, `dict/es`, `dict/en`, `spell`.
 - `js/editor.js` es el núcleo: comandos de formato (execCommand), cinta, barra inferior, menús,
   buscar/reemplazar, autoguardado y **la API de documento** `Ed.document` (`get()`, `set(doc)`,
   `isDirty()`, `onChange(fn)`). Un módulo externo (p. ej. el gestor de documentos) debe usar solo esa API.
@@ -73,6 +74,76 @@ La interfaz está en español; los comentarios del código también.
   atributos, inofensivos.
 - **Pegar**: `Ed.sanitizeHtml` quita fuente, tamaño, interlineado, mayúsculas, márgenes y colores neutros
   (negro, gris, blanco: en oscuro el texto no se veía); se quedan los colores con tono y `--chl/--chd`.
+- **Especificación de formato de guion** (Leo, 17-09-2026, `especificacion-formato-guion.md`, 1.1.13; manda sobre lo anterior
+  del guion). Elementos (`Ed.screenplay.KINDS`): scene, **subscene** (encabezado secundario, negrita, sin número), action,
+  character, paren, dialogue, transition, shot, **act** (centrado, subrayado; empieza página nueva salvo el primero tras solo
+  transiciones y los «FIN…»: `paginas.js` y `preparar` de exportar.js), **note** (gris, `[ ]` de CSS; el menú Exportar puede
+  ocultarlas, `guiones.claquedraw.exportar.sinNotas`) y **montage**. Sangrías en `ch` desde el margen con `min()` en % para
+  hojas estrechas y **medidas de un guion real** (The Office, piloto de 2005, que pasó Leo el 18-09-2026, 1.1.15; la
+  especificación decía 22/16/10): personaje 18 (3,3 in; **no se centra**), paréntesis 12 (2,7 in; 26 de ancho, con sangría
+  francesa para su «(»), diálogo 7,5 (2,25 in; 42 de ancho); `sp-dialogue:has(+ .sp-paren)` va pegado. Los mismos valores en
+  exportar.js (PDF: 1,8 / 1,2 / 0,75 in desde el margen de 1,5; Word, en twips) y en `FORMATOS` de maquetar.js. Enter (`NEXT`) y Tab (`TAB`: acción→personaje, personaje/diálogo→
+  paréntesis; los demás siguen el ciclo de `ORDEN`) según la tabla de la especificación; **Enter en un elemento vacío abre el
+  menú «/»** (`Ed.slash.abrirAqui`: escribe la «/» y la quita si se cierra con Esc o un clic fuera). Ctrl+1…6 (`atajo` en
+  `KINDS`; solo Ctrl, no Cmd). `js/formato.js`: «int/ext» → «INT./EXT.» en `beforeinput`, no deja teclear los «( )» / «[ ]»
+  que ya pinta el CSS, «:» al salir de una transición, `data-izq` a «FADE IN:», el menú de sugerencias `.sug-menu` (lugares y
+  momentos de las escenas usadas, secundarios, transiciones, tomas y actos; va antes que el de «/» en el `keydown`) y
+  `Ed.formato.numerar` (botón «Nº escenas», `Ed.page.state.numerar`, contador CSS «ESCENA N - »). Personaje: con el nombre
+  entero la lista ofrece «Sin extensión» (Enter/Tab siguen su camino) y V.O., O.S., CONT'D; «(» tras el nombre lo suelta.
+  Páginas: el número va **arriba a la derecha, «N.», sin el de la primera** (`.pag-num`); en el PDF con `@page { @top-right }`
+  y `@page :first` (Chromium ≥ 131; Electron 36). Exportar pasa antes por `preparar(html)`: un espacio entre nombre y
+  extensión, números de escena si están activados, `nueva-pagina` en los actos y sin notas si se pidió. Pendiente de la
+  especificación: `(CONT'D)` automático tras una acción.
+  **El PDF se maqueta como un guion impreso** (1.1.15, `js/claquedraw/maquetar.js`, modelo puro con `test/maquetar.test.js`):
+  con solo texto, `paginar(bloques)` reparte en páginas de 54 renglones de 12 pt (parte los renglones como el navegador:
+  espacios y tras un guion entre letras, con `white-space: pre-wrap` y los espacios duros como normales), con una línea en
+  blanco entre elementos salvo los pegados; el bloque de diálogo va junto y, si no cabe, se parte **al final de una oración con
+  dos renglones a cada lado**, «(MORE)» abajo (en la columna del personaje, como el real) y «NOMBRE (CONT'D)» arriba de la
+  siguiente (un monólogo largo, las veces que haga falta: lo que queda vuelve a la cola como otra unidad); la acción larga, igual
+  sin MORE; un encabezado no se queda solo (`saltar()` se lo lleva si lo suyo pasa entero); una transición se lleva la unidad
+  anterior; el acto empieza página. exportar.js (`paginado`) pinta cada página en una `.hoja` de 9,5 in con `@page` de 0,5 in
+  arriba y el número en esa franja («2.» desde la segunda; posicionado por encima de la hoja, Chromium lo pintaba al pie de la
+  anterior), y recorta los bloques partidos con `recortar(el, a, b)` (posiciones de `textoBloque`, los `<br>` cuentan uno). Con
+  imágenes o tablas lo reparte el navegador como antes. **Portada** (`js/portada.js`, «/portada» o un clic en ella): primer
+  bloque `div.portada.ed-fijo[contenteditable=false][data-portada]` pintado desde sus datos con `Ed.dialog` como formulario
+  (título, episodio, escrito por, basado en, versión, fecha, contacto; «Quitar la portada»); mide `54lh`, paginas.js la cuenta
+  como una hoja sin número ni página del contador y la numeración del guion empieza detrás; exportar.js la saca como primera
+  hoja del PDF, primera página del Word (con salto) y cabecera del texto.
+  **El contador y los saltos del editor son los del PDF** (1.1.16, Leo: «verifica que el contador de páginas del editor
+  coincida con lo del pdf»): index.html carga `js/claquedraw/maquetar.js` y paginas.js y exportar.js arman los bloques con la
+  misma función, `bloquesDe(els, { numerar, sinNotas, fijo })` (con `elementos()`: las listas, por elemento; `textoBloque()`:
+  un `<br>` al final no es un renglón, `<p><br></p>` es uno y no dos; el personaje con un solo espacio; «ESCENA n - » delante si
+  `#editor.numerar-escenas`, con `prefijos` para no descontar; sin notas si `guiones.claquedraw.exportar.sinNotas`, que llega
+  al marco por el evento `storage`; tablas e imágenes, sus renglones de alto). Probado con cinco guiones inventados de 23 a 27
+  páginas (Electron, `printToPDF`): mismas páginas y ninguna hoja pasa de 54 renglones.
+  **Diálogo doble** (`js/doble.js`, 1.1.16; especificación 2.7): `div.sp-doble > div.sp-col × 2 > p.sp-character|paren|dialogue`,
+  todo en el mismo contenteditable. «/dialogo-doble» (slash, detrás de Diálogo), el clic derecho (`data-action="doble"`, que
+  dentro de uno dice «Separar…») y el asa de bloques (`separar`; no se convierte) llaman a `Ed.doble.alternar()`: en un diálogo
+  (`grupoDe`: personaje + paréntesis/diálogos seguidos) lo junta con el de antes, o con el de después, o con una columna en
+  blanco; en otra línea pone uno en blanco; dentro de uno, `separar`. Juntar y separar van con **un solo `insertHTML` sobre
+  una selección del principio de un párrafo al final de otro** (Chrome reemplaza limpio y entra en Deshacer; empezando en el
+  propio `div` se queda el envoltorio, así que separar abarca el párrafo de antes y el de después, y sin ellos lo hace a mano).
+  Enter (`D.onEnter`, desde screenplay.js): personaje/paréntesis → diálogo de su columna (o la línea vacía que ya estaba),
+  diálogo izquierdo → columna derecha, diálogo derecho → una acción debajo; una línea vacía de más se quita. Tab y Mayús+Tab en
+  una columna solo ciclan entre sus tres tipos y `S.set` no pone otros (`kindOf` ignora `sp-doble`/`sp-col`). Retroceso/Supr
+  (`keydown` en captura): al principio de una columna el cursor pasa a la de antes (derecha vacía: vuelve a ser un diálogo
+  normal; todo vacío: fuera), no une un párrafo de al lado con el bloque, y una selección que cruza columnas se borra por tramos
+  (`tramosDe`, como fijos.js). `normalizar` (MutationObserver) repara columnas que faltan o sobran, dobles anidados y deja un
+  `<p>` detrás del último; al pegar, `Ed.sanitizeHtml` envuelto deshace un doble dentro de una columna o uno a medias.
+  Maquetar: `lineasDoble` (la columna más larga; `DOBLE`: columnas de 28, personaje en el 8, paréntesis en el 4) y no se parte;
+  PDF en rejilla de 2,8 + 0,4 + 2,8 in; Word, tabla sin bordes que no se parte (`tablaDoble`); texto, columnas lado a lado.
+  **Pasada de pruebas del 18-09-2026 (1.1.14)**, lo que se corrigió: los atajos Markdown de bloque («- », «# », «> », «1. ») ya
+  no convierten un elemento de guion (`markdown.js`: un diálogo con guion de interrupción o una toma de montaje se volvían
+  lista); «int.» + espacio dejaba doble espacio; pegar «(…)» o «[…]» salía doble y los «:» de la transición se ponían fuera del
+  historial (deshacer dejaba uno suelto): ahora `alSalir(b)` de formato.js lo arregla todo con `execCommand` al salir del
+  bloque, y «FADE OUT» / «FUNDIDO A NEGRO» reciben punto; **Esc con las sugerencias abiertas** lo cogía el asa de bloques
+  (seleccionaba el bloque y el editor se quedaba sin cursor): `anyMenuOpen` de blocks.js mira todos los `.char-menu` (también
+  el `.sug-menu`); «Nº escenas» no se aplicaba al abrir (page.js aplica la vista antes de que exista formato.js); pegar texto
+  en un elemento de guion deja todos los párrafos de ese elemento y no lo lee como Markdown (`insertPlainText`); **Tab al final
+  de una línea con texto abre la siguiente** del tipo de la tabla (antes convertía el nombre o el diálogo en paréntesis); el
+  asa de bloques ofrece los elementos nuevos (`CONVERTS` sale de `KINDS`); y una transición no empieza página (`paginas.js`
+  agrupa el bloque anterior con ella). Para probar el editor en el panel: `beforeinput` + `execCommand('insertText')` por
+  carácter (sin el primero no hay conversiones) y `keydown` sintéticos; `Ed.setCaret(p, n)` cuenta hijos, no caracteres.
 - **Tab en un elemento de guion cambia de elemento** (Mayús+Tab al anterior: escena → acción → personaje →
   paréntico → diálogo → transición → toma), sin mover el cursor; antes sangraba y deformaba el formato. En
   texto normal, listas y tablas, Tab sigue igual.
@@ -107,21 +178,18 @@ La interfaz está en español; los comentarios del código también.
 - En ClapCraft con la ventana estrecha la cinta y la barra inferior pasan a una segunda fila (antes cortaban
   alineación, listas y Ortografía) y el panel de buscar se coloca bajo la cinta; la casilla «Aa» ya no mide 180 px.
 - **Páginas** (`js/paginas.js`, Leo 14-09-2026: saber cuántas hojas lleva y cuánto dura; 1 página ≈ 1 min).
-  **Se cuenta en renglones de página real** (revisión del 14-09-2026: con la hoja estrecha salía el doble):
-  cada bloque suma sus renglones de texto divididos por la escala 576 px / ancho de la columna (un renglón
-  sigue siendo uno), las tablas, bases de datos e imágenes su alto, y un renglón en blanco si hay margen con el
-  anterior; la página son 54 renglones y la hoja en pantalla mide al menos 54 líneas y crece si hace falta. El
-  número de páginas ya no cambia con el ancho. Lo que sigue describe la parte visual:
+  **Desde la 1.1.16 las reparte `Claquedraw.maquetar.paginar`, igual que el PDF** (ver arriba): de cada página que empieza en
+  un bloque sale su margen de salto, y de la que empieza a mitad de uno (un diálogo o una acción partidos) una raya `.dentro`
+  a la altura del carácter donde sigue (`alturaEn`: el rectángulo de ese carácter, proporcional al alto del bloque, así vale
+  con zoom); una página que empieza en un elemento de lista pone el margen en el `li`. La hoja en pantalla mide al menos 54
+  líneas y crece si hace falta. Lo que sigue describe la parte visual:
   la hoja sigue siendo continua, pero se ve partida en hojas. No toca el DOM del documento ni el Deshacer:
   mide `offsetTop` de los bloques (unidades sin zoom), y al bloque que no cabe le da margen con una hoja de
   estilos propia (`#pagEstilo`: `#editor > :nth-child(n) { margin-top }` = hueco natural + lo que falta
   hasta la hoja siguiente) y `min-height` a la hoja para completar la última; los huecos entre hojas son
   `.pag-salto` en `.pag-capa` dentro de `#pageWrap`, y cada hoja lleva su número (`.pag-num`) en la
   esquina inferior derecha, desde la primera, que existe entera aunque el documento esté vacío.
-  Probado con tablas y bases de datos: se empujan enteras como cualquier bloque; una tabla más alta
-  que una página se corta con la raya. Página = 54 líneas × interlineado real de
-  la hoja (Carta, Courier 12 pt); encabezado de escena, personaje y paréntico pasan de hoja con lo que les
-  sigue; un bloque más alto que una página se corta con una raya (`.dentro`). Recalcula con
+  Recalcula con
   `MutationObserver` y cuando cambia el ancho (`ResizeObserver`), con `setTimeout` (no rAF: el marco de
   ClapCraft se precarga escondido y ahí no hay frames; sin ancho no calcula). Contador `#fbPaginas` en la
   barra inferior («N páginas · ≈ N min»). **Desplazamiento estable al escribir**: al medir solo se quitan
@@ -237,8 +305,9 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   15-09-2026, también en Personajes): el tablero llama a `moverPunto`/`moverSalto` con `{ intercambiar: true }` y, si lo que hay
   en la celda es un solo nodo, `intercambiarPuntos(p, q)`: cada uno a la celda y la trama del otro; un extremo de salto se
   lleva a su pareja a la misma celda (la pareja sigue en su trama); si algo caería sobre un tercero, dos en la misma celda o un
-  salto quedaría mal (en la trama de su pareja, un cuadro en una alternativa), no se hace y avisa. Las notas se quedan en su
-  tramo (sus extremos pasan al nodo que ocupa ese lugar). Mientras se arrastra, el de debajo (y su pareja) se aparta a su sitio
+  salto quedaría mal (en la trama de su pareja, un cuadro en una alternativa), no se hace y avisa. **Las notas de un nodo se van con él** (1.1.1, Leo 16-09-2026: «al mover el nodo se debe mover con todo y sus
+  notas, lo mismo al borrar»; antes también se quedaban y pasaban al otro nodo); las de un enlace se quedan en su tramo (sus extremos
+  pasan al nodo que ocupa ese lugar). Mientras se arrastra, las notas de nodo acompañan al arrastrado y al que se aparta. Mientras se arrastra, el de debajo (y su pareja) se aparta a su sitio
   (`previaIntercambio`, `.pt.intercambio` con transición). **Las notas también** (`moverNota(…, { intercambiar })`,
   `intercambiarNotas`): arrastrada sobre un tramo con otra nota, esa pasa al tramo de origen de la arrastrada, y al seguir
   arrastrando vuelve a su tramo (`colocarNotaArrastrada` en tablero.js). Sin la opción, el modelo sigue rechazando (criterio 13
@@ -274,7 +343,9 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   los nodos, que van después en el DOM, se veían a través de la columna al desplazar (pasó el 14-09-2026).
 - **Rótulos y notas de una fila** (Leo, 16-09-2026: «no importa que crezca el alto vertical de la trama donde no quepa
   la información»). El nombre de un nodo redondo (no cuadros, rombos ni descartados, que siguen con texto suelto) va en
-  un rótulo de papel con borde, sombra y guía hasta el punto (`.pt.con-rotulo`; el seleccionado con borde de acento).
+  un rótulo de papel con borde, sombra y guía hasta el punto (`.pt.con-rotulo`; el seleccionado con borde de acento). **Teñido
+  del color de su nodo** (el suyo o el de su trama, `--c`; 1.1.16, Leo: «los colores del tooltip fijo no cambian, solo cambia
+  el color del nodo»): 7 % de fondo y 32 % de borde quieto, más al pasar el ratón o elegido; igual el rótulo en la tira.
   `colocarRotulos(row)` mide tras montar cada fila y **apila**: los **rótulos hacia arriba** (nivel 0 pegado al carril;
   el que choca con el anterior sube 19 px) y las **notas hacia abajo** (26 px por nivel), con los huecos del «+» al
   final, debajo de todas las notas. Ya no hay `.abajo` ni notas `.aparte` con guías: cada cosa tiene su nivel.
@@ -298,6 +369,14 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   **Al pasar el ratón por un nodo —o por su propio rótulo** (`.cap` con `pointer-events: auto`, Leo 16-09-2026)— el
   rótulo enseña el nombre entero, **en varias líneas** si hace falta (`width: max-content`, hasta 300 px) y por encima
   del eje (`.pt:hover { z-index: 9 }`), sin recortarse.
+  **Y debajo, tres líneas de su descripción** (1.1.10, Leo 17-09-2026: «lo suficiente para que se entienda de qué trata… que no
+  afecte mucho visualmente; la completa, en el panel»): `ponerResumen(cap, p)` deja la descripción (en una línea, hasta 220
+  caracteres) en `.cap[data-desc]` —al pintar el nodo y al escribir en el panel— y `css/tramas.css` la enseña solo en `:hover`
+  con `::after { content: attr(data-desc) }`, separada por una raya, más pequeña, apagada y cortada con `-webkit-line-clamp: 3`.
+  **Del color del nodo** (1.1.11, Leo 17-09-2026: «el tooltip del hover debe ser del mismo color que el del nodo o la nota»): el
+  rótulo, al pasar el ratón, va sobre `color-mix` al 11 % de `--c` (su color o el de su trama) con el borde al 45 %
+  (`#board .pt.con-rotulo:hover .cap` en la piel). **Las notas ya no llevan el globo `#tip`**: al pasar el ratón la cajita crece
+  hacia abajo y enseña su texto en cuatro líneas como mucho, con su papel y su color (`.nota:hover:not(.arrastrando)`).
   **Las notas apiladas se reordenan arrastrando** (Leo, 16-09-2026: «déjame reordenar notas, una encima o debajo de
   otras, que la animación de mover exista… y que no importe si es del nodo o del enlace»): dentro de su sitio, la
   altura del puntero decide dónde cae (`reordenarNotaArrastrada` → `m.colocarNota(id, antesDe)`, que recoloca la nota
@@ -315,7 +394,9 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   a su medida colgada de su sitio con su guía al carril, el nodo o **la mitad del tramo** que une dos nodos; antes la de
   tramo se estiraba de nodo a nodo y crecía con la escala, y ocupaba un nivel entero del apilado. `.nota.de-nodo` marca
   cuál es de nodo, pero ya no cambia su aspecto. Una nota de nodo
-  se crea con «Nota en este nodo» del menú del nodo; arrastrando una nota, **acercar el puntero a un nodo la cuelga de él a cualquier altura** (1.0.80, Leo 16-09-2026: «si muevo una nota de nodo a un enlace, regresarla es muy complicado»; antes solo valía un cuadro de 24 px sobre el nodo a la altura del carril): el imán es el 30 % del tramo hacia ese lado, entre 12 y 40 px, así que **la mitad del tramo sigue siendo del enlace** y ahí una nota de enlace solo se ordena, sin convertirse; fuera del imán va al tramo donde cae (ya no se intercambian: se apilan). **Su guía es continua, de 2 px y del color de su trama** (`--gl`, que pone tablero.js), con un punto donde toca el carril: antes era una raya gris discontinua que no dejaba ver de quién era la nota (Leo, 16-09-2026). **Mide lo que la nota se haya bajado** (`--guia`, que escribe `colocarRotulos` con su nivel): con la altura fija se veía cortada en cuanto la nota caía a un segundo nivel. Si el «+» de la celda (`#celda`, z 3)
+  se crea con «Agregar nota» del menú del nodo (antes «Nota en este nodo», Leo 17-09-2026) o con «＋ Nota» en su panel (1.1.3); **al terminar de escribirla en sitio se
+  vuelve a centrar** (`editarEnSitio` llama a `colocarRotulos` de su fila y pone el texto en el panel): se colocaba con el ancho
+  del campo y quedaba «al lado del nodo y no abajo» (Leo, 17-09-2026); arrastrando una nota, **acercar el puntero a un nodo la cuelga de él a cualquier altura** (1.0.80, Leo 16-09-2026: «si muevo una nota de nodo a un enlace, regresarla es muy complicado»; antes solo valía un cuadro de 24 px sobre el nodo a la altura del carril): el imán es el 30 % del tramo hacia ese lado, entre 12 y 40 px, así que **la mitad del tramo sigue siendo del enlace** y ahí una nota de enlace solo se ordena, sin convertirse; fuera del imán va al tramo donde cae (ya no se intercambian: se apilan). **Su guía es continua, de 2 px**, con un punto donde toca el carril: antes era una raya gris discontinua que no dejaba ver de quién era la nota (Leo, 16-09-2026). **Guía y punto van siempre del color de la nota** (`--nc` en la piel: su tono, o `--nota-tenue` la de papel; 1.1.18, Leo: «del mismo color que la nota todo el tiempo, no solo al hacer hover»; hasta entonces, quietas, del color de la trama, `--gl`, que tablero.js sigue poniendo). **Apiladas, la guía de las de abajo cruza las de arriba** (está bien), pero la nota señalada, elegida o arrastrada va delante (`z-index: 2`, 1.1.2, Leo 17-09-2026). **Mide lo que la nota se haya bajado** (`--guia`, que escribe `colocarRotulos` con su nivel): con la altura fija se veía cortada en cuanto la nota caía a un segundo nivel. **Y sale de su sitio** (`--gx`, 1.1.16, Leo 18-09-2026: «se ven ligeramente separadas del nodo»): la nota del primer nodo se corre a la derecha para no salirse del tablero y una más estrecha que su hueco mínimo (44 px) quedaba a la izquierda de él; la guía iba en medio de la nota. Ahora la nota va centrada en su hueco y `--gx` pone la guía y su punto sobre el nodo (o la mitad del tramo). Si el «+» de la celda (`#celda`, z 3)
   queda encima de una nota, `notaBajo(e)` (`elementsFromPoint`) lo esconde y el clic elige la nota (Leo, 15-09-2026).
   **Elegir una nota abre su panel** (Leo, 16-09-2026: «que se vea su contenido en el panel inferior»): `sel.tipo`
   `'nota'` pinta su texto en un `textarea` que ocupa el alto (se escribe ahí y se ve en el tablero al momento), su
@@ -337,6 +418,38 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   **Color** (`paletaVarios`, `data-varios-color`), Eliminar y Soltar; el menú contextual de uno de los elegidos ofrece lo mismo
   y Supr borra (`pedirBorrarNotas` con confirmación). El `pointerdown` pone `soltarClic = false` al empezar: el Mayús+clic lo
   deja en true para que el clic de después no elija nada.
+- **Rayas y sus notas** (1.1.7, Leo 17-09-2026: «quiero que se habiliten todos los enlaces del largo de la trama, incluso si
+  no hay nodos… velo como rayas: las rayas son enlaces, los puntos son los nodos»; en la 1.1.6 la nota abierta colgaba de un nodo
+  y se iba dos celdas más allá). Fuera de los tramos entre nodos (tras el último, antes del primero o en una trama sin nodos),
+  **cada raya entre dos columnas es un enlace**: `enlaceEn(e)` devuelve `{ a: null, b: null, lineaId, col }`, el puntero la
+  enciende (`rayaBajo` → `#rayaHover`, `.cadena.raya`), el clic la elige (`sel.tipo 'raya'`, id `lineaId|col`, panel con «＋ Nota»
+  y sus notas) y el secundario abre `menuAbierto` («Agregar nota», `data-abierta-nota="lineaId|col"`). La nota de una raya es
+  `{ abierta: true, lineaId, actoId, celda }` (la columna donde empieza la raya; `deId`/`aId` null) y se dibuja a mitad de su raya
+  (`sitioNota`). Modelo: `crearNotaAbierta(lineaId, cg)`, `moverNotaAbierta(id, lineaId, cg)`, `colNota(n)`, `lineaDeNota(n)`
+  (úsese en lugar de `punto(n.deId).lineaId`), `notasAbiertas(lineaId, cg)`; `notasDe(id, null)` no las cuenta como de nodo;
+  insertar, borrar y mover columnas y borrar un acto las llevan como a un nodo (no el «abrir sitio» de `moverBloque`); borrar
+  nodos no las toca, borrar su trama sí; `normalizar` pasa las de la 1.1.6 (con `deId`) a la raya que sale de ese nodo.
+  Arrastrar una nota fuera de todo tramo la deja en la raya donde cae; a un enlace entre nodos, pierde la marca.
+- **Lo pegado no se mete entre nodos y se lleva las notas de sus rayas** (1.1.16, Leo 18-09-2026: «no copia las de enlace»):
+  `pegar` corre lo pegado hasta que, en cada trama, del primer nodo pegado al último no quede ninguno de los que ya había (antes
+  solo miraba las celdas, y un enlace pegado entre otros nodos dejaba de ser consecutivo: su nota pasaba a ser de nodo), y
+  `copiar` se lleva también las notas de las rayas (`abierta`) que quedan entre dos nodos copiados de su trama o detrás del
+  último (o delante del primero) si ese va (`{ abierta, dc, df }` en el portapapeles).
+- **Copiar, pegar y duplicar** (1.1.12, Leo 17-09-2026: «copiar y pegar nodos y notas… por medio de selecciones como las que
+  tenemos… duplicarlos, como en Figma, con Opción mientras arrastro… con contenido y color»). Modelo: `copiar(ids)` → `{ tipo:
+  'puntos', c0, f0, puntos: [{ ref, dc, df, titulo, descripcion, color, cortado, colorEnlace? }], saltos, notas }` (un extremo
+  se lleva a su pareja; notas de nodo y de enlace entre copiados; sin ids del tablero, así vale en otro esquema) y `pegar(clip,
+  c0, f0)` (nacen las tramas y columnas que falten; si algo cae sobre un nodo, todo se corre a la derecha al primer sitio
+  libre; un salto que no cabe deja su extremo como nodo suelto); `copiarNotas(ids)` / `pegarNotas(clip, destino)` (destino
+  `{ deId }`, `{ deId, aId }`, `{ lineaId, cg }` o nada = donde estaban). Tablero: el portapapeles es suyo (`portapapeles`,
+  entre esquemas; al del sistema solo va el texto) y se oye en los eventos `copy`/`paste` del documento (en Electron los
+  atajos son los `role` del menú Edición) si el tablero se ve y el foco no está en un campo. Se copia lo elegido (`queCopiar`:
+  notas o nodos con Mayús o rectángulo, el nodo, el salto o la nota elegidos). Los nodos se pegan donde está el puntero
+  (`ultimoSitio`, que apunta `onMouseMove`) o, si no, donde estaban; las notas en el nodo, enlace o raya elegidos o donde
+  estaban; lo pegado queda elegido. **Cmd/Ctrl+D** duplica sin tocar el portapapeles (nodos justo a la derecha, notas en su
+  sitio). **Opción al arrastrar**: un nodo deja el original a la vista (`.pt.original-dup`) y al soltar pega la copia ahí (sin
+  intercambiar); un bloque, igual con `pegar(clip, c0 + dc, f0 + dl)`; una nota crea la copia en el `pointerdown` y lo que se
+  arrastra es la copia (si no se mueve, se quita).
 - **El trazo de un salto abre el panel de su nodo de salida** (Leo, 16-09-2026: «si selecciono la diagonal, no se abre
   el texto en la descripción; debe poderse escribir como si eligiera uno de sus nodos»): con `sel.tipo === 'salto'`,
   `panel()` pinta el panel del punto `deId` (cabecera «Relación» o «Cambio de escena»), así que ahí se escribe su
@@ -411,6 +524,25 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   donde no se pone nada»; así la columna 1 no queda pegada a la columna de tramas y su cabecera se ve entera): en tablero.js
   todo lo que pasa de celdas a píxeles va por `px(cg) = MARGEN() + cg * G()` y lo que vuelve, por `celdaEn(x)`; `MARGEN()` es
   una celda. El hueco no es de ningún acto y ahí no sale el «+» de crear (`onMouseMove` lo esconde si `celdaEn < 0`).
+- **Después de la última columna hay una más** (1.1.5, Leo 17-09-2026: «cuando llego al final de una trama ya no se me sugiere
+  agregar nuevos nodos»): las pistas miden `W + G()` y, pasado el final, `onMouseMove` pone el «+» ahí con `celdaObj.extender`.
+  Nada cambia hasta crear: `extender(q)` llama a `m.asegurarCeldas(total)` (el último acto crece o, si ya tiene `MAX_CELDAS`,
+  nace otro de una columna) y devuelve dónde quedó; vale para el menú de crear y para arrastrar el «+» a otra trama (salto).
+- **El borde de un acto se arrastra columna a columna** (1.1.8, Leo 17-09-2026: «cuando arrastre hacia la derecha en la última
+  línea vertical quiero que se vayan agregando más líneas… a la izquierda, que vaya quitando líneas y moviendo los nodos y notas;
+  si ya no se puede comprimir más, ya no pasa nada»; antes `fijarAncho` recortaba y amontonaba los nodos en la última celda, y
+  el «+» de acto nuevo tapaba el asa del último). El arrastre `res` lleva `n` (columnas aplicadas) y `pila` (el acto y los que
+  nazcan): a la derecha `m.crecerActo(id)` (una columna al final; el último acto, lleno, abre otro de una columna), a la
+  izquierda `m.encogerActo(id)` (quita la columna vacía más a la derecha del acto —sin nodos en ninguna trama ni notas de
+  raya— con `borrarColumnas`, así lo de detrás se junta; un acto nacido en el arrastre y vacío se borra). Si ya no se comprime,
+  se rebasa `x0` para que seguir a la izquierda no haga nada y volver a la derecha crezca al momento. `#addActo` va 10 px
+  más allá del borde para dejar libre el asa. `fijarAncho` sigue para el panel del acto.
+  **Pegado al borde crece solo** (1.1.9, Leo 17-09-2026: «para que funcione tengo que arrastrar a la izquierda y luego a la
+  derecha»: el final del último acto queda junto al borde del tablero y no había sitio para llevar el puntero más allá):
+  `autoCrecer()` —con el puntero a menos de `BORDE_AUTO` (40 px) del borde derecho de `#board`— añade una columna cada 110 ms,
+  desplaza el tablero lo mismo y corre `res.x0`, así el borde sigue bajo el puntero; para al alejarse, al soltar, si el puntero
+  sale de la ventana (`mouseleave` del documento) o si vuelve sin botón (`buttons === 0` cuenta como soltar: al simularlo, los
+  `pointermove` deben llevar `buttons: 1`).
 - **El alto de carril y del eje los fija la hoja de estilos** (`--fila`, `--eje` en `:root` de
   `css/tramas.css`, 120 y 57 —44 de actos más 13 de la tira de columnas—; la piel de ClapCraft pone 80 y 46): `tablero.js` los lee con
   `getComputedStyle` al cargar (`medida()`) para colocar los cables del SVG. Cambiar `.row`/`.axis`
@@ -574,6 +706,17 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   larga) y los pinta en una capa: lo igual apagado, lo añadido en verde y lo quitado tachado en rojo.
   **Una trama sin nodos** enseña su aviso («Esta trama aún no tiene nodos…») **encima de la raya**, donde irían los títulos
   (`.hilo-pista.vacia .hilo-vacio`, absoluto; 1.0.79): centrado, la raya lo tachaba.
+  **Las notas del esquema también van en la tira, como puntos** (1.1.16, Leo: «quiero ver las notas que agregué en el esquema
+  en la línea del tiempo del editor»; en la 1.1.17, «márcalas solo con puntos… ocupan mucho espacio»: la 1.1.16 las pintaba
+  como tarjetas y la tira crecía). `pintarNotas` en texto.js: bajo un nodo (`.hilo-nodo[data-punto].con-notas > .hilo-notas`)
+  un punto por nota (`.hilo-np`, del color de la nota o papel; seis como mucho y «+N»), y bajo la mitad de un enlace o en su
+  raya (`.hilo-notas-enlace[data-grupo]`, agrupados por sitio) los de sus notas. El globo `#tip`: al pasar por un nodo, su
+  descripción y debajo sus notas (`notasNodo`); al pasar por los puntos de un enlace o de una raya, sus notas (`notasEnlace`),
+  con el mismo título que en el nodo, «Nota» o «N notas» (1.1.18, Leo: «no pongas "nota del enlace" o "nota de la raya"»). Un rótulo que va debajo del eje (`.rotulo-abajo`) baja un poco más si el nodo lleva puntos. **Flechas de
+  trama**: encima y debajo del círculo de la trama (`.hilo-trama.con-flechas`, `[data-trama-paso]`, `cambiarTrama`) pasan a la
+  de arriba o la de abajo en el orden del esquema (Leo: «la opción de poder moverme de tramas, quizás con unas flechas»).
+  **Salen siempre**, con borde y sombra (1.1.17, Leo: «tampoco veo las flechas»: con una sola trama no salían y, con más, eran
+  dos trazos grises); sin trama a ese lado, apagadas.
   `C.texto.abrirDocumento(doc, ganchos, { tira })` es el único camino para abrir un documento: con `tira` manda la
   cabecera de la vista (`#textoCab`), sin ella (una nota de biblioteca) mandan las migas.
   Al pasar el ratón por un nodo, el globo `#tip` del tablero (el mismo elemento) enseña debajo el
@@ -696,9 +839,24 @@ Nuevo / Abrir… / Guardar… en la cabecera.
     `personaje` se descartan). La papelera guarda `origenId` = subId y `origenNombre` =
     «Contenedor › Sub».
   · **Contenedores**: `colocarContenedor(id, antesDe)` (cambia de grupo fijado/suelto según el
-    destino), `moverContenedor`, `eliminarContenedor` (notas de todos sus subs a la papelera).
+    destino), `moverContenedor`, `eliminarContenedor` (sus esquemas y bibliotecas, a la papelera).
   · **Papelera** al final de la barra (`gestor.PAPELERA`; `tirarNota`, `restaurarNota`,
-    `eliminarDefinitivo`, `vaciarPapelera`, `purgarPapelera(30)` una vez por guion).
+    `eliminarDefinitivo`, `vaciarPapelera`, `purgarPapelera(30)` una vez por guion). **Esquemas, bibliotecas y personajes van
+    enteros** (1.1.16, Leo: «que las bibliotecas y esquemas, también de los personajes, se vayan a la papelera y puedan
+    restaurarse»): `eliminarEsquema` (con su biblioteca oculta: documento y versiones), `eliminarSub` (segmentos, secciones y
+    notas; `_sacarBiblioteca`/`_meterBiblioteca`) y `eliminarPersonaje` (su biblioteca y la lista `carriles` de sus carriles,
+    que quedan «Sin personaje») dejan una **pieza** `{ tipo: 'esquema'|'sub'|'personaje', …, origenId, origenNombre,
+    carpetaId, grupoId, eliminadoEn }` (`normalizar` las conserva; el esquema se guarda sin `carpetaId`, que va en la pieza,
+    para que abrir y guardar den lo mismo). `piezaEnPapelera(id)`, `restaurarPieza(id)`: a su contenedor (si ya no está, al de
+    su nombre o a uno nuevo con él; los de personaje, a los suyos), a su carpeta y a su grupo si siguen, con nombre libre; el
+    personaje, si no hay otro con su nombre, y recupera los carriles que sigan sin personaje (`o.restaurado` de app.js los ata
+    también en el esquema montado). En el gestor: «Mover a la papelera» sin preguntar (se restaura), la papelera enseña arriba
+    las piezas (`.gd-pieza`, doble clic o ⋯ › Restaurar / Eliminar del todo) y debajo las notas. Antes de tirar un esquema, el
+    montado y el editor se vuelcan (`o.volcar`).
+  · **Duplicar** (1.1.16, Leo: «quiero poder duplicar bibliotecas y esquemas, con todo y su contenido»): ⋯ › «Duplicar»
+    (`duplicarHijo`, tras `o.volcar`) → `duplicarSub(id)` (segmentos, secciones y notas con ids nuevos, `ordenSegmentos`
+    traducido; no las de guiones ni las de personaje) y `duplicarEsquema(eid)` (con su documento y versiones, `guion.eid` al
+    nuevo); «Nombre (copia)», detrás del original y en su carpeta y su grupo (`colocarEnArbol(copia, original, true)`).
   El gestor lleva `actual = { tipo: sub | cont (contenedor sin subcontenedores) | papelera, cid, id }`
   (`ref()`, `clave()`/`desclave()` para el DOM: `[data-sub]` en las filas de hijo, `[data-gd-drop-sub]`
   solo en subcontenedores). **Los tableros no llevan botones arriba** (Leo): el **«＋» del contenedor
@@ -856,7 +1014,9 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   `vista.pantallas[guionId]` qué vista estaba delante, en qué árbol, qué esquema montado, qué biblioteca abierta y qué
   nota (`recordarPantalla` en app.js, desde `persistir`, `verVista`, `montarEsquema` y el gancho `alNavegar` del
   gestor —`navegar`, `abrirNota` y `cerrarNota`—), y `restaurarPantalla` lo repone al montar el proyecto, con lo que
-  siga existiendo (si no, el primer esquema, como antes). Vive en la vista, no en el archivo: es de esta máquina. **Mientras se repone no se apunta nada** (`reponiendo`, 1.0.78): el arranque llama a `persistir()` antes de montar y eso pisaba lo guardado con «sin esquema», así que siempre se abría el primero; la biblioteca solo se reabre si la vista era Documentos (el gestor la recuerda aunque delante esté el esquema) y `montar` ya no salta a Personajes por su cuenta. Al acercar el puntero a un borde del tablero
+  siga existiendo (si no, el primer esquema, como antes). Vive en la vista, no en el archivo: es de esta máquina. Al volver a una
+  nota o a una biblioteca, `reponer` llama a `verVista('documentos')` y `o.mostrarTablero` mira también la clase del `body`
+  (1.1.16: `vista.modo` ya decía «documentos» y la página no la ponía, así que se veía el esquema detrás). **Mientras se repone no se apunta nada** (`reponiendo`, 1.0.78): el arranque llama a `persistir()` antes de montar y eso pisaba lo guardado con «sin esquema», así que siempre se abría el primero; la biblioteca solo se reabre si la vista era Documentos (el gestor la recuerda aunque delante esté el esquema) y `montar` ya no salta a Personajes por su cuenta. Al acercar el puntero a un borde del tablero
   de segmentos se desplaza solo (`autodesplazar`, cada 16 ms) para llegar a los que no se ven; mientras dura
   el arrastre `render()` no redibuja (`renderPendiente`: si no, el persistir de fondo se llevaba lo
   arrastrado). Las notas llevan la fecha en todas partes (Leo: todo lo que va dentro de un segmento). Las notas de los nodos guardan `modificado`
@@ -901,7 +1061,24 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   el menú o arrastrando el «+») quedan con el nombre propuesto escrito y seleccionado en sitio, como un segmento;
   en blanco se queda el propuesto («Sin título», «Punto nuevo», «Evento», «Cambio de escena», «Relación»); en
   un salto el otro extremo toma el nombre si seguía con el propuesto. `aplicarOrden` pone lo nuevo detrás del último de sus predecesores
-  naturales. **Segmento expandido** (Leo, 15-09-2026, `docs/diseno/rediseno-5/Pantalla_Segmento.dc.html`): todas las
+  naturales. **Panel de la nota** (1.1.16, Leo: «en un segmento expandido, al hacer clic en una nota, aparezca un panel lateral
+  con el nombre, el color y un campo de descripción amplio… texto plano… que se vea si abro el documento»; y después «el mismo
+  panel en las bibliotecas»): `.gd-exp-lado` a la derecha de `.gd-exp-medio` (el segmento expandido) o de `.gd-bib-medio` (el
+  tablero de la biblioteca). `mostrarLado(id)` pinta el nombre (renombra al escribir) y la descripción, que ocupa todo el alto
+  (el color se quitó del panel en la 1.1.17, Leo: «que se siga haciendo desde los tres puntos, para no afectar al campo
+  descripción, que es el importante»; «⋯ › Color…» deja el panel abierto):
+  un `contenteditable` de texto plano **que es el texto del documento** (`htmlDeLado`: un `<p>` por renglón, las tablas como
+  tablas editables y lo demás —imágenes, bases de datos, portada, diálogos dobles— como una marca fija `data-f`);
+  `htmlDeLadoEditado` lo devuelve conservando el formato de lo que no cambió (subsecuencia común por renglones; los cambiados
+  heredan el tipo de guion del renglón viejo más parecido) y `guardarLadoYa` lo guarda a los 400 ms y al salir, sin reescribir
+  si no se tocó. Pegar pega texto; Cmd+B/I/U no hacen nada. Un clic fuera de las notas (también dentro del gestor) o Esc lo
+  cierra, y quita la marca. Tras redibujar la biblioteca se vuelve a abrir si la nota sigue elegida (`notaSel`). En su cabecera,
+  **expandir** (`ic-expand`, `[data-gd-lado-abrir]`; antes un lápiz que Leo no reconocía) abre el documento en el editor. **Su
+  ancho se arrastra** por el borde izquierdo (1.1.18, Leo: «quiero poder hacer más ancho el sidepane… el de los segmentos»):
+  `.gd-lado-asa` (8 px por dentro: `aside` de tramas.css le daba `overflow: auto`, que recortaba media asa y el arrastre caía
+  en el borde) → `arrastrarLadoNota`, de 280 a 900 px sin dejar el tablero por debajo de 320, en `--lado-nota` y
+  `vista.ladoNota`; doble clic, 360. El clic que cierra el arrastre cae en el tablero: `suprimirClic` para que no cierre el panel.
+  **Segmento expandido** (Leo, 15-09-2026, `docs/diseno/rediseno-5/Pantalla_Segmento.dc.html`): todas las
   cabeceras de segmento (bandeja, segmentos, actos de la cronología, momentos y Apariciones) llevan el icono
   `ic-expand` (`[data-gd-expandir]`); `C.gestor.expandir(subId, clave, sel)` guarda `expandido = { subId, clave }`
   (las claves de `ordenSegmentos`) y el segmento ocupa el lienzo: en una biblioteca, `renderMain` pinta

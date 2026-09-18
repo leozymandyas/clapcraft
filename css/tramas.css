@@ -163,6 +163,9 @@ main { flex: 1; display: flex; min-height: 0; }
 .cadena::after { content: ''; position: absolute; left: 0; right: 0; top: -7px; bottom: -7px; }
 .cadena:hover { filter: brightness(.85); }
 .cadena.sel { box-shadow: 0 0 0 2px var(--papel), 0 0 0 5px var(--foco-halo); z-index: 2; }
+/* una raya sin nodos (Leo, 17-09-2026): no se ve hasta que se señala o se elige */
+.cadena.raya { pointer-events: none; opacity: .75; }
+.cadena.raya.sel { opacity: 1; }
 .sw.trama { background: var(--papel) !important; box-shadow: inset 0 0 0 3px var(--tc); }
 .enlace-notas { overflow-y: auto; gap: 6px !important; }
 .enlace-nota { text-align: left; font: italic 12px var(--mono); color: var(--nota-tinta); background: var(--nota); border: 1px solid var(--nota-borde);
@@ -206,11 +209,13 @@ body.con-ruta .pt:hover > *, body.con-ruta .pt:focus-within > *, body.con-ruta .
         background: var(--nota); border: 1.5px solid var(--nota-borde); border-radius: 5px;
         box-shadow: 2px 2px 0 var(--sombra-suave); cursor: grab; z-index: 1; touch-action: none; }
 /* la guía que la une a su sitio: continua y del color de su trama, para que se vea de quién es */
-.nota::before { content: ''; position: absolute; left: calc(50% - 1px); width: 2px;
+.nota::before { content: ''; position: absolute; left: calc(var(--gx, 50%) - 1px); width: 2px;   /* --gx: dónde está su sitio (tablero.js) */
         top: calc(-1 * var(--guia, 13px)); height: var(--guia, 13px);
-        border-radius: 1px; background: var(--gl, var(--nota-borde)); }
+        border-radius: 1px; background: var(--tc, var(--nota-borde)); }   /* del color de la nota (el de su tono o el borde del papel) */
 .nota.arrastrando { cursor: grabbing; border-color: var(--foco); box-shadow: var(--sombra); }
 .nota:hover { border-color: var(--nota-tinta); }
+/* apiladas, la guía de las de abajo pasa por encima de las de arriba; la que se señala (o está elegida) va delante (Leo, 17-09-2026) */
+.nota:hover, .nota.sel, .nota.arrastrando { z-index: 2; }
 .nota.sel { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
 .nota span { display: block; max-width: 100%; line-height: 19px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -345,6 +350,7 @@ html[data-theme="dark"] #dlg::backdrop { background: rgba(0, 0, 0, .55); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 /* el nodo que se cambiará de lugar con el arrastrado: se aparta a su sitio (Leo, 15-09-2026) */
 .pt.intercambio { transition: transform .16s ease; z-index: 4; }
+.nota.intercambio { transition: transform .16s ease; }
 .pt.intercambio .dot { box-shadow: 0 0 0 3px var(--foco-halo); }
 /* selección múltiple (Leo, 15-09-2026): el rectángulo que se arrastra y los nodos elegidos */
 .marquesina { position: absolute; z-index: 9; pointer-events: none; border: 1px solid var(--foco); background: var(--foco-banda, rgba(38, 65, 127, .07)); border-radius: 2px; }
@@ -397,3 +403,21 @@ body.moviendo-fila, body.moviendo-fila * { cursor: grabbing !important; user-sel
 .salto-nombre.sel { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); font-weight: 600; }
 .salto-nombre-edit { position: absolute; transform: translate(-50%, -50%); z-index: 7; pointer-events: auto; width: 150px; font: 500 12px var(--sans);
   padding: 2px 6px; border: 1px solid var(--foco); border-radius: 4px; box-shadow: 0 0 0 3px var(--foco-halo); background: var(--papel); color: var(--tinta); outline: 0; }
+
+/* La descripción de un nodo asoma bajo su título al pasar el ratón: tres líneas como mucho, en letra pequeña y apagada; la
+   completa, en el panel (Leo, 17-09-2026) */
+.pt:hover .cap[data-desc]::after { content: attr(data-desc); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+        overflow: hidden; margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--regla, var(--borde));
+        font-weight: 400; font-size: .92em; line-height: 1.35; color: var(--tenue); white-space: normal; text-align: left; }
+
+/* **Al pasar el ratón, la nota se abre ella misma** (Leo, 17-09-2026: «que ocurra lo mismo con las notas»): en lugar del globo
+   negro, la cajita crece hacia abajo y enseña su texto en varias líneas (cuatro como mucho), con su papel y su color */
+.nota:hover:not(.arrastrando) { height: auto; min-height: 22px; }
+.nota:hover:not(.arrastrando) span { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4;
+        overflow: hidden; line-height: 1.4; padding-top: 3px; padding-bottom: 3px; }
+/* y el rótulo del nodo, **del color del nodo** (el de su trama si no tiene propio) */
+.pt:hover .cap { background: color-mix(in oklab, var(--c) 11%, var(--papel)); border-color: color-mix(in oklab, var(--c) 45%, var(--regla-fuerte, var(--borde))); }
+.pt:hover .cap[data-desc]::after { border-top-color: color-mix(in oklab, var(--c) 30%, transparent); }
+
+/* arrastrando con Opción (duplicar), el original se queda en su sitio, apagado (Leo, 17-09-2026) */
+.pt.original-dup { opacity: .45; z-index: 2; }

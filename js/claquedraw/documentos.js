@@ -82,6 +82,8 @@
   });
 
   const clonar = d => JSON.parse(JSON.stringify(d));
+  /* el nombre de lo que hay en la papelera: una nota, un esquema, una biblioteca o un personaje */
+  const nombreEnPapelera = x => (x.nota ? x.nota.titulo : x.tipo === 'esquema' ? x.esquema.nombre : x.tipo === 'personaje' ? x.personaje.nombre : x.sub.nombre);
   const no = aviso => ({ ok: false, aviso });
   const si = extra => Object.assign({ ok: true }, extra || {});
   const plano = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -274,7 +276,37 @@
       if (e && e.subId === subId) x.etiquetaId = e.id;          // su segmento tiene que ser de su misma biblioteca
       d.notas.push(x);
     });
+    /* Las piezas tiradas enteras (Leo, 18-09-2026: «que las bibliotecas y esquemas, también de los personajes, se vayan a la
+       papelera y puedan restaurarse»): un esquema con su documento, una biblioteca o un personaje con la suya, con todo lo
+       suyo (segmentos, notas y versiones), de dónde venían (contenedor, carpeta y grupo) y cuándo se tiraron. */
+    const bib = (b, sid) => {
+      const etiquetas = (Array.isArray(b.etiquetas) ? b.etiquetas : []).filter(e => e && e.id).map(e => Object.assign(clonar(e), { id: String(e.id), subId: sid }));
+      const etqIds = new Set(etiquetas.map(e => e.id));
+      const notas = (Array.isArray(b.notas) ? b.notas : []).filter(n => n && n.id).map(n => Object.assign(nota(n, +n.creado || 0, sid), n.etiquetaId && etqIds.has(String(n.etiquetaId)) ? { etiquetaId: String(n.etiquetaId) } : {}));
+      return { etiquetas, notas };
+    };
+    const pieza = x => {
+      const base = { tipo: x.tipo, origenId: String(x.origenId || ''), origenNombre: texto(x.origenNombre, ''), eliminadoEn: +x.eliminadoEn || 0,
+                     ...(x.carpetaId ? { carpetaId: String(x.carpetaId) } : {}), ...(x.grupoId ? { grupoId: String(x.grupoId) } : {}) };
+      const conBib = (o, b) => { const sid = b && b.sub && String(b.sub.id || ''); if (!sid) return null; return Object.assign(o, { sub: Object.assign(clonar(b.sub), { id: sid }) }, bib(b, sid)); };
+      if (x.tipo === 'esquema') {
+        const eid = x.esquema && String(x.esquema.id || ''); if (!eid || ids.has(eid)) return null;
+        const e = sanearEsquema(x.esquema, eid, x.esquema.nombre); if (!e) return null;
+        ids.add(eid);
+        const g = x.guiones && conBib({}, x.guiones);
+        return Object.assign(base, { esquema: Object.assign(e, tono(x.esquema)) }, g ? { guiones: g } : {});
+      }
+      if (x.tipo === 'sub') { const sid = x.sub && String(x.sub.id || ''); if (!sid || ids.has(sid)) return null; ids.add(sid); return conBib(base, x); }
+      if (x.tipo === 'personaje') {
+        const pj = x.personaje, pid = pj && String(pj.id || ''); if (!pid || ids.has(pid)) return null; ids.add(pid);
+        Object.assign(base, { personaje: { id: pid, nombre: texto(pj.nombre, 'Personaje'), color: color(pj.color), ...(pj.carpetaId ? { carpetaId: String(pj.carpetaId) } : {}) },
+          carriles: (Array.isArray(x.carriles) ? x.carriles : []).filter(c => c && c.eid && c.lineaId).map(c => ({ eid: String(c.eid), lineaId: String(c.lineaId) })) });
+        return (x.sub && conBib(base, x)) || base;
+      }
+      return null;
+    };
     (Array.isArray(src.papelera) ? src.papelera : []).forEach(x => {
+      if (x && x.tipo && x.tipo !== 'nota') { const p = pieza(x); if (p) d.papelera.push(p); return; }
       const n = x && x.nota; const id = n && String(n.id || ''); if (!id || ids.has(id)) return; ids.add(id);
       d.papelera.push({ nota: nota(n, +n.creado || 0, String(n.subId || '')), origenId: String(x.origenId || n.subId || n.contenedorId || ''), origenNombre: texto(x.origenNombre, ''), eliminadoEn: +x.eliminadoEn || 0 });
     });
@@ -423,7 +455,9 @@
     etiqueta(id) { return this.datos.etiquetas.find(e => e.id === id) || null; }
     nota(id) { return this.datos.notas.find(n => n.id === id) || null; }
     papelera() { return this.datos.papelera.slice(); }
-    enPapelera(id) { return this.datos.papelera.find(x => x.nota.id === id) || null; }
+    enPapelera(id) { return this.datos.papelera.find(x => x.nota && x.nota.id === id) || null; }
+    /* un esquema, una biblioteca o un personaje tirados enteros */
+    piezaEnPapelera(id) { return this.datos.papelera.find(x => (x.tipo === 'esquema' && x.esquema.id === id) || (x.tipo === 'sub' && x.sub.id === id) || (x.tipo === 'personaje' && x.personaje.id === id)) || null; }
     /* Un subcontenedor con su contenedor, o null. */
     sub(id) {
       for (const c of this.datos.contenedores) { const s = c.subs.find(x => x.id === id); if (s) return { contenedor: c, sub: s }; }
@@ -738,14 +772,19 @@
       return si({ contenedor: c });
     }
     /* Se lleva sus esquemas y sus subcontenedores con sus etiquetas; las notas van a la papelera. */
+    /* Sus esquemas y sus bibliotecas van a la papelera, cada uno con lo suyo (se restauran en un contenedor con su nombre). */
     eliminarContenedor(id) {
       const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe');
-      const mias = this.notasContenedor(id), notas = mias.length;
-      mias.forEach(n => this.tirarNota(n.id));
+      const notas = this.notasContenedor(id).length, esquemas = c.esquemas.length;
+      const bibs = c.subs.filter(s => !s.guionEid);
+      c.esquemas.slice().forEach(e => this.eliminarEsquema(e.id));
+      bibs.forEach(s => this.eliminarSub(s.id));
       const subs = new Set(c.subs.map(s => s.id));
       this.datos.contenedores = this.datos.contenedores.filter(x => x !== c);
       this.datos.etiquetas = this.datos.etiquetas.filter(e => !subs.has(e.subId));
-      return si({ contenedor: c, notas, esquemas: c.esquemas.length, aviso: '«' + c.nombre + '» eliminado' + (notas ? ' · ' + notas + (notas === 1 ? ' nota va' : ' notas van') + ' a la papelera' : '') });
+      this.datos.notas = this.datos.notas.filter(n => !subs.has(n.subId));
+      const n = esquemas + bibs.length;
+      return si({ contenedor: c, notas, esquemas, aviso: '«' + c.nombre + '» eliminado' + (n ? ' · ' + (esquemas ? esquemas + (esquemas === 1 ? ' esquema' : ' esquemas') : '') + (esquemas && bibs.length ? ' y ' : '') + (bibs.length ? bibs.length + (bibs.length === 1 ? ' biblioteca' : ' bibliotecas') : '') + ' a la papelera' : '') });
     }
 
     /* ---------- carpetas ---------- */
@@ -1126,14 +1165,74 @@
       return si(r);
     }
     /* Sus etiquetas se van; sus notas, a la papelera. */
+    /* A la papelera entera, con sus segmentos y sus notas (Leo, 18-09-2026); desde ahí se restaura. */
     eliminarSub(id) {
       const r = this.sub(id); if (!r) return no('Esa biblioteca ya no existe');
-      const mias = this.notasDe(id), notas = mias.length;
-      mias.forEach(n => this.tirarNota(n.id));
-      this.datos.etiquetas = this.datos.etiquetas.filter(e => e.subId !== id);
-      this.sacarDeGrupo(id);                                     // si estaba en un grupo, sale de él
-      r.contenedor.subs = r.contenedor.subs.filter(x => x !== r.sub); this._tocar(r.contenedor);
-      return si({ sub: r.sub, contenedor: r.contenedor, notas, aviso: '«' + r.sub.nombre + '» eliminado' + (notas ? ' · ' + notas + (notas === 1 ? ' nota va' : ' notas van') + ' a la papelera' : '') });
+      const g = this.grupoDe(id);
+      this.sacarDeGrupo(id);                                     // si estaba en un grupo, sale de él (y vuelve a él al restaurarla)
+      const b = this._sacarBiblioteca(r.contenedor, r.sub);
+      this.datos.papelera.push(Object.assign({ tipo: 'sub', origenId: r.contenedor.id, origenNombre: r.contenedor.nombre, eliminadoEn: this.ahora() },
+        r.sub.carpetaId ? { carpetaId: r.sub.carpetaId } : {}, g ? { grupoId: g.grupo.id } : {}, b));
+      this._tocar(r.contenedor);
+      return si({ sub: r.sub, contenedor: r.contenedor, notas: b.notas.length, aviso: 'La biblioteca «' + r.sub.nombre + '» va a la papelera' });
+    }
+    /* saca una biblioteca con sus segmentos y sus notas (para la papelera), y la vuelve a poner */
+    _sacarBiblioteca(c, s) {
+      const etiquetas = this.datos.etiquetas.filter(e => e.subId === s.id), notas = this.datos.notas.filter(n => n.subId === s.id);
+      this.datos.etiquetas = this.datos.etiquetas.filter(e => e.subId !== s.id);
+      this.datos.notas = this.datos.notas.filter(n => n.subId !== s.id);
+      c.subs = c.subs.filter(x => x !== s);
+      return { sub: s, etiquetas, notas };
+    }
+    _meterBiblioteca(c, b) {
+      c.subs.push(b.sub);
+      this.datos.etiquetas.push(...b.etiquetas.map(e => Object.assign(e, { subId: b.sub.id })));
+      this.datos.notas.push(...b.notas.map(n => Object.assign(n, { subId: b.sub.id })));
+    }
+
+    /* ---------- duplicar (Leo, 18-09-2026: «quiero poder duplicar bibliotecas y esquemas, con todo y su contenido») ----------
+       La copia se llama «Nombre (copia)» y queda justo detrás del original, en su carpeta y en su grupo. */
+    /* Las notas (con sus versiones), los segmentos y las secciones de la biblioteca `desde`, copiados a `hacia` con
+       identificadores nuevos. */
+    _copiarContenido(desde, hacia) {
+      const secs = new Map(), etqs = new Map();
+      if (Array.isArray(hacia.secciones)) hacia.secciones = hacia.secciones.map(k => { const n = Object.assign({}, k, { id: this.idNuevo() }); secs.set(k.id, n.id); return n; });
+      this.datos.etiquetas.filter(e => e.subId === desde).forEach(e => {
+        const n = Object.assign(clonar(e), { id: this.idNuevo(), subId: hacia.id });
+        if (n.seccionId) { if (secs.has(n.seccionId)) n.seccionId = secs.get(n.seccionId); else delete n.seccionId; }
+        etqs.set(e.id, n.id); this.datos.etiquetas.push(n);
+      });
+      if (Array.isArray(hacia.ordenSegmentos)) hacia.ordenSegmentos = hacia.ordenSegmentos.map(k => (/^etq:/.test(k) && etqs.has(k.slice(4)) ? 'etq:' + etqs.get(k.slice(4)) : k));
+      const notas = this.notasDe(desde).map(nt => Object.assign(clonar(nt), { id: this.idNuevo(), subId: hacia.id, etiquetaId: nt.etiquetaId ? etqs.get(nt.etiquetaId) || null : null }));
+      this.datos.notas.push(...notas);
+      return notas;
+    }
+    duplicarSub(id) {
+      const r = this.sub(id); if (!r) return no('Esa biblioteca ya no existe');
+      if (r.sub.guionEid || r.sub.lineaId) return no('Esa biblioteca no se puede duplicar');
+      const c = r.contenedor, t = this.ahora();
+      const s = Object.assign(clonar(r.sub), { id: this.idNuevo(), nombre: this._libre(r.sub.nombre + ' (copia)', c.subs.map(x => x.nombre)), creado: t, modificado: t });
+      c.subs.splice(c.subs.indexOf(r.sub) + 1, 0, s);
+      const notas = this._copiarContenido(id, s);
+      this.colocarEnArbol(s.id, id, true);                         // detrás del original, en su carpeta y en su grupo
+      this._tocar(c);
+      return si({ contenedor: c, sub: s, aviso: 'Biblioteca duplicada: «' + s.nombre + '»' + (notas.length ? ' · ' + notas.length + (notas.length === 1 ? ' nota' : ' notas') : '') });
+    }
+    /* Un esquema, con sus nodos, sus notas y su documento (con sus versiones), que vive en su biblioteca oculta. */
+    duplicarEsquema(eid) {
+      const r = this.esquema(eid); if (!r) return no('Ese esquema ya no existe');
+      const c = r.contenedor;
+      const e = Object.assign(clonar(r.esquema), { id: this.idNuevo(), nombre: this._libre(r.esquema.nombre + ' (copia)', c.esquemas.map(x => x.nombre)) });
+      c.esquemas.splice(c.esquemas.indexOf(r.esquema) + 1, 0, e);
+      const gs = this.bibliotecaGuiones(eid, false);
+      if (gs) {
+        const s = Object.assign(clonar(gs), { id: e.id + ':guiones', guionEid: e.id });
+        c.subs.push(s);
+        this._copiarContenido(gs.id, s).forEach(n => { if (n.guion) n.guion = Object.assign({}, n.guion, { eid: e.id }); });
+      }
+      this.colocarEnArbol(e.id, eid, true);
+      this._tocar(c);
+      return si({ contenedor: c, esquema: e, aviso: 'Esquema duplicado: «' + e.nombre + '»' });
     }
 
     /* ---------- esquemas de pasos de un contenedor ---------- */
@@ -1210,16 +1309,18 @@
       r.esquema.datos = clonar(datos); this._tocar(r.contenedor);
       return si(Object.assign({ cambio: true }, r));
     }
-    /* Se lleva sus notas por nodo. */
+    /* A la papelera entero (Leo, 18-09-2026): con sus nodos y sus notas y con su documento (y sus versiones), que vive en su
+       biblioteca oculta. */
     eliminarEsquema(eid) {
       const r = this.esquema(eid); if (!r) return no('Ese esquema ya no existe');
-      const n = Object.keys(r.esquema.notas).length;
-      const gs = this.bibliotecaGuiones(eid, false);            // sus guiones viven con él: se van a la papelera con él
-      let gn = 0;
-      if (gs) { gn = this.notasDe(gs.id).length; this.eliminarSub(gs.id); }
-      r.contenedor.esquemas = r.contenedor.esquemas.filter(x => x !== r.esquema); this._tocar(r.contenedor);
-      return si(Object.assign({ aviso: 'Esquema «' + r.esquema.nombre + '» eliminado' + (n ? ' con las notas de sus nodos' : '')
-        + (gn ? ' · ' + gn + (gn === 1 ? ' guion va' : ' guiones van') + ' a la papelera' : '') }, r));
+      const c = r.contenedor, e = r.esquema, g = this.grupoDe(eid);
+      this.sacarDeGrupo(eid);
+      const gs = this.bibliotecaGuiones(eid, false), guiones = gs ? this._sacarBiblioteca(c, gs) : null;
+      c.esquemas = c.esquemas.filter(x => x !== e); this._tocar(c);
+      const guardado = Object.assign({}, e); delete guardado.carpetaId;   // la carpeta va aparte (la de la papelera no la guarda)
+      this.datos.papelera.push(Object.assign({ tipo: 'esquema', esquema: guardado, origenId: c.id, origenNombre: c.nombre, eliminadoEn: this.ahora() },
+        e.carpetaId ? { carpetaId: e.carpetaId } : {}, g ? { grupoId: g.grupo.id } : {}, guiones ? { guiones } : {}));
+      return si(Object.assign({ aviso: 'El esquema «' + e.nombre + '» va a la papelera' }, r));
     }
     notaEsquema(eid, puntoId) { const r = this.esquema(eid); return (r && r.esquema.notas[puntoId]) || null; }
     guardarNotaEsquema(eid, puntoId, doc) {
@@ -1465,11 +1566,52 @@
       return si({ nota: x.nota, sub: destino.sub, contenedor: destino.contenedor, aviso: '«' + x.nota.titulo + '» vuelve a «' + destino.contenedor.nombre + ' › ' + destino.sub.nombre + '»' });
     }
     eliminarDefinitivo(id) {
-      const x = this.enPapelera(id); if (!x) return no('Esa nota no está en la papelera');
+      const x = this.enPapelera(id) || this.piezaEnPapelera(id); if (!x) return no('Eso no está en la papelera');
       this.datos.papelera = this.datos.papelera.filter(y => y !== x);
-      return si({ nota: x.nota, aviso: '«' + x.nota.titulo + '» eliminada del todo' });
+      return si({ nota: x.nota, aviso: '«' + nombreEnPapelera(x) + '» eliminado del todo' });
     }
-    vaciarPapelera() { const n = this.datos.papelera.length; this.datos.papelera = []; return si({ eliminadas: n, aviso: n ? 'Papelera vaciada · ' + n + (n === 1 ? ' nota' : ' notas') : 'La papelera ya estaba vacía' }); }
+    vaciarPapelera() { const n = this.datos.papelera.length; this.datos.papelera = []; return si({ eliminadas: n, aviso: n ? 'Papelera vaciada · ' + n + (n === 1 ? ' elemento' : ' elementos') : 'La papelera ya estaba vacía' }); }
+    /* Un esquema, una biblioteca o un personaje vuelven de la papelera: a su contenedor (si ya no está, a uno con su nombre),
+       a su carpeta y a su grupo si siguen ahí, con un nombre libre. Un personaje recupera los carriles que sigan sin
+       personaje (`carriles`: los que vuelven a ser suyos). */
+    restaurarPieza(id) {
+      const x = this.piezaEnPapelera(id); if (!x) return no('Eso no está en la papelera');
+      if (x.tipo === 'personaje') {
+        const pj = x.personaje, k = clavePersonaje(pj.nombre);
+        if (this.datos.elenco.some(q => clavePersonaje(q.nombre) === k)) return no('Ya hay un personaje «' + pj.nombre + '»: renómbralo antes de restaurar este');
+        const p = clonar(pj);
+        if (p.carpetaId && !this.datos.carpetasElenco.some(q => q.id === p.carpetaId)) delete p.carpetaId;
+        this.datos.elenco.push(p);
+        if (x.sub) this._meterBiblioteca(this.personajes(true), x);
+        const carriles = (x.carriles || []).filter(cr => {
+          const r = this.esquema(cr.eid), l = r && (r.esquema.datos.lineas || []).find(q => q.id === cr.lineaId);
+          if (!l || l.personaje) return false;
+          l.personaje = p.id; l.nombre = p.nombre; this._tocar(r.contenedor); return true;
+        });
+        if (x.grupoId && this.grupo(x.grupoId) && this.grupo(x.grupoId).ambito === ELENCO) this.aGrupo(x.grupoId, p.id);
+        this.datos.papelera = this.datos.papelera.filter(y => y !== x);
+        return si({ personaje: p, carriles, aviso: '«' + p.nombre + '» vuelve a Personajes' + (carriles.length ? ' con ' + carriles.length + (carriles.length === 1 ? ' carril' : ' carriles') : '') });
+      }
+      let c = this.contenedor(x.origenId)
+        || (x.origenId === ID_ESQUEMAS ? this.esquemasPersonajes(true) : null)
+        || this.datos.contenedores.find(q => !q.oculto && plano(q.nombre) === plano(x.origenNombre));
+      if (!c) c = this.crearContenedor(x.origenNombre || NOMBRE_GLOBAL, { vacio: true }).contenedor;
+      const carpeta = x.carpetaId && c.carpetas.some(q => q.id === x.carpetaId) ? x.carpetaId : null;
+      let pieza;
+      if (x.tipo === 'esquema') {
+        pieza = Object.assign(x.esquema, { nombre: this._libre(x.esquema.nombre, c.esquemas.map(e => e.nombre)) });
+        c.esquemas.push(pieza);
+        if (x.guiones) this._meterBiblioteca(c, Object.assign(x.guiones, { sub: Object.assign(x.guiones.sub, { guionEid: pieza.id }) }));
+      } else {
+        pieza = Object.assign(x.sub, { nombre: this._libre(x.sub.nombre, c.subs.map(q => q.nombre)) });
+        this._meterBiblioteca(c, x);
+      }
+      if (carpeta) pieza.carpetaId = carpeta; else delete pieza.carpetaId;
+      if (x.grupoId) { const g = this.grupo(x.grupoId); if (g && g.ambito === c.id) this.aGrupo(x.grupoId, pieza.id); }
+      this.datos.papelera = this.datos.papelera.filter(y => y !== x);
+      this._tocar(c);
+      return si({ contenedor: c, tipo: x.tipo, [x.tipo === 'esquema' ? 'esquema' : 'sub']: pieza, aviso: '«' + pieza.nombre + '» vuelve a «' + c.nombre + '»' });
+    }
     /* Tira las notas que lleven más de `dias` en la papelera. Se llama una vez al arrancar. */
     purgarPapelera(dias) {
       const limite = this.ahora() - (dias || DIAS_PAPELERA) * 864e5;
@@ -1502,7 +1644,10 @@
     _documentosTexto(conPapelera) {
       const lista = [];
       this.datos.notas.forEach(n => lista.push({ doc: n, tipo: 'nota', id: n.id, titulo: n.titulo, modificado: n.modificado || null, ruta: () => { const r = this.sub(n.subId); return r ? r.contenedor.nombre + ' › ' + r.sub.nombre : ''; } }));
-      if (conPapelera) this.datos.papelera.forEach(x => lista.push({ doc: x.nota, tipo: 'papelera', id: x.nota.id }));
+      if (conPapelera) this.datos.papelera.forEach(x => {
+        if (x.nota) lista.push({ doc: x.nota, tipo: 'papelera', id: x.nota.id });
+        [].concat(x.notas || [], (x.guiones && x.guiones.notas) || []).forEach(n => lista.push({ doc: n, tipo: 'papelera', id: n.id }));   // las de un esquema, una biblioteca o un personaje tirados
+      });
       this.datos.contenedores.forEach(c => c.esquemas.forEach(e => Object.keys(e.notas).forEach(pid => {
         const n = e.notas[pid], p = (e.datos.puntos || []).find(q => q.id === pid);
         lista.push({ doc: n, tipo: 'nodo', eid: e.id, id: pid, titulo: (p && p.titulo) || n.title || 'Sin título', modificado: n.modificado || null, ruta: () => c.nombre + ' › ' + e.nombre });
@@ -1599,13 +1744,20 @@
       const p = this.personaje(id); if (!p) return no('Ese personaje ya no existe');
       const m = this.menciones(id);
       if (m.length) return no('«' + p.nombre + '» aparece en ' + m.length + (m.length === 1 ? ' nota' : ' notas') + ': quítalo de ellas antes de eliminarlo');
-      this.datos.contenedores.forEach(c => c.esquemas.forEach(e => (e.datos.lineas || []).forEach(l => { if (l.personaje === id) { delete l.personaje; l.nombre = 'Sin personaje'; } })));
-      const b = this.contenedor(ID_PERSONAJES), s = b && b.subs.find(x => x.lineaId === id); if (s) this.eliminarSub(s.id);
+      /* a la papelera con su biblioteca y la lista de sus carriles, para devolvérselos al restaurarlo (Leo, 18-09-2026) */
+      const carriles = [];
+      this.datos.contenedores.forEach(c => c.esquemas.forEach(e => (e.datos.lineas || []).forEach(l => { if (l.personaje === id) { carriles.push({ eid: e.id, lineaId: l.id }); delete l.personaje; l.nombre = 'Sin personaje'; } })));
+      const g = this.grupoDe(id);
+      this.sacarDeGrupo(id);
+      const b = this.contenedor(ID_PERSONAJES), s = b && b.subs.find(x => x.lineaId === id);
+      const bibl = s ? this._sacarBiblioteca(b, s) : {};
       this.datos.elenco = this.datos.elenco.filter(x => x !== p);
-      return si({ personaje: p, aviso: '«' + p.nombre + '» eliminado' });
+      const pj = { id: p.id, nombre: p.nombre, color: p.color, ...(p.carpetaId ? { carpetaId: p.carpetaId } : {}) };
+      this.datos.papelera.push(Object.assign({ tipo: 'personaje', personaje: pj, carriles, origenId: ID_PERSONAJES, origenNombre: 'Personajes', eliminadoEn: this.ahora() }, g ? { grupoId: g.grupo.id } : {}, bibl));
+      return si({ personaje: p, carriles, aviso: '«' + p.nombre + '» va a la papelera' });
     }
   }
 
-  Object.assign(C, { Documentos, ID_PERSONAJES, ID_ESQUEMAS_PERSONAJE: ID_ESQUEMAS, COLORES_CARPETA, HOJA_PERSONAJE, TONOS_NOTA: TONOS, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
+  Object.assign(C, { Documentos, nombreEnPapelera, ID_PERSONAJES, ID_ESQUEMAS_PERSONAJE: ID_ESQUEMAS, COLORES_CARPETA, HOJA_PERSONAJE, TONOS_NOTA: TONOS, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

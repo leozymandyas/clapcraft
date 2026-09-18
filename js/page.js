@@ -3,7 +3,7 @@
   'use strict';
   const VIEW_KEY = 'guiones.editor.view';
   const ZOOM_MIN = 0.5, ZOOM_MAX = 3;
-  const state = { v: 3, width: 60, zoom: 1.25, typewriter: true, script: true };
+  const state = { v: 3, width: 60, zoom: 1.25, typewriter: true, script: true, numerar: false };
   const page = { state };
   Ed.page = page;
   const $ = s => document.querySelector(s);
@@ -25,6 +25,8 @@
     $('#fbWidth').value = state.width;
     $('#fbTypewriter').classList.toggle('active', state.typewriter);
     $('#fbScript').classList.toggle('active', state.script);
+    const fn = $('#fbNumerar'); if (fn) fn.classList.toggle('active', !!state.numerar);
+    if (Ed.formato) Ed.formato.numerar(!!state.numerar);
   };
 
   page.setZoom = function (z) {
@@ -39,6 +41,7 @@
     else if (key === 'zoom') state.zoom = clamp(+value, ZOOM_MIN, ZOOM_MAX);
     else if (key === 'typewriter') state.typewriter = !!value;
     else if (key === 'script') state.script = !!value;
+    else if (key === 'numerar') state.numerar = !!value;
     page.apply();
     page.save();
   };

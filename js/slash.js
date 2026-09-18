@@ -21,7 +21,10 @@
     { group: 'Bloques', id: 'hr', label: 'Línea horizontal', keys: 'linea separador hr', hint: '---', run: () => Ed.cmd('insertHorizontalRule') },
     { group: 'Bloques', id: 'link', label: 'Enlace', keys: 'enlace link url', hint: 'Ctrl+K', run: () => Ed.actions.link() }
   ];
-  Ed.screenplay.KINDS.forEach(k => COMMANDS.push({ group: 'Guion', id: 'sp-' + k.id, label: k.label, keys: k.keys, hint: k.hint, run: () => Ed.screenplay.set(k.id) }));
+  Ed.screenplay.KINDS.forEach(k => COMMANDS.push({ group: 'Guion', id: 'sp-' + k.id, label: k.label, keys: k.keys, hint: k.atajo ? 'Ctrl+' + k.atajo : k.hint, run: () => Ed.screenplay.set(k.id) }));
+  /* el diálogo doble (js/doble.js), detrás del diálogo: junta dos diálogos seguidos, pone uno en blanco o lo separa */
+  COMMANDS.splice(COMMANDS.findIndex(c => c.id === 'sp-dialogue') + 1, 0, { group: 'Guion', id: 'doble', label: 'Diálogo doble', keys: 'dialogo-doble dialogo doble dual simultaneo columnas', hint: 'dos columnas', run: () => Ed.doble && Ed.doble.alternar() });
+  COMMANDS.push({ group: 'Guion', id: 'portada', label: 'Portada', keys: 'portada titulo cubierta', hint: 'formulario', run: () => Ed.portada && Ed.portada.editar() });
 
   let menu, anchorNode = null, anchorOffset = -1, items = [], index = 0;
 
@@ -34,7 +37,7 @@
     document.body.appendChild(menu);
     menu.addEventListener('mousedown', e => e.preventDefault());
     menu.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) choose(+b.dataset.i); });
-    document.addEventListener('mousedown', e => { if (S.open && !(e.target.closest && e.target.closest('.slash-menu'))) close(); });
+    document.addEventListener('mousedown', e => { if (S.open && !(e.target.closest && e.target.closest('.slash-menu'))) close(true); });
     document.addEventListener('selectionchange', () => { if (S.open) requestAnimationFrame(refresh); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
@@ -83,7 +86,26 @@
     if (q === null || (q.length > 24)) { close(); return; }
     render(q);
   }
-  function close() { S.open = false; if (menu) menu.hidden = true; anchorNode = null; }
+  let auto = false;                                          // abierto con Enter en una línea vacía (no se tecleó la «/»)
+  function close(quitarBarra) {
+    /* abierto por Enter y cerrado sin elegir: la «/» que puso el menú no se queda en el texto */
+    if (quitarBarra && auto && anchorNode) {
+      const r = Ed.getRange();
+      if (r && r.collapsed && r.startContainer === anchorNode && r.startOffset === anchorOffset + 1 && anchorNode.nodeValue[anchorOffset] === '/') {
+        const del = document.createRange(); del.setStart(anchorNode, anchorOffset); del.setEnd(anchorNode, anchorOffset + 1);
+        Ed.restoreSelection(del); Ed.cmd('delete');
+      }
+    }
+    auto = false; S.open = false; if (menu) menu.hidden = true; anchorNode = null;
+  }
+  /* Abre el menú en el cursor sin que se haya tecleado la «/» (la pone él y la quita si se cierra sin elegir). */
+  S.abrirAqui = function () {
+    if (!menu || !Ed.editor) return false;
+    Ed.cmd('insertText', '/');                                 // el `input` de esta inserción abre el menú (S.onInput)
+    if (!S.open) return false;
+    auto = true;
+    return true;
+  };
 
   function choose(i) {
     const cmd = items[i];
@@ -131,7 +153,7 @@
     if (e.key === 'ArrowDown') { e.preventDefault(); index = (index + 1) % items.length; render(query() || ''); return true; }
     if (e.key === 'ArrowUp') { e.preventDefault(); index = (index - 1 + items.length) % items.length; render(query() || ''); return true; }
     if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); choose(index); return true; }
-    if (e.key === 'Escape') { e.preventDefault(); close(); return true; }
+    if (e.key === 'Escape') { e.preventDefault(); close(true); return true; }
     return false;
   };
 })(window.Ed);

@@ -131,6 +131,16 @@
   }
 
 
+  /* las flechas de la tira: la trama de arriba o la de abajo, en el orden del esquema */
+  function cambiarTrama(d) {
+    const m = modelo(), L = m ? m.datos.lineas : [], i = L.findIndex(x => x.id === lineaId), l = L[i + d];
+    if (!l) return;
+    lineaId = l.id; posicion = null;
+    render();
+    tira.scrollLeft = 0;
+    if (o.avisar) o.avisar('En ' + l.nombre);
+  }
+
   /* ---------- la cabecera de la vista (50 px, rediseño) ----------
      «CONTENEDOR [Esquema] Título del documento» y «Ver esquema». El título se escribe aquí (la barra de título del
      editor no se ve): pasa al #docTitle del marco y de ahí renombra la nota. */
@@ -180,20 +190,92 @@
       const pista = s
         ? `${FORMA[s.tipo] || 'Salto'}${destino ? ' → ' + destino.nombre : ''} · pulsa para ver esa trama`
         : p.descripcion;
-      return `<button type="button" class="${clases.join(' ')}"${s ? ` data-salto="${esc(p.id)}"` : ''}
+      return `<button type="button" class="${clases.join(' ')}" data-punto="${esc(p.id)}"${s ? ` data-salto="${esc(p.id)}"` : ''}
         style="--c:${tono(p.color || l.color)}" data-pista="${esc(pista)}">
         <span class="hilo-tit"><span class="hilo-tit-txt">${esc(p.titulo) || 'Sin título'}</span></span><i class="hilo-punto"></i>${s ? `<i class="hilo-trazo ${sube ? 'sube' : 'baja'}" title="${sube ? 'Sube' : 'Baja'} a ${esc(destino ? destino.nombre : 'otra trama')}"></i>` : ''}</button>`;
     }).join('');
-    /* la trama: el círculo con su inicial, como en el carril del tablero */
-    const n = m.puntosDe(l.id).length;
-    const chip = `<div class="hilo-trama" style="--tc:${tono(l.color)}" title="${esc(l.nombre)} · ${ETIQUETA[l.tipo] || l.tipo} · ${n} ${n === 1 ? 'nodo' : 'nodos'}">
-        <span class="chip ${l.tipo}" data-inicial="${esc((l.nombre || '?').trim().charAt(0).toUpperCase())}" style="background:${tono(l.color)};color:${tono(l.color)}"></span></div>`;
+    /* la trama: el círculo con su inicial, como en el carril del tablero, y encima y debajo las flechas que pasan a la trama de
+       arriba o de abajo del esquema (Leo, 18-09-2026: «la opción de poder moverme de tramas, quizás con unas flechas»). Salen
+       siempre, con borde, para que se vean (1.1.17, Leo: «tampoco veo las flechas»: con una sola trama no salían y, con más,
+       eran dos trazos grises); sin trama a ese lado, apagadas. */
+    const n = m.puntosDe(l.id).length, L = m.datos.lineas, i = fila(l.id);
+    const flecha = (d, trazo) => {
+      const otra = L[i + d];
+      const nada = L.length === 1 ? 'Es la única trama del esquema' : d < 0 ? 'Es la primera trama' : 'Es la última trama';
+      return `<button type="button" class="hilo-cambiar" data-trama-paso="${d}"${otra ? '' : ' disabled'} title="${otra ? (d < 0 ? 'Trama de arriba: ' : 'Trama de abajo: ') + esc(otra.nombre) : nada}" aria-label="${d < 0 ? 'Trama de arriba' : 'Trama de abajo'}">`
+        + `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${trazo}"/></svg></button>`;
+    };
+    const chip = `<div class="hilo-trama con-flechas" style="--tc:${tono(l.color)}">
+        ${flecha(-1, 'M4 10l4-4 4 4')}
+        <span class="chip ${l.tipo}" data-inicial="${esc((l.nombre || '?').trim().charAt(0).toUpperCase())}" style="background:${tono(l.color)};color:${tono(l.color)}" title="${esc(l.nombre)} · ${ETIQUETA[l.tipo] || l.tipo} · ${n} ${n === 1 ? 'nodo' : 'nodos'}"></span>
+        ${flecha(1, 'M4 6l4 4 4-4')}</div>`;
     const vacio = puntos ? '' : '<span class="hilo-vacio">Esta trama aún no tiene nodos: créalos en el esquema de pasos.</span>';
     tira.innerHTML = `${chip}<div class="hilo-pista${l.tipo === 'alterna' ? ' alterna' : ''}${l.cortada ? ' cortada' : ''}${puntos ? '' : ' vacia'}" style="--c:${tono(l.color)}">${puntos}${vacio}</div>`;
     colocarRotulos();
+    pintarNotas(m, l);
     /* Centrar el nodo resaltado desplazando solo la tira (scrollIntoView movería también la página). */
     const act = tira.querySelector('.hilo-nodo.actual, .hilo-nodo.pos');
     if (act) tira.scrollLeft = act.offsetLeft + act.offsetWidth / 2 - tira.clientWidth / 2;
+  }
+
+  /* **Las notas del esquema, en la tira, como puntos** (Leo, 18-09-2026, 1.1.17: «márcalas solo con puntos abajo del nodo o
+     abajo de la raya… para ver las notas del nodo, hover sobre el nodo y se ven en el tooltip… las de enlace, hover sobre el
+     punto que aparece»; en la 1.1.16 iban como tarjetas y ocupaban mucho): bajo un nodo, un punto por cada una de sus notas,
+     del color de la nota; bajo la mitad de un enlace (o en su raya, para las de una raya), los de sus notas. Al pasar el ratón
+     por el nodo, el globo enseña su descripción y sus notas; por los puntos de un enlace, las notas de ese enlace. */
+  const MAX_PUNTOS = 6;
+  let notasNodo = new Map(), notasEnlace = [];                   // lo que enseña el globo
+  const puntoNota = n => `<i class="hilo-np${n.color ? '' : ' papel'}"${n.color ? ` style="--nc:var(--t-${esc(n.color)})"` : ''}></i>`;
+  const puntosDe = ns => ns.slice(0, MAX_PUNTOS).map(puntoNota).join('') + (ns.length > MAX_PUNTOS ? `<b>+${ns.length - MAX_PUNTOS}</b>` : '');
+  function pintarNotas(m, l) {
+    notasNodo = new Map(); notasEnlace = [];
+    tira.style.height = '';                                       // la 1.1.16 la hacía crecer con las notas
+    const pista = tira.querySelector('.hilo-pista'); if (!pista) return;
+    const notas = m.notasDeLinea ? m.notasDeLinea(l.id) : [];
+    if (!notas.length) return;
+    const props = m.puntosDe(l.id);
+    const nodo = p => p && pista.querySelector(`:scope > .hilo-nodo[data-punto="${CSS.escape(p.id)}"]`);
+    const centro = p => { const el = nodo(p); return el ? el.offsetLeft + el.offsetWidth / 2 : null; };
+    /* las de un nodo, bajo su nodo */
+    notas.filter(n => !n.abierta && !n.aId).forEach(n => { if (!notasNodo.has(n.deId)) notasNodo.set(n.deId, []); notasNodo.get(n.deId).push(n); });
+    notasNodo.forEach((ns, id) => {
+      const el = nodo(m.punto(id)); if (!el) return;
+      el.classList.add('con-notas');
+      el.insertAdjacentHTML('beforeend', `<span class="hilo-notas" aria-hidden="true">${puntosDe(ns)}</span>`);
+    });
+    /* las de un enlace (a su mitad) y las de una raya (en su raya), agrupadas por sitio */
+    const sitio = n => {
+      if (n.abierta) {
+        const c = m.colNota(n), a = props.filter(p => m.cg(p) <= c).pop(), b = props.find(p => m.cg(p) > c);
+        if (a && b) return (centro(a) + centro(b)) / 2;
+        if (a) return centro(a) + 70;
+        if (b) return Math.max(40, centro(b) - 70);
+        return 60;
+      }
+      const a = m.punto(n.deId), b = m.punto(n.aId);
+      return a && b ? (centro(a) + centro(b)) / 2 : null;
+    };
+    notas.filter(n => n.abierta || n.aId).forEach(n => {
+      const x = sitio(n); if (x == null) return;
+      let g = notasEnlace.find(q => Math.abs(q.x - x) < 8);
+      if (!g) notasEnlace.push(g = { x, notas: [] });
+      g.notas.push(n);
+    });
+    notasEnlace.forEach((g, k) => {
+      pista.insertAdjacentHTML('beforeend', `<span class="hilo-notas hilo-notas-enlace" data-grupo="${k}" style="left:${Math.round(g.x)}px">${puntosDe(g.notas)}</span>`);
+    });
+  }
+  /* las notas en el globo: un renglón por nota, con su punto de color */
+  function notasEnGlobo(tip, ns, titulo) {
+    const caja = document.createElement('div'); caja.className = 'tip-notas';
+    if (titulo) { const t = document.createElement('div'); t.className = 'tip-t'; t.textContent = titulo; caja.appendChild(t); }
+    ns.forEach(n => {
+      const f = document.createElement('div'); f.className = 'tip-nota';
+      f.insertAdjacentHTML('beforeend', puntoNota(n));
+      const t = document.createElement('span'); t.textContent = n.texto || 'Nota'; f.appendChild(t);
+      caja.appendChild(f);
+    });
+    tip.appendChild(caja);
   }
 
   /* Como en el tablero: el rótulo va encima del punto y, si choca con el anterior, baja al otro lado del eje
@@ -291,13 +373,32 @@
     /* la tira es de referencia (Leo, 16-09-2026): sus nodos ya no abren nada; un cuadro o un rombo enseña la trama
        del otro extremo, que es mirar, no navegar */
     tira.addEventListener('click', e => {
+      const paso = e.target.closest('[data-trama-paso]');
+      if (paso) { cambiarTrama(+paso.dataset.tramaPaso); return; }
       const s = e.target.closest('[data-salto]');
       if (s) saltar(s.dataset.salto);
     });
     /* Globo bajo el nodo, con el mismo #tip del tablero: título y descripción del esquema. */
     const tip = o.tip;
     if (tip) {
+      const ponerGlobo = (el, bajo) => {
+        tip.style.background = ''; tip.style.color = '';
+        tip.classList.add('show');
+        const r = (bajo || el).getBoundingClientRect(), w = tip.offsetWidth;
+        tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8)) + 'px';
+        tip.style.top = (r.bottom + 6) + 'px';
+      };
       tira.addEventListener('mouseover', e => {
+        /* los puntos de un enlace o de una raya: sus notas */
+        const g = e.target.closest('.hilo-notas-enlace');
+        if (g) {
+          const grupo = notasEnlace[+g.dataset.grupo]; if (!grupo) return;
+          tip.innerHTML = '';
+          notasEnGlobo(tip, grupo.notas, grupo.notas.length === 1 ? 'Nota' : grupo.notas.length + ' notas');   // como en el nodo (Leo: «solo ponle nota»)
+          tip.firstChild.classList.add('sola');
+          ponerGlobo(g);
+          return;
+        }
         const n = e.target.closest('.hilo-nodo'); if (!n) return;
         const titulo = (n.querySelector('.hilo-tit-txt') || n.querySelector('.hilo-tit')).textContent, texto = n.dataset.pista;
         tip.innerHTML = '';
@@ -305,14 +406,13 @@
         const b = document.createElement('div'); b.textContent = texto || 'Sin descripción en el esquema';
         if (!texto) b.style.opacity = '.6';
         tip.appendChild(b);
-        tip.style.background = ''; tip.style.color = '';
-        tip.classList.add('show');
-        const r = n.getBoundingClientRect(), w = tip.offsetWidth;
-        tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8)) + 'px';
-        tip.style.top = (r.bottom + 6) + 'px';
+        /* y sus notas, debajo (Leo, 18-09-2026) */
+        const ns = notasNodo.get(n.dataset.punto);
+        if (ns && ns.length) notasEnGlobo(tip, ns, ns.length === 1 ? 'Nota' : ns.length + ' notas');
+        ponerGlobo(n);
       });
       tira.addEventListener('mouseout', e => {
-        const n = e.target.closest('.hilo-nodo');
+        const n = e.target.closest('.hilo-nodo, .hilo-notas-enlace');
         if (n && !(e.relatedTarget && n.contains(e.relatedTarget))) tip.classList.remove('show');
       });
       tira.addEventListener('click', () => tip.classList.remove('show'));

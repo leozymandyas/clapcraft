@@ -166,7 +166,7 @@
     }
     $('#blockStyle').value = tag;
     /* el encabezado de escena y los títulos van en negrita por su estilo: la B solo se enciende con negrita puesta a mano */
-    if (block && (tag === 'sp-scene' || /^h[1-6]$/.test(tag))) {
+    if (block && (tag === 'sp-scene' || tag === 'sp-subscene' || /^h[1-6]$/.test(tag))) {
       const bb = $('[data-cmd="bold"]'); if (bb) bb.classList.toggle('active', !!(el && el.closest && el.closest('b, strong')));
     }
 
@@ -247,6 +247,7 @@
     editor.classList.remove('fusionando');
     if (e.target !== editor && e.target.closest && e.target.closest('.db')) { Ed.db.onInput(e); return; }
     if (Ed.slash) Ed.slash.onInput(e);
+    if (Ed.formato) Ed.formato.onInput(e);
     if (Ed.characters) Ed.characters.onInput(e);
     if (e.inputType === 'insertText' && e.data) {
       const data = e.data;
@@ -591,6 +592,7 @@
     'zoom-reset': () => Ed.page.setZoom(1),
     'typewriter': () => { Ed.page.setOption('typewriter', !Ed.page.state.typewriter); typewriterScroll(); },
     'script': () => Ed.page.setOption('script', !Ed.page.state.script),
+    'numerar': () => Ed.page.setOption('numerar', !Ed.page.state.numerar),
     'pin': () => setPin(!document.body.classList.contains('pin-top')),
     'paste': () => {
       Ed.focusEditor();
@@ -613,6 +615,7 @@
     'pin-bottom': () => setPinBottom(!document.body.classList.contains('pin-bottom')),
     'highlight': () => highlight(),
     'sp': btn => Ed.screenplay.set(btn.dataset.kind),
+    'doble': () => Ed.doble && Ed.doble.alternar(),
     'database': () => Ed.db.insert(),
     'spell': () => Ed.spell && Ed.spell.setEnabled(!Ed.spell.enabled),
     'color-pop': btn => { if (!colorPop.hidden && popKind === btn.dataset.kind) closeColorPop(); else openColorPop(btn.dataset.kind, btn); },
@@ -837,6 +840,9 @@
     const charBlock = e.target.closest && e.target.closest('p.sp-character');
     const charHtml = charBlock && Ed.characters && Ed.characters.ctxHtml ? Ed.characters.ctxHtml(charBlock) : '';
     charBox.innerHTML = charHtml; charBox.hidden = !charHtml;
+    /* dentro de un diálogo doble, la misma opción lo separa */
+    const doble = $('[data-action="doble"] > span', ctx);
+    if (doble) doble.textContent = Ed.doble && Ed.doble.de(e.target) ? 'Separar el diálogo doble' : 'Diálogo doble';
     openContextMenu(e.clientX, e.clientY);
   });
   ctx.addEventListener('click', e => {
@@ -897,6 +903,7 @@
     if (Ed.db && Ed.db.onEditorKeydown(e)) return;
     if (Ed.blocks && Ed.blocks.onKeydown(e)) return;
     if (Ed.characters && Ed.characters.onKeydown(e)) return;
+    if (Ed.formato && Ed.formato.onKeydown(e)) return;
     if (Ed.slash && Ed.slash.onKeydown(e)) return;
     if (e.key === 'Tab' && !mod && !e.altKey && Ed.screenplay && Ed.screenplay.onTab(e)) return;
     if (e.key === 'Tab') { e.preventDefault(); if (!Ed.table.tab(e.shiftKey)) indent(e.shiftKey ? -1 : 1); return; }
@@ -916,6 +923,12 @@
     if (Ed.md.onKeydown(e)) return;
     if (!mod) return;
     const k = e.key.toLowerCase();
+    /* Ctrl+1…6: escena, acción, personaje, paréntesis, diálogo, transición (especificación de guion; solo Ctrl, que
+       Cmd+número es de pestañas y ventanas) */
+    if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && /^Digit[1-6]$/.test(e.code) && Ed.screenplay) {
+      const kind = Ed.screenplay.KINDS.find(x => x.atajo === e.code.slice(5));
+      if (kind) { e.preventDefault(); Ed.screenplay.set(kind.id); return; }
+    }
     if (e.altKey) {
       const m = e.code.match(/^Digit([0-6])$/);
       if (m) { e.preventDefault(); Ed.cmd('formatBlock', m[1] === '0' ? 'p' : 'h' + m[1]); updateToolbar(); }
@@ -970,6 +983,15 @@
   /* ---------- pegar y arrastrar ---------- */
   function insertPlainText(text) {
     Ed.focusEditor();
+    /* pegado en un elemento de guion, cada párrafo sigue siendo de ese elemento (antes los de detrás quedaban como texto normal)
+       y no se lee como Markdown: «- Andrés…» es una toma de montaje o un guion de interrupción, no una lista */
+    const r0 = Ed.getRange(), b0 = r0 && Ed.closestBlock(r0.startContainer, editor), kind = b0 && Ed.screenplay && Ed.screenplay.kindOf(b0);
+    if (kind) {
+      const trozos = text.replace(/\r\n?/g, '\n').split(/\n{2,}/);
+      if (trozos.length === 1 && !text.includes('\n')) { Ed.cmd('insertText', text); return; }
+      Ed.cmd('insertHTML', trozos.map(p => `<p class="sp-${kind}">` + Ed.escapeHtml(p).replace(/\n/g, '<br>') + '</p>').join(''));
+      return;
+    }
     if (Ed.md.enabled && Ed.md.looksLikeMarkdown(text)) { Ed.cmd('insertHTML', Ed.md.toHtml(text)); return; }
     const paras = text.replace(/\r\n?/g, '\n').split(/\n{2,}/);
     if (paras.length === 1 && !text.includes('\n')) { Ed.cmd('insertText', text); return; }
