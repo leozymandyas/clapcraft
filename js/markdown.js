@@ -378,6 +378,30 @@
     return Array.from(el.childNodes).map(inlineToMd).join('').replace(/[ \t]+\n/g, '  \n').trim();
   }
 
+  /* ---------- el guion en Markdown (exportar a .md; Leo, 18-09-2026) ----------
+     Legible en cualquier visor (y en Obsidian): los actos como `##`, las escenas como `###` y los encabezados secundarios
+     como `####`; la acción en párrafos; el diálogo junto, con el personaje en negrita, el paréntesis en cursiva y lo dicho
+     debajo (saltos de renglón de Markdown); las transiciones como cita (`> CORTE A:`; «FADE IN:», que va a la izquierda, en
+     su párrafo); tomas y montajes en mayúsculas; las notas en cursiva y entre corchetes, y el diálogo doble como una tabla de
+     dos columnas, una por personaje. */
+  const spDe = el => { const c = el && el.classList && Array.from(el.classList).find(k => /^sp-[a-z]+$/.test(k) && k !== 'sp-col'); return c ? c.slice(3) : null; };
+  const unaLinea = t => t.replace(/\s*\n\s*/g, ' ').replace(/[ \t\u00A0]+/g, ' ').trim();
+  function lineaDialogo(p) {
+    const k = spDe(p), t = inlineChildren(p);
+    if (!t) return '';
+    if (k === 'character') return '**' + unaLinea(t).toUpperCase() + '**';
+    if (k === 'paren') return '*(' + unaLinea(t).replace(/^\(|\)$/g, '') + ')*';
+    return t;
+  }
+  const dialogoMd = ps => { const t = ps.map(lineaDialogo).filter(Boolean).join('  \n'); return t ? t + '\n\n' : ''; };
+  function dobleMd(el) {
+    const cols = Array.from(el.children).filter(c => c.classList.contains('sp-col')).map(c => Array.from(c.children));
+    const celda = ps => ps.map(lineaDialogo).filter(Boolean).join('<br>').replace(/ {2}\n/g, '<br>').replace(/\n/g, ' ').replace(/\|/g, '\\|');
+    const cab = cols.map(ps => (ps[0] && spDe(ps[0]) === 'character' ? celda([ps[0]]) : ''));
+    const cuerpo = cols.map(ps => celda(ps[0] && spDe(ps[0]) === 'character' ? ps.slice(1) : ps));
+    return '| ' + cab.join(' | ') + ' |\n|' + ' --- |'.repeat(cols.length) + '\n| ' + cuerpo.join(' | ') + ' |\n\n';
+  }
+
   function listToMd(el, depth) {
     const ordered = el.tagName === 'OL';
     let out = '';
@@ -405,13 +429,18 @@
     if (/^H[1-6]$/.test(tag)) return '#'.repeat(+tag[1]) + ' ' + inlineChildren(el) + '\n\n';
     switch (tag) {
       case 'P': case 'DIV': case 'LI': {
-        let t = blocksToMd(el).trim();
+        if (el.classList && el.classList.contains('sp-doble')) return dobleMd(el);
+        const t = blocksToMd(el).trim();
         if (!t) return '';
-        /* elementos de guion: convención tipo Fountain */
-        const sp = Array.from(el.classList || []).find(c => c.startsWith('sp-'));
-        if (sp === 'sp-scene' || sp === 'sp-character' || sp === 'sp-shot') t = t.toUpperCase();
-        else if (sp === 'sp-transition') t = '> ' + t.toUpperCase();
-        else if (sp === 'sp-paren') t = '(' + t + ')';
+        /* elementos de guion (ver arriba; el diálogo, junto, lo arma blocksToMd) */
+        const sp = spDe(el);
+        if (sp === 'act') return '## ' + unaLinea(t).toUpperCase() + '\n\n';
+        if (sp === 'scene') return '### ' + unaLinea(t).toUpperCase() + '\n\n';
+        if (sp === 'subscene') return '#### ' + unaLinea(t).toUpperCase() + '\n\n';
+        if (sp === 'character' || sp === 'paren') return lineaDialogo(el) + '\n\n';
+        if (sp === 'transition') return (el.hasAttribute('data-izq') ? '' : '> ') + unaLinea(t).toUpperCase() + '\n\n';
+        if (sp === 'shot' || sp === 'montage') return t.toUpperCase() + '\n\n';
+        if (sp === 'note') return '*[' + unaLinea(t).replace(/^\[|\]$/g, '') + ']*\n\n';
         return t + '\n\n';
       }
       case 'BLOCKQUOTE':
@@ -436,8 +465,26 @@
     let out = '';
     let buf = '';
     const flush = () => { const t = buf.trim(); if (t) out += t + '\n\n'; buf = ''; };
-    for (const node of Array.from(parent.childNodes)) {
-      if (node.nodeType === 1 && BLOCK_SET.has(node.tagName)) { flush(); out += blockToMd(node); }
+    const nodos = Array.from(parent.childNodes);
+    for (let i = 0; i < nodos.length; i++) {
+      const node = nodos[i];
+      if (node.nodeType === 1 && BLOCK_SET.has(node.tagName)) {
+        flush();
+        /* un diálogo de guion va junto: el personaje con los paréntesis y diálogos que le siguen */
+        if (spDe(node) === 'character') {
+          const grupo = [node];
+          let j = i + 1;
+          while (j < nodos.length) {
+            const n = nodos[j];
+            if (n.nodeType === 3 && !n.nodeValue.trim()) { j++; continue; }
+            if (n.nodeType === 1 && /^(paren|dialogue)$/.test(spDe(n) || '')) { grupo.push(n); j++; continue; }
+            break;
+          }
+          out += dialogoMd(grupo); i = j - 1;
+          continue;
+        }
+        out += blockToMd(node);
+      }
       else buf += inlineToMd(node);
     }
     flush();

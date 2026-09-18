@@ -472,8 +472,59 @@
 
   /* ---------- pestañas ---------- */
   const barraPestanas = $('pestanas');
+  let editandoPestana = false;                                   // con el nombre de una pestaña en edición no se redibujan
+  /* **Renombrar el proyecto** (Leo, 18-09-2026: «quiero poder cambiar el nombre del proyecto, sin que eso cambie el nombre del
+     archivo automáticamente»): doble clic en su pestaña (o Archivo › Renombrar proyecto…) lo edita en sitio; Enter o salir del
+     campo lo guarda, Esc lo deja. El nombre va dentro de su archivo, que se sigue llamando igual. */
+  function editarNombrePestana(id) {
+    const g = biblioteca.guion(id); if (!g || !barraPestanas) return;
+    if (id !== abiertoId || pantalla === 'nuevo') { montar(id); }
+    const p = barraPestanas.querySelector(`.pestana[data-id="${CSS.escape(id)}"]`), nom = p && p.querySelector('.pestana-nom');
+    if (!nom || nom.querySelector('input')) return;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'pestana-edit'; inp.value = g.nombre; inp.spellcheck = false;
+    inp.setAttribute('aria-label', 'Nombre del proyecto');
+    nom.textContent = ''; nom.appendChild(inp);
+    p.classList.add('editando'); editandoPestana = true;
+    inp.focus(); inp.select();
+    let hecho = false;
+    const acabar = guardarlo => {
+      if (hecho) return; hecho = true;
+      editandoPestana = false; p.classList.remove('editando');
+      if (guardarlo) renombrarProyecto(id, inp.value); else renderPestanas();
+    };
+    inp.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); acabar(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); acabar(false); }
+    });
+    inp.addEventListener('blur', () => acabar(true));
+    ['click', 'pointerdown', 'mousedown'].forEach(t => inp.addEventListener(t, e => e.stopPropagation()));
+  }
+  function renombrarProyecto(id, nombre) {
+    const g = biblioteca.guion(id); if (!g) return false;
+    const n = String(nombre || '').trim(), viejo = g.nombre;
+    if (!n || n === viejo) { renderPestanas(); return false; }
+    const r = biblioteca.renombrar(id, n);
+    if (!r.ok) { T.tablero.avisar(/ya hay/i.test(r.aviso || '') ? 'Ya hay un proyecto abierto que se llama así' : r.aviso); renderPestanas(); return false; }
+    /* **El contenedor que se llamaba como el proyecto cambia con él** (Leo, 18-09-2026, con captura: «solo se cambia en la
+       pestaña, no en el header»): la cabecera «CONTENEDOR [Esquema]» enseña el contenedor y, con el nombre del proyecto, se
+       leía como el nombre del proyecto. Vale el nombre de antes o el de su archivo, sin mayúsculas, acentos ni separadores
+       (en el suyo: proyecto «amor toktiker», archivo «amor-tiktoker», contenedor «Amor tiktoker»). Los que se llaman de otra
+       forma («Temporada 1») se quedan. */
+    const d = id === abiertoId ? docs() : null, arch = estado(id).archivo;
+    const iguales = d ? d.contenedoresLlamados([viejo, arch && sinExtension(arch.nombre)]) : [];
+    const cambiados = iguales.filter(c => d.renombrarContenedor(c.id, n).ok);
+    if (cambiados.length) { biblioteca.marcar(id); renderChipEsquema(); C.gestor.render(); if (C.texto.render) C.texto.render(); }
+    persistir();                                   // el nombre nuevo va dentro de su archivo (si tiene), que no se renombra
+    if (estado(id).archivo) recordarReciente(id);
+    renderPestanas();
+    const a = estado(id).archivo;
+    T.tablero.avisar('Proyecto «' + g.nombre + '»' + (cambiados.length ? ' (y su contenedor)' : '') + (a ? ' · el archivo sigue siendo ' + a.nombre : ''));
+    return true;
+  }
   function renderPestanas() {
-    if (!barraPestanas) return;
+    if (!barraPestanas || editandoPestana) return;
     barraPestanas.innerHTML = '';
     biblioteca.datos.guiones.forEach(g => {
       const b = document.createElement('div');
@@ -511,6 +562,7 @@
     const p = e.target.closest('.pestana'); if (!p) return;
     if (p.dataset.proyectoNuevo) { if (e.target.closest('[data-cerrar]')) cancelarProyecto(); else if (pantalla !== 'nuevo') { pantalla = 'nuevo'; aplicarPantalla(); C.proyectos.enfocar(); } return; }
     if (e.target.closest('[data-cerrar]')) { cerrarPestana(p.dataset.id); return; }
+    if (e.detail >= 2) { editarNombrePestana(p.dataset.id); return; }   // doble clic: renombrar (con `detail`: el primer clic redibuja)
     if (p.dataset.id !== abiertoId) montar(p.dataset.id);
     else if (pantalla === 'nuevo') { pantalla = 'proyecto'; aplicarPantalla(); }
   });
@@ -540,62 +592,64 @@
   function cancelarProyecto() {
     C.proyectos.descartar(); pantalla = 'proyecto'; aplicarPantalla();
   }
-  /* Crea el proyecto de la pestaña de creación: sus documentos salen de la plantilla y, con carpeta, nace con su archivo
-     (y desde entonces se guarda ahí solo). Devuelve el guion o null. */
-  async function crearProyecto({ nombre, plantilla, carpeta }) {
+  /* Crea el proyecto de la pestaña de creación: sus documentos salen de la plantilla y nace con su archivo (y desde entonces
+     se guarda ahí solo). **Primero se elige el archivo** (Leo, 18-09-2026: ya no hay «Dónde se guarda» en la pantalla):
+     «Crear proyecto» abre el diálogo de guardar del sistema con el nombre propuesto (`C.nombreArchivo`: «Año nuevo» →
+     «anio-nuevo.clapcraft») y, si se cancela, no se crea nada y la pantalla sigue como estaba. La pestaña lleva el nombre
+     del proyecto, no el del archivo. Sin diálogo (un navegador sin File System Access) se crea sin archivo, como antes.
+     Devuelve el guion o null. */
+  async function crearProyecto({ nombre, plantilla }) {
     const pl = C.plantillas.plantilla(plantilla);
-    const r = biblioteca.crear({ nombre: String(nombre || '').trim() || nombreSinTitulo(), documentos: C.plantillas.documentos(pl.id) });
+    const n = biblioteca.nombreLibre(String(nombre || '').trim() || nombreSinTitulo());
+    const destino = await elegirArchivoNuevo(C.nombreArchivo(n) + '.' + EXT);
+    if (destino === false) return null;
+    const r = biblioteca.crear({ nombre: n, documentos: C.plantillas.documentos(pl.id) });
     if (!r.ok) { T.tablero.avisar(r.aviso); return null; }
     const g = r.guion;
     tonos[g.id] = pl.tono;
     C.proyectos.descartar();
     montar(g.id);
-    if (carpeta) await archivoEnCarpeta(g.id, carpeta);
+    if (destino) await archivoNuevo(g.id, destino);
     else T.tablero.avisar('Proyecto «' + g.nombre + '» creado · Guardar como… le da un archivo');
     return g;
   }
-  async function archivoEnCarpeta(id, carpeta) {
+  /* El diálogo de guardar del sistema para un proyecto nuevo: `{ ruta }` (Electron: en la última carpeta usada, o en
+     ~/Documents/ClapCraft si existe, o en Documentos), `{ handle }` (Chrome y Edge, que recuerdan la carpeta), false si se
+     canceló y null si no hay diálogo. Un archivo que ya es de otro proyecto abierto no vale: se pisarían. */
+  async function elegirArchivoNuevo(sugerido) {
+    if (api && api.elegirArchivo) {
+      let ruta = await api.elegirArchivo({ nombre: sugerido, carpeta: vista.carpetaProyectos && vista.carpetaProyectos.ruta, filters: FILTROS });
+      if (!ruta) return false;
+      if (!/\.clapcraft$/i.test(ruta)) ruta += '.' + EXT;
+      const otro = biblioteca.datos.guiones.find(x => (estado(x.id).archivo || {}).ruta === ruta);
+      if (otro) { T.tablero.avisar(baseDe(ruta) + ' es el archivo de «' + otro.nombre + '», que está abierto · elige otro nombre'); return false; }
+      return { ruta };
+    }
+    if (window.showSaveFilePicker) {
+      try { return { handle: await window.showSaveFilePicker({ suggestedName: sugerido, types: TIPOS, id: 'clapcraft-proyectos', startIn: 'documents' }) }; }
+      catch (err) { if (err.name !== 'AbortError') T.tablero.avisar('No se pudo elegir el archivo'); return false; }
+    }
+    return null;
+  }
+  /* Vincula el proyecto recién creado al archivo elegido y lo escribe; la carpeta queda para el próximo proyecto. */
+  async function archivoNuevo(id, destino) {
     const g = biblioteca.guion(id); if (!g) return;
-    const contenido = serializar(g);
-    try {
-      if (carpeta.ruta && api && api.crearProyecto) {
-        const ruta = await api.crearProyecto({ carpeta: carpeta.ruta, nombre: g.nombre, content: await empaquetar(contenido) });
-        vista.carpetaProyectos = { ruta: carpeta.ruta, texto: carpeta.texto }; guardarVista();
-        vincular(id, { nombre: baseDe(ruta), ruta }); estado(id).ultimoEscrito = contenido;
-      } else if (carpeta.handle) {
-        const dir = carpeta.handle;
-        if (dir.requestPermission && await dir.requestPermission({ mode: 'readwrite' }) !== 'granted') throw new Error('sin permiso');
-        const base = g.nombre.replace(/[\\/:*?"<>|]/g, '-');
-        let nombre = base + '.' + EXT;
-        for (let n = 2; n < 1000; n++) { try { await dir.getFileHandle(nombre); nombre = base + ' ' + n + '.' + EXT; } catch (_) { break; } }
-        const h = await dir.getFileHandle(nombre, { create: true });
-        idb.set('carpetaProyectos', dir).catch(() => {});
-        vincular(id, { nombre: h.name, handle: h });
-        if (!await escribirArchivo(id)) { desvincular(id); throw new Error('no quedó escrito'); }
-      } else return;
-      await nombrarComoArchivo(id);                            // «Nombre 2» si ya había un archivo con ese nombre
-      recordarReciente(id); persistir();
-      T.tablero.avisar('Proyecto «' + g.nombre + '» creado en ' + estado(id).archivo.nombre + ' · se guarda ahí solo');
-    } catch (err) {
-      console.error('ClapCraft · no se pudo crear el archivo del proyecto', err);
-      T.tablero.avisar('Proyecto creado, pero no se pudo escribir en ' + carpeta.texto + ' · usa Guardar como…');
+    if (destino.ruta) {
+      const base = baseDe(destino.ruta);
+      vincular(id, { nombre: base, ruta: destino.ruta });
+      vista.carpetaProyectos = { ruta: destino.ruta.slice(0, Math.max(0, destino.ruta.length - base.length - 1)) }; guardarVista();
+    } else vincular(id, { nombre: destino.handle.name, handle: destino.handle });
+    const a = estado(id).archivo;
+    if (!await escribirArchivo(id)) {
+      desvincular(id);
+      if (destino.handle) {           // el sistema dejó elegir el archivo pero no escribirlo (navegadores embebidos)
+        descargar(serializar(g), a.nombre);
+        T.tablero.avisar('Aquí no se puede escribir en ' + a.nombre + ': se descarga una copia. Prueba en Chrome, Edge o la app de escritorio');
+      } else T.tablero.avisar('Proyecto creado, pero no se pudo escribir en ' + a.nombre + ' · usa Guardar como…');
+      return;
     }
-  }
-  /* la carpeta de partida: la última elegida o ~/Documents/ClapCraft (Electron); en el navegador, la última elegida si
-     sigue con permiso (si no, el proyecto se queda en esta ventana hasta «Guardar como…») */
-  async function carpetaInicial() {
-    if (api && api.carpetaProyectos) return vista.carpetaProyectos || api.carpetaProyectos();
-    try { const h = await idb.get('carpetaProyectos'); if (h && await h.queryPermission({ mode: 'readwrite' }) === 'granted') return { texto: h.name, handle: h }; } catch (_) {}
-    return null;
-  }
-  async function elegirCarpeta(actual) {
-    if (api && api.elegirCarpeta) return api.elegirCarpeta({ actual: actual && actual.ruta });
-    if (window.showDirectoryPicker) {
-      try { const h = await window.showDirectoryPicker({ id: 'clapcraft-proyectos', mode: 'readwrite' }); return { texto: h.name, handle: h }; }
-      catch (err) { if (err.name !== 'AbortError') T.tablero.avisar('No se pudo elegir la carpeta'); return null; }
-    }
-    T.tablero.avisar('Este navegador no deja elegir carpeta: el proyecto se queda aquí y «Guardar como…» lo descarga');
-    return null;
+    recordarReciente(id); persistir();
+    T.tablero.avisar('Proyecto «' + g.nombre + '» creado en ' + a.nombre + ' · se guarda ahí solo');
   }
   /* Sin pestañas: nada montado; se ve «Sin proyectos». */
   function quedarSinProyectos() {
@@ -800,23 +854,13 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
-  /* Renombra el guion como su archivo (sin extensión) y lo escribe si el nombre cambió. */
-  async function nombrarComoArchivo(id) {
-    const g = biblioteca.guion(id), est = estado(id); if (!g || !est.archivo) return;
-    const base = sinExtension(est.archivo.nombre);
-    if (base && base !== g.nombre) {
-      biblioteca.renombrar(g.id, base);
-      if (id === abiertoId) document.title = g.nombre + ' · ClapCraft';
-      est.ultimoEscrito = null; await escribirArchivo(id);
-    }
-  }
-
   /* «Guardar como…»: elige archivo, escribe y deja la pestaña vinculada a él. */
   async function guardarComo() {
     const id = abiertoId, g = biblioteca.guion(id); if (!g) return;
     volcar(); C.texto.volcar();
-    /* nombre propuesto: «Esquema», no el nombre automático del guion (Leo, 13-09-2026) */
-    const contenido = serializar(g), sugerido = 'Esquema.' + EXT;
+    /* nombre propuesto: el del proyecto hecho nombre de archivo, como al crear («Año nuevo» → «anio-nuevo.clapcraft»); lo que
+       se elija no cambia el nombre del proyecto (Leo, 18-09-2026) */
+    const contenido = serializar(g), sugerido = C.nombreArchivo(g.nombre) + '.' + EXT;
     if (api && api.saveFile) {
       const ruta = await api.saveFile({ defaultPath: sugerido, content: await empaquetar(contenido), filters: FILTROS });
       if (!ruta) return;
@@ -839,7 +883,6 @@
       T.tablero.avisar('Descargado ' + sugerido + ' · este navegador no puede seguir guardando ahí solo');
       return;
     }
-    await nombrarComoArchivo(id);
     recordarReciente(id); persistir();
     T.tablero.avisar('Guardado en ' + estado(id).archivo.nombre + ' · se seguirá guardando ahí solo');
   }
@@ -869,7 +912,9 @@
       const ya = biblioteca.datos.guiones.find(g => { const a = estado(g.id).archivo; return a && (a.ruta || a.nombre) === clave; });
       if (ya) { montar(ya.id); T.tablero.avisar('Ya estaba abierto: «' + ya.nombre + '»'); return null; }
     }
-    const base = sinExtension(nombre) || (typeof datos.nombre === 'string' && datos.nombre.trim()) || SIN_TITULO;
+    /* el nombre del proyecto es el que lleva dentro, no el del archivo (Leo, 18-09-2026: renombrar el proyecto no cambia el
+       archivo; antes el proyecto tomaba siempre el nombre del archivo al abrirlo) */
+    const base = (typeof datos.nombre === 'string' && datos.nombre.trim()) || sinExtension(nombre) || SIN_TITULO;
     const actual = biblioteca.guion(abiertoId);
     const copia = biblioteca.toJSON();
     if (esVirgen(actual)) { desvincular(actual.id); delete estados[actual.id]; biblioteca.eliminar(actual.id); }
@@ -976,7 +1021,6 @@
   abiertoId = biblioteca.activo() ? biblioteca.activo().id : null;
   document.title = (abiertoId ? biblioteca.activo().nombre + ' · ' : '') + 'ClapCraft';
   C.proyectos.iniciar({ crear: crearProyecto, cancelar: cancelarProyecto, nuevo: () => nuevo(), abrir: () => abrirArchivo(), abrirReciente, recientes,
-    carpetaInicial, elegirCarpeta, sinCarpeta: api && api.crearProyecto ? 'Elige una carpeta' : 'Solo en este navegador',
     version: () => api && api.version ? api.version() : fetch('package.json').then(r => r.json()).then(j => j.version) });
   if (!abiertoId) document.body.classList.add('sin-esquema');
   persistir();
@@ -1337,6 +1381,7 @@
     tema: alternarTema, vista: () => verVista(vista.modo === 'texto' ? 'esquema' : 'texto'),
     documentos: () => verVista(vista.modo === 'documentos' ? 'esquema' : 'documentos'),
     lado: () => alternarLado(), deshacer, rehacer,
+    renombrar: () => { if (abiertoId && pantalla !== 'nuevo') editarNombrePestana(abiertoId); },
     pestanaSig: () => pasarPestana(1), pestanaAnt: () => pasarPestana(-1)
   };
   if (api && api.onMenu) api.onMenu(accion => {
@@ -1362,6 +1407,7 @@
   /* API para el gestor de documentos que venga después: la biblioteca, el guion abierto y la vista. */
   C.biblioteca = biblioteca;
   C.app = { abrir: montar, nuevo, crearProyecto, cancelarProyecto, cerrar: cerrarPestana, abrirReciente, recientes, guardar, guardarComo, abrirArchivo, montarEsquema, esquemaMontado: () => esquemaId,
+    renombrar: renombrarProyecto, editarNombre: editarNombrePestana,
             archivo: id => { const a = estado(id || abiertoId).archivo; return a && { nombre: a.nombre, ruta: a.ruta || null, permiso: a.permiso }; },
             sucio: id => sucio(id || abiertoId), abiertoId: () => abiertoId, vista: verVista, modo: () => vista.modo };
 })(window.Claquedraw, window.Tramas);

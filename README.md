@@ -5,7 +5,7 @@ nodos), escribes el texto de cada paso en un **editor de guion** y organizas el 
 **bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
 navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-**Versión 1.1.18**
+**Versión 1.1.22**
 
 ## Instalar
 
@@ -73,7 +73,7 @@ El tablero donde se estructura la historia.
 - **Notas** en post-it: colgadas de un nodo («Agregar nota», en su menú o en su panel) o **de la mitad del tramo entre dos
   nodos**, con una guía de su color hasta la línea de la trama; caben varias en el mismo sitio. Se arrastran de tramo en tramo y **se ordenan arrastrándolas encima o debajo de las otras** —también
   una de enlace sobre las de un nodo, y al revés—, que se apartan con animación. **Arriba, a la altura de la línea de
-  la trama, la nota se cuelga del nodo; más abajo, entre las notas, solo cambia de orden.** La guía que une una nota con su nodo va siempre del color de la nota. Con clic
+  la trama, la nota se cuelga del nodo; más abajo, entre las notas, solo cambia de orden.** La guía que une una nota con su nodo va siempre del color de la nota y, apiladas, pasa por detrás de las notas de arriba: ninguna raya tapa el texto de otra nota. Con clic
   derecho se les da uno de los 24 colores de la paleta; su texto va en **itálica**, para no confundirlas con los
   nombres de los nodos.
 - **Los nombres se guardan al salir del campo**: al renombrar un nodo, una nota, una trama, un acto o algo del árbol
@@ -117,8 +117,9 @@ El tablero donde se estructura la historia.
   la **Actual** marcada. **«Guardar versión…»** pide un nombre; pulsar una la carga (avisa si lo de ahora no está
   guardado), el doble clic la renombra y la «×» la borra. **«Comparar con la actual…»** enfrenta las dos por
   párrafos: lo igual apagado, lo añadido en verde y lo quitado tachado.
-- **Exportar** (barra inferior): PDF, Word (.docx) y texto sin formato, de lo que tengas abierto, con el mismo formato de
-  guion; el menú deja **ocultar las notas del guion**. El **PDF se maqueta como un guion impreso**: 54 renglones por página,
+- **Exportar** (barra inferior): PDF, Word (.docx), **Markdown (.md)** y texto sin formato, de lo que tengas abierto, con el
+  mismo formato de guion; el menú deja **ocultar las notas del guion**. En Markdown, los actos y las escenas son encabezados,
+  el personaje va en negrita con su diálogo debajo y el diálogo doble, en una tabla. El **PDF se maqueta como un guion impreso**: 54 renglones por página,
   numeradas arriba a la derecha desde la segunda, y un diálogo que no cabe se parte al final de una oración con «(MORE)» abajo
   y «NOMBRE (CONT'D)» arriba de la página siguiente; un encabezado nunca queda solo al pie ni una transición al principio.
 - **Elementos de guion** (formato de TV, Courier 12): encabezado de escena, **encabezado secundario** (las entrevistas a
@@ -199,12 +200,16 @@ Se entra desde el pie del menú lateral.
 - Al abrir el programa vuelves a **la última pantalla de cada proyecto**: la vista en la que estabas, el esquema
   montado, la biblioteca abierta y hasta la nota que tenías delante.
 
-- Cada **proyecto** abierto es una **pestaña**; `Ctrl+Tab` pasa de una a otra.
+- Cada **proyecto** abierto es una **pestaña**; `Ctrl+Tab` pasa de una a otra. **Doble clic en la pestaña** (o Archivo ›
+  Renombrar proyecto…) le cambia el nombre; su archivo se sigue llamando igual, y al abrirlo otra vez el proyecto conserva
+  su nombre. «Guardar como…» propone el nombre del proyecto como nombre de archivo (`anio-nuevo.clapcraft`). Si un contenedor se llama como el proyecto o como su archivo
+  (el nombre que sale en la cabecera; dan igual las mayúsculas, los acentos y los guiones), cambia con él.
 - **Nuevo proyecto** (`Cmd/Ctrl+N`, el «+» de las pestañas): se abre en una pestaña propia, que se puede dejar a medias
-  e ir a otra. A la izquierda, el nombre y **dónde se guarda** (en la app, de partida `~/Documents/ClapCraft`; «Cambiar»
-  elige otra carpeta; en Chrome o Edge, una carpeta elegida o solo el navegador). A la derecha, seis **plantillas** (En
-  blanco, Largometraje, Serie de TV, Novela, Cortometraje y Teatro) con el árbol y las tramas exactas que crean. Enter crea
-  y Esc cancela. Con carpeta, el proyecto nace con su `.clapcraft` (sin pisar uno que ya exista: «Nombre 2»).
+  e ir a otra. A la izquierda, el nombre; a la derecha, seis **plantillas** (En blanco, Largometraje, Serie de TV, Novela,
+  Cortometraje y Teatro) con el árbol y las tramas exactas que crean. **«Crear proyecto»** (o Enter) abre el diálogo de
+  guardar del sistema para elegir el nombre del archivo y la carpeta: propone el nombre del proyecto sin espacios, con
+  guiones, sin acentos y con la ñ como «ni» (`Año nuevo` → `anio-nuevo.clapcraft`), en la carpeta del último proyecto creado.
+  Si se cancela, no se crea nada. La pestaña lleva el nombre del proyecto, no el del archivo. Esc cancela.
 - **Sin proyectos abiertos**: «Nuevo proyecto», «Abrir un proyecto» y los **recientes** (los proyectos con archivo que se
   han abierto, con su estructura y cuándo). Un `.clapcraft` soltado en la ventana también se abre.
 - El trabajo se guarda siempre en el navegador o en la app. **«Guardar como…»** (`Cmd/Ctrl+Shift+S`) lo
@@ -215,7 +220,7 @@ Se entra desde el pie del menú lateral.
 - En el navegador, Chrome y Edge escriben en el archivo (pueden pedir permiso al volver); en los demás solo
   se descarga una copia.
 - En la app, las órdenes están en el menú: **Archivo** (Nuevo proyecto…, Abrir proyecto…, Guardar, Guardar como…,
-  Cerrar proyecto), **Edición** y **Ver** (modo oscuro).
+  Renombrar proyecto…, Cerrar proyecto), **Edición** y **Ver** (modo oscuro).
 
 ## Atajos de teclado
 

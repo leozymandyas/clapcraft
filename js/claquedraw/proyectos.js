@@ -1,8 +1,9 @@
 /* Claquedraw · pantallas de proyecto (Leo, 15-09-2026, docs/diseno/rediseno-13/)
    - «Nuevo proyecto» (`#nuevoProyecto`): el proyecto es la pestaña, así que crearlo vive en una pestaña propia junto a los
-     abiertos (se puede dejar a medias y volver). A la izquierda, en la lateral de 320 px, el nombre y dónde se guarda; a la
-     derecha las plantillas (js/claquedraw/plantillas.js) y, de la elegida, el árbol y las tramas exactas que va a crear.
-     Enter crea, Esc cancela.
+     abiertos (se puede dejar a medias y volver). A la izquierda, en la lateral de 320 px, el nombre; a la derecha las
+     plantillas (js/claquedraw/plantillas.js) y, de la elegida, el árbol y las tramas exactas que va a crear. Enter crea, Esc
+     cancela. **Dónde se guarda lo pregunta el sistema** (Leo, 18-09-2026): «Crear proyecto» abre su diálogo de guardar con
+     el nombre de archivo propuesto (app.js); si se cancela, esta pantalla sigue como estaba.
    - «Sin proyectos» (`#sinProyectos`): sin pestañas abiertas, el menú queda en su riel y en el centro «Nuevo proyecto», «Abrir
      un proyecto» y los recientes; un .clapcraft soltado en la ventana también se abre (app.js).
    Este módulo pinta y guarda lo que se va escribiendo en la pestaña de creación; crear, abrir y las pestañas son de app.js. */
@@ -16,11 +17,10 @@
   let o = {}, estado = null, version = '';
 
   /* ---------- Nuevo proyecto ---------- */
-  /* `estado` = { nombre, plantilla, carpeta: { texto, ruta?, handle? } | null }: vive mientras la pestaña esté abierta */
+  /* `estado` = { nombre, plantilla }: vive mientras la pestaña esté abierta */
   function empezar() {
     if (estado) return;
-    estado = { nombre: '', plantilla: C.plantillas.PLANTILLAS[0].id, carpeta: null };
-    Promise.resolve(o.carpetaInicial && o.carpetaInicial()).then(c => { if (estado && !estado.carpeta && c) { estado.carpeta = c; pintarCarpeta(); } });
+    estado = { nombre: '', plantilla: C.plantillas.PLANTILLAS[0].id };
   }
   function descartar() { estado = null; }
 
@@ -33,10 +33,8 @@
         <div class="np-form">
           <label class="np-campo"><span class="np-rotulo">NOMBRE DEL PROYECTO</span>
             <input type="text" class="np-nombre" data-np-nombre maxlength="120" placeholder="Sin título" autocomplete="off" spellcheck="false"></label>
-          <div class="np-campo"><span class="np-rotulo">DÓNDE SE GUARDA</span>
-            <button type="button" class="np-destino" data-np-carpeta title="Elegir la carpeta donde se guarda el archivo del proyecto">${ic('folder', 15)}<span class="np-destino-txt" data-np-carpeta-txt></span><span class="np-cambiar">Cambiar</span></button></div>
         </div>
-        <div class="np-pie">El proyecto se abre como una pestaña más. Todo lo que cree la plantilla se puede renombrar o borrar después.</div>
+        <div class="np-pie">Al crearlo eliges el nombre de su archivo y dónde se guarda. El proyecto se abre como una pestaña más, con su nombre, y todo lo que cree la plantilla se puede renombrar o borrar después.</div>
       </aside>
       <div class="np-cuerpo">
         <header class="esq-cab np-cab"><span class="np-miga">NUEVO PROYECTO</span>${ic('chev-r', 13)}<span class="np-miga-nom">Plantilla</span><span class="spacer"></span><span class="np-cuenta">${P.PLANTILLAS.length} PLANTILLAS</span></header>
@@ -52,12 +50,7 @@
           <button type="button" class="btn primario np-crear" data-np-crear>${ic('plus', 14)}Crear proyecto</button></footer>
       </div>`;
     const campo = s.querySelector('[data-np-nombre]'); campo.value = estado.nombre;
-    pintarCarpeta(); pintarPlantillas();
-  }
-  function pintarCarpeta() {
-    const t = document.querySelector('#nuevoProyecto [data-np-carpeta-txt]'); if (!t || !estado) return;
-    t.textContent = estado.carpeta ? estado.carpeta.texto : (o.sinCarpeta || 'Solo en esta ventana');
-    t.parentNode.title = estado.carpeta ? 'Se guarda en ' + estado.carpeta.texto + ' · Cambiar' : 'Elegir la carpeta donde se guarda el archivo del proyecto';
+    pintarPlantillas();
   }
   function pintarPlantillas() {
     const s = $('nuevoProyecto'); if (!s || !estado) return;
@@ -93,7 +86,7 @@
       return;
     }
     creandoAhora = true;
-    try { await o.crear({ nombre, plantilla: estado.plantilla, carpeta: estado.carpeta }); } finally { creandoAhora = false; }
+    try { await o.crear({ nombre, plantilla: estado.plantilla }); } finally { creandoAhora = false; }
   }
 
   /* ---------- Sin proyectos ---------- */
@@ -130,10 +123,9 @@
     np.addEventListener('input', e => {
       if (e.target.matches('[data-np-nombre]') && estado) { estado.nombre = e.target.value; e.target.classList.remove('falta'); }
     });
-    np.addEventListener('click', async e => {
+    np.addEventListener('click', e => {
       const t = e.target.closest('button'); if (!t || !estado) return;
       if (t.dataset.npPlantilla) { estado.plantilla = t.dataset.npPlantilla; pintarPlantillas(); const b = np.querySelector(`[data-np-plantilla="${t.dataset.npPlantilla}"]`); if (b) b.focus(); return; }
-      if (t.matches('[data-np-carpeta]')) { const c = o.elegirCarpeta && await o.elegirCarpeta(estado.carpeta); if (c && estado) { estado.carpeta = c; pintarCarpeta(); } return; }
       if (t.matches('[data-np-cancelar]')) { o.cancelar(); return; }
       if (t.matches('[data-np-crear]')) crear();
     });

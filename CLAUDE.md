@@ -396,7 +396,7 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   cuál es de nodo, pero ya no cambia su aspecto. Una nota de nodo
   se crea con «Agregar nota» del menú del nodo (antes «Nota en este nodo», Leo 17-09-2026) o con «＋ Nota» en su panel (1.1.3); **al terminar de escribirla en sitio se
   vuelve a centrar** (`editarEnSitio` llama a `colocarRotulos` de su fila y pone el texto en el panel): se colocaba con el ancho
-  del campo y quedaba «al lado del nodo y no abajo» (Leo, 17-09-2026); arrastrando una nota, **acercar el puntero a un nodo la cuelga de él a cualquier altura** (1.0.80, Leo 16-09-2026: «si muevo una nota de nodo a un enlace, regresarla es muy complicado»; antes solo valía un cuadro de 24 px sobre el nodo a la altura del carril): el imán es el 30 % del tramo hacia ese lado, entre 12 y 40 px, así que **la mitad del tramo sigue siendo del enlace** y ahí una nota de enlace solo se ordena, sin convertirse; fuera del imán va al tramo donde cae (ya no se intercambian: se apilan). **Su guía es continua, de 2 px**, con un punto donde toca el carril: antes era una raya gris discontinua que no dejaba ver de quién era la nota (Leo, 16-09-2026). **Guía y punto van siempre del color de la nota** (`--nc` en la piel: su tono, o `--nota-tenue` la de papel; 1.1.18, Leo: «del mismo color que la nota todo el tiempo, no solo al hacer hover»; hasta entonces, quietas, del color de la trama, `--gl`, que tablero.js sigue poniendo). **Apiladas, la guía de las de abajo cruza las de arriba** (está bien), pero la nota señalada, elegida o arrastrada va delante (`z-index: 2`, 1.1.2, Leo 17-09-2026). **Mide lo que la nota se haya bajado** (`--guia`, que escribe `colocarRotulos` con su nivel): con la altura fija se veía cortada en cuanto la nota caía a un segundo nivel. **Y sale de su sitio** (`--gx`, 1.1.16, Leo 18-09-2026: «se ven ligeramente separadas del nodo»): la nota del primer nodo se corre a la derecha para no salirse del tablero y una más estrecha que su hueco mínimo (44 px) quedaba a la izquierda de él; la guía iba en medio de la nota. Ahora la nota va centrada en su hueco y `--gx` pone la guía y su punto sobre el nodo (o la mitad del tramo). Si el «+» de la celda (`#celda`, z 3)
+  del campo y quedaba «al lado del nodo y no abajo» (Leo, 17-09-2026); arrastrando una nota, **acercar el puntero a un nodo la cuelga de él a cualquier altura** (1.0.80, Leo 16-09-2026: «si muevo una nota de nodo a un enlace, regresarla es muy complicado»; antes solo valía un cuadro de 24 px sobre el nodo a la altura del carril): el imán es el 30 % del tramo hacia ese lado, entre 12 y 40 px, así que **la mitad del tramo sigue siendo del enlace** y ahí una nota de enlace solo se ordena, sin convertirse; fuera del imán va al tramo donde cae (ya no se intercambian: se apilan). **Su guía es continua, de 2 px**, con un punto donde toca el carril: antes era una raya gris discontinua que no dejaba ver de quién era la nota (Leo, 16-09-2026). **Guía y punto van siempre del color de la nota** (`--nc` en la piel: su tono, o `--nota-tenue` la de papel; 1.1.18, Leo: «del mismo color que la nota todo el tiempo, no solo al hacer hover»; hasta entonces, quietas, del color de la trama, `--gl`, que tablero.js sigue poniendo). **Apiladas, cada nota tapa a las de más abajo** (1.1.22, Leo: «la línea de las notas de hasta abajo cubren el contenido de las de arriba»; hasta entonces la guía de las de abajo las cruzaba y la señalada iba delante): las notas de una trama van en su capa, `.notas-capa` dentro de `.track` (absoluta, `inset: 0`, z 1, sin quitarle los clics a la pista; con una nota señalada, elegida o arrastrada, z 2 con `:has()`), y dentro cada nota lleva `--nz` = 500 − su nivel (`colocarRotulos`), así la guía de una de abajo pasa por detrás de las de arriba; al señalarla crece hacia abajo, sobre las de debajo, y solo la arrastrada va delante de todas (z 999). **Mide lo que la nota se haya bajado** (`--guia`, que escribe `colocarRotulos` con su nivel): con la altura fija se veía cortada en cuanto la nota caía a un segundo nivel. **Y sale de su sitio** (`--gx`, 1.1.16, Leo 18-09-2026: «se ven ligeramente separadas del nodo»): la nota del primer nodo se corre a la derecha para no salirse del tablero y una más estrecha que su hueco mínimo (44 px) quedaba a la izquierda de él; la guía iba en medio de la nota. Ahora la nota va centrada en su hueco y `--gx` pone la guía y su punto sobre el nodo (o la mitad del tramo). Si el «+» de la celda (`#celda`, z 3)
   queda encima de una nota, `notaBajo(e)` (`elementsFromPoint`) lo esconde y el clic elige la nota (Leo, 15-09-2026).
   **Elegir una nota abre su panel** (Leo, 16-09-2026: «que se vea su contenido en el panel inferior»): `sel.tipo`
   `'nota'` pinta su texto en un `textarea` que ocupa el alto (se escribe ahí y se ve en el tablero al momento), su
@@ -610,11 +610,10 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   proyecto»; el menú Archivo dice Nuevo proyecto…, Abrir proyecto… y Cerrar proyecto). **Nuevo** (Ctrl+N, el «+», `btnNuevo`, el
   menú) ya no crea un «Sin título»: abre la **pestaña de creación** (`.pestana-proyecto`, una sola, en memoria; se puede ir a
   otra y volver; `pantalla = 'nuevo'` en app.js → `body.pantalla-nuevo`, que tapa todo `<main>` con `#nuevoProyecto`).
-  `js/claquedraw/proyectos.js` la pinta: lateral de 320 px con nombre (obligatorio: sin nombre, el campo tiembla) y «Dónde se
-  guarda» (`carpetaInicial`/`elegirCarpeta`: en Electron `vista.carpetaProyectos` o `~/Documents/ClapCraft`, IPC
-  `proyecto:carpeta`/`proyecto:elegirCarpeta`; en el navegador `showDirectoryPicker`, handle en IndexedDB `carpetaProyectos`, o
-  «Solo en este navegador»), y a la derecha las plantillas, «Árbol que crea» y «Tramas que crea»; Enter crea (salvo con foco en
-  un botón), Esc cancela. **Plantillas** (`js/claquedraw/plantillas.js`, Node, `test/plantillas.test.js`): seis (En blanco,
+  `js/claquedraw/proyectos.js` la pinta: lateral de 320 px con el nombre (obligatorio: sin nombre, el campo tiembla) y a la
+  derecha las plantillas, «Árbol que crea» y «Tramas que crea»; Enter crea (salvo con foco en un botón), Esc cancela. **Ya no
+  hay «Dónde se guarda»** (1.1.22, Leo: «que cuando des en "Crear proyecto" te abra el Files del sistema operativo para que
+  selecciones el nombre del archivo y la ruta»): lo pregunta el diálogo de guardar del sistema (ver `crearProyecto`). **Plantillas** (`js/claquedraw/plantillas.js`, Node, `test/plantillas.test.js`): seis (En blanco,
   Largometraje, Serie de TV, Novela, Cortometraje, Teatro), cada una con un contenedor, carpetas (color: uno de los seis de
   carpeta), esquemas y bibliotecas sueltas; cada esquema lleva los tres actos de siempre y las tramas de la plantilla,
   **sin nodos** (Leo, 16-09-2026: ya no se crea «Inicio»). **Ningún esquema de plantilla trae biblioteca enlazada**
@@ -622,9 +621,16 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   plantilla son las que se listan aparte, y «En blanco» crea «Contenedor» con un solo «Esquema». La prueba exige que lo
   creado sea exactamente el árbol de la vista previa: **no inventar chips que no se crean** (el diseño decía «8 CAPÍTULOS»
   con dos en el árbol).
-  `crearProyecto` (app.js): `biblioteca.crear({ nombre, documentos: plantillas.documentos(id) })`, monta y, con carpeta,
-  `archivoEnCarpeta` (Electron: IPC `proyecto:crear`, que no pisa nada y usa «Nombre 2»; navegador: `getFileHandle` en la carpeta
-  y `escribirArchivo` comprueba) y `nombrarComoArchivo`. **Sin proyectos** (`body.sin-proyectos`, `#sinProyectos`): al cerrar la
+  `crearProyecto` (app.js) **elige primero el archivo** (`elegirArchivoNuevo`): Electron, IPC `proyecto:elegirArchivo` (el
+  diálogo de guardar, «Crear», en `vista.carpetaProyectos` —la carpeta del último proyecto creado—, o `~/Documents/ClapCraft`
+  si existe, o Documentos; solo devuelve la ruta); Chrome/Edge, `showSaveFilePicker` con `id: 'clapcraft-proyectos'`; sin
+  diálogo, se crea sin archivo como antes. El nombre propuesto es `C.nombreArchivo(nombre)` (biblioteca.js, Node): sin
+  espacios y con guiones, sin acentos, la ñ como «ni» y en minúsculas («Año nuevo» → `anio-nuevo.clapcraft`); «Guardar
+  como…» propone lo mismo. **Cancelar no crea nada** y la pantalla sigue con lo escrito; un archivo que ya es de otro
+  proyecto abierto se rechaza (se pisarían). Después `biblioteca.crear({ nombre, documentos: plantillas.documentos(id) })`,
+  monta y `archivoNuevo` vincula y escribe con `escribirArchivo` (si no queda escrito: desvincula y, en el navegador, descarga
+  una copia). **La pestaña lleva el nombre del proyecto, no el del archivo.** Desaparecieron `archivoEnCarpeta`,
+  `carpetaInicial`, `elegirCarpeta` y los IPC `proyecto:carpeta`, `proyecto:elegirCarpeta` y `proyecto:crear`. **Sin proyectos** (`body.sin-proyectos`, `#sinProyectos`): al cerrar la
   última pestaña (`quedarSinProyectos`: nada montado, `abiertoId = null`) y en el primer arranque (`vista.iniciada`; salvo si
   hay un tablero de tramas.html que heredar). Riel de 44 px, «Nuevo proyecto», «Abrir un proyecto», **recientes**
   (`guiones.claquedraw.recientes`, ocho como mucho: `recordarReciente` al abrir, crear, «Guardar como…», montar y cerrar un
@@ -632,11 +638,14 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   nombre; `plantillas.estructura` y `plantillas.visto`), y el pie con los atajos y la versión (`editorAPI.version` o
   `package.json`). **Soltar un `.clapcraft`** en la ventana lo abre (Electron: `editorAPI.rutaDe` = `webUtils.getPathForFile`;
   Chrome/Edge: `getAsFileSystemHandle`, queda vinculado; si no, solo leído). Sin proyecto, la franja esconde Guardar y el
-  indicador. `npm run test:archivos` arranca sin proyectos (crea uno en blanco sin carpeta) y comprueba crear con carpeta,
-  cerrar todo y abrir un reciente, y que ese proyecto se sigue guardando (Leo, 15-09-2026: «ve que el guardado siga
+  indicador. `npm run test:archivos` arranca sin proyectos (crea uno en blanco, con su archivo en la carpeta temporal) y
+  comprueba el diálogo de «Crear proyecto» (nombre propuesto, cancelar, dónde nace el archivo, el nombre de la pestaña, no pisar
+  el archivo de otro proyecto abierto), cerrar todo y abrir un reciente, y que ese proyecto se sigue guardando (Leo, 15-09-2026: «ve que el guardado siga
   funcionando»): notas y texto de sección llegan solos a su archivo, cerrar justo tras un cambio lo escribe, reabrir desde
   recientes no reescribe, crear otro proyecto escribe lo pendiente del anterior y, al volver a arrancar, los dos siguen
-  vinculados sin reescribirse (53 comprobaciones). En el panel de navegador la tecla Enter de la herramienta no llega al campo: se prueba con
+  vinculados sin reescribirse (71 comprobaciones en la 1.1.22, con renombrar el proyecto sin tocar su archivo, su contenedor
+  detrás y exportar a Markdown; «guarda la nota nueva creada en el segmento expandido» falla alguna vez por los tiempos del
+  arrastre sintético: repetir antes de buscar un fallo). En el panel de navegador la tecla Enter de la herramienta no llega al campo: se prueba con
   `KeyboardEvent` sintético.
 - **Archivos `.clapcraft`** (Leo, 14-09-2026: ligeros). JSON sin sangría `{ app: 'clapcraft', formato: 2,
   nombre, documentos }` —el tablero antiguo (`g.datos`, `g.notas`) ya está migrado y no viaja; `tramas.html`
@@ -656,15 +665,30 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   reescribirla) y volver a arrancar (sin reescribir y siguiendo al archivo). Encontraron dos reescrituras sin
   cambios: `normalizar` añadía `segmentosPrimero: false` (ahora solo se guarda si es true) y, al volver a
   arrancar, el guion normalizado tenía las claves en otro orden que el archivo; `escribirArchivo` ya no escribe si
-  `mismoContenido` (documentos normalizados, claves ordenadas) aunque el texto difiera. Una copia con otro nombre
-  de archivo sí se reescribe una vez al volver a arrancar: el `nombre` de dentro pasa a ser el del archivo.
+  `mismoContenido` (documentos normalizados, claves ordenadas) aunque el texto difiera.
+  **El nombre del proyecto va por su lado y el del archivo por el suyo** (1.1.19, Leo: «quiero poder cambiar el nombre del
+  proyecto, sin que eso cambie el nombre del archivo automáticamente»): el proyecto se renombra con **doble clic en su pestaña**
+  (`click` con `detail` 2: el primer clic puede montar y redibujar las pestañas) o **Archivo › Renombrar proyecto…** (orden
+  `renombrar`), en sitio (`editarNombrePestana`: `input.pestana-edit`, Enter o salir guarda, Esc deja; mientras,
+  `editandoPestana` frena `renderPestanas`) → `renombrarProyecto` (`biblioteca.renombrar`, `persistir()` escribe el nombre
+  nuevo **dentro** de su archivo, que no cambia de nombre, y `recordarReciente` lo pone en los recientes). Al abrir un archivo el
+  proyecto toma **el nombre que lleva dentro** (`datos.nombre`; el del archivo solo si no trae), «Guardar como…» propone el
+  nombre del proyecto y ya no lo renombra, y crear un proyecto en una carpeta tampoco (desapareció `nombrarComoArchivo`, que
+  igualaba el proyecto a su archivo). **La cabecera enseña el contenedor, no el proyecto** («AMOR TIKTOKER [Piloto]»: Leo le
+  había puesto al contenedor el nombre del proyecto y, al renombrar, «solo se cambia en la pestaña, no en el header»; 1.1.20):
+  `renombrarProyecto` renombra también los contenedores que se llamaban como el proyecto y redibuja cabecera, árbol y editor;
+  los de otro nombre («Temporada 1», los de las plantillas) no se tocan. **Qué es «llamarse como el proyecto»** (1.1.21, Leo:
+  «no veo aplicado el cambio»; en su proyecto real nunca coincidieron del todo: proyecto «amor-tiktoker», luego «amor toktiker»,
+  archivo `amor-tiktoker.clapcraft`, contenedor «Amor tiktoker»): `d.contenedoresLlamados([nombre de antes, nombre del
+  archivo sin extensión])` de documentos.js compara sin mayúsculas, acentos ni separadores (`sinSeparadores`: guiones,
+  puntos y espacios cuentan como un espacio), así que también vale el nombre del archivo.
   El estado de archivo es **por guion** (`estado(id)` = `{ archivo, ultimoEscrito, temporizador,
   escribiendo }`; `vista.archivos[id]` y la clave IndexedDB `archivo:<id>` lo recuerdan). «Guardar
   como…» (`Ctrl+Shift+S`) y «Abrir…» dejan la pestaña **vinculada** al archivo y desde entonces cada
   `persistir()` programa `escribirArchivo(id)` (1 s) que escribe solo si `serializar(g)` cambió respecto
   a `ultimoEscrito` (`vincular()` lo pone a null: un archivo recién elegido está vacío aunque el
   contenido no haya cambiado; olvidarlo dejaba archivos de 0 bytes al «Guardar como» dos veces). El
-  nombre propuesto en el diálogo es siempre «Esquema.clapcraft». `escribirHandle()` pide permiso si hace
+  nombre propuesto en el diálogo es el del proyecto (hasta la 1.1.18, «Esquema.clapcraft»). `escribirHandle()` pide permiso si hace
   falta, escribe y **relee el archivo para comprobarlo**: en navegadores embebidos (el panel de Claude,
   por ejemplo) el sistema deja elegir el archivo pero la escritura no llega, sin error; en ese caso
   «Guardar como…» desvincula, descarga una copia y lo dice. Si al recargar no se recupera el handle
@@ -748,7 +772,12 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   (`#cdExportar`, con borde y sin color de acento: Leo no lo quiere morado) y en el ⋯ del guion; menú PDF / Word /
   Texto (`C.gestor.pop`, en la página: como un clic dentro del marco no le llega, texto.js lo cierra en el `mousedown` del
   marco y el mismo botón lo abre y lo cierra; Esc cierra cualquier menú abierto, oyente en captura del documento). Se exporta
-  **lo que hay abierto en el editor** (`documentoAExportar`: el documento del esquema, un guion o una nota de biblioteca). PDF: HTML imprimible en Carta con Courier Prime (`aImprimible`); en Electron `editorAPI.guardarPdf`
+  **lo que hay abierto en el editor** (`documentoAExportar`: el documento del esquema, un guion o una nota de biblioteca). **Markdown**
+  (1.1.19, Leo: «agrega a la exportación poder exportar a .md»): `aMarkdown` usa `Ed.md.fromHtml` del marco (js/markdown.js), que
+  ahora sabe de guion —actos `##`, escenas `###`, secundarios `####`, el diálogo junto (`**PERSONAJE**`, `*(paréntesis)*` y lo dicho,
+  con saltos de renglón de dos espacios), transiciones como cita salvo «FADE IN:», tomas y montajes en mayúsculas, notas
+  `*[…]*` y el diálogo doble como tabla de dos columnas— y pone delante la portada (`# Título`, episodio, autor…); sin el marco,
+  el texto sin formato. PDF: HTML imprimible en Carta con Courier Prime (`aImprimible`); en Electron `editorAPI.guardarPdf`
   → IPC `pdf:save` (ventana escondida, `printToPDF`, las fuentes por su ruta en `fonts/`), en el navegador el diálogo de
   imprimir. Word: un .docx hecho a mano (`docx`: document.xml con sangrías de guion y un zip sin comprimir, CRC32 propio).
   Texto: párrafos con una línea en blanco, personaje/paréntico/diálogo seguidos. `npm run test:archivos` escribe un documento y

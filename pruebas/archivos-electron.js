@@ -7,8 +7,10 @@
    3. «Abrir…» una copia trae el mismo guion, se ve igual (orden de tarjetas y notas) y no lo reescribe;
    4. al volver a arrancar (recargar) retoma el archivo por su ruta, no lo reescribe, y los cambios siguen
       llegando al archivo;
-   5. «Nuevo proyecto» con plantilla y carpeta crea su archivo sin pisar otro, y cerrar todo deja «Sin proyectos» con los
-      recientes, que se vuelven a abrir;
+   5. «Nuevo proyecto» ya no pregunta la carpeta: «Crear proyecto» abre el diálogo de guardar con el nombre propuesto
+      (sin espacios, acentos ni ñ), cancelarlo no crea nada, el archivo nace donde se eligió y la pestaña lleva el nombre del
+      proyecto; el archivo de otro proyecto abierto no se pisa, y cerrar todo deja «Sin proyectos» con los recientes, que se
+      vuelven a abrir;
    6. ese proyecto se sigue guardando: notas y texto, cerrar justo tras un cambio, reabrir desde recientes sin reescribir,
       crear otro con un cambio pendiente y volver a arrancar con los dos vinculados.
    No forma parte de la aplicación ni del instalador. */
@@ -21,10 +23,17 @@ const zlib = require('zlib');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'clapcraft-prueba-'));
 const ARCHIVO = path.join(TMP, 'Mi guion.clapcraft'), COPIA = path.join(TMP, 'Copia del guion.clapcraft');
 app.setPath('userData', path.join(TMP, 'datos'));                        // aparte de la app real
-/* Guardar como… del guion va al .clapcraft; lo exportado (pdf, docx, txt) a su propio archivo */
+/* Guardar como… del guion va al .clapcraft; lo exportado (pdf, docx, txt, md) a su propio archivo. Para «Crear proyecto» la
+   prueba pone en `guardarEn` la carpeta (se acepta el nombre propuesto), en `rutaFija` un archivo concreto o `cancelarGuardar`
+   para cancelar; en `ultimoGuardar` queda lo que se le pidió al diálogo. */
+let guardarEn = null, rutaFija = null, cancelarGuardar = false, ultimoGuardar = null;
 dialog.showSaveDialog = async (w, op) => {
-  const ext = ((op || w || {}).filters || [])[0] && (op || w).filters[0].extensions[0];
-  return { canceled: false, filePath: ext && ext !== 'clapcraft' ? path.join(TMP, 'Exportado.' + ext) : ARCHIVO };
+  op = op || w || {}; ultimoGuardar = op;
+  const ext = (op.filters || [])[0] && op.filters[0].extensions[0];
+  if (ext && ext !== 'clapcraft') return { canceled: false, filePath: path.join(TMP, 'Exportado.' + ext) };
+  if (cancelarGuardar) { cancelarGuardar = false; return { canceled: true }; }
+  if (rutaFija) { const p = rutaFija; rutaFija = null; return { canceled: false, filePath: p }; }
+  return { canceled: false, filePath: guardarEn ? path.join(guardarEn, path.basename(op.defaultPath)) : ARCHIVO };
 };
 dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [COPIA] });
 require('../electron/main.js');
@@ -60,9 +69,10 @@ app.whenReady().then(async () => {
      tanto que la prueba parecía colgada (pasó el 15-09-2026): la ventana de la prueba no se frena */
   win.webContents.setBackgroundThrottling(false);
   const js = code => win.webContents.executeJavaScript(`(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); ${code} })()`, true);
-  /* sin proyectos abiertos (el primer arranque): se crea uno en blanco, sin carpeta (no escribe en la carpeta de verdad) */
+  /* sin proyectos abiertos (el primer arranque): se crea uno en blanco; su archivo va a la carpeta temporal, con el nombre
+     propuesto («sin-titulo-1.clapcraft»), y «Guardar como…» lo lleva luego a «Mi guion» */
   const listo = () => js(`for (let i = 0; i < 100 && !(window.Claquedraw && Claquedraw.app); i++) await W(50);
-    if (!Claquedraw.biblioteca.total()) { Claquedraw.app.nuevo(); await W(100); await Claquedraw.app.crearProyecto({ nombre: 'Sin título 1', plantilla: 'blanco', carpeta: null }); }
+    if (!Claquedraw.biblioteca.total()) { Claquedraw.app.nuevo(); await W(100); await Claquedraw.app.crearProyecto({ nombre: 'Sin título 1', plantilla: 'blanco' }); }
     for (let i = 0; i < 100 && !Claquedraw.gestor.documentos(); i++) await W(50); await W(600); return true;`);
   /* el guion de la pestaña abierta tal como lo serializa app.js */
   const enPagina = () => js(`const g = Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()); return JSON.stringify({ app: 'clapcraft', formato: 2, nombre: g.nombre, documentos: g.documentos });`);
@@ -74,8 +84,9 @@ app.whenReady().then(async () => {
   };
 
   try {
-    await listo();
+    guardarEn = TMP; await listo(); guardarEn = null;
     console.log('\nClapCraft · prueba de guardado en ' + TMP + '\n');
+    comprobar('el primer proyecto nace con su archivo, con el nombre propuesto', fs.existsSync(path.join(TMP, 'sin-titulo-1.clapcraft')), fs.readdirSync(TMP).join(', '));
 
     /* ---------- 1. un guion con contenido y «Guardar como…» ---------- */
     await js(`
@@ -100,7 +111,8 @@ app.whenReady().then(async () => {
     comprobar('«Guardar como…» crea el archivo', fs.existsSync(ARCHIVO));
     const f1 = await mismo(ARCHIVO, 'el archivo es gzip y es exactamente el guion de la pestaña');
     const doc1 = JSON.parse(f1.texto);
-    comprobar('el guion toma el nombre del archivo', doc1.nombre === 'Mi guion', doc1.nombre);
+    /* el proyecto se queda con su nombre aunque el archivo se llame de otra forma (Leo, 18-09-2026: antes tomaba el del archivo) */
+    comprobar('«Guardar como…» no cambia el nombre del proyecto', doc1.nombre === 'Sin título 1' && fs.existsSync(ARCHIVO), doc1.nombre);
     comprobar('lleva el texto de la nota (acentos, comillas, japonés)', /¿Ñandú\? «comillas» — 日本/.test(f1.texto));
     comprobar('lleva el documento del esquema', /EXT\. PUERTO – NOCHE/.test(f1.texto));
     comprobar('el personaje escrito en el editor entró al elenco', doc1.documentos.elenco.some(p => p.nombre === 'LESTAT'));
@@ -271,7 +283,8 @@ app.whenReady().then(async () => {
       const n = d.documentoEsquema(e.id);
       const doc = { titulo: n.titulo, html: n.html };
       const pdf = await Claquedraw.exportar.exportar('pdf', doc), docx = await Claquedraw.exportar.exportar('docx', doc), txt = await Claquedraw.exportar.exportar('txt', doc);
-      return { eid: e.id, conTira, conVersion, cmp, id: n.id, html: n.html, boton: w.document.getElementById('cdVersiones').textContent.trim(), pdf, docx, txt };`);
+      const md = await Claquedraw.exportar.exportar('md', doc);
+      return { eid: e.id, conTira, conVersion, cmp, id: n.id, html: n.html, boton: w.document.getElementById('cdVersiones').textContent.trim(), pdf, docx, txt, md };`);
     await espera(2500);
     const f4 = await mismo(ARCHIVO, 'documentos: el archivo es exactamente el guion abierto');
     const d4 = JSON.parse(f4.texto).documentos;
@@ -283,8 +296,9 @@ app.whenReady().then(async () => {
     const pdfB = fs.existsSync(gen.pdf) ? fs.readFileSync(gen.pdf) : null, docxB = fs.existsSync(gen.docx) ? fs.readFileSync(gen.docx) : null;
     comprobar('exporta a PDF', pdfB && pdfB.slice(0, 5).toString() === '%PDF-' && pdfB.length > 1000, gen.pdf);
     comprobar('exporta a Word (.docx)', docxB && docxB[0] === 0x50 && docxB[1] === 0x4b && docxB.includes(Buffer.from('word/document.xml')), gen.docx);
-    if (process.env.PRUEBA_EXPORTADOS) [gen.pdf, gen.docx, gen.txt].forEach(f => { try { fs.copyFileSync(f, path.join(process.env.PRUEBA_EXPORTADOS, path.basename(f))); } catch (_) {} });   // para mirarlos
+    if (process.env.PRUEBA_EXPORTADOS) [gen.pdf, gen.docx, gen.txt, gen.md].forEach(f => { try { fs.copyFileSync(f, path.join(process.env.PRUEBA_EXPORTADOS, path.basename(f))); } catch (_) {} });   // para mirarlos
     comprobar('exporta a texto', fs.existsSync(gen.txt) && /EXT\. PUERTO/.test(fs.readFileSync(gen.txt, 'utf8')), gen.txt);
+    comprobar('exporta a Markdown (la escena como encabezado)', fs.existsSync(gen.md) && /^### EXT\. PUERTO/m.test(fs.readFileSync(gen.md, 'utf8')), gen.md);
 
     /* ---------- 3. «Abrir…» una copia: el mismo guion, se ve igual, no se reescribe ---------- */
     /* la copia lleva dentro su propio nombre, como si se hubiera guardado así (si no, al volver a arrancar la app
@@ -297,7 +311,7 @@ app.whenReady().then(async () => {
       return [...document.querySelectorAll('#gdMain .gd-tablero[data-orden] > [data-clave]')].map(c => c.querySelector('.gd-etq-nom').textContent.trim() + ':' + [...c.querySelectorAll('[data-nota]')].map(n => n.textContent.trim()).join('|')).join(' / ');`);
     await js(`document.querySelector('[data-gd-ir-contenedores]') && document.querySelector('[data-gd-ir-contenedores]').click(); await W(300); await Claquedraw.app.abrirArchivo(); await W(1200);`);
     const pestanas = await js(`return Claquedraw.biblioteca.datos.guiones.map(g => g.nombre);`);
-    comprobar('«Abrir…» abre la copia en otra pestaña', pestanas.includes('Copia del guion') && pestanas.includes('Mi guion'), JSON.stringify(pestanas));
+    comprobar('«Abrir…» abre la copia en otra pestaña', pestanas.includes('Copia del guion') && pestanas.includes('Sin título 1'), JSON.stringify(pestanas));   // cada uno con su nombre, no el del archivo
     const abierto = JSON.parse(await enPagina()), enArchivo = JSON.parse(leerArchivo(COPIA).texto);
     const dif = diferencia(enArchivo.documentos, abierto.documentos);
     comprobar('lo abierto es exactamente lo del archivo', !dif, dif);
@@ -331,20 +345,44 @@ app.whenReady().then(async () => {
     await mismo(destino, 'tras volver a arrancar, los cambios llegan a su archivo («' + quien + '»)');
     comprobar('y la nota nueva está en él', /Tras reabrir/.test(leerArchivo(destino).texto));
 
-    /* ---------- 5. nuevo proyecto con plantilla y carpeta; cerrar todo deja «Sin proyectos» con sus recientes ---------- */
+    /* ---------- 5. «Nuevo proyecto»: el archivo lo pide el diálogo de guardar del sistema (Leo, 18-09-2026) ---------- */
     const CARPETA = path.join(TMP, 'Proyectos');
-    fs.mkdirSync(CARPETA); fs.writeFileSync(path.join(CARPETA, 'Entrevista.clapcraft'), 'ya estaba');   // no se pisa
-    await js(`Claquedraw.app.nuevo(); await W(200);
-      await Claquedraw.app.crearProyecto({ nombre: 'Entrevista', plantilla: 'serie', carpeta: { ruta: ${JSON.stringify(CARPETA)}, texto: 'Proyectos' } }); await W(1500);`);
-    const NUEVO = path.join(CARPETA, 'Entrevista 2.clapcraft');
-    comprobar('«Crear proyecto» crea su archivo en la carpeta sin pisar el que había', fs.existsSync(NUEVO) && fs.readFileSync(path.join(CARPETA, 'Entrevista.clapcraft'), 'utf8') === 'ya estaba');
+    fs.mkdirSync(CARPETA);
+    /* como en la pantalla: el nombre en su campo, la plantilla y «Crear proyecto» */
+    const crearEnPantalla = (nombre, plantilla) => js(`Claquedraw.app.nuevo(); await W(200);
+      const c = document.querySelector('#nuevoProyecto [data-np-nombre]'); c.value = ${JSON.stringify(nombre)}; c.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('#nuevoProyecto [data-np-plantilla="${plantilla}"]').click(); await W(100);
+      document.querySelector('#nuevoProyecto [data-np-crear]').click(); await W(1500);
+      return { total: Claquedraw.biblioteca.total(), nuevo: document.body.classList.contains('pantalla-nuevo'), campo: (document.querySelector('#nuevoProyecto [data-np-nombre]') || {}).value };`);
+    const pestana = () => js(`return (document.querySelector('.pestana.activa .pestana-nom') || {}).textContent;`);
+    comprobar('la pantalla de nuevo proyecto ya no pregunta dónde se guarda', await js(`Claquedraw.app.nuevo(); await W(200);
+      const r = !document.querySelector('#nuevoProyecto [data-np-carpeta]') && ![...document.querySelectorAll('#nuevoProyecto .np-rotulo')].some(e => /DÓNDE SE GUARDA/.test(e.textContent));
+      Claquedraw.app.cancelarProyecto(); await W(100); return r;`));
+    const total0 = await js(`return Claquedraw.biblioteca.total();`);
+    cancelarGuardar = true;
+    const cancelado = await crearEnPantalla('Entrevista del Año', 'serie');
+    comprobar('cancelar el diálogo no crea nada y la pantalla sigue con lo escrito', cancelado.total === total0 && cancelado.nuevo && cancelado.campo === 'Entrevista del Año', JSON.stringify(cancelado));
+    comprobar('el nombre propuesto va sin espacios, acentos ni ñ («entrevista-del-anio.clapcraft»)',
+      ultimoGuardar && path.basename(ultimoGuardar.defaultPath || '') === 'entrevista-del-anio.clapcraft', ultimoGuardar && ultimoGuardar.defaultPath);
+    guardarEn = CARPETA;
+    await js(`document.querySelector('#nuevoProyecto [data-np-crear]').click(); await W(1500);`);
+    const NUEVO = path.join(CARPETA, 'entrevista-del-anio.clapcraft');
+    comprobar('«Crear proyecto» escribe su archivo donde se eligió', fs.existsSync(NUEVO), fs.readdirSync(CARPETA).join(', '));
     const creado = fs.existsSync(NUEVO) && JSON.parse(leerArchivo(NUEVO).texto);
-    comprobar('el proyecto nuevo trae el árbol de la plantilla', creado && creado.nombre === 'Entrevista 2' && creado.documentos.contenedores[0].nombre === 'Temporada 1'
-      && creado.documentos.contenedores[0].esquemas.length === 8, creado && JSON.stringify(creado.documentos.contenedores[0].esquemas.map(e => e.nombre)));
+    comprobar('el proyecto nuevo trae el árbol de la plantilla y su nombre, no el del archivo', creado && creado.nombre === 'Entrevista del Año' && creado.documentos.contenedores[0].nombre === 'Temporada 1'
+      && creado.documentos.contenedores[0].esquemas.length === 8, creado && JSON.stringify([creado.nombre, creado.documentos.contenedores[0].esquemas.map(e => e.nombre)]));
+    comprobar('la pestaña lleva el nombre del proyecto', await pestana() === 'Entrevista del Año', await pestana());
+    await mismo(NUEVO, 'el proyecto nuevo nace con su archivo idéntico');
+    /* el archivo de otro proyecto abierto no se pisa: se avisa y la pantalla sigue */
+    const bytesAntes = fs.readFileSync(NUEVO);
+    rutaFija = NUEVO;
+    const pisar = await crearEnPantalla('Otra cosa', 'blanco');
+    comprobar('elegir el archivo de otro proyecto abierto no lo pisa', pisar.nuevo && pisar.total === total0 + 1 && fs.readFileSync(NUEVO).equals(bytesAntes), JSON.stringify(pisar));
+    await js(`Claquedraw.app.cancelarProyecto(); await W(100);`);
     await js(`
       for (const g of Claquedraw.biblioteca.datos.guiones.slice()) { const p = Claquedraw.app.cerrar(g.id); await W(300); const b = document.querySelector('#dlg[open] #dlgOk'); if (b) b.click(); await p; await W(300); }`);
     const vacio = await js(`return { clase: document.body.className, total: Claquedraw.biblioteca.total(), recientes: [...document.querySelectorAll('.sinp-reciente .sinp-rec-nom')].map(e => e.textContent) };`);
-    comprobar('cerrar el último proyecto deja «Sin proyectos» con los recientes', vacio.total === 0 && /sin-proyectos/.test(vacio.clase) && vacio.recientes.includes('Entrevista 2'), JSON.stringify(vacio));
+    comprobar('cerrar el último proyecto deja «Sin proyectos» con los recientes', vacio.total === 0 && /sin-proyectos/.test(vacio.clase) && vacio.recientes.includes('Entrevista del Año'), JSON.stringify(vacio));
     await js(`document.querySelector('.sinp-reciente').click(); await W(1200);`);
     const reabierto = await js(`return Claquedraw.biblioteca.total() && Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`);
     comprobar('un reciente se abre en su pestaña', reabierto === vacio.recientes[0], reabierto);
@@ -366,6 +404,29 @@ app.whenReady().then(async () => {
     comprobar('lleva la nota y el documento del esquema', /Nota en la plantilla/.test(leerArchivo(NUEVO).texto) && /INT\. BARCO – DÍA/.test(leerArchivo(NUEVO).texto));
     comprobar('el indicador dice guardado', (await indicador()).includes('ok'), await indicador());
 
+    /* renombrar el proyecto: el nombre nuevo va dentro de su archivo, que se sigue llamando igual (Leo, 18-09-2026) */
+    /* …y el contenedor que se llamaba como el proyecto cambia con él (la cabecera enseña el contenedor) */
+    const renombrado = await js(`const d = Claquedraw.gestor.documentos(), c = d.datos.contenedores.find(x => !x.oculto);
+      d.renombrarContenedor(c.id, 'Entrevista del Año'); Claquedraw.gestor.render();
+      return Claquedraw.app.renombrar(Claquedraw.app.abiertoId(), 'Entrevista a fondo');`);
+    await espera(2500);
+    const trasRenombrar = JSON.parse(leerArchivo(NUEVO).texto);
+    comprobar('renombrar el proyecto no renombra su archivo', renombrado && fs.existsSync(NUEVO) && trasRenombrar.nombre === 'Entrevista a fondo'
+      && !fs.readdirSync(CARPETA).some(f => /a fondo/.test(f)), fs.readdirSync(CARPETA).join(', '));
+    comprobar('el contenedor que se llamaba como el proyecto cambia con él', trasRenombrar.documentos.contenedores.some(c => c.nombre === 'Entrevista a fondo'),
+      JSON.stringify(trasRenombrar.documentos.contenedores.map(c => c.nombre)));
+    /* …también si se llama como su archivo, con otras mayúsculas o sin guiones (el proyecto de Leo: «amor toktiker», archivo
+       «amor-tiktoker», contenedor «Amor tiktoker»), y la cabecera lo enseña al momento */
+    const cabecera = await js(`const d = Claquedraw.gestor.documentos(), c = d.datos.contenedores.find(x => !x.oculto);
+      d.renombrarContenedor(c.id, 'ENTREVISTA DEL ANIO'); Claquedraw.gestor.render();
+      Claquedraw.app.renombrar(Claquedraw.app.abiertoId(), 'La entrevista'); await W(50);
+      return document.querySelector('#esquemaChip [data-chip-cont]').textContent;`);
+    await espera(2500);
+    const trasArchivo = JSON.parse(leerArchivo(NUEVO).texto);
+    comprobar('el contenedor que se llamaba como el archivo también, y se ve en la cabecera', cabecera === 'La entrevista'
+      && trasArchivo.nombre === 'La entrevista' && trasArchivo.documentos.contenedores.some(c => c.nombre === 'La entrevista'),
+      cabecera + ' · ' + JSON.stringify(trasArchivo.documentos.contenedores.map(c => c.nombre)));
+
     /* un cambio y cerrar enseguida (antes del segundo de espera del autoguardado): cerrar lo escribe */
     await notaNueva('Justo antes de cerrar');
     await js(`await Claquedraw.app.cerrar(Claquedraw.app.abiertoId()); await W(300);`);
@@ -383,8 +444,8 @@ app.whenReady().then(async () => {
 
     /* otro proyecto con carpeta mientras el primero tiene un cambio pendiente: el pendiente se escribe */
     await notaNueva('Pendiente al crear otro');
-    await js(`Claquedraw.app.nuevo(); await W(100); await Claquedraw.app.crearProyecto({ nombre: 'Corto', plantilla: 'corto', carpeta: { ruta: ${JSON.stringify(CARPETA)}, texto: 'Proyectos' } }); await W(1500);`);
-    const CORTO = path.join(CARPETA, 'Corto.clapcraft');
+    await crearEnPantalla('Corto', 'corto');
+    const CORTO = path.join(CARPETA, 'corto.clapcraft');
     comprobar('el cambio pendiente del otro proyecto llegó a su archivo', /Pendiente al crear otro/.test(leerArchivo(NUEVO).texto));
     await mismo(CORTO, 'el proyecto nuevo nace con su archivo idéntico');
     await notaNueva('Antes de reiniciar');

@@ -1,11 +1,12 @@
 /* Claquedraw · exportar
-   «Exportar» (Leo, 15-09-2026, docs/diseno/rediseno-11/): PDF, Word y texto sin formato de un documento del editor. Desde un
+   «Exportar» (Leo, 15-09-2026, docs/diseno/rediseno-11/): PDF, Word, Markdown y texto sin formato de un documento del editor. Desde un
    guion generado (una nota plana) exporta la nota; desde el editor con secciones o «Revisar guión», lo que está dentro del
    guion, en su orden de lectura. Todo sale del HTML del editor: los elementos de guion (`sp-*`) se traducen a su formato.
 
    - PDF: una página Carta con Courier Prime 12 pt. En Electron la imprime el proceso principal a un archivo (`pdf:save`); en
      el navegador se abre el diálogo de imprimir (que deja guardar como PDF).
    - Word: un .docx mínimo hecho aquí (document.xml + estilos en un zip sin comprimir), sin dependencias.
+   - Markdown: con el conversor del editor (js/markdown.js), con el guion en encabezados, negritas y cursivas (18-09-2026).
    - Texto: párrafos separados por una línea en blanco; personaje, paréntico y diálogo seguidos. */
 (function (C) {
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -72,6 +73,31 @@
       out += (i ? (pegado ? '\n' : '\n\n') : '') + t;
     });
     return out.trim() + '\n';
+  }
+
+  /* ---------- Markdown (Leo, 18-09-2026: «agrega a la exportación poder exportar a .md») ----------
+     Con el conversor del editor (`Ed.md.fromHtml` de js/markdown.js, en el marco: los actos como `##`, las escenas como `###`,
+     el diálogo junto con el personaje en negrita, el diálogo doble en una tabla…) y, delante, la portada si la hay. Sin el
+     editor cargado, el texto sin formato. */
+  function aMarkdown(html) {
+    const m = document.getElementById('editorMarco'), W = m && m.contentWindow, E = W && W.Ed;
+    if (!(E && E.md && E.md.fromHtml && m.contentDocument)) return aTexto(html);
+    const po = portadaDe(html);
+    let cabeza = '';
+    if (po) {
+      const l = [];
+      if (po.titulo) l.push('# ' + po.titulo);
+      if (po.episodio) l.push('*' + po.episodio + '*');
+      if (po.autor) l.push('escrito por **' + po.autor + '**');
+      if (po.basado) l.push('*' + po.basado + '*');
+      const pie = [po.version, po.fecha, po.contacto].filter(Boolean);
+      if (pie.length) l.push(pie.join('  \n'));
+      cabeza = l.join('\n\n') + '\n\n---\n\n';
+    }
+    const caja = m.contentDocument.createElement('div');       // en el documento del marco, donde vive el conversor
+    caja.innerHTML = html || '';
+    caja.querySelectorAll('.portada, .cd-seccion').forEach(x => x.remove());
+    return cabeza + E.md.fromHtml(caja);
   }
 
   /* ---------- HTML para imprimir (PDF) ----------
@@ -374,6 +400,7 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     const titulo = nombreArchivo(doc.titulo);
     if (formato === 'pdf') return pdf(doc.html, doc.titulo);
     if (formato === 'docx') return guardar(docx(doc.html), titulo + '.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', { name: 'Documento de Word', extensions: ['docx'] });
+    if (formato === 'md') return guardar(aMarkdown(doc.html), titulo + '.md', 'text/markdown;charset=utf-8', { name: 'Markdown', extensions: ['md'] });
     return guardar(aTexto(doc.html), titulo + '.txt', 'text/plain;charset=utf-8', { name: 'Texto sin formato', extensions: ['txt'] });
   }
   /* El menú de «Exportar» junto a un botón (o un rectángulo, para el botón de dentro del marco del editor). `obtener()` da
@@ -383,7 +410,7 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     const f = document.createDocumentFragment();
     const tit = Object.assign(document.createElement('div'), { className: 'gd-pop-tit', textContent: 'Exportar ' + (doc0.titulo || '') });
     f.appendChild(tit);
-    [['pdf', 'Documento PDF', '.pdf'], ['docx', 'Word', '.docx'], ['txt', 'Texto sin formato', '.txt']].forEach(([k, texto, ext]) => {
+    [['pdf', 'Documento PDF', '.pdf'], ['docx', 'Word', '.docx'], ['md', 'Markdown', '.md'], ['txt', 'Texto sin formato', '.txt']].forEach(([k, texto, ext]) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'ex-opcion'; b.setAttribute('role', 'menuitem');
       b.innerHTML = `<span></span><span class="ex-ext">${ext}</span>`; b.firstChild.textContent = texto;
       b.addEventListener('click', async () => {
@@ -403,5 +430,5 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     C.gestor.pop(trigger, f);
   }
 
-  C.exportar = { menu, exportar, aTexto, docx, aImprimible, preparar };
+  C.exportar = { menu, exportar, aTexto, aMarkdown, docx, aImprimible, preparar };
 })(window.Claquedraw);

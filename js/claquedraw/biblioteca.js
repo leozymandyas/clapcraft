@@ -245,7 +245,17 @@
     }
   }
 
-  Object.assign(C, { Biblioteca, normalizar, esTablero, plano, FORMATO, NOMBRE, ORDENES });
+  /* El nombre de archivo que se propone para un proyecto (Leo, 18-09-2026): el del proyecto sin espacios y con guiones, sin
+     acentos, con la ñ como «ni» (año → anio) y en minúsculas; lo que no es letra ni número hace de guion y los apóstrofos
+     se quitan. Sin nada que usar, «proyecto». */
+  function nombreArchivo(nombre) {
+    const s = String(nombre || '').normalize('NFC').replace(/ñ/g, 'ni').replace(/Ñ/g, 'NI')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC').toLowerCase().replace(/['\u2019]/g, '')
+      .replace(/[^\p{L}\p{N}\p{M}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80).replace(/-+$/, '');
+    return s || 'proyecto';
+  }
+
+  Object.assign(C, { Biblioteca, normalizar, esTablero, plano, nombreArchivo, FORMATO, NOMBRE, ORDENES });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -87,6 +87,7 @@
   const no = aviso => ({ ok: false, aviso });
   const si = extra => Object.assign({ ok: true }, extra || {});
   const plano = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const sinSeparadores = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const comparar = (a, b) => a.localeCompare(b, 'es', { sensitivity: 'base', numeric: true });
   const texto = (v, defecto) => { const s = String(v ?? '').trim(); return s || defecto; };
   const color = v => { const n = Math.round(+v); return n >= 0 && n < PALETA.length ? n : 0; };
@@ -742,6 +743,13 @@
       const c = this.datos.contenedores.find(x => !x.oculto) || this.crearContenedor(NOMBRE_GLOBAL).contenedor;   // un «Capítulo» con su biblioteca
       const r = this.crearEsquema(c.id, datos, 'Esquema de pasos', notas);
       return si({ esquema: r.ok ? r.esquema : null, contenedor: c, cambio: true });
+    }
+    /* Los contenedores que se llaman como el proyecto, con cualquiera de los nombres que se le pasan (el de antes y el de su
+       archivo): sin mayúsculas, acentos ni separadores, «amor-tiktoker» es «Amor tiktoker» (Leo, 18-09-2026: al renombrar el
+       proyecto, la cabecera no cambiaba porque su contenedor nunca se llamó exactamente igual). */
+    contenedoresLlamados(nombres) {
+      const buscados = new Set([].concat(nombres || []).map(sinSeparadores).filter(Boolean));
+      return this.datos.contenedores.filter(c => !c.oculto && buscados.has(sinSeparadores(c.nombre)));
     }
     renombrarContenedor(id, nombre) {
       const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe');

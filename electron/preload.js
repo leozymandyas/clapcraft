@@ -14,10 +14,8 @@ contextBridge.exposeInMainWorld('editorAPI', {
   onAbrirRuta: cb => ipcRenderer.on('abrir-ruta', (_e, p) => cb(p)),
   /* órdenes del menú de la aplicación (Archivo, Edición, Ver): 'nuevo', 'abrir', 'guardar', … */
   onMenu: cb => ipcRenderer.on('menu', (_e, accion) => cb(accion)),
-  /* nuevo proyecto: la carpeta de partida, elegir otra y crear el archivo (sin pisar uno que ya exista) */
-  carpetaProyectos: () => ipcRenderer.invoke('proyecto:carpeta'),
-  elegirCarpeta: opts => ipcRenderer.invoke('proyecto:elegirCarpeta', opts),
-  crearProyecto: opts => ipcRenderer.invoke('proyecto:crear', opts),
+  /* nuevo proyecto: el diálogo de guardar del sistema elige nombre y carpeta del archivo (lo escribe después writeFile) */
+  elegirArchivo: opts => ipcRenderer.invoke('proyecto:elegirArchivo', opts),
   version: () => ipcRenderer.invoke('app:version'),
   /* la ruta de un archivo soltado en la ventana (un .clapcraft arrastrado desde el Finder) */
   rutaDe: archivo => { try { return webUtils.getPathForFile(archivo) || null; } catch (_) { return null; } },

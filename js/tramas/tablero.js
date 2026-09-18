@@ -151,7 +151,10 @@
       const props = m.puntosDe(l.id);
 
       /* las notas de la trama: las de un tramo (entre dos nodos) y las de un nodo; caben varias y se apilan
-         debajo del carril (Leo, 16-09-2026) */
+         debajo del carril (Leo, 16-09-2026). Van en su propia capa (Leo, 18-09-2026: «la línea de las notas de hasta abajo
+         cubren el contenido de las de arriba»): dentro, cada nota tapa a las de más abajo (`--nz`, que pone
+         colocarRotulos), así la guía de una de abajo pasa por detrás de las de arriba; la capa va donde iban las notas */
+      const capaNotas = document.createElement('div'); capaNotas.className = 'notas-capa'; track.appendChild(capaNotas);
       m.notasDeLinea(l.id).forEach(nt => {
         const a = m.punto(nt.deId), b = nt.aId && m.punto(nt.aId);
         const el = document.createElement('div');
@@ -160,7 +163,7 @@
         if (nt.color) { el.style.setProperty('--tc', tono(nt.color)); el.style.setProperty('--tf', `var(--f-${nt.color})`); }   // su tono: trazo y fondo pálido
         el.style.setProperty('--gl', tono(l.color));           // el color de su trama: la guía que la une a su nodo (Leo, 16-09-2026)
         const s = document.createElement('span'); s.textContent = nt.texto;
-        el.appendChild(s); track.appendChild(el);
+        el.appendChild(s); capaNotas.appendChild(el);
       });
 
       /* ya no hay huecos con el icono de nota bajo cada tramo (Leo, 16-09-2026): el enlace se elige y su menú contextual
@@ -408,7 +411,7 @@
     /* ---- notas y huecos, apilados hacia abajo ---- */
     const usados = [];                                          // por nivel, el borde derecho de lo último colocado
     const piezas = [];
-    Array.from(track.querySelectorAll(':scope > .nota')).forEach(el => {
+    Array.from(track.querySelectorAll(':scope > .notas-capa > .nota')).forEach(el => {
       const nt = m.nota(el.dataset.nota); if (!nt) return;
       const sitio = sitioNota(nt); if (!sitio) return;
       el.style.marginTop = ''; el.style.left = ''; el.style.width = ''; el.style.maxWidth = '';
@@ -453,6 +456,8 @@
       /* y sale de su nodo aunque la nota se corra para no salirse por la izquierda (la del primer nodo; Leo, 18-09-2026: «se
          ven ligeramente separadas del nodo»): antes iba siempre en medio de la nota */
       if (!z.hueco) z.el.style.setProperty('--gx', Math.round(z.centro - left) + 'px');
+      /* la de más arriba, delante: la guía de las de abajo no tapa su texto (Leo, 18-09-2026) */
+      if (!z.hueco) z.el.style.setProperty('--nz', String(Math.max(1, 500 - n)));
       z.nivel = n;
     });
     return { arriba: BASE_ROTULO + Math.max(0, niveles.length - 1) * ALTO_ROTULO + ALTO_ROTULO,
@@ -923,7 +928,7 @@
     const dyN = destino !== arr.track ? destino.getBoundingClientRect().top - arr.track.getBoundingClientRect().top : 0;
     m.datos.notas.forEach(n => {
       if (n.deId !== arr.p.id || n.aId) return;
-      const el = arr.track.querySelector(`:scope > .nota[data-nota="${CSS.escape(n.id)}"]`);
+      const el = arr.track.querySelector(`:scope > .notas-capa > .nota[data-nota="${CSS.escape(n.id)}"]`);
       if (el) { el.style.transform = `translate(${dxN}px, ${dyN}px)`; el.classList.add('con-nodo'); }
     });
     if (!arr.alt) previaIntercambio(arr.p, destino.dataset.linea, pos);   // duplicando no se intercambia

@@ -18,6 +18,17 @@ function conBiblioteca(d, cid, datos, nombre, nombreSub) {
 const nombres = xs => xs.map(x => x.nombre || x.titulo);
 const TABLERO = { actos: [{ id: 'a1', nombre: 'Acto I', celdas: 10 }], lineas: [{ id: 'l1', tipo: 'principal' }], puntos: [{ id: 'p1', lineaId: 'l1', actoId: 'a1', celda: 2, titulo: 'Inicio' }], saltos: [], notas: [] };
 
+test('contenedoresLlamados: los que se llaman como el proyecto, sin mayúsculas, acentos ni separadores', () => {
+  const d = nuevo();
+  d.crearContenedor('Amor tiktoker'); d.crearContenedor('Temporada 1'); d.crearContenedor('Canción');
+  /* el caso de Leo: proyecto «amor toktiker», archivo «amor-tiktoker.clapcraft», contenedor «Amor tiktoker» */
+  assert.deepEqual(nombres(d.contenedoresLlamados(['amor toktiker', 'amor-tiktoker'])), ['Amor tiktoker']);
+  assert.deepEqual(nombres(d.contenedoresLlamados(['CANCION', null, ''])), ['Canción']);
+  assert.deepEqual(nombres(d.contenedoresLlamados(['amor toktiker'])), []);          // un nombre de verdad distinto no vale
+  d.personajes(true);
+  assert.deepEqual(nombres(d.contenedoresLlamados(['Personajes'])), []);             // los ocultos no cuentan
+});
+
 test('contenedores: crear (con un «Documentos» dentro) con nombre libre, renombrar, fijar, mover y eliminar con lo suyo', () => {
   const d = nuevo();
   const a = d.crearContenedor('Amanecer');                       // x1 = contenedor, x2 = su subcontenedor

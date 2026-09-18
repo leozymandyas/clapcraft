@@ -207,15 +207,21 @@ body.con-ruta .pt:hover > *, body.con-ruta .pt:focus-within > *, body.con-ruta .
 .nota { position: absolute; top: var(--centro, 50%); margin-top: 13px; height: 22px; box-sizing: border-box;
         width: auto; padding: 0 2px;
         background: var(--nota); border: 1.5px solid var(--nota-borde); border-radius: 5px;
-        box-shadow: 2px 2px 0 var(--sombra-suave); cursor: grab; z-index: 1; touch-action: none; }
+        box-shadow: 2px 2px 0 var(--sombra-suave); cursor: grab; z-index: var(--nz, 1); touch-action: none; }
+/* la capa de las notas de una trama (tablero.js): ocupa la pista entera sin quitarle los clics y va donde iban las notas;
+   con una nota señalada, elegida o arrastrada, por encima de las de otras tramas */
+.notas-capa { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.notas-capa:has(> .nota:hover, > .nota.sel, > .nota.arrastrando) { z-index: 2; }
+.notas-capa > .nota { pointer-events: auto; }
 /* la guía que la une a su sitio: continua y del color de su trama, para que se vea de quién es */
 .nota::before { content: ''; position: absolute; left: calc(var(--gx, 50%) - 1px); width: 2px;   /* --gx: dónde está su sitio (tablero.js) */
         top: calc(-1 * var(--guia, 13px)); height: var(--guia, 13px);
         border-radius: 1px; background: var(--tc, var(--nota-borde)); }   /* del color de la nota (el de su tono o el borde del papel) */
 .nota.arrastrando { cursor: grabbing; border-color: var(--foco); box-shadow: var(--sombra); }
 .nota:hover { border-color: var(--nota-tinta); }
-/* apiladas, la guía de las de abajo pasa por encima de las de arriba; la que se señala (o está elegida) va delante (Leo, 17-09-2026) */
-.nota:hover, .nota.sel, .nota.arrastrando { z-index: 2; }
+/* apiladas, **cada nota tapa a las de más abajo** (`--nz`, Leo 18-09-2026: la guía de las de abajo cubría el texto de las
+   de arriba): la que se señala crece hacia abajo, sobre las de debajo, sin subir de capa; solo la arrastrada va delante */
+.nota.arrastrando { z-index: 999; }
 .nota.sel { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
 .nota span { display: block; max-width: 100%; line-height: 19px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

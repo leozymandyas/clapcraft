@@ -203,3 +203,18 @@ test('notas: crear las acepta, normalizar las sanea y toJSON las copia', () => {
   assert.deepEqual(c.guion('y').notas, {});
   assert.equal(c.guion('y').notaActual, null);
 });
+
+test('nombreArchivo: el nombre de archivo que se propone para un proyecto (sin espacios, acentos ni ñ)', () => {
+  assert.equal(C.nombreArchivo('Año nuevo'), 'anio-nuevo');                    // el ejemplo de Leo
+  assert.equal(C.nombreArchivo('Amor tiktoker'), 'amor-tiktoker');
+  assert.equal(C.nombreArchivo('La Ñusta: capítulo 1'), 'la-niusta-capitulo-1');
+  assert.equal(C.nombreArchivo('  ¿Quién mató a Laura?  '), 'quien-mato-a-laura');
+  assert.equal(C.nombreArchivo('Canción   de  cuna'), 'cancion-de-cuna');
+  assert.equal(C.nombreArchivo('O\u2019Brien'), 'obrien');
+  assert.equal(C.nombreArchivo('an\u0303o'), 'anio');                          // la ñ escrita con su tilde aparte
+  assert.equal(C.nombreArchivo('がっこう の 話'), 'がっこう-の-話');             // lo que no es latino se queda
+  assert.equal(C.nombreArchivo(''), 'proyecto');
+  assert.equal(C.nombreArchivo('«»'), 'proyecto');
+  assert.ok(C.nombreArchivo('palabra '.repeat(30)).length <= 80);
+  assert.ok(!/-$/.test(C.nombreArchivo('palabra '.repeat(30))));
+});

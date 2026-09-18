@@ -61,6 +61,7 @@ function montarMenu() {
       { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => enviar('guardar') },
       { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => enviar('guardarComo') },
       { type: 'separator' },
+      { label: 'Renombrar proyecto…', click: () => enviar('renombrar') },   // el archivo se sigue llamando igual (18-09-2026)
       { label: 'Cerrar proyecto', accelerator: 'CmdOrCtrl+W', click: () => enviar('cerrar') },
       ...(mac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Salir' }]) ] },
     { label: 'Edición', submenu: [
@@ -136,26 +137,18 @@ ipcMain.handle('file:open', async (event, { filters, binario }) => {
   return { path: p, name: path.basename(p), content: await leer(p, binario) };
 });
 
-/* Nuevo proyecto (ClapCraft): dónde se guarda y el archivo que lo recibe. La carpeta de partida es ~/Documents/ClapCraft;
-   el renderer recuerda la última elegida. `proyecto:crear` no pisa nada: si ya hay un archivo con ese nombre, «Nombre 2». */
-const os = require('os');
-const casa = p => p && p.startsWith(os.homedir()) ? '~' + p.slice(os.homedir().length) : p;
-ipcMain.handle('proyecto:carpeta', async () => { const ruta = path.join(app.getPath('documents'), 'ClapCraft'); return { ruta, texto: casa(ruta) }; });
-ipcMain.handle('proyecto:elegirCarpeta', async (event, { actual } = {}) => {
+/* Nuevo proyecto (ClapCraft, Leo 18-09-2026): «Crear proyecto» pide el archivo con el diálogo de guardar del sistema, con el
+   nombre que propone la página («anio-nuevo.clapcraft») en la última carpeta usada, o en ~/Documents/ClapCraft si existe, o
+   en Documentos. Solo elige: el archivo lo escribe después la página, como el autoguardado. */
+const esCarpeta = p => fs.stat(p).then(s => s.isDirectory(), () => false);
+ipcMain.handle('proyecto:elegirArchivo', async (event, { nombre, carpeta, filters } = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const { canceled, filePaths } = await dialog.showOpenDialog(win, { title: 'Dónde se guarda el proyecto', defaultPath: actual || app.getPath('documents'),
-    properties: ['openDirectory', 'createDirectory'], buttonLabel: 'Elegir carpeta' });
-  if (canceled || !filePaths[0]) return null;
-  return { ruta: filePaths[0], texto: casa(filePaths[0]) };
-});
-ipcMain.handle('proyecto:crear', async (event, { carpeta, nombre, content }) => {
-  await fs.mkdir(carpeta, { recursive: true });
-  const base = String(nombre || 'Proyecto').replace(/[\\/:*?"<>|]/g, '-').trim() || 'Proyecto';
-  for (let n = 1; n < 1000; n++) {
-    const p = path.join(carpeta, (n === 1 ? base : base + ' ' + n) + '.clapcraft');
-    try { await fs.writeFile(p, Buffer.from(content), { flag: 'wx' }); return p; }
-    catch (err) { if (err.code !== 'EEXIST') throw err; }
-  }
-  throw new Error('No hay un nombre libre en ' + carpeta);
+  const propia = path.join(app.getPath('documents'), 'ClapCraft');
+  const dir = carpeta && await esCarpeta(carpeta) ? carpeta : await esCarpeta(propia) ? propia : app.getPath('documents');
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Crear proyecto', message: 'Elige el nombre del archivo y dónde se guarda el proyecto', buttonLabel: 'Crear',
+    nameFieldLabel: 'Archivo:', defaultPath: path.join(dir, path.basename(String(nombre || 'proyecto.clapcraft'))), filters,
+    properties: ['createDirectory', 'showOverwriteConfirmation'], showsTagField: false });
+  return canceled || !filePath ? null : filePath;
 });
 ipcMain.handle('app:version', () => app.getVersion());
