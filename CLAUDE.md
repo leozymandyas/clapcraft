@@ -924,7 +924,7 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   el archivo de otro proyecto abierto), cerrar todo y abrir un reciente, y que ese proyecto se sigue guardando (Leo, 15-09-2026: «ve que el guardado siga
   funcionando»): notas y texto de sección llegan solos a su archivo, cerrar justo tras un cambio lo escribe, reabrir desde
   recientes no reescribe, crear otro proyecto escribe lo pendiente del anterior y, al volver a arrancar, los dos siguen
-  vinculados sin reescribirse (78 comprobaciones en la 1.1.33, ya con una ventana por proyecto: «Abrir…» y «Nuevo proyecto» en otra
+  vinculados sin reescribirse (86 en la 1.1.55, con Electron sabiendo el archivo de cada ventana al arrancar, «Guardar como…» rechazando el de otra ventana, un cambio durante una escritura y que no queden temporales; 78 en la 1.1.33, ya con una ventana por proyecto: «Abrir…» y «Nuevo proyecto» en otra
   ventana, abrir dos veces el mismo archivo no abre otra, `ventanas.json`, cerrar ventanas y las pestañas; antes 71, con renombrar el proyecto sin tocar su archivo, su contenedor
   detrás y exportar a Markdown; «guarda la nota nueva creada en el segmento expandido» falla alguna vez por los tiempos del
   arrastre sintético: repetir antes de buscar un fallo). En el panel de navegador la tecla Enter de la herramienta no llega al campo: se prueba con
@@ -982,6 +982,53 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   Sin File System Access ni Electron: descarga, sin autoguardado al archivo. «Nuevo» desvincula. El
   indicador `#estadoGuardado` (botón, clic = Guardar) ya no enseña el nombre del archivo (Leo, 15-09-2026): «✓»
   (escrito), «●» (cambios sin escribir) o «● Reconectar»; el nombre y la ruta van en su `title`.
+  **Revisión del guardado** (1.1.55, Leo: «verifica con un agent team que el guardado de archivos funcione»; cuatro agentes: las
+  pruebas, un estrés en Electron con userData temporal —sus guiones en el scratchpad de esa sesión— y la revisión de la página y
+  del proceso principal). Lo que se corrigió:
+  · **Se escribe de una vez** (`claude/atomico.js`, `test/atomico.test.js`): un temporal junto al archivo, `fsync` y `rename`
+    (con los permisos que tenía y a través de un enlace simbólico), para la app (`file:write`, `file:save`), `ventanas.json`,
+    `puente.json` y el servidor de Claude. `fs.writeFile` vaciaba el archivo antes de escribir: salir con Cmd+Q a mitad dejaba un
+    proyecto grande cortado (reproducido 3 de 3 con 1,8 MB), y quien lo leyera mientras (Claude, iCloud) lo veía roto.
+  · **Salir espera** (`before-quit` en main.js): pide a cada ventana `app:vaciar` y la página contesta tras `escribirTodo()` (máximo
+    20 s). Antes solo el botón rojo pasaba por la página.
+  · **Una escritura en marcha ya no anula la siguiente**: `escribirArchivo` guarda su promesa (`est.enCurso`) y, si llega otra, la
+    espera y vuelve a mirar. Antes devolvía false tras quitar el autoguardado pendiente: Cmd+S o un cambio durante una escritura se
+    quedaban sin escribir, y cerrar decía «No se pudo escribir» y, aceptando, perdía lo último.
+  · **Si falla, se reintenta solo** (5 s, 10 s… hasta un minuto; el aviso sale una vez) y el indicador dice «Sin escribir» (en
+    Electron; «Reconectar» queda para el permiso del navegador).
+  · **No cabe en este equipo** (el localStorage del origen `file://`, ~52 millones de caracteres para todas las ventanas): la copia
+    local se quedaba vieja pero la firma seguía siendo la del archivo, así que al volver a arrancar se tomaba por lo último y
+    **pisaba el archivo** (el estrés vio uno de 39 MB quedarse en un proyecto vacío de 360 bytes). Ahora, con archivo, `persistir`
+    quita la copia vieja y `pedido()` abre la ventana desde el archivo (`vista.archivos[id].ruta`).
+  · **«Cambió fuera»**: mientras se pregunta (`preguntarSinEscribir`, `est.bloqueado`) no se escribe (el autoguardado pisaba lo de
+    fuera antes de elegir); `onArchivoCambiado` espera a la escritura en marcha en lugar de ignorar el aviso; y el vigía
+    (electron/claude.js) calla solo lo que la app acaba de escribir **por su huella** (`atomico.huella`: disco, inodo, tamaño y
+    fecha), no todo lo que llegue en 2 s (un cambio de iCloud en ese rato se perdía).
+  · **Electron sabe el archivo de cada ventana desde el arranque**: `retomarArchivos` llama a `informarVentana()` en cuanto lo
+    retoma. Antes, hasta el primer cambio, no se vigilaba, Claude lo tomaba por cerrado y **escribía en él con la app abierta** (y
+    la app lo pisaba después), y abrirlo desde el Finder abría otra ventana con el mismo archivo.
+  · **«Guardar como…» no acepta el archivo de otra ventana** (`file:save` lanza `ABIERTO`) y sus errores se avisan (antes EACCES
+    se tragaba). Las rutas se comparan con `atomico.mismoArchivo` (misma identidad: mayúsculas, enlaces) en main.js y en el
+    servidor, y el servidor no escribe si el archivo cambió mientras trabajaba (otra sesión de Claude).
+  · **Lo que se escribe en sitio o en el panel flotante no se pierde al cerrar**: `volcarTodo()` saca el foco del campo (un nombre
+    en sitio se guarda al salir de él) y vacía el `repintarTablero` de 150 ms del panel flotante antes de cerrar, recargar o salir.
+  · **Renombrado justo antes de escribir**: `file:write` pasa por `claude.antesDeEscribir`: si el archivo ya no está y se le
+    encuentra por su inodo, la ventana pasa a él y la escritura se repite ahí (`MOVIDO`); antes se volvía a crear con el nombre
+    viejo. Si no se le encuentra (borrado, o movido a donde no se busca), `archivo:perdido`: se avisa y se vuelve a escribir entero
+    en su sitio (antes seguía con ✓ sin archivo). Los inodos se comparan con su disco (`dev`).
+  · **Abrir apunta lo que tiene el archivo** (no el proyecto ya montado): lo que cambie al montar (la papelera purgada, el documento
+    de un esquema) se escribe; `migrado`, una marca que se pone sola, no cuenta (`sinMarcas` en `mismoContenido` y `firmaDe`).
+  · El sello de los enlaces llega también a la copia local, «Guardar» sin haber podido leer el archivo al arrancar mira antes si
+    cambió fuera (`releerAntesDeEscribir`), y la app instalada es una sola (`requestSingleInstanceLock`, solo empaquetada).
+  · Con la escritura de una vez: un archivo de solo lectura no se escribe aunque la carpeta deje (el `rename` lo habría
+    sustituido; `sePuedeEscribir`), los temporales de una escritura cortada (la app matada a mitad) se quitan al volver a abrir
+    ese proyecto si su proceso ya no vive (`atomico.limpiar`, desde `ventana:proyecto`), y los errores se dicen en palabras
+    (`motivoError`: permiso, disco lleno, carpeta que no existe; sin la ruta del temporal).
+  Tras corregir, el agente de estrés repitió sus escenarios: todos los que fallaban pasan (también Cmd+Q con un proyecto de 16 MB a
+  mitad de la escritura, y dos ventanas que no caben juntas en el localStorage), sin regresiones.
+  Queda: lo que el servidor escribe con `rename` estrena inodo, así que si Claude cambia un proyecto cerrado y luego se renombra
+  el archivo antes de volver a abrirlo, «Recientes» no lo encuentra por su identidad (no se pierde nada: se abre con Abrir…); y
+  las etiquetas del Finder (atributos extendidos) no pasan al archivo nuevo.
 - `js/claquedraw/texto.js`: la vista **Texto**. Encima de la cinta del editor va **la tira de una
   trama**: sus nodos dibujados como en el tablero (mismos tokens: `.dot`, cuadro beige, rombo morado,
   cortado, fuera de escena) con el título encima, y a la izquierda el chip de la trama.
@@ -1823,8 +1870,8 @@ puedas acceder al contenido de la aplicación, tanto texto y muy principalmente 
   (a la ventana del proyecto: `claude:peticion` → `claude:respuesta`) y `abrir` (abre el archivo con `abrirRuta` y espera su
   ventana). Menú **Claude**: «Permitir que Claude acceda» (casilla, en `claude.json`; `alternar`) y «Conectar con Claude…»
   (deja `clapcraft.plugin` en Descargas con `claude/plugin.js` y ofrece copiar el `claude mcp add …` para Claude Code). **Vigila
-  el archivo de cada ventana** (`fs.watch` de su carpeta) y avisa `archivo:cambiado`, salvo lo que la app escribió hace menos de
-  2 s (`escrito(ruta)` en `file:write` y `file:save`).
+  el archivo de cada ventana** (`fs.watch` de su carpeta) y avisa `archivo:cambiado`, salvo lo que la propia app acaba de
+  escribir (`escrito(ruta)` en `file:write` y `file:save`: desde la 1.1.55 por su huella, no por los 2 s de antes).
 - **En la ventana** (app.js, «Claude»): `atenderClaude` vuelca tablero y editor, ejecuta con `ctx.docs = docs()` y, si cambió
   algo, `ponerAlDia`: el esquema montado se recarga del guardado (`modelo.cargar` + `T.tablero.render()`, que lo registra en su
   Deshacer como un paso), el editor relee su nota (`C.texto.recargar`), se persiste y se redibuja; el aviso («Claude cambió el

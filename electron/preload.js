@@ -43,5 +43,12 @@ contextBridge.exposeInMainWorld('editorAPI', {
   archivoId: ruta => ipcRenderer.invoke('archivo:id', String(ruta || '')),
   buscarArchivo: q => ipcRenderer.invoke('archivo:buscar', q || {}),
   hayProyecto: q => ipcRenderer.invoke('proyecto:hay', q || {}),
-  onArchivoRenombrado: cb => ipcRenderer.on('archivo:renombrado', (_e, x) => cb(x))
+  onArchivoRenombrado: cb => ipcRenderer.on('archivo:renombrado', (_e, x) => cb(x)),
+  /* el archivo de esta ventana ya no está en su sitio y no se encontró renombrado (1.1.55): se vuelve a crear al guardar */
+  onArchivoPerdido: cb => ipcRenderer.on('archivo:perdido', (_e, ruta) => cb(ruta)),
+  /* salir de la app (1.1.55): Electron pide a la ventana que escriba lo pendiente y espera su respuesta */
+  onVaciar: cb => ipcRenderer.on('app:vaciar', async (_e, n) => {
+    let ok = false; try { ok = await cb(); } catch (_) {}
+    ipcRenderer.send('app:vaciado', n, !!ok);
+  })
 });

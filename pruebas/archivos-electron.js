@@ -405,6 +405,22 @@ app.whenReady().then(async () => {
     const tras2 = [await jsEn(primera, `return Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`), await jsEn(segunda, `return Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`)];
     comprobar('cada ventana vuelve con su proyecto', tras2[0] === 'Sin título 1' && tras2[1] === 'Copia del guion', JSON.stringify(tras2));
     comprobar('las dos siguen vinculadas y guardadas', (await jsEn(primera, `return document.getElementById('estadoGuardado').className;`)).includes('ok') && (await indicador()).includes('ok'), await indicador());
+    /* 1.1.55: Electron sabe el archivo de cada ventana en cuanto arranca, sin esperar a un cambio (si no, no lo vigilaba y Claude
+       lo tomaba por cerrado y escribía en él) */
+    const puente = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'puente.json'), 'utf8'));
+    comprobar('al volver a arrancar, Electron sabe el archivo de cada ventana sin tocar nada', [ARCHIVO, COPIA].every(r => (puente.abiertos || []).some(x => x.ruta === r)), JSON.stringify(puente.abiertos));
+    /* 1.1.55: «Guardar como…» sobre el archivo de otra ventana se rechaza (las dos escribirían en él) */
+    const bytesArchivo = fs.readFileSync(ARCHIVO);
+    rutaFija = ARCHIVO;
+    await js(`await Claquedraw.app.guardarComo(); await W(300);`);
+    comprobar('«Guardar como…» no acepta el archivo de otra ventana', fs.readFileSync(ARCHIVO).equals(bytesArchivo) && await js(`return Claquedraw.app.archivo().ruta;`) === COPIA);
+    /* 1.1.55: un cambio que llega mientras se escribe también se escribe (antes la segunda escritura se descartaba) */
+    await js(`const g = Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()), c = g.documentos.contenedores.find(x => !x.oculto);
+      c.nombre = 'En vuelo 1'; const p1 = Claquedraw.app.guardar();
+      c.nombre = 'En vuelo 2'; await Claquedraw.app.guardar(); await p1; return true;`);
+    comprobar('un cambio mientras se escribe también llega al archivo', /En vuelo 2/.test(leerArchivo(COPIA).texto) && !(await indicador()).includes('sucio'), await indicador());
+    const temporales = fs.readdirSync(TMP).filter(f => f.endsWith('.tmp'));
+    comprobar('escribir de una vez no deja temporales', !temporales.length, temporales.join(', '));
     await js(`${NOMBRAR} const G = Claquedraw.gestor, d = G.documentos(); Claquedraw.app.vista('documentos'); G.abrirSub(d.datos.contenedores[0].subs[0].id); await W(300);
       document.querySelector('#gdMain [data-clave="bandeja"] [data-gd-crear-nota]').click(); await W(200);
       return JSON.stringify(await nombrarNueva('Tras reabrir'));`).then(v => ventanasNuevas.push(JSON.parse(v)));

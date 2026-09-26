@@ -19,6 +19,7 @@ const net = require('net');
 const zlib = require('zlib');
 const { execFile } = require('child_process');
 const { buscarArchivos, buscarPorEnlace } = require('./archivos');
+const atomico = require('./atomico');                          // escribir de una vez, y el mismo archivo aunque la ruta se escriba distinto (1.1.55)
 
 const RAIZ = path.join(__dirname, '..');
 ['js/tramas/modelo.js', 'js/claquedraw/biblioteca.js', 'js/claquedraw/documentos.js', 'js/claquedraw/plantillas.js', 'js/claquedraw/guion.js',
@@ -90,12 +91,11 @@ function leerProyecto(ruta) {
   if (!datos || datos.app !== 'clapcraft' || !datos.documentos || typeof datos.documentos !== 'object') throw new Error(bonito(ruta) + ' no es un proyecto de ClapCraft');
   return datos;
 }
-/* Escribe de una vez: a un temporal junto al archivo y se renombra (nunca queda a medias). */
+/* Escribe de una vez: a un temporal junto al archivo, fsync y se renombra (nunca queda a medias; un enlace simbólico sigue siéndolo
+   y los permisos se conservan: claude/atomico.js). */
 function escribirProyecto(ruta, datos) {
   const bytes = zlib.gzipSync(Buffer.from(JSON.stringify({ app: 'clapcraft', formato: 2, nombre: datos.nombre, documentos: datos.documentos }), 'utf8'));
-  const tmp = path.join(path.dirname(ruta), '.' + path.basename(ruta) + '.claude-' + process.pid + '.tmp');
-  fs.writeFileSync(tmp, bytes);
-  fs.renameSync(tmp, ruta);
+  atomico.escribirSync(ruta, bytes);
 }
 const nombreDentro = ruta => { try { const d = leerProyecto(ruta); return typeof d.nombre === 'string' && d.nombre.trim() ? d.nombre.trim() : null; } catch (_) { return null; } };
 /* Los .clapcraft del equipo: claude/archivos.js (Spotlight en macOS y las carpetas de siempre). */
@@ -144,7 +144,7 @@ async function resolver(arg) {
   }
   if (/[\\/]/.test(a) || /\.clapcraft$/i.test(a)) {
     const ruta = path.resolve(casa(a));
-    const x = app.abiertos.find(y => y.ruta && path.resolve(y.ruta) === ruta);
+    const x = app.abiertos.find(y => y.ruta && atomico.mismoArchivo(y.ruta, ruta));
     if (x) return enApp(x);
     if (!fs.existsSync(ruta)) throw new Error('No existe ' + bonito(ruta));
     return { tipo: 'archivo', ruta, app };
@@ -174,7 +174,7 @@ async function porEnlace(texto, app) {
   const abiertos = app.abiertos.map(y => ({ y, r: E.rangoNombre(s, { ruta: y.ruta, nombre: y.nombre, enlaces: y.enlaces || [] }) })).filter(z => z.r !== null)
     .sort((a, b) => a.r - b.r || (b.y.id === app.delante) - (a.y.id === app.delante));
   const archivos = (await buscarPorEnlace(s, (app.recientes || []).map(r => r.ruta).filter(Boolean)))
-    .filter(f => !app.abiertos.some(y => y.ruta && path.resolve(y.ruta) === path.resolve(f.ruta)));
+    .filter(f => !app.abiertos.some(y => y.ruta && atomico.mismoArchivo(y.ruta, f.ruta)));
   const mejor = Math.min(abiertos.length ? abiertos[0].r : 9, archivos.length ? archivos[0].rango : 9);
   if (abiertos.length && abiertos[0].r === mejor) return { tipo: 'vivo', proyecto: abiertos[0].y, app };
   const iguales = archivos.filter(f => f.rango === mejor);
@@ -198,11 +198,12 @@ async function enVivo(dest, nombre, args, espera) {
   return r.resultado || { ok: false, error: 'Sin respuesta' };
 }
 async function enArchivo(ruta, nombre, args, app) {
+  const huella = atomico.huella(ruta);                          // para no pisar lo que otro escriba mientras (1.1.55)
   const datos = leerProyecto(ruta);
   const docs = new C.Documentos(datos.documentos);
   let cambio = false;
   const ctx = { docs, origen, proyecto: { nombre: datos.nombre || path.basename(ruta, '.clapcraft'), ruta: bonito(ruta), vivo: false }, cambio: () => { cambio = true; } };
-  const abiertoSinPuente = app && app.p && !app.p.activo && (app.p.abiertos || []).some(x => x.ruta && path.resolve(x.ruta) === ruta);
+  const abiertoSinPuente = app && app.p && !app.p.activo && (app.p.abiertos || []).some(x => x.ruta && atomico.mismoArchivo(x.ruta, ruta));
   const meta = H.LISTA.find(t => t.name === nombre);
   if (abiertoSinPuente && meta && !(meta.annotations && meta.annotations.readOnlyHint))
     return { ok: false, error: 'Ese proyecto está abierto en ClapCraft y la conexión con Claude está apagada: enciéndela en el menú Claude › Permitir que Claude acceda (o cierra el proyecto) y vuelve a intentarlo.' };
@@ -210,10 +211,12 @@ async function enArchivo(ruta, nombre, args, app) {
   if (r.ok && cambio) {
     /* justo antes de escribir: si la app lo acaba de abrir, lo hace ella (lo de aquí se tira: aún no está escrito) */
     const ahora = await estadoApp();
-    const abierto = ahora.abiertos.find(x => x.ruta && path.resolve(x.ruta) === ruta);
+    const abierto = ahora.abiertos.find(x => x.ruta && atomico.mismoArchivo(x.ruta, ruta));
     if (abierto && ahora.p && ahora.p.activo) { const v = await enVivo({ app: ahora, proyecto: abierto }, nombre, args); if (v) return v; }
     else if (abierto) return { ok: false, error: 'ClapCraft acaba de abrir ese proyecto: vuelve a intentarlo' };
     C.enlaces.sellar(docs.datos, C.enlaces.proyectoDe({ ruta }));   // el nombre con que se hacen sus enlaces (1.1.52)
+    /* otro (otra sesión de Claude, iCloud) lo cambió mientras se trabajaba: no se pisa */
+    if (atomico.huella(ruta) !== huella) return { ok: false, error: bonito(ruta) + ' cambió mientras se trabajaba en él (¿otra sesión de Claude?): vuelve a intentarlo.' };
     escribirProyecto(ruta, { nombre: ctx.proyecto.nombre, documentos: docs.datos });
     r.texto = (r.texto || '') + '\n(Escrito en ' + bonito(ruta) + '. ClapCraft lo verá al abrirlo.)';
   }

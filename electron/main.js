@@ -11,6 +11,7 @@ const fs = require('fs/promises');
    el botón rojo se lo pregunta antes a la página (escribe su archivo o pide confirmación si no tiene), y salir de la app no
    pregunta ni las olvida. */
 const fsSync = require('fs');
+const atomico = require('../claude/atomico');                 // escribir de una vez: temporal, fsync y renombrar (1.1.55)
 const ventanas = new Map();   // webContents.id → { win, proyecto, ruta, nuevo, cerrable }
 let saliendo = false, listo = false, pendientes = [];
 let claude = null;                                             // el puente con Claude (electron/claude.js), desde que la app está lista
@@ -18,7 +19,7 @@ const SESION = () => path.join(app.getPath('userData'), 'ventanas.json');
 function guardarSesion() {
   if (saliendo) return;                                  // saliendo de la app, las ventanas que se cierran no se olvidan
   const lista = [...ventanas.values()].filter(v => v.proyecto && !v.win.isDestroyed()).map(v => ({ p: v.proyecto, bounds: v.win.getBounds() }));
-  try { fsSync.writeFileSync(SESION(), JSON.stringify(lista)); } catch (_) {}
+  try { atomico.escribirSync(SESION(), JSON.stringify(lista)); } catch (_) {}
 }
 function leerSesion() {
   try { const l = JSON.parse(fsSync.readFileSync(SESION(), 'utf8')); return Array.isArray(l) ? l.filter(x => x && typeof x.p === 'string') : []; } catch (_) { return []; }
@@ -68,7 +69,27 @@ function createWindow(q, bounds) {
   });
   return win;
 }
-app.on('before-quit', () => { guardarSesion(); saliendo = true; });
+/* **Salir espera a que cada ventana escriba lo suyo** (1.1.55): se le pide (`app:vaciar`) y se sale cuando contestan todas, o a los
+   20 s. Antes se salía a mitad de la escritura: el botón rojo pasa por la página, pero Cmd+Q no, y un proyecto grande quedaba
+   cortado en el disco. */
+let vaciado = false;
+const esperasVaciar = new Map();
+ipcMain.on('app:vaciado', (_e, n) => { const f = esperasVaciar.get(n); if (f) { esperasVaciar.delete(n); f(); } });
+function vaciarVentanas() {
+  const vivas = [...ventanas.values()].filter(v => v.proyecto && !v.win.isDestroyed() && !v.win.webContents.isLoading() && !v.win.webContents.isCrashed());
+  return Promise.all(vivas.map((v, i) => new Promise(res => {
+    const n = Date.now() + '-' + i, t = setTimeout(() => { esperasVaciar.delete(n); res(); }, 20000);
+    esperasVaciar.set(n, () => { clearTimeout(t); res(); });
+    try { v.win.webContents.send('app:vaciar', n); } catch (_) { clearTimeout(t); esperasVaciar.delete(n); res(); }
+  })));
+}
+app.on('before-quit', e => {
+  guardarSesion(); saliendo = true;
+  if (vaciado) return;
+  e.preventDefault();
+  vaciado = true;
+  vaciarVentanas().then(() => app.quit(), () => app.quit());
+});
 
 /* Abrir un .clapcraft desde el Finder (doble clic o «Abrir con»): si ya tiene ventana, esa; si hay una ventana sin proyecto
    (en «Sin proyectos»), ahí; si no, una nueva. macOS avisa con open-file, a veces antes de que la app esté lista; Windows y
@@ -76,13 +97,21 @@ app.on('before-quit', () => { guardarSesion(); saliendo = true; });
 function abrirRuta(p) {
   if (!p || !/\.clapcraft$/i.test(p)) return;
   if (!listo) { pendientes.push(p); return; }
-  const ya = [...ventanas.values()].find(v => v.ruta === p);
+  const ya = [...ventanas.values()].find(v => atomico.mismoArchivo(v.ruta, p));
   if (ya) { enfocar(ya.win); return; }
   const vacia = [...ventanas.values()].find(v => !v.proyecto && !v.nuevo && !v.win.webContents.isLoading());
   if (vacia) { vacia.win.webContents.send('abrir-ruta', p); enfocar(vacia.win); return; }
   createWindow({ ruta: p }, cascada());
 }
 app.on('open-file', (e, p) => { e.preventDefault(); abrirRuta(p); });
+/* **Una sola ClapCraft a la vez** (1.1.55, solo la instalada: en desarrollo convive con ella): una segunda (`open -n`) abría las
+   mismas ventanas con los mismos archivos y las dos escribían en ellos. La segunda se va y la primera se trae delante. */
+if (app.isPackaged && !app.requestSingleInstanceLock()) { app.exit(0); return; }
+app.on('second-instance', (_e, argv) => {
+  const r = (argv || []).find(a => /\.clapcraft$/i.test(a));
+  if (r) { abrirRuta(r); return; }
+  const w = [...ventanas.values()].map(v => v.win).find(x => !x.isDestroyed()); if (w) enfocar(w);
+});
 
 /* **Enlaces clapcraft://** (1.1.52): el sistema le pasa a ClapCraft los que se abren fuera (un clic en uno que escribió Claude, si
    su app los deja abrir); van a la ventana de su proyecto —abriéndolo si hace falta— y ahí, a su sitio (electron/claude.js). El
@@ -100,13 +129,14 @@ ipcMain.handle('portapapeles:escribir', (_e, t) => { clipboard.writeText(String(
 ipcMain.handle('portapapeles:leer', () => clipboard.readText());
 ipcMain.on('enlace:ir', (_e, url) => abrirEnlace(String(url || '')));
 /* cuando el archivo de un proyecto cambia de nombre (1.1.52, electron/claude.js) */
-ipcMain.handle('archivo:id', async (_e, ruta) => { try { const st = await fs.stat(ruta); return { ino: st.ino }; } catch (_) { return null; } });
-ipcMain.handle('archivo:buscar', async (_e, q) => (claude && q ? claude.buscarPorInodo(q.ruta, q.ino) : null));
+ipcMain.handle('archivo:id', async (_e, ruta) => { try { const st = await fs.stat(ruta); return { ino: st.ino, dev: st.dev }; } catch (_) { return null; } });
+ipcMain.handle('archivo:buscar', async (_e, q) => (claude && q ? claude.buscarPorInodo(q.ruta, q.ino, q.dev) : null));
 ipcMain.handle('proyecto:hay', async (_e, q) => (claude && q ? claude.hayProyecto(q.slug, q.salvo, q.rutas) : false));
 
 ipcMain.on('ventana:proyecto', (e, info) => {
   const v = ventanas.get(e.sender.id); if (!v) return;
   v.proyecto = (info && info.id) || null; v.ruta = (info && info.ruta) || null; v.nuevo = !!(info && info.nuevo);
+  if (v.ruta) atomico.limpiar(v.ruta);                           // lo que dejó una escritura cortada (1.1.55)
   v.nombre = (info && info.nombre) || null;
   v.enlaces = Array.isArray(info && info.enlaces) ? info.enlaces.filter(x => typeof x === 'string').slice(0, 24) : [];   // cómo se le llama en sus enlaces (1.1.52)
   guardarSesion();
@@ -116,7 +146,7 @@ ipcMain.on('ventana:proyecto', (e, info) => {
 ipcMain.handle('ventana:abrir', (e, q) => {
   q = q || {};
   const v0 = ventanas.get(e.sender.id);
-  const ya = [...ventanas.values()].find(v => v !== v0 && ((q.p && v.proyecto === q.p) || (q.ruta && v.ruta === q.ruta)));
+  const ya = [...ventanas.values()].find(v => v !== v0 && ((q.p && v.proyecto === q.p) || (q.ruta && atomico.mismoArchivo(v.ruta, q.ruta))));
   if (ya) { enfocar(ya.win); return { ya: true }; }
   const limpio = {}; ['p', 'ruta', 'nuevo', 'h', 't'].forEach(k => { if (q[k]) limpio[k] = String(q[k]); });
   createWindow(limpio, cascada());
@@ -125,8 +155,8 @@ ipcMain.handle('ventana:abrir', (e, q) => {
 /* ¿quién tiene ese archivo? 'aqui', 'otra' (y se trae delante, si `enfocarla`) o null */
 ipcMain.handle('ventana:buscarRuta', (e, { ruta, enfocarla } = {}) => {
   const v0 = ventanas.get(e.sender.id);
-  if (v0 && ruta && v0.ruta === ruta) return 'aqui';
-  const ya = ruta && [...ventanas.values()].find(v => v !== v0 && v.ruta === ruta);
+  if (v0 && ruta && atomico.mismoArchivo(v0.ruta, ruta)) return 'aqui';
+  const ya = ruta && [...ventanas.values()].find(v => v !== v0 && atomico.mismoArchivo(v.ruta, ruta));
   if (!ya) return null;
   if (enfocarla !== false) enfocar(ya.win);
   return 'otra';
@@ -212,13 +242,15 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 
 /* El contenido puede ser texto (tramas.html) o bytes (los .clapcraft van comprimidos con gzip); al leer,
    `binario` devuelve los bytes tal cual. */
-const escribir = (p, content) => typeof content === 'string' ? fs.writeFile(p, content, 'utf8') : fs.writeFile(p, Buffer.from(content));
+const escribir = (p, content) => atomico.escribir(p, typeof content === 'string' ? content : Buffer.from(content));   // de una vez (claude/atomico.js)
 const leer = (p, binario) => binario ? fs.readFile(p).then(b => new Uint8Array(b)) : fs.readFile(p, 'utf8');
 ipcMain.handle('file:save', async (event, { defaultPath, content, filters }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const { canceled, filePath } = await dialog.showSaveDialog(win, { defaultPath, filters });
   if (canceled || !filePath) return null;
-  if (claude) claude.escrito(filePath);
+  /* el archivo de otro proyecto abierto no vale: las dos ventanas escribirían en él y ganaría la última (1.1.55) */
+  const v0 = ventanas.get(event.sender.id);
+  if ([...ventanas.values()].some(v => v !== v0 && !v.win.isDestroyed() && atomico.mismoArchivo(v.ruta, filePath))) throw new Error('ABIERTO');
   await escribir(filePath, content);
   if (claude) claude.escrito(filePath);
   return filePath;
@@ -226,9 +258,11 @@ ipcMain.handle('file:save', async (event, { defaultPath, content, filters }) => 
 
 /* Escritura y lectura sin diálogo, para el autoguardado de Claquedraw en el archivo ya elegido */
 ipcMain.handle('file:write', async (event, { path: p, content }) => {
-  if (claude) claude.escrito(p);                                 // lo que escribe la app no cuenta como cambio de fuera
+  /* el archivo de la ventana se acaba de renombrar (antes de que el vigía lo viera): se sigue y la página lo reintenta ahí; si no,
+     se volvía a crear con el nombre viejo y el renombrado se quedaba sin los cambios (1.1.55) */
+  if (claude) await claude.antesDeEscribir(event.sender.id, p);
   await escribir(p, content);
-  if (claude) claude.escrito(p);
+  if (claude) claude.escrito(p);                                 // lo que escribe la app no cuenta como cambio de fuera
   return p;
 });
 ipcMain.handle('file:read', async (event, { path: p, binario }) => leer(p, binario));

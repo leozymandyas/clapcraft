@@ -111,7 +111,13 @@
   let localOk = true;
   function persistir() {
     const g = biblioteca.guion(abiertoId);
-    if (g) { localOk = escribirJSON(PREFIJO_PROYECTO + g.id, g); escribirJSON(CLAVE_ULTIMO, g.id); }
+    if (g) {
+      localOk = escribirJSON(PREFIJO_PROYECTO + g.id, g); escribirJSON(CLAVE_ULTIMO, g.id);
+      /* **No cabe en este equipo** (1.1.55): la copia local se quedaría vieja, y al volver a arrancar se tomaba por lo último y
+         pisaba el archivo (su firma seguía siendo la del archivo). Con archivo, la copia vieja se quita: al volver, se lee del
+         archivo (`pedido`). Sin archivo se queda, que es lo único que hay. */
+      if (!localOk && estado(g.id).archivo) { try { localStorage.removeItem(PREFIJO_PROYECTO + g.id); } catch (_) {} }
+    }
     if (abiertoId) programarEscritura(abiertoId);
     informarVentana();
     indicador(); renderPestanas(); renderChipEsquema();       // el título del esquema sigue a renombres y enlaces
@@ -296,6 +302,20 @@
   /* lo escrito en el editor **y en la ventana de una nota** (1.1.54), a sus datos: antes de guardar, de Claude, de cambiar de
      pestaña o de cerrar */
   function volcarTexto() { C.texto.volcar(); if (C.gestor && C.gestor.guardarPanel) C.gestor.guardarPanel(); }
+  /* **Todo lo pendiente, a los documentos** (1.1.55), antes de cerrar o salir: un nombre que se escribe en sitio (un nodo, una
+     nota, una pestaña: se guardan al salir del campo, y cerrando la ventana no se salía), lo escrito en el panel flotante (repinta
+     y guarda 150 ms después), el tablero y el editor. */
+  function volcarTodo() {
+    const a = document.activeElement;
+    if (a && a !== document.body && a.tagName !== 'IFRAME' && (a.matches('input, textarea') || a.isContentEditable)) { try { a.blur(); } catch (_) {} }
+    volcarTodoSinSalir();
+  }
+  /* lo mismo sin sacar el foco de donde se escribe */
+  function volcarTodoSinSalir() {
+    if (repintarTablero) { clearTimeout(repintarTablero); repintarTablero = null; T.tablero.render(); alCambiar(); }
+    if (temporizador) volcar();
+    volcarTexto();
+  }
   function releerEditor(id) {
     const n = id && C.texto.clave() === id && docs().nota(id); if (!n) return;
     C.texto.recargar({ titulo: n.titulo, html: n.html, characters: n.characters });
@@ -1082,8 +1102,9 @@
     const clave = a.ruta || 'h:' + a.nombre;
     const lista = recientes(), previo = lista.find(r => r.clave === clave);
     const tono = tonos[id] || (previo && previo.tono) || TONOS_RECIENTE[[...g.nombre].reduce((n, c) => n + c.charCodeAt(0), 0) % TONOS_RECIENTE.length];
-    const ino = (vista.archivos[id] || {}).ino || (previo && previo.ino) || null;   // su identidad: si se renombra con el proyecto cerrado, se le encuentra (1.1.53)
-    const r = Object.assign({ clave, nombre: g.nombre, ruta: a.ruta || null, tono, estructura: C.plantillas.estructura(g.documentos), visto: Date.now() }, ino ? { ino } : {});
+    const va = vista.archivos[id] || {}, ino = va.ino || (previo && previo.ino) || null;   // su identidad: si se renombra con el proyecto cerrado, se le encuentra (1.1.53)
+    const dev = va.ino ? va.dev : previo && previo.dev;       // y su disco (1.1.55)
+    const r = Object.assign({ clave, nombre: g.nombre, ruta: a.ruta || null, tono, estructura: C.plantillas.estructura(g.documentos), visto: Date.now() }, ino ? { ino } : {}, ino && dev ? { dev } : {});
     escribirJSON(CLAVE_RECIENTES, [r, ...lista.filter(x => x.clave !== clave)].slice(0, MAX_RECIENTES));
     if (a.handle) idb.set('reciente:' + clave, a.handle).catch(() => {});
   }
@@ -1099,7 +1120,7 @@
     if (r.ruta && api && api.readFile) {
       /* se renombró con el proyecto cerrado (1.1.53): se le busca por su identidad; al abrirlo, sus enlaces se ponen al día */
       let ruta = r.ruta;
-      if (r.ino && api.buscarArchivo) { try { const x = await api.buscarArchivo({ ruta, ino: r.ino }); if (x) ruta = x; } catch (_) {} }
+      if (r.ino && api.buscarArchivo) { try { const x = await api.buscarArchivo({ ruta, ino: r.ino, dev: r.dev }); if (x) ruta = x; } catch (_) {} }
       if (ruta !== r.ruta) olvidarReciente(clave);              // la entrada nueva la pone él al abrirse
       if (!await abrirRuta(ruta)) { olvidarReciente(clave); T.tablero.avisar('«' + r.nombre + '» ya no está en ' + r.ruta); }
       return;
@@ -1129,7 +1150,7 @@
     const forzar = !!(op && op.forzar), id = abiertoId, g = biblioteca.guion(id);
     if (!g) { if (pantalla === 'nuevo') C.proyectos.descartar(); await cerrarVentana(forzar); return; }
     const est = estado(id);
-    if (temporizador) volcar(); volcarTexto();
+    volcarTodo();
     if (est.archivo) { if (!await escribirArchivo(id) && !await T.tablero.confirmar('No se pudo escribir en ' + est.archivo.nombre + '. ¿Cerrar «' + g.nombre + '» de todas formas? Se perderían los cambios.', 'Cerrar')) return; }
     else if (!esVirgen(g) && !await T.tablero.confirmar('¿Cerrar «' + g.nombre + '»? No está guardado en ningún archivo y se perderá.', 'Cerrar')) return;
     if (est.archivo) recordarReciente(id);
@@ -1168,10 +1189,13 @@
      (al abrir se normaliza; al montar un esquema el tablero vuelca sus datos a su manera): antes de escribir se mira
      si de verdad cambió; si no, no se toca el archivo (se reescribía al volver a arrancar sin haber cambiado nada,
      pasó el 15-09-2026). */
+  /* `migrado` es una marca que la app pone sola al montar (el esquema de la forma antigua ya pasó a los documentos): no es un
+     cambio, y al abrir un proyecto que no la tenía no lo reescribe (1.1.55) */
+  const sinMarcas = d => { if (d && typeof d === 'object') delete d.migrado; return d; };
   const ordenado = v => Array.isArray(v) ? v.map(ordenado) : v && typeof v === 'object' ? Object.keys(v).sort().reduce((o, k) => { o[k] = ordenado(v[k]); return o; }, {}) : v;
   function mismoContenido(a, b) {
     if (!a || !b) return false;
-    const plano = t => { const x = JSON.parse(t); if (x && x.documentos && typeof x.documentos === 'object') x.documentos = C.normalizarDocumentos(x.documentos); return JSON.stringify(ordenado(x)); };
+    const plano = t => { const x = JSON.parse(t); if (x && x.documentos && typeof x.documentos === 'object') x.documentos = sinMarcas(C.normalizarDocumentos(x.documentos)); return JSON.stringify(ordenado(x)); };
     try { return plano(a) === plano(b); } catch (_) { return false; }
   }
   const mismosBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -1203,12 +1227,15 @@
     const e = $('estadoGuardado'); if (!e) return;
     const est = estado(abiertoId), a = est.archivo;
     let texto, pista, clase = '';
-    if (!localOk) { texto = 'Sin guardar'; pista = 'No se pudo guardar en este navegador'; clase = 'sucio'; }
+    if (!localOk && !a) { texto = 'Sin guardar'; pista = 'No se pudo guardar en este navegador'; clase = 'sucio'; }
     else if (!a) { texto = ''; pista = 'Sin archivo: Guardar como… lo crea y a partir de ahí se guarda solo'; }
     /* sin el nombre del archivo (Leo): solo el estado; el nombre y la ruta van en el globo */
+    else if (a.permiso === false && a.ruta) { texto = 'Sin escribir'; pista = 'No se pudo escribir en ' + a.ruta + ' · se reintenta solo; Guardar lo intenta ya'; clase = 'sucio'; }
     else if (a.permiso === false) { texto = 'Reconectar'; pista = a.nombre + ' · pulsa Guardar para volver a escribir en el archivo'; clase = 'sucio'; }
     else if (sucio(abiertoId)) { texto = ''; pista = a.nombre + ' · cambios sin escribir (se guardan solos en un momento)'; clase = 'sucio'; }
     else { texto = ''; pista = 'Guardado en ' + (a.ruta || a.nombre); clase = 'ok'; }
+    /* con archivo, que no quepa en este equipo no es no estar guardado: el archivo es la copia (1.1.55) */
+    if (!localOk && a) pista += ' · no cabe en la copia de este equipo: el archivo es la única copia';
     e.innerHTML = (clase === 'sucio' ? '<span class="estado-punto"></span>' : clase === 'ok' ? '<svg width="13" height="13"><use href="#ic-check"></use></svg>' : '') + '<span></span>';
     e.lastElementChild.textContent = texto; e.title = pista; e.className = 'estado ' + clase;
   }
@@ -1232,33 +1259,70 @@
 
   function programarEscritura(id) {
     const est = estado(id);
-    if (!est.archivo || est.archivo.permiso === false) return;
+    if (!est.archivo || est.archivo.permiso === false || est.bloqueado) return;
     clearTimeout(est.temporizador);
     est.temporizador = setTimeout(() => escribirArchivo(id), 1000);
   }
 
-  /* Escribe el guion en su archivo si cambió. Devuelve si quedó escrito. */
+  /* Escribe el guion en su archivo si cambió. Devuelve si quedó escrito.
+     **Con otra escritura en marcha, espera a que acabe y vuelve a mirar** (1.1.55): antes devolvía false y, como ya había quitado el
+     autoguardado pendiente, lo último no se escribía hasta el siguiente cambio (y cerrar en ese momento decía «No se pudo
+     escribir»). Mientras se pregunta si cargar lo que cambió fuera (`est.bloqueado`), no se escribe: si no, el autoguardado
+     pisaba la versión de fuera antes de elegir. Si falla, se reintenta solo (5 s, 10 s… hasta un minuto) y se avisa una vez. */
   async function escribirArchivo(id) {
     const est = estado(id), g = biblioteca.guion(id);
     clearTimeout(est.temporizador); est.temporizador = null;
-    if (!est.archivo || !g || est.escribiendo) return false;
+    if (!est.archivo || !g || est.bloqueado) return false;
+    if (est.escribiendo) return est.enCurso.then(() => escribirArchivo(id));
     let contenido = serializar(g);
     if (contenido === est.ultimoEscrito || mismoContenido(contenido, est.ultimoEscrito)) { anotarEscrito(id, contenido); indicador(); renderPestanas(); return true; }
-    if (sellarEnlaces(id)) contenido = serializar(g);          // el nombre de sus enlaces va dentro (1.1.52), solo si ya se escribe
+    let sellado = false;
+    if (sellarEnlaces(id)) { contenido = serializar(g); sellado = true; }   // el nombre de sus enlaces va dentro (1.1.52), solo si ya se escribe
     est.escribiendo = true;
-    try {
-      const bytes = await empaquetar(contenido);
-      if (est.archivo.ruta && api && api.writeFile) await api.writeFile({ path: est.archivo.ruta, content: bytes });
-      else if (est.archivo.handle) await escribirHandle(est.archivo.handle, bytes);
-      else return false;
-      anotarEscrito(id, contenido); est.archivo.permiso = true;
-      return true;
-    } catch (err) {
-      console.error('ClapCraft · no se pudo escribir en ' + est.archivo.nombre, err);
-      est.archivo.permiso = false;
-      T.tablero.avisar('No se pudo escribir en ' + est.archivo.nombre + ' · pulsa Guardar para reintentar');
-      return false;
-    } finally { est.escribiendo = false; indicador(); renderPestanas(); }
+    const a = est.archivo;
+    const p = (async () => {
+      try {
+        const bytes = await empaquetar(contenido);
+        if (a.ruta && api && api.writeFile) await api.writeFile({ path: a.ruta, content: bytes });
+        else if (a.handle) await escribirHandle(a.handle, bytes);
+        else return false;
+        anotarEscrito(id, contenido); a.permiso = true;
+        if (est.fallos) { est.fallos = 0; T.tablero.avisar('Guardado otra vez en ' + a.nombre); }
+        clearTimeout(est.reintento); est.reintento = null;
+        /* el sello también a la copia de este equipo: si no, al volver a arrancar el archivo se reescribía igual (1.1.55) */
+        if (sellado && id === abiertoId && localOk) escribirJSON(PREFIJO_PROYECTO + id, g);
+        return true;
+      } catch (err) {
+        /* el archivo se renombró justo ahora (electron/claude.js lo sigue y avisa): se escribe en el nuevo en cuanto llegue */
+        if (/MOVIDO/.test(String(err && err.message))) { setTimeout(() => programarEscritura(id), 400); return false; }
+        console.error('ClapCraft · no se pudo escribir en ' + a.nombre, err);
+        a.permiso = false;
+        est.fallos = (est.fallos || 0) + 1;
+        if (est.fallos === 1) T.tablero.avisar('No se pudo escribir en ' + a.nombre + ' (' + motivoError(err && err.message) + ')' + (a.ruta ? ' · se reintenta solo; Guardar lo intenta ya' : ' · pulsa Guardar para reintentar'));
+        if (a.ruta) {
+          clearTimeout(est.reintento);
+          est.reintento = setTimeout(() => { est.reintento = null; if (est.archivo !== a || a.permiso !== false) return; a.permiso = true; escribirArchivo(id); }, Math.min(60000, 5000 * 2 ** (est.fallos - 1)));
+        }
+        return false;
+      } finally { est.escribiendo = false; indicador(); renderPestanas(); }
+    })();
+    est.enCurso = p.catch(() => false);
+    return p;
+  }
+  /* un error de escritura dicho para Leo (sin la ruta del temporal ni el nombre del método de Electron) */
+  function motivoError(m) {
+    m = String(m || '');
+    if (/EACCES|EPERM|EROFS|solo lectura/.test(m)) return 'no hay permiso para escribir en esa carpeta o en ese archivo';
+    if (/ENOSPC/.test(m)) return 'no queda espacio en el disco';
+    if (/ENOENT/.test(m)) return 'esa carpeta ya no existe';
+    return m.replace(/^Error invoking remote method '[^']*': (Error: )?/, '').replace(/[^\s,']*\.tmp'?/g, '').trim();
+  }
+  /* espera a lo que se esté escribiendo y escribe lo que falte (salir de la app, electron/main.js) */
+  async function escribirTodo() {
+    volcarTodo();
+    let ok = true;
+    for (const g of biblioteca.datos.guiones) { if (estado(g.id).archivo && !await escribirArchivo(g.id)) ok = false; }
+    return ok;
   }
 
   /* Escribe en un FileSystemFileHandle y comprueba releyendo: en algunos entornos (navegadores
@@ -1290,7 +1354,14 @@
        se elija no cambia el nombre del proyecto (Leo, 18-09-2026) */
     const contenido = serializar(g), sugerido = C.nombreArchivo(g.nombre) + '.' + EXT;
     if (api && api.saveFile) {
-      const ruta = await api.saveFile({ defaultPath: sugerido, content: await empaquetar(contenido), filters: FILTROS });
+      /* el archivo de otro proyecto abierto no vale (se pisarían: 1.1.55, electron/main.js lo rechaza) y un error se dice */
+      let ruta;
+      try { ruta = await api.saveFile({ defaultPath: sugerido, content: await empaquetar(contenido), filters: FILTROS }); }
+      catch (err) {
+        const m = String((err && err.message) || err);
+        T.tablero.avisar(/ABIERTO/.test(m) ? 'Ese archivo es el de otro proyecto abierto · elige otro nombre' : 'No se pudo guardar ahí: ' + motivoError(m));
+        return;
+      }
       if (!ruta) return;
       vincular(id, { nombre: baseDe(ruta), ruta });
       anotarEscrito(id, contenido);
@@ -1327,8 +1398,22 @@
       if (p !== 'granted') { T.tablero.avisar('Sin permiso para escribir en ' + est.archivo.nombre + ' · usa Guardar como…'); return; }
       est.archivo.permiso = true;
     }
+    /* sin haber podido leer el archivo al arrancar (el permiso del navegador, o no se leyó), antes de pisarlo se mira si cambió
+       fuera mientras tanto (1.1.55) */
+    if (est.ultimoEscrito === null && await releerAntesDeEscribir(id)) return;
     volcar(); volcarTexto();
     if (await escribirArchivo(id)) T.tablero.avisar('Guardado en ' + est.archivo.nombre);
+  }
+  async function releerAntesDeEscribir(id) {
+    const est = estado(id), a = est.archivo, g = biblioteca.guion(id), v = vista.archivos[id];
+    let texto = null;
+    try {
+      if (a.ruta && api && api.readFile) texto = await desempaquetar(await api.readFile({ path: a.ruta, binario: true }));
+      else if (a.handle) texto = await desempaquetar(await (await a.handle.getFile()).arrayBuffer());
+    } catch (_) { return false; }                               // no se lee (no existe, o está roto): se escribe
+    if (texto === null || !g) return false;
+    est.ultimoEscrito = texto;
+    return !!(v && await cambiadoFuera(g, v, texto));
   }
 
   /* Abre el texto de un archivo en esta ventana: sustituye al proyecto si es un «Sin título» sin tocar; si ya está aquí, lo
@@ -1389,7 +1474,9 @@
     let f; try { f = await h.getFile(); } catch (_) { T.tablero.avisar('Sin permiso para leer ' + h.name + ': ábrelo con Abrir…'); return null; }
     let texto; try { texto = await desempaquetar(await f.arrayBuffer()); } catch (_) { T.tablero.avisar('No se pudo leer ' + f.name); return null; }
     const g = abrirDatos(texto, f.name, h.name); if (!g) return null;
-    vincular(g.id, { nombre: h.name, handle: h }); anotarEscrito(g.id, serializar(g)); indicador(); renderPestanas();
+    /* lo que tiene el archivo, no el proyecto ya montado: si al montar cambió algo (la papelera purgada, un esquema migrado), se
+       escribe; si solo se normalizó, `mismoContenido` no lo reescribe (1.1.55) */
+    vincular(g.id, { nombre: h.name, handle: h }); anotarEscrito(g.id, texto); programarEscritura(g.id); indicador(); renderPestanas();
     recordarReciente(g.id); comprobarEnlaces(g.id);
     T.tablero.avisar('Abierto ' + h.name + ' · se irá guardando ahí solo');
     return g;
@@ -1406,7 +1493,7 @@
     catch (_) { T.tablero.avisar('No se pudo leer ' + ruta); return false; }
     const nombre = baseDe(ruta);
     const g = abrirDatos(texto, nombre, ruta); if (!g) return true;
-    vincular(g.id, { nombre, ruta }); anotarEscrito(g.id, serializar(g)); indicador(); renderPestanas();
+    vincular(g.id, { nombre, ruta }); anotarEscrito(g.id, texto); programarEscritura(g.id); indicador(); renderPestanas();   // lo del archivo (ver abrirHandle)
     recordarReciente(g.id); comprobarEnlaces(g.id);
     T.tablero.avisar('Abierto ' + nombre + ' · se irá guardando ahí solo');
     return true;
@@ -1441,7 +1528,7 @@
      Con el proyecto abierto, Electron vigila el archivo (electron/claude.js, `archivo:cambiado`) y pasa lo mismo. */
   function firmaDe(texto) {
     let s;
-    try { const x = JSON.parse(texto); if (x && x.documentos && typeof x.documentos === 'object') x.documentos = C.normalizarDocumentos(x.documentos); s = JSON.stringify(ordenado(x)); }
+    try { const x = JSON.parse(texto); if (x && x.documentos && typeof x.documentos === 'object') x.documentos = sinMarcas(C.normalizarDocumentos(x.documentos)); s = JSON.stringify(ordenado(x)); }
     catch (_) { s = String(texto || ''); }
     let h = 0x811c9dc5;
     for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
@@ -1453,7 +1540,7 @@
     est.ultimoEscrito = texto;
     const v = vista.archivos[id]; if (!v || texto === null || texto === undefined) return;
     /* su inodo (1.1.52): si el archivo se renombra con ClapCraft cerrado, al volver se le encuentra por él */
-    if (v.ruta && api && api.archivoId) api.archivoId(v.ruta).then(x => { if (x && x.ino && vista.archivos[id] === v && v.ino !== x.ino) { v.ino = x.ino; guardarVista(); } }).catch(() => {});
+    if (v.ruta && api && api.archivoId) api.archivoId(v.ruta).then(x => { if (x && x.ino && vista.archivos[id] === v && (v.ino !== x.ino || v.dev !== x.dev)) { v.ino = x.ino; v.dev = x.dev; guardarVista(); } }).catch(() => {});
     if (texto === antes && v.firma) return;
     const f = firmaDe(texto);
     if (v.firma !== f) { v.firma = f; guardarVista(); }
@@ -1477,17 +1564,31 @@
     const local = serializar(g);
     if (!v.firma || texto === local || mismoContenido(texto, local)) return false;   // sin firma (antes de la 1.1.49), lo de siempre
     if (firmaDe(texto) === v.firma) return false;                // el archivo es el que dejamos: lo de aquí es lo último
-    if (firmaDe(local) !== v.firma && !await T.tablero.confirmar('«' + g.nombre + '» cambió fuera de ClapCraft mientras estaba cerrado (Claude, por ejemplo) y aquí también hay cambios que no llegaron a escribirse. ¿Cargar la versión del archivo? Si no, se queda la de aquí y se escribe en el archivo.', 'Cargar la del archivo')) return false;
+    if (firmaDe(local) !== v.firma && !await preguntarSinEscribir(g.id, '«' + g.nombre + '» cambió fuera de ClapCraft mientras estaba cerrado (Claude, por ejemplo) y aquí también hay cambios que no llegaron a escribirse. ¿Cargar la versión del archivo? Si no, se queda la de aquí y se escribe en el archivo.')) return false;
     return cargarDelArchivo(g.id, texto, 'Cargados los cambios de ' + v.nombre + ' hechos fuera de ClapCraft');
+  }
+  /* la pregunta de «cambió fuera»: mientras está abierta no se escribe en el archivo (el autoguardado pisaba lo de fuera antes de
+     elegir, 1.1.55); al quedarse con lo de aquí, se escribe */
+  async function preguntarSinEscribir(id, texto) {
+    const est = estado(id);
+    est.bloqueado = true; clearTimeout(est.temporizador); est.temporizador = null;
+    let si = false;
+    try { si = await T.tablero.confirmar(texto, 'Cargar la del archivo'); }
+    finally { est.bloqueado = false; }
+    if (!si) programarEscritura(id);
+    return si;
   }
   if (api && api.onArchivoCambiado && api.readFile) api.onArchivoCambiado(async ruta => {
     const id = abiertoId, est = estado(id), a = est.archivo, g = biblioteca.guion(id);
-    if (!g || !a || !a.ruta || a.ruta !== ruta || est.escribiendo) return;
+    if (!g || !a || !a.ruta || a.ruta !== ruta || est.bloqueado) return;
+    /* con una escritura en marcha, se espera y se mira después (antes se ignoraba el aviso y lo de fuera se perdía, 1.1.55) */
+    if (est.escribiendo) await est.enCurso;
+    if (est.archivo !== a || a.ruta !== ruta) return;
     let texto; try { texto = await desempaquetar(await api.readFile({ path: ruta, binario: true })); } catch (_) { return; }
     if (texto === est.ultimoEscrito || mismoContenido(texto, est.ultimoEscrito)) return;   // lo que escribió esta ventana
-    if (temporizador) volcar(); volcarTexto();
+    volcarTodoSinSalir();
     if (mismoContenido(texto, serializar(g))) { anotarEscrito(id, texto); return; }        // ya lo tenía
-    if (sucio(id) && !await T.tablero.confirmar('«' + g.nombre + '» cambió fuera de ClapCraft y aquí hay cambios que aún no se escribieron. ¿Cargar la versión del archivo? Si no, se queda la de aquí y se escribe en el archivo.', 'Cargar la del archivo')) { programarEscritura(id); return; }
+    if (sucio(id) && !await preguntarSinEscribir(id, '«' + g.nombre + '» cambió fuera de ClapCraft y aquí hay cambios que aún no se escribieron. ¿Cargar la versión del archivo? Si no, se queda la de aquí y se escribe en el archivo.')) return;
     cargarDelArchivo(id, texto, 'Cargados los cambios de ' + a.nombre + ' hechos fuera de ClapCraft');
   });
 
@@ -1500,9 +1601,10 @@
       if (v.ruta && api && api.writeFile) {
         /* se renombró con ClapCraft cerrado (1.1.52): el archivo de la misma identidad (inodo) en su carpeta o en las de siempre */
         let renombrado = null;
-        if (v.ino && api.buscarArchivo) { try { const r = await api.buscarArchivo({ ruta: v.ruta, ino: v.ino }); if (r && r !== v.ruta) renombrado = { antes: v.ruta, ahora: r }; } catch (_) {} }
+        if (v.ino && api.buscarArchivo) { try { const r = await api.buscarArchivo({ ruta: v.ruta, ino: v.ino, dev: v.dev }); if (r && r !== v.ruta) renombrado = { antes: v.ruta, ahora: r }; } catch (_) {} }
         if (renombrado) { sellarConNombreDe(g.id, renombrado.antes); v.ruta = renombrado.ahora; v.nombre = baseDe(renombrado.ahora); guardarVista(); migrarVisto(renombrado.antes, renombrado.ahora); olvidarReciente(renombrado.antes); }
         est.archivo = { nombre: v.nombre, ruta: v.ruta, permiso: true };
+        informarVentana();                                       // en cuanto se sabe (ver abajo)
         let texto = null;
         if (api.readFile) { try { texto = await desempaquetar(await api.readFile({ path: v.ruta, binario: true })); } catch (_) { est.archivo.permiso = false; } }
         if (renombrado) { recordarReciente(g.id); informarVentana(); }
@@ -1527,6 +1629,10 @@
       } else { delete vista.archivos[g.id]; guardarVista(); continue; }
       if (est.archivo.permiso) programarEscritura(g.id);       // lo local es lo último: si difiere, se escribe
     }
+    /* y a Electron, su archivo: hasta el primer cambio le decía que la ventana no tenía ninguno (el aviso del arranque sale antes
+       de retomarlo), así que no lo vigilaba, Claude lo tomaba por cerrado y escribía en él, y abrirlo desde el Finder abría otra
+       ventana con el mismo archivo (1.1.55) */
+    informarVentana();
     indicador(); renderPestanas();
   }
 
@@ -2041,6 +2147,11 @@
         const k = PREFIJO_PENDIENTE + params.get('t'), x = leerJSON(k);
         try { localStorage.removeItem(k); } catch (_) {}
         if (x) abrirDatos(x.texto, x.nombre, null);
+      } else if (!g0 && inicial && vista.archivos[inicial] && vista.archivos[inicial].ruta && api && api.readFile) {
+        /* la ventana lleva un proyecto que no está en este equipo (no cupo, 1.1.55): se abre de su archivo */
+        const ruta = vista.archivos[inicial].ruta;
+        idsPropios.add(inicial); delete vista.archivos[inicial]; guardarVista();
+        await abrirRuta(ruta);
       }
     } finally { informarVentana(); }
     otrosDeAntes.forEach(id => abrirVentana({ p: id }));
@@ -2289,6 +2400,14 @@
     return true;
   }
   if (api && api.onArchivoRenombrado) api.onArchivoRenombrado(x => { if (x && x.antes && x.ahora) seguirArchivo(abiertoId, x.antes, x.ahora); });
+  /* se borró (o se movió a donde no se le encuentra) con el proyecto abierto: se dice y se vuelve a escribir entero en su sitio
+     (antes seguía con ✓ hasta el siguiente cambio, 1.1.55) */
+  if (api && api.onArchivoPerdido) api.onArchivoPerdido(ruta => {
+    const est = estado(abiertoId), a = est.archivo; if (!a || a.ruta !== ruta) return;
+    est.ultimoEscrito = null; indicador(); renderPestanas();
+    T.tablero.avisar(a.nombre + ' ya no está en su carpeta · se vuelve a guardar ahí');
+    programarEscritura(abiertoId);
+  });
   /* lo último de Claude que se vio de un archivo va por su ruta (`avisarCambiosDeClaude`): con el nombre nuevo, lo mismo */
   function migrarVisto(antes, ahora) {
     const vistos = leerJSON(CLAVE_CLAUDE_VISTO) || {};
@@ -2500,9 +2619,12 @@
   if (api && api.onEnlace) api.onEnlace(u => irAEnlace(u, { deFuera: true }));
 
   window.addEventListener('beforeunload', () => {
-    volcarTexto(); if (temporizador) volcar();
+    volcarTodo();
     biblioteca.datos.guiones.forEach(g => { if (sucio(g.id)) escribirArchivo(g.id); });   // lo que dé tiempo
   });
+  /* **Salir de la app espera a que se escriba todo** (1.1.55): Electron pregunta a cada ventana antes de salir (Cmd+Q, apagar el
+     equipo) y sale cuando todas contestan; antes salía a mitad de la escritura y un proyecto grande quedaba cortado. */
+  if (api && api.onVaciar) api.onVaciar(async () => { try { return await escribirTodo(); } catch (_) { return false; } });
 
   /* API para el gestor de documentos que venga después: la biblioteca, el guion abierto y la vista. */
   C.biblioteca = biblioteca;

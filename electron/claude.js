@@ -20,6 +20,7 @@ const os = require('os');
 module.exports = function iniciarClaude(o) {
   const { app, ipcMain, dialog, shell, clipboard, ventanas, enfocar, abrirRuta } = o;
   const E = require('../js/claquedraw/enlaces.js').enlaces;   // los enlaces clapcraft:// (1.1.52)
+  const atomico = require('../claude/atomico');              // escribir de una vez (1.1.55)
   const DIR = app.getPath('userData');
   const CONFIG = path.join(DIR, 'claude.json'), PUENTE = path.join(DIR, 'puente.json');
   const leerConfig = () => { try { return JSON.parse(fs.readFileSync(CONFIG, 'utf8')) || {}; } catch (_) { return {}; } };
@@ -38,7 +39,7 @@ module.exports = function iniciarClaude(o) {
   function anunciar() {
     const x = { pid: process.pid, app: 'ClapCraft', version: app.getVersion(), activo: !!(activo && servidor), socket: activo && servidor ? socketRuta : null,
                 abiertos: abiertos().map(({ id, nombre, ruta, enlaces }) => ({ id, nombre, ruta, enlaces })) };
-    try { fs.mkdirSync(DIR, { recursive: true }); fs.writeFileSync(PUENTE, JSON.stringify(x), { mode: 0o600 }); } catch (_) {}
+    try { fs.mkdirSync(DIR, { recursive: true }); atomico.escribirSync(PUENTE, JSON.stringify(x), 0o600); } catch (_) {}   // de una vez: el servidor lo lee
   }
   function olvidar() { try { fs.unlinkSync(PUENTE); } catch (_) {} if (process.platform !== 'win32') { try { fs.unlinkSync(socketRuta); } catch (_) {} } }
 
@@ -144,14 +145,17 @@ module.exports = function iniciarClaude(o) {
   /* ---------- el archivo de cada ventana, vigilado ---------- */
   const vigias = new Map(), escritos = new Map();
   const inodo = r => { try { return fs.statSync(r).ino; } catch (_) { return null; } };
+  const disco = r => { try { return fs.statSync(r).dev; } catch (_) { return null; } };
+  const esEl = (r, ino, dev) => { try { const st = fs.statSync(r); return st.ino === ino && (!dev || st.dev === dev); } catch (_) { return false; } };
   /* **Un archivo por su inodo** (1.1.52): renombrarlo en el Finder lo conserva. En su carpeta y, si no, en las de siempre
      (claude/archivos.js). Si el de `ruta` sigue siendo él, `ruta`. */
-  async function buscarPorInodo(ruta, ino) {
+  /* con su disco (`dev`) cuando se sabe: en otro volumen el mismo número de inodo es otro archivo (1.1.55) */
+  async function buscarPorInodo(ruta, ino, dev) {
     if (!ruta || !ino) return null;
-    if (inodo(ruta) === ino) return ruta;
+    if (esEl(ruta, ino, dev)) return ruta;
     const dir = path.dirname(ruta);
-    try { for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); if (/\.clapcraft$/i.test(f) && p !== ruta && inodo(p) === ino) return p; } } catch (_) {}
-    try { const { buscarArchivos } = require('../claude/archivos'); for (const p of await buscarArchivos()) if (p !== ruta && inodo(p) === ino) return p; } catch (_) {}
+    try { for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); if (/\.clapcraft$/i.test(f) && p !== ruta && esEl(p, ino, dev)) return p; } } catch (_) {}
+    try { const { buscarArchivos } = require('../claude/archivos'); for (const p of await buscarArchivos()) if (p !== ruta && esEl(p, ino, dev)) return p; } catch (_) {}
     return null;
   }
   /* ¿hay otro archivo (no `salvo`) que se llame así? Al comprobar los enlaces de un proyecto recién abierto: si el nombre de su
@@ -165,24 +169,38 @@ module.exports = function iniciarClaude(o) {
     return todas.some(f => otro(f) && fs.existsSync(f));
   }
   /* el archivo de una ventana ya no está en su ruta: si se renombró (el mismo inodo), la ventana sigue con él */
-  function renombrado(ruta, x) {
-    if (!x || !x.ino) return;
-    buscarPorInodo(ruta, x.ino).then(nueva => {
-      if (!nueva || nueva === ruta) return;
-      const v = ventanas.get(x.wid);
-      if (!v || v.win.isDestroyed() || v.ruta !== ruta) return;
-      if ([...ventanas.values()].some(w => w !== v && w.ruta === nueva)) return;   // otra ventana ya lo tiene abierto
-      v.ruta = nueva;
-      v.win.webContents.send('archivo:renombrado', { antes: ruta, ahora: nueva });
-      anunciar(); vigilar();
-    }).catch(() => {});
+  /* Devuelve la ruta nueva si la ventana pasó a ella. Si no se encuentra (se borró, o se movió a donde no se busca), se le dice
+     a la ventana, que lo vuelve a escribir entero en su sitio (1.1.55: antes seguía con ✓ sin archivo). */
+  async function renombrado(ruta, x) {
+    if (!x || !x.ino) return null;
+    let nueva = null; try { nueva = await buscarPorInodo(ruta, x.ino, x.dev); } catch (_) {}
+    const v = ventanas.get(x.wid);
+    if (!v || v.win.isDestroyed() || !v.ruta || path.resolve(v.ruta) !== ruta) return null;
+    if (!nueva || nueva === ruta) {
+      if (!fs.existsSync(ruta)) v.win.webContents.send('archivo:perdido', v.ruta);
+      return null;
+    }
+    if ([...ventanas.values()].some(w => w !== v && atomico.mismoArchivo(w.ruta, nueva))) return null;   // otra ventana ya lo tiene abierto
+    const antes = v.ruta;
+    v.ruta = nueva;
+    v.win.webContents.send('archivo:renombrado', { antes, ahora: nueva });
+    anunciar(); vigilar();
+    return nueva;
+  }
+  /* Antes de escribir el archivo de una ventana: si ya no está (lo acaban de renombrar y el vigía aún no lo vio), se le busca; si
+     se encuentra, la ventana pasa a él y la escritura se rechaza (`MOVIDO`: la página la repite en el nuevo). Si no, se escribe:
+     vuelve a nacer en su sitio. */
+  async function antesDeEscribir(wid, ruta) {
+    const r = path.resolve(ruta), x = vigias.get(r);
+    if (!x || x.wid !== wid || fs.existsSync(r)) return;
+    if (await renombrado(r, x)) throw new Error('MOVIDO');
   }
   function vigilar() {
     const quiero = new Map();
     ventanas.forEach((v, wid) => { if (v.ruta && !v.win.isDestroyed()) quiero.set(path.resolve(v.ruta), wid); });
     vigias.forEach((x, ruta) => { if (!quiero.has(ruta)) { try { x.w.close(); } catch (_) {} vigias.delete(ruta); } });
     quiero.forEach((wid, ruta) => {
-      const hay = vigias.get(ruta); if (hay) { hay.wid = wid; if (!hay.ino) hay.ino = inodo(ruta); return; }
+      const hay = vigias.get(ruta); if (hay) { hay.wid = wid; if (!hay.ino) { hay.ino = inodo(ruta); hay.dev = disco(ruta); } return; }
       try {
         const base = path.basename(ruta); let t = null;
         const w = fs.watch(path.dirname(ruta), (ev, nombre) => {
@@ -191,14 +209,16 @@ module.exports = function iniciarClaude(o) {
           t = setTimeout(() => {
             const x = vigias.get(ruta); if (!x) return;
             if (!fs.existsSync(ruta)) { renombrado(ruta, x); return; }    // ¿se renombró? (1.1.52)
-            x.ino = inodo(ruta) || x.ino;                                 // Claude escribe a un temporal y lo renombra: otro inodo
-            if (Date.now() - (escritos.get(ruta) || 0) < 2000) return;   // lo acaba de escribir la propia app
+            x.ino = inodo(ruta) || x.ino; x.dev = disco(ruta) || x.dev;   // al escribir, un temporal que se renombra: otro inodo
+            /* lo que acaba de escribir la propia app: solo si el archivo es exactamente el que dejó (identidad, tamaño y fecha). Antes
+               se callaba todo lo que llegara en los 2 s siguientes, y un cambio de fuera en ese rato se perdía (1.1.55) */
+            if (escritos.get(ruta) === atomico.huella(ruta)) return;
             const v = ventanas.get(x.wid);
             if (v && !v.win.isDestroyed()) v.win.webContents.send('archivo:cambiado', ruta);
           }, 500);
         });
         w.on('error', () => {});
-        vigias.set(ruta, { w, wid, ino: inodo(ruta) });
+        vigias.set(ruta, { w, wid, ino: inodo(ruta), dev: disco(ruta) });
       } catch (_) {}
     });
   }
@@ -272,10 +292,11 @@ module.exports = function iniciarClaude(o) {
   if (activo) encender(); else anunciar();
   app.on('will-quit', () => { apagar(); olvidar(); });
   return {
-    activo: () => activo, alternar, conectar, irAEnlace, buscarPorInodo, hayProyecto,
+    activo: () => activo, alternar, conectar, irAEnlace, buscarPorInodo, hayProyecto, antesDeEscribir,
     /* las ventanas cambiaron (un proyecto abierto o cerrado, un archivo nuevo) */
     alCambiarVentanas: () => { anunciar(); vigilar(); },
     enfocada: wid => { ultimaEnfocada = wid; },
-    escrito: ruta => { escritos.set(path.resolve(ruta), Date.now()); }
+    /* lo que la app acaba de escribir: su huella (claude/atomico.js), para no tomarlo por un cambio de fuera */
+    escrito: ruta => { const r = path.resolve(ruta); escritos.set(r, atomico.huella(r)); const x = vigias.get(r); if (x) { x.ino = inodo(r) || x.ino; x.dev = disco(r) || x.dev; } }
   };
 };
