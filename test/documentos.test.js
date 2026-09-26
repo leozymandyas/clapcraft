@@ -174,8 +174,8 @@ test('papelera: tirar, restaurar al origen o a otro sitio, eliminar del todo, va
   assert.equal(d.tirarNota(n.id).ok, true);
   assert.equal(d.nota(n.id), null); assert.equal(d.enPapelera(n.id).origenNombre, 'A › Biblioteca');
   assert.equal(d.tirarNota(n.id).ok, false);
-  assert.equal(d.restaurarNota(n.id).sub.id, 'x2');                            // al origen, a la bandeja
-  assert.equal(d.nota(n.id).etiquetaId, null);
+  assert.equal(d.restaurarNota(n.id).sub.id, 'x2');                            // al origen y a su segmento
+  assert.equal(d.nota(n.id).etiquetaId, e.id);
   d.tirarNota(n.id); assert.equal(d.restaurarNota(n.id, 'x4').contenedor.nombre, 'B');   // a otro subcontenedor
   d.tirarNota(n.id); assert.equal(d.restaurarNota(n.id, 'x3').sub.id, 'x4');            // un contenedor vale: su primer subcontenedor
   d.tirarNota(n.id); d.eliminarContenedor('x1'); d.eliminarContenedor('x3');
@@ -873,4 +873,183 @@ test('esquemas, bibliotecas y personajes van enteros a la papelera y se restaura
   assert.equal(d.restaurarPieza(p.id).ok, false);
   /* eliminar del todo */
   assert.equal(d.eliminarDefinitivo(p.id).ok, true); assert.equal(d.piezaEnPapelera(p.id), null);
+});
+
+test('iniciales: dos letras para la etiqueta de un personaje (1.1.40)', () => {
+  assert.equal(C.iniciales('Lestat'), 'Le');
+  assert.equal(C.iniciales('Pez Gota'), 'PG');
+  assert.equal(C.iniciales('  maría  josé  pérez '), 'MJ');
+  assert.equal(C.iniciales('ñu'), 'Ñu');
+  assert.equal(C.iniciales('X'), 'X');
+  assert.equal(C.iniciales(''), '·');
+  assert.equal(C.iniciales(null), '·');
+});
+
+test('papelera: la nota vuelve a su segmento y a su sitio, también tras abrir el archivo; si no, a la bandeja', () => {
+  const d = nuevo();
+  d.crearContenedor('A'); d.crearContenedor('B');                // subs x2 y x4
+  const e = d.crearEtiqueta('x2', 'Acto I').etiqueta, f = d.crearEtiqueta('x2', 'Acto II').etiqueta;
+  const [n1, n2, n3] = ['Uno', 'Dos', 'Tres'].map(t => d.crearNota('x2', e.id, t).nota);
+  d.crearNota('x2', null, 'Suelta'); d.crearNota('x2', f.id, 'Otra');
+  const orden = () => nombres(d.notasDe('x2', e.id));
+  /* tirar la de en medio: recuerda su segmento y la que la seguía en él (no la de la bandeja ni la de otro segmento) */
+  d.tirarNota(n2.id);
+  assert.equal(d.enPapelera(n2.id).etiquetaId, e.id); assert.equal(d.enPapelera(n2.id).antesDe, n3.id);
+  const r = d.restaurarNota(n2.id);                              // lo que hace el «Deshacer» del aviso
+  assert.equal(r.sub.id, 'x2'); assert.equal(d.nota(n2.id).etiquetaId, e.id);
+  assert.deepEqual(orden(), ['Uno', 'Dos', 'Tres']);             // exactamente donde estaba
+  /* la última no lleva `antesDe` y vuelve al final */
+  d.tirarNota(n3.id); assert.equal('antesDe' in d.enPapelera(n3.id), false);
+  d.restaurarNota(n3.id); assert.deepEqual(orden(), ['Uno', 'Dos', 'Tres']);
+  /* una de la bandeja no guarda segmento (las entradas viejas tampoco: siguen yendo a la bandeja) */
+  const s = d.notasDe('x2', null)[0]; d.tirarNota(s.id); assert.equal('etiquetaId' in d.enPapelera(s.id), false);
+  /* ida y vuelta por JSON y normalizar: se conserva todo y la entrada queda igual */
+  d.tirarNota(n1.id);
+  const copia = nuevo(JSON.parse(JSON.stringify(d.toJSON())));
+  assert.deepEqual(copia.toJSON().papelera, d.toJSON().papelera);
+  assert.equal(copia.restaurarNota(n1.id).ok, true);
+  assert.deepEqual(nombres(copia.notasDe('x2', e.id)), ['Uno', 'Dos', 'Tres']);
+  /* si su vecina se movió, vuelve a su segmento, al final */
+  d.moverNota(n2.id, f.id);
+  d.restaurarNota(n1.id); assert.deepEqual(orden(), ['Tres', 'Uno']);
+  /* el segmento se borró entretanto: a la bandeja */
+  d.tirarNota(n1.id); d.eliminarEtiqueta(e.id);
+  d.restaurarNota(n1.id); assert.equal(d.nota(n1.id).etiquetaId, null); assert.equal(d.nota(n1.id).subId, 'x2');
+  /* restaurada en otra biblioteca: a la bandeja, al final */
+  d.tirarNota(n2.id); assert.equal(d.enPapelera(n2.id).etiquetaId, f.id);
+  const g = d.crearEtiqueta('x4', 'Acto I').etiqueta; d.crearNota('x4', g.id, 'Ajena');
+  assert.equal(d.restaurarNota(n2.id, 'x4').sub.id, 'x4');
+  assert.equal(d.nota(n2.id).etiquetaId, null); assert.deepEqual(nombres(d.notasDe('x4', null)), ['Dos']);
+});
+
+test('papelera: varias notas tiradas seguidas vuelven a su sitio en cualquier orden (se sigue la cadena de antesDe)', () => {
+  /* un segmento con `ts` notas; tira las de `tirar` en ese orden y restaura las de `restaurar` en ese orden */
+  const probar = (ts, tirar, restaurar) => {
+    const d = nuevo();
+    d.crearContenedor('A');                                      // sub x2
+    const e = d.crearEtiqueta('x2', 'Acto I').etiqueta;
+    const ns = Object.fromEntries(ts.map(t => [t, d.crearNota('x2', e.id, t).nota]));
+    d.crearNota('x2', null, 'Suelta');                           // en la bandeja: no cuenta
+    tirar.forEach(t => assert.equal(d.tirarNota(ns[t].id).ok, true));
+    restaurar.forEach(t => assert.equal(d.restaurarNota(ns[t].id).ok, true));
+    return nombres(d.notasDe('x2', e.id));
+  };
+  /* tirar A y luego B: de la más vieja a la más nueva (el orden de la papelera) y al revés (el «Deshacer») */
+  assert.deepEqual(probar(['A', 'B', 'C'], ['A', 'B'], ['A', 'B']), ['A', 'B', 'C']);
+  assert.deepEqual(probar(['A', 'B', 'C'], ['A', 'B'], ['B', 'A']), ['A', 'B', 'C']);
+  /* tres tiradas seguidas de cuatro */
+  assert.deepEqual(probar(['A', 'B', 'C', 'D'], ['A', 'B', 'C'], ['A', 'B', 'C']), ['A', 'B', 'C', 'D']);
+  assert.deepEqual(probar(['A', 'B', 'C', 'D'], ['A', 'B', 'C'], ['C', 'B', 'A']), ['A', 'B', 'C', 'D']);
+  assert.deepEqual(probar(['A', 'B', 'C', 'D'], ['A', 'B', 'C'], ['B', 'A', 'C']), ['A', 'B', 'C', 'D']);
+  /* las últimas: la cadena acaba sin nadie a la vista y van al final, en su orden */
+  assert.deepEqual(probar(['A', 'B', 'C'], ['B', 'C'], ['B', 'C']), ['A', 'B', 'C']);
+  /* un ciclo en la papelera (datos a mano) no se queda dando vueltas: va al final */
+  const d = nuevo();
+  d.crearContenedor('A');
+  const e = d.crearEtiqueta('x2', 'Acto I').etiqueta;
+  const [a, b, c] = ['A', 'B', 'C'].map(t => d.crearNota('x2', e.id, t).nota);
+  d.tirarNota(a.id); d.tirarNota(b.id);
+  d.enPapelera(b.id).antesDe = a.id;                             // A → B → A
+  assert.equal(d.restaurarNota(a.id).ok, true);
+  assert.deepEqual(nombres(d.notasDe('x2', e.id)), ['C', 'A']);
+  /* un eslabón de otro segmento corta la cadena */
+  const f = d.crearEtiqueta('x2', 'Acto II').etiqueta;
+  d.tirarNota(a.id);                                             // A: antesDe ninguna (era la última)
+  d.enPapelera(a.id).antesDe = b.id; d.enPapelera(b.id).etiquetaId = f.id; d.enPapelera(b.id).antesDe = c.id;
+  d.restaurarNota(a.id);
+  assert.deepEqual(nombres(d.notasDe('x2', e.id)), ['C', 'A'], 'B era de otro segmento: A no sigue su cadena hasta C');
+});
+
+test('papelera: tiradas en cualquier orden y restauradas en cualquier orden, vuelven a su sitio (todas las combinaciones)', () => {
+  /* la que la seguía y la que iba delante (`antesDe`, `despuesDe`), y por la papelera las que también se tiraron: de arriba
+     abajo, de abajo arriba y salteadas, restauradas una a una en el orden que sea */
+  const perm = a => a.length <= 1 ? [a] : a.flatMap((x, i) => perm([...a.slice(0, i), ...a.slice(i + 1)]).map(q => [x, ...q]));
+  const ts = ['A', 'B', 'C', 'D'], subconjuntos = [];
+  (function sub(i, acc) { if (i === ts.length) { if (acc.length) subconjuntos.push(acc); return; } sub(i + 1, acc); sub(i + 1, [...acc, ts[i]]); })(0, []);
+  let casos = 0;
+  subconjuntos.forEach(tir => perm(tir).forEach(tirar => perm(tir).forEach(restaurar => {
+    const d = nuevo();
+    d.crearContenedor('A');                                      // sub x2
+    const e = d.crearEtiqueta('x2', 'Acto I').etiqueta;
+    const ns = Object.fromEntries(ts.map(t => [t, d.crearNota('x2', e.id, t).nota]));
+    tirar.forEach(t => d.tirarNota(ns[t].id));
+    restaurar.forEach(t => d.restaurarNota(ns[t].id));
+    assert.deepEqual(nombres(d.notasDe('x2', e.id)), ts, 'tirar ' + tirar.join('') + ', restaurar ' + restaurar.join(''));
+    casos++;
+  })));
+  assert.equal(casos, 748);                                      // 4 subconjuntos de 1, 6 de 2, 4 de 3 y 1 de 4, por sus órdenes al tirar y al restaurar
+  /* y la papelera guarda las dos vecinas, que vuelven igual por JSON */
+  const d = nuevo();
+  d.crearContenedor('A');
+  const e = d.crearEtiqueta('x2', 'Acto I').etiqueta;
+  const [a, b] = ['A', 'B', 'C'].map(t => d.crearNota('x2', e.id, t).nota);
+  d.tirarNota(b.id);
+  assert.equal(d.enPapelera(b.id).despuesDe, a.id);
+  const d2 = nuevo(JSON.parse(JSON.stringify(d.datos)));
+  assert.equal(d2.enPapelera(b.id).despuesDe, a.id);
+});
+
+test('moverEtiqueta: el vecino es el de su sección y en el orden que se ve (con ordenSegmentos)', () => {
+  const d = nuevo();
+  d.crearContenedor('A');                                        // sub x2
+  const [a, b, c] = ['A', 'B', 'C'].map(t => d.crearEtiqueta('x2', t).etiqueta);
+  const k = d.crearSeccion('x2', 'Investigación').seccion;
+  const [f1, f2] = ['F1', 'F2'].map(t => d.crearEtiqueta('x2', t, 0, { seccionId: k.id }).etiqueta);
+  /* con secciones no cruza: C es la última de la de partida y F1 la primera de la suya */
+  assert.equal(d.moverEtiqueta(c.id, 1).ok, false);
+  assert.equal(d.moverEtiqueta(f1.id, -1).ok, false);
+  assert.equal(d.moverEtiqueta(f1.id, 1).ok, true);
+  assert.deepEqual(nombres(d.etiquetasDe('x2', k.id)), ['F2', 'F1']);
+  assert.deepEqual(nombres(d.etiquetasDe('x2', null)), ['A', 'B', 'C']);
+  /* con el orden de las tarjetas puesto (se arrastró una), manda ese orden y cambia lo que se pinta */
+  const pintado = () => d.ordenSegmentos('x2', ['bandeja', ...d.etiquetasDe('x2', null).map(x => 'etq:' + x.id)]);
+  d.colocarSegmento('x2', 'etq:' + c.id, 'etq:' + a.id, ['bandeja', 'etq:' + a.id, 'etq:' + b.id, 'etq:' + c.id]);
+  assert.deepEqual(pintado(), ['bandeja', 'etq:' + c.id, 'etq:' + a.id, 'etq:' + b.id]);
+  assert.equal(d.moverEtiqueta(c.id, -1).ok, false);             // la bandeja no cuenta: C ya es la primera
+  assert.equal(d.moverEtiqueta(a.id, -1).ok, true);
+  assert.deepEqual(pintado(), ['bandeja', 'etq:' + a.id, 'etq:' + c.id, 'etq:' + b.id]);
+  assert.equal(d.moverEtiqueta(c.id, 1).ok, true);
+  assert.deepEqual(pintado(), ['bandeja', 'etq:' + a.id, 'etq:' + b.id, 'etq:' + c.id]);
+  assert.equal(d.moverEtiqueta(c.id, 1).aviso, 'Ya está en el extremo');
+});
+
+test('primeraBiblioteca y todasLasBibliotecas: en el orden del árbol, nunca la oculta de los guiones', () => {
+  const d = nuevo();
+  const cont = d.crearContenedor('Capítulo', { vacio: true }).contenedor;
+  const e = d.crearEsquema(cont.id, TABLERO, 'Escaleta').esquema;
+  d.crearDocumentoEsquema(e.id, 'Guion');                       // crea la biblioteca oculta de sus guiones
+  assert.ok(cont.subs[0].guionEid, 'subs[0] es la oculta');
+  assert.equal(d.primeraBiblioteca(cont.id), null);              // no hay ninguna a la vista
+  const suelta = d.crearSub(cont.id, 'Suelta').sub;
+  assert.equal(d.primeraBiblioteca(cont.id), suelta);
+  /* una carpeta delante con una biblioteca dentro, y dentro de ella un grupo con otra delante */
+  const k = d.crearCarpeta(cont.id, 'Temporada', 'azul').carpeta;
+  const enCarpeta = d.crearSub(cont.id, 'En carpeta').sub; d.moverACarpeta('sub', enCarpeta.id, k.id);
+  d.colocarEnArbol(k.id, e.id);
+  assert.equal(d.primeraBiblioteca(cont.id), enCarpeta);
+  const enGrupo = d.crearSub(cont.id, 'En grupo').sub; d.moverACarpeta('sub', enGrupo.id, k.id);
+  const gr = d.crearGrupo(cont.id, [enGrupo.id], 'Grupo').grupo;
+  d.colocarEnArbol(gr.id, enCarpeta.id);
+  assert.equal(d.primeraBiblioteca(cont.id), enGrupo);
+  assert.equal(d.primeraBiblioteca('no-existe'), null);
+  /* todas: los contenedores fijados primero, y sin los ocultos */
+  const otro = d.crearContenedor('Fijado').contenedor; d.fijarContenedor(otro.id, true);
+  d.personajes(true);
+  assert.deepEqual(d.todasLasBibliotecas().map(x => [x.contenedor.nombre, x.sub.nombre]),
+    [['Fijado', 'Biblioteca'], ['Capítulo', 'En grupo'], ['Capítulo', 'En carpeta'], ['Capítulo', 'Suelta']]);
+  /* restaurar en un contenedor va a su primera biblioteca a la vista, no a la oculta */
+  const n = d.crearNota(suelta.id, null, 'Nota').nota; d.tirarNota(n.id);
+  assert.equal(d.restaurarNota(n.id, cont.id).sub.id, enGrupo.id);
+  /* sin destino ni origen: la primera de todas */
+  d.tirarNota(n.id); d.eliminarSub(enGrupo.id); d.enPapelera(n.id).origenId = 'ya-no';
+  assert.equal(d.restaurarNota(n.id).sub.id, otro.subs[0].id);
+});
+
+test('moverNota: la biblioteca de la que sale también cambia de fecha', () => {
+  const d = nuevo();
+  d.crearContenedor('A'); d.crearContenedor('B');                // subs x2 y x4
+  const n = d.crearNota('x2', null, 'Viajera').nota;
+  const antes = d.sub('x2').sub.modificado;
+  assert.equal(d.moverNota(n.id, null, 'x4').ok, true);
+  assert.ok(d.sub('x2').sub.modificado > antes);
 });

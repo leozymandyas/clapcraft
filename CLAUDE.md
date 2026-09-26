@@ -4,11 +4,13 @@ Editor de guiones tipo Notion/Scrivener en **JavaScript puro, sin build ni depen
 Se ejecuta abriendo `index.html` (o `node serve.js 5173`) y está preparado para Electron (`npm start`,
 que abre `claquedraw.html`; con npm 11 hay que correr `node node_modules/electron/install.js` tras
 `npm install` porque los scripts de instalación vienen bloqueados). `npm run dist` deja el `.dmg` en
-`dist/`; `electron/main.js` recibe los `.clapcraft` del Finder (`open-file`) y los manda al renderer por
-`abrir-ruta`, y monta el menú de la aplicación (Archivo / Edición / Ver): cada opción manda una orden
+`dist/`; `electron/main.js` abre **una ventana por proyecto** (1.1.33, ver `app.js` en Claquedraw), recibe los `.clapcraft` del
+Finder (`open-file`: a la ventana que ya lo tenga, a una vacía por `abrir-ruta` o a una nueva con `?ruta=`), abre el puente con Claude (`electron/claude.js`, ver «Claude» al final) y monta el menú de la aplicación (Archivo / Edición / Ver / Claude): cada opción manda una orden
 por el canal `menu` (`editorAPI.onMenu`) que `app.js` resuelve en `ordenes`; con `body.escritorio`
-la barra esconde los botones que ya están en el menú. Deshacer/Rehacer del menú no llevan rol nativo:
-en Esquema van al historial del tablero y en Texto a `execCommand` del marco. En Electron los
+la barra esconde los botones que ya están en el menú. Deshacer/Rehacer del menú no llevan rol nativo
+(`historia` en app.js): con el foco en el editor, en Texto o con una nota abierta van a `execCommand` del marco; con el foco
+en un campo de la página (la descripción de un nodo, el panel de una nota, un nombre), al del campo (1.1.32: hasta entonces
+deshacían el tablero, y en Documentos el esquema escondido); si no, en Esquema, al historial del tablero. En Electron los
 aceleradores del menú se comen la tecla antes de que llegue a la página.
 La interfaz está en español; los comentarios del código también.
 
@@ -278,24 +280,92 @@ de tecleo deben ser carácter a carácter con `document.execCommand('insertText'
 unos ms entre pulsaciones, porque los atajos Markdown se procesan de forma diferida.
 Al terminar pruebas: limpiar `localStorage` (`guiones.editor.doc`) y dejar el editor vacío.
 
+**Las bibliotecas y los segmentos** (1.1.54) se prueban con `npm run test:segmentos` (`pruebas/segmentos-electron.js`, 85
+comprobaciones con el ratón y el teclado de verdad: `sendInputEvent`, la ventana enfocada, ~180 ms entre los clics de un doble clic;
+el portapapeles sustituido): la ventana de una nota (abrir, cerrar con el fondo, Esc y ×, ‹ › y «＋», el doble clic al editor y
+«Contraer», lo que recuerda cada nota, los menús y `#dlg` encima sin cerrarla, las teclas que no llegan al tablero escondido, las
+pestañas y las vistas), buscar, filtrar y ordenar (y que se recuerda al recargar), el formato del campo y un bloque por cada fallo
+que encontró la revisión (j–q). Chromium no da `dblclick` si el botón se repintó entre los dos clics: el doble clic en ‹ › no se
+puede reproducir con el ratón, pero sí el de una palabra del campo justo después. El formato del campo, que depende de lo que hace
+Chrome con `execCommand`, se probó además en un Electron aparte con `div.gd-lado-texto.md-texto` y las hojas de la app (código,
+resaltado y enlaces al principio y al final de párrafos, títulos y citas, títulos sobre marcas y en celdas, y Deshacer).
+
 ## Tramas (tablero de estructura)
 
 Segunda herramienta del repositorio: `tramas.html` + `css/tramas.css` + `js/tramas/`. No comparte
 código con el editor (espacio global propio `window.Tramas`), solo las fuentes y el lenguaje visual.
 La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda sobre cualquier duda.
 
-- `js/tramas/modelo.js`: **modelo puro, sin DOM**. Cinco colecciones planas (`actos`, `lineas`,
+- `js/tramas/modelo.js`: **modelo puro, sin DOM**. `columnas` y cinco colecciones planas (`actos`, `lineas`,
   `puntos`, `saltos`, `notas`), todas las invariantes y los dos cálculos derivados (`presencia()`,
   `recorrido()`). Cada operación devuelve `{ ok, aviso?, … }`; la interfaz solo enseña el aviso.
-  Se carga en Node: `npm test` corre `test/tramas.test.js` (criterios de aceptación de la spec).
+  Se carga en Node: `npm test` corre `test/tramas.test.js` (criterios de aceptación de la spec) y
+  **`test/fuzz-tramas.test.js`**, un fuzz con semillas fijas: ocho tandas de 400 operaciones al azar —crear, mover,
+  intercambiar, copiar, pegar, ocultar y borrar nodos, saltos, notas, tramas, actos y columnas— que tras **cada** una
+  comprueban las invariantes de la spec (una celda, un nodo; los dos extremos de un salto en la misma columna y en tramas
+  distintas; una nota entre dos nodos consecutivos de la misma trama; actos que no se pisan; siempre una trama a la vista)
+  y que lo guardado vuelve igual al abrirlo. Así salieron tres de los cuatro fallos del debugueo del 20-09-2026 (1.1.48) —el cuarto, el de reordenar tramas con alguna oculta, es de la interfaz—; quitar
+  cualquiera de esas reparaciones hace fallar las ocho semillas en milisegundos. Con la interfaz, lo mismo lo prueba
+  **`npm run test:esquema`** (`pruebas/mono-esquema.js`): un «mono» que en la app de verdad da clics, arrastres y teclas al
+  azar —reproducibles por semilla— sobre el tablero y comprueba cada diez gestos las invariantes, que el DOM cuadra con el
+  modelo, que no se perdería nada al guardar y que la página no ha soltado ningún error (`electron pruebas/mono-esquema.js
+  <semilla> <gestos>`). Con `MONO_ARCHIVO=<ruta.clapcraft>` trabaja sobre **una copia** de un proyecto de verdad (el
+  original no se toca) y `<índice>` como tercer argumento elige cuál de sus esquemas monta: los datos de Leo tienen formas
+  que un proyecto recién creado no tiene.
+  **Las columnas no dependen de los actos** (1.1.24, Leo: «que las líneas verticales existan sin depender de un acto, que pueda
+  mover los actos sin que se muevan las líneas, para poder definir qué tan largo es un acto solamente, y pueden haber o no más
+  de uno»): el tablero tiene `columnas` (las líneas verticales) y un acto es un tramo de ellas, `{ id, nombre, desde, celdas,
+  fondo }`, ordenados, sin pisarse, con huecos o sin ninguno; los nodos van en una columna global `col` (`cg(p)`, `columna(c)`
+  recorta a las que hay, `actoEn(c)` da el acto que la cubre o null), y las notas de raya también (`{ abierta, lineaId, col }`).
+  La API es por columnas: `nuevoPunto(lineaId, col, props)`, `moverPunto(id, { col, lineaId })`, `ocupante(lineaId, col)`,
+  `moverSalto(id, col)`; `ubicarCelda` desapareció. `normalizar` pasa lo guardado antes (actos seguidos sin `desde` y nodos con
+  `actoId` + `celda`; lo reconoce porque no trae `columnas`) a esta forma. **Los actos**: `moverBorde(id, fin)` cambia dónde acaba
+  (si el siguiente empieza justo ahí, el borde es de los dos y se reparten el sitio; si no, no pasa del siguiente; el último,
+  pasado el final, crea columnas) —`fijarAncho`, `crecerActo` y `encogerActo` van por él, y `anchoMaximo(id)` es el tope de la
+  barra del panel—; `moverActo(id, desde)` lo lleva entero con su largo sin pisar a sus vecinos; `borrarActo` solo lo quita (sus
+  columnas y nodos se quedan; puede no quedar ninguno); `nuevoActo` empieza donde acaba el último. Ninguno mueve nodos ni
+  columnas. En el tablero se arrastra la cabecera de un acto para moverlo (`actoArr`, sin robarle el clic que lo elige ni el
+  doble clic que lo renombra; `body.moviendo-acto`) y su borde para cambiar lo que dura; las rayas `.sep` van en los dos bordes
+  de cada acto (`bordesActos`) y el «+» de acto nuevo, detrás del último (`finActos`).
 - `js/tramas/tablero.js`: la única capa que conoce píxeles (celda × escala). Reconstruye el DOM
   entero en cada `render()`; **un clic seco nunca redibuja** (solo cambia clases) para que el doble
   clic siga cayendo en el mismo elemento. Los arrastres no registran historial hasta soltar.
+- **La descripción de un nodo lleva formato** (1.1.32, Leo: «quiero que mis campos de descripción acepten formato markdown,
+  formateado y todo quiero verlo en ese campo. Esto no hace que los tooltips del esquema se vean con ese formato, solo es el
+  campo»). `js/mdvivo.js` (`window.MdVivo`, sin dependencias; claquedraw.html y tramas.html lo cargan antes que tablero.js;
+  `test/mdvivo.test.js`): `html(md)` pinta Markdown (cada renglón, un párrafo; `#`…`######`, `- `, `1. ` con su `start`, `> `
+  con un `<p>` por renglón; `**`, `*`/`_`, `~~`, `` ` ``, `==`, `[t](url)` —sin `javascript:`— y `<u>`), `md(campo)` lo
+  contrario, `plano(md)` el texto sin marcas y `vivo(campo, op)` convierte al escribir con las reglas del editor (js/markdown.js),
+  más Cmd/Ctrl+B, I y U, pegar como texto, Enter en un renglón vacío de una cita (sale) y Retroceso al principio de un título o
+  de una cita (párrafo). **Desde la 1.1.54** (el formato de la ventana de una nota, de ClapBook) también los atajos del editor
+  (`atajoDe(e, mac)`, puro —Cmd en el Mac y Ctrl en los demás, así Ctrl+E y Ctrl+K siguen siendo del sistema en el Mac; AltGr no cuenta—: Cmd+Mayús+X tachado, Cmd+Mayús+H resaltado —`op.resaltado()` da el color; sin él, `<mark>`—, Cmd+K
+  enlace —solo con `op.pedirEnlace`—, Cmd+Alt+0…6 títulos por `e.code`, y Cmd+E código), `formato(campo, accion, valor)` (negrita,
+  cursiva, subrayado, tachado, código, resaltar, letra, título, quitar y enlace, siempre por `execCommand` —entra en Deshacer— y
+  con el HTML del editor: `<strike>`, `<span style>` con `styleWithCSS` para los colores, `<a href>…</a>\u200B`), `pegar` (una
+  dirección sobre lo elegido es un enlace; con `op.markdown`, lo que `pareceMd` entra con formato), `urlEnlace`, `esUrl` y
+  `enlaceEn`. En los campos de Markdown (el nodo, el flotante) todo eso da la vuelta por `md()`/`html()`. `#fNota` es un `div.md-campo.md-texto[contenteditable]` (antes un textarea) y `p.descripcion` sigue
+  siendo texto, ahora Markdown: `descripcionEn`/`descripcionDe` en tablero.js, y los rótulos (`ponerResumen`), el globo de la
+  tira del editor (texto.js) y las tarjetas de la cronología la enseñan con `plano`. **Lo que en el campo es texto se queda en
+  texto** (`escaparMd`): un `*` o un `==` que no se convirtió (pegado, o con la conversión deshecha) se guarda escapado y un
+  párrafo que empieza por `#`, `- `, `> ` o `2. ` también, así que al volver a abrir el nodo se ve igual. **Tres cosas de
+  Chrome que costó ver**: (1) lo que un atajo inserta con `insertHTML` **al final de un bloque** sale con el tamaño y el color
+  de su sitio en `<span style>` (y al final del párrafo de una cita lo sacaba del párrafo); en medio del texto no: por eso el
+  atajo escribe antes un `\u200B` detrás y el cursor sigue tras él; (2) al unir bloques (Retroceso o Supr entre un título y un
+  párrafo, o con una cita) sí hace falta igualar los estilos, `.md-fusion` en `beforeinput` (tramas.css; los bloques con más
+  especificidad que `.md-texto h2`, cuyo tamaño y peso se llevaba), pero **no** en los `insertHTML` de los atajos, donde ponía
+  justo esos spans; (3) con la ventana sin foco, `focus()` no dispara `focus`, así que `defaultParagraphSeparator` se pide en
+  cada tecla (salían `<div>`). `onKeyDown` del tablero cuenta un `contenteditable` como campo (si no, Supr en la descripción
+  borraba el nodo). `aside h2` (el rótulo del panel) también estiliza los títulos del campo: `.md-texto` los devuelve.
 - `js/tramas/app.js`: autoguardado en `localStorage` (`guiones.tramas.doc`), abrir/guardar `.json`
   (usa `window.editorAPI` de Electron si existe) y `Tramas.document` (`get/set/isDirty/onChange`),
   misma forma que `Ed.document`.
-- Reglas firmes de la spec: hay exactamente una trama principal, que no se elimina ni cambia de tipo
-  y no se puede promover otra; un nodo pertenece como mucho a un salto; los dos extremos de un salto
+- Reglas firmes de la spec: **caben las tramas principales que sean** (1.1.23, Leo: «quita esa regla que puse de que solo
+  puede haber una trama principal»; la spec pedía exactamente una): se crean desde «+ trama» (Principal, Secundaria o
+  Alternativa) y cualquier trama cambia de tipo en su panel, pero **siempre queda al menos una** (`ultimaPrincipal(id)`: la
+  última no se elimina —ni su «×» ni su papelera salen— ni deja de serlo —sus otros tipos, apagados—; `normalizar` ya no
+  degrada las que sobran, solo hace principal la primera si no hay ninguna). La historia (`flujo`, `hilo`, el camino
+  iluminado, la tira del editor) sale de la primera (`lineaPrincipal`) y todas las principales empiezan en escena
+  (`presencia`); un nodo pertenece como mucho a un salto; los dos extremos de un salto
   comparten celda; un cuadro nunca toca una trama alternativa (se convierte en rombo); borrar un
   salto borra sus dos nodos; una nota va entre dos nodos consecutivos o **en un nodo** (`aId: null`) y **caben varias
   en el mismo sitio** (Leo, 16-09-2026; la spec pedía una por tramo).
@@ -307,7 +377,12 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   lleva a su pareja a la misma celda (la pareja sigue en su trama); si algo caería sobre un tercero, dos en la misma celda o un
   salto quedaría mal (en la trama de su pareja, un cuadro en una alternativa), no se hace y avisa. **Las notas de un nodo se van con él** (1.1.1, Leo 16-09-2026: «al mover el nodo se debe mover con todo y sus
   notas, lo mismo al borrar»; antes también se quedaban y pasaban al otro nodo); las de un enlace se quedan en su tramo (sus extremos
-  pasan al nodo que ocupa ese lugar). Mientras se arrastra, las notas de nodo acompañan al arrastrado y al que se aparta. Mientras se arrastra, el de debajo (y su pareja) se aparta a su sitio
+  pasan al nodo que ocupa ese lugar). **`moverPunto` recoloca las notas** (1.1.48, del debugueo del 20-09-2026):
+  `_repararNotas(p.id)` al final del movimiento —el `evitar` es el nodo que se movió, para que una nota de enlace se quede con el
+  extremo que no se movió—. Sin eso, meter un nodo en medio de un tramo dejaba su nota entre dos nodos que ya no eran consecutivos
+  (se pintaba a mitad de un trecho larguísimo, encima del nodo de en medio), y llevarse a otra trama uno de los extremos dejaba la
+  nota entre dos tramas: **`normalizar` la descarta al abrir el archivo, así que esa nota desaparecía al guardar y volver a abrir**.
+  `pegar` e `intercambiarPuntos` también reparan al terminar. Mientras se arrastra, las notas de nodo acompañan al arrastrado y al que se aparta. Mientras se arrastra, el de debajo (y su pareja) se aparta a su sitio
   (`previaIntercambio`, `.pt.intercambio` con transición). **Las notas también** (`moverNota(…, { intercambiar })`,
   `intercambiarNotas`): arrastrada sobre un tramo con otra nota, esa pasa al tramo de origen de la arrastrada, y al seguir
   arrastrando vuelve a su tramo (`colocarNotaArrastrada` en tablero.js). Sin la opción, el modelo sigue rechazando (criterio 13
@@ -325,7 +400,7 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   nodos, cuadros y rombos cuyo punto queda dentro (`multi`, `.pt.multi`; Mayús suma a lo elegido; Esc o un clic en otro nodo lo
   sueltan). Arrastrar uno de ellos mueve el bloque con vista previa (nodos y trazos desplazados) y al soltar
   `m.moverBloque(ids, dc, dl)`: los extremos de un salto van juntos (entra la pareja), faltan tramas por abajo → secundarias
-  nuevas, faltan celdas → `asegurarCeldas` alarga el último acto o añade actos; si cae sobre otros nodos se abre sitio en el
+  nuevas, faltan columnas → nacen (`asegurarCeldas`); si cae sobre otros nodos se abre sitio en el
   tiempo (todo lo que no va en el bloque desde su primera celda de destino se corre el ancho del bloque, en todas las tramas, para
   no romper saltos ni el orden); un cuadro no baja a una alternativa; `_repararNotas` recoloca las notas que quedan fuera de un
   tramo válido. Entra en Deshacer como un solo paso. **Borrado masivo** (Leo, 15-09-2026): con algo elegido sale la barra
@@ -357,7 +432,8 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   **El rótulo del primer nodo no se sale por la izquierda** (Leo, 16-09-2026: un nombre largo en la primera columna se
   perdía bajo la columna de tramas): se desplaza lo justo con `translateX(calc(-50% + dx))`.
   **La fila crece lo que haga falta, cada una la suya** (1.0.82, Leo 16-09-2026: «si tengo más tramas se hacen igual de
-  anchas aunque no existan notas») y su carril deja de ir centrado: `render` mide lo que ocupan rótulos y notas **por
+  anchas aunque no existan notas») **y su carril va siempre en el centro de la fila** (1.1.47; entre la 1.0.82 y la 1.1.46 se
+  quedaba pegado debajo de los rótulos cuando la fila crecía): `render` mide lo que ocupan rótulos y notas **por
   fila** y, si no cabe en `FILA_BASE`, escribe `--fila` y `--centro` **en esa `.row`** (en `:root` quedan los de partida;
   `.rail`, `.pt`, `.cadena`, `.nota` y `.hueco` leen `top: var(--centro, 50%)`). La geometría vive en `GEO` (por trama:
   `top`, `alto`, `centro`; `geo(id)`, `altoFilas()`) y la usan `yFila`, el alto del SVG, el nombre de un salto (en el borde
@@ -377,6 +453,28 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   rótulo, al pasar el ratón, va sobre `color-mix` al 11 % de `--c` (su color o el de su trama) con el borde al 45 %
   (`#board .pt.con-rotulo:hover .cap` en la piel). **Las notas ya no llevan el globo `#tip`**: al pasar el ratón la cajita crece
   hacia abajo y enseña su texto en cuatro líneas como mucho, con su papel y su color (`.nota:hover:not(.arrastrando)`).
+  **Reordenar una nota no rehace el tablero** (1.1.45, Leo, con su proyecto «Amor tiktoker»: «cuando intento mover una nota en la
+  misma trama, de arriba a abajo, empieza a parpadear»): cada paso del arrastre llamaba a `render()` —40 reconstrucciones de
+  `#rows` en un arrastre corto, midiendo con `capturePage` y un MutationObserver sobre `#rows`—, así que las notas se destruían y
+  volvían a nacer con sus guías y sus animaciones a medias. Ahora, mientras la nota siga en **su misma trama**, solo se recoloca
+  esa fila (`ajustarFila`, el bloque de medida que antes vivía dentro de `render`) y se le ajusta su clase `de-nodo`/`abierta`;
+  solo cambiar de trama repinta. Además, la nota que tiene el ratón encima **no cuenta para el alto de la fila** (con `:hover`
+  crece para enseñar su texto, y la fila crecía y encogía a cada píxel) y **la fila no encoge mientras se arrastra**. Medido: de
+  40 reconstrucciones a 5 y cero cambios de píxel en las otras tramas. El `:hover` forzado se prueba con el depurador de Chromium
+  (`CSS.forcePseudoState`): los eventos sintéticos no lo activan.
+  **La guía viaja con la nota** (1.1.46, Leo: «se ve por un tiempo como el enlace de la nota al nodo se sale y aparece arriba del
+  nodo»): la animación del reordenamiento mueve la nota desde donde estaba, pero su `--guia` ya tenía la medida final, así que
+  durante esos milisegundos la línea asomaba por encima del carril. `--guia` se registra con `@property` (`syntax: '<length>'`,
+  **`inherits: true`**: la línea es `.nota::before`, y un pseudo-elemento hereda de su elemento; con `false` se quedaba con el
+  valor inicial y la guía salía como un muñón) y `animarNotas` la anima junto al `transform`, de `g + dy` a `g`, leyéndola **del
+  estilo en línea** (con otra animación a medias, el valor calculado es el de ese instante y el error se acumula) y cancelando la
+  animación anterior de esa nota.
+  **Una nota puede bajarse a su propio escalón** (1.1.46, Leo: «quiero poder poner más abajo notas… sin que eso haga que deje de
+  estar relacionada a su nodo, solo es para mejorar la organización visual»): `nota.nivel` en el modelo (`fijarNivelNota`, que
+  `normalizar` conserva) es el escalón donde se quiere, contando desde el carril; sigue colgando de su nodo o de su tramo, solo
+  baja. `colocarRotulos` empieza a buscarle sitio ahí (y las que lo tienen se colocan después, para no robarles el nivel a las
+  demás) y la fila crece para contenerla. Se pone arrastrando la nota **por debajo de todas las que comparten su sitio**
+  (`bajarNotaArrastrada`, que mira el paso de la fila, apuntado en `row.dataset.paso`); subiéndola otra vez se le quita.
   **Las notas apiladas se reordenan arrastrando** (Leo, 16-09-2026: «déjame reordenar notas, una encima o debajo de
   otras, que la animación de mover exista… y que no importe si es del nodo o del enlace»): dentro de su sitio, la
   altura del puntero decide dónde cae (`reordenarNotaArrastrada` → `m.colocarNota(id, antesDe)`, que recoloca la nota
@@ -424,7 +522,7 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   **cada raya entre dos columnas es un enlace**: `enlaceEn(e)` devuelve `{ a: null, b: null, lineaId, col }`, el puntero la
   enciende (`rayaBajo` → `#rayaHover`, `.cadena.raya`), el clic la elige (`sel.tipo 'raya'`, id `lineaId|col`, panel con «＋ Nota»
   y sus notas) y el secundario abre `menuAbierto` («Agregar nota», `data-abierta-nota="lineaId|col"`). La nota de una raya es
-  `{ abierta: true, lineaId, actoId, celda }` (la columna donde empieza la raya; `deId`/`aId` null) y se dibuja a mitad de su raya
+  `{ abierta: true, lineaId, col }` (la columna donde empieza la raya; `deId`/`aId` null) y se dibuja a mitad de su raya
   (`sitioNota`). Modelo: `crearNotaAbierta(lineaId, cg)`, `moverNotaAbierta(id, lineaId, cg)`, `colNota(n)`, `lineaDeNota(n)`
   (úsese en lugar de `punto(n.deId).lineaId`), `notasAbiertas(lineaId, cg)`; `notasDe(id, null)` no las cuenta como de nodo;
   insertar, borrar y mover columnas y borrar un acto las llevan como a un nodo (no el «abrir sitio» de `moverBloque`); borrar
@@ -450,6 +548,114 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   sitio). **Opción al arrastrar**: un nodo deja el original a la vista (`.pt.original-dup`) y al soltar pega la copia ahí (sin
   intercambiar); un bloque, igual con `pegar(clip, c0 + dc, f0 + dl)`; una nota crea la copia en el `pointerdown` y lo que se
   arrastra es la copia (si no se mueve, se quita).
+- **Un nodo nace sin nombre propuesto** (1.1.42, Leo: «quita lo del nombre sugerido en los nodos; al igual que las notas, debe
+  haber un texto para que pueda guardarse»): `nuevoPunto` lo crea con `titulo: ''` (ya no «Punto nuevo» / «Evento»), sin nombre no
+  se pinta su rótulo (ni en el tablero ni en la tira del editor) y, si se cierra el panel flotante sin escribir nada, no se crea
+  (`limpiar()` de flotante.js, la regla de la 1.1.39). En tramas.html, donde el nombre se escribe en sitio, `nombrarRecien` enseña
+  el campo donde irá el rótulo y borra el nodo si se deja en blanco.
+- **Lo que se borra del esquema se puede deshacer desde su aviso** (1.1.42, Leo: «lo del deshacer aplica para los elementos de los
+  esquemas»): `borrado(r, antes, msg)` en tablero.js guarda el JSON del tablero antes de borrar y pinta el aviso con «Deshacer»,
+  que lo repone tal cual (`aplicarInstantanea` + `registrar`, sin depender del historial); lo usan los borrados de nodo, salto,
+  trama, acto, nota, varias notas, selección múltiple y columnas. Lo que se borra desde el panel flotante va por
+  `T.tablero.instantanea()` / `T.tablero.restaurar(json)` (el aviso del contexto pasa ahora la acción: `ctx.avisar(t, accion)`). El
+  botón del aviso va en el **acento del propio aviso** (`--toast-acento` en la piel, `currentColor` en tramas.css): con
+  `--inverso` —la regla de tramas.css gana por especificidad, `#aviso .aviso-accion`— salía casi negro sobre el grafito en modo
+  oscuro (Leo, 1.1.43). Contraste comprobado en los dos temas (6:1).
+- **Una relación nace sin texto** (1.1.41, Leo: «que las relaciones en los esquemas no tengan un texto por defecto; pueden tenerlo
+  si se edita, pero nacen en el arrastre sin ningún texto adicional»): `saltoDesdeCruce` crea su nodo con `titulo: ''`, `cables()`
+  no pinta el rótulo si no hay título y `nombrarRecien` no abre el campo en sitio para un salto sin nombre. Se le pone después con
+  el panel (el del salto es el de su nodo de salida) o con doble clic en un extremo. En flotante.js, `limpiar()` deja vacío un
+  extremo de salto que nunca tuvo título (solo recupera el suyo lo que sí lo tenía).
+- **Filas y columnas con su propio tamaño** (1.1.41, Leo: «quiero poder hacer más largas las filas y columnas del esquema, de manera
+  individual… el ancho de las filas hace que también sea más amplio el espacio entre las notas… debe poder restablecerse el tamaño
+  de todas las filas y columnas que se hayan modificado individualmente»). Modelo: un **factor** sobre el tamaño de la vista,
+  `linea.alto` y `datos.anchos[columna]` (`anchoCol`, `altoLinea`, `fijarAnchoCol`, `fijarAltoLinea`, `tamanosPropios`,
+  `restablecerTamanos`); los anchos viajan con sus columnas al insertar, borrar y mover (`_mapearAnchos`) y `normalizar` solo
+  guarda lo que se tocó. Tablero: `anchoCol(c)` en píxeles y `xs()`, las posiciones de todas las rayas (con su clave de caché), así
+  que `px(cg)` las lee y `celdaEn(x)` busca en ellas (antes los dos eran una multiplicación); `anchoDe(acto)` es la diferencia
+  entre sus dos bordes y la cuadrícula del fondo se dibuja raya a raya cuando hay anchos propios (`rejillaFondo`). Cada fila lleva
+  su `--fila` cuando su alto no es el de la vista, y `colocarRotulos(row, base)` **reparte el alto que sobra entre los
+  niveles de notas** (`dispo`: lo que queda de `base` desde debajo de los rótulos, contando lo que mide de verdad la nota más
+  alta, que una de varios renglones ocupa más; el tope del paso, 6 × el normal, solo evita guías absurdas).
+  **Sin salirse de su trama y con el carril centrado** (1.1.47, Leo: «aún hay momentos en los que las notas se van a otras tramas
+  y momentos en que la línea de la trama se va hasta arriba en lugar de seguir centrada»; la 1.1.44 lo había dejado a medias):
+  `colocarRotulos` devuelve **el borde de abajo de verdad** —el de la nota que más baja, con su alto real, no el último escalón
+  más un tope de tres renglones, que se quedaba corto con una nota larga o muy bajada— y `ajustarFila` hace la fila lo bastante
+  alta para que quepan los rótulos por encima **y** las notas por debajo con el carril **en su mitad**
+  (`alto = max(base, 2 · max(arriba, abajo) + 12)`, `centro = alto / 2`). Así el carril está a la misma altura relativa en todas
+  las tramas y entre las notas de una y los rótulos de la siguiente queda hueco. `remedir(row)` vuelve a medir una fila sin
+  reconstruir el tablero y, si cambió de alto, pone al día `GEO` (las de debajo se corren) y `cables()`: lo usan el arrastre de
+  notas y la escritura en vivo (el título de un nodo, el texto de una nota en el panel), que antes solo recolocaban la fila. Se arrastra el borde de abajo de la etiqueta de la trama (`.fila-asa`) y el borde
+  derecho de la cabecera de la columna (`.col-asa`, que es la raya: se ensancha el hueco a su derecha); **doble clic en un asa**
+  devuelve su tamaño normal (se cuenta a mano, `dosVeces`: el `preventDefault` del `pointerdown` deja sin `click`), y el botón de
+  restablecer de la barra de abajo devuelve las escalas **y** todos los tamaños propios (`T.tablero.restablecerTamanos`, con aviso;
+  `pintarEscalas` lo enciende en cuanto hay alguno, desde `alCambiar`).
+- **Los saltos se crean arrastrando el «+»** (1.1.23, Leo: «quita en el menú lo de cambio y salto de escena, que las
+  funcionalidades existan, solo que no en el menú»): el menú de crear (`abrirMenuCrear`, el del «+» y el doble clic en una
+  pista) solo ofrece el nodo. Arrastrando el «+» a otra trama, **la vista previa pinta en sus dos puntas lo que va a nacer**
+  (`cel.marcas`, dos `rect` en `#cables`, girados 45° para el rombo): el cuadro o, si una de las dos tramas es alternativa, el
+  rombo (`formaEntre`); luego se convierte desde el menú del salto, como siempre (un cuadro sigue sin tocar una alternativa).
+- **Mover entre tramas se ve** (1.1.23, Leo: «no hay animación que me indique dónde se va a posicionar si acepto el
+  movimiento»): el nodo arrastrado se desliza de celda en celda y, sobre otra trama, **baja o sube a su carril**
+  (`transform` con `yFila(destino) - yFila(origen)`; `.pt.arrastrando` con transición de `left` y `transform`), con sus notas
+  de nodo (el mismo desplazamiento; antes usaban el borde de la pista y con filas de alto distinto quedaban corridas) y, si es
+  el extremo de un salto, su pareja en la misma celda (`.con-nodo`) y el trazo y el nombre del salto apagados (`.en-vilo`)
+  hasta soltar; el que se aparta en un intercambio también va al carril (`previaIntercambio`). **Sin parpadeos** (1.1.27, Leo: «la
+  animación de mover un nodo a otra trama se ve rara, quizás porque tiene notas… muchos parpadeos»; eran dos cosas): las notas del
+  nodo arrastrado, que viajan con él, quedaban bajo el puntero y el destino (`elementFromPoint` → `.track`) saltaba a su trama de
+  origen en cada movimiento —ahora lo que viaja en la vista previa (`.pt.con-nodo`, `.nota.con-nodo`, `.pt.intercambio`,
+  `.nota.intercambio`) lleva `pointer-events: none`—; y `previaIntercambio` devolvía lo apartado a su sitio y lo volvía a apartar
+  en cada movimiento: ahora recuerda lo que puso (`arr.previaT`) y solo toca lo que cambia. Y **al cruzar la línea de un salto**
+  (1.1.29, Leo: «sigue ocurriendo… cuando paso por la línea que une las tramas»): el trazo (y su nombre) quedaba encima de la
+  pista y `elementFromPoint` no daba ninguna, así que el destino volvía a la trama de origen; ahora el nodo, la nota y el «+» la
+  buscan con `pistaBajo(x, y)`, que recorre `elementsFromPoint` hasta la primera `#board .track`. Y **al pasar de largo por la
+  columna de un cuadro** (1.1.30, Leo: «sigue parpadeando»): la vista previa del intercambio mandaba el salto entero a la otra
+  punta y lo devolvía en cuanto el puntero seguía, con su trazo y su nombre quietos. Ahora sale **solo si el puntero se detiene
+  220 ms** sobre el mismo nodo (`arr.candidato`, `arr.esperaPrevia`; soltar antes intercambia igual) y el salto se aparta entero:
+  sus extremos, su trazo (`[data-salto-g]`) y su nombre (`previaDe`, aplicado con `ponerPrevia`; si el extremo cambia de trama,
+  el trazo se apaga con `.en-vilo`). Lo arrastrado va por encima de los trazos y los nombres de los saltos (`.pt.arrastrando`
+  z 7 y la capa de sus notas, z 6). Probado con el ratón de verdad en Electron (`sendInputEvent`): de largo, cero cambios.
+  **La causa que quedaba** (1.1.31, Leo con su proyecto «Análisis de The Office»: «Se ve a Jim y Dwight», de la trama azul a la de
+  arriba): el rótulo de un nodo lleva `pointer-events: auto` (para pasar el ratón por él) y el `pointer-events: none` que se pone al
+  nodo arrastrado no le llega; al subir, su rótulo caía bajo el puntero y `pistaBajo` daba la trama de origen (el rótulo sigue en
+  su DOM), así que la vista previa bajaba y subía. Ahora nada de dentro de `.pt.arrastrando`, `.con-nodo` o `.intercambio` recibe
+  el puntero (`!important`) y `pistaBajo` se lo salta. Para reproducirlo se cargaron sus datos en un Electron aparte y se subió el
+  nodo con `sendInputEvent`: 4 saltos antes, 0 después. Una nota arrastrada, que ya se
+  movía en el modelo de sitio en sitio, **ahora se desliza** hasta el nuevo (`animarNotas` ya no se la salta, 200 ms).
+- **Arrastrando cerca de un borde, el tablero se desplaza solo** (1.1.23, Leo: «cuando muevo una nota o nodo muy a la derecha o
+  izquierda, no se hace scroll automáticamente»): nodos, notas, saltos, bloques y el «+» hacia otra trama (este, solo en vertical).
+  `vigilarBordes` (al principio de `onPointerMove`) arranca `pasoDespl` cada 16 ms mientras dura uno de esos arrastres; a menos de
+  `BORDE_DESPL` (48 px) de un borde —el izquierdo es el de la columna de tramas (`zonaUtil`), el de arriba el del eje— desplaza
+  `#board`, más deprisa cuanto más cerca, y **repite el movimiento** con la última posición del puntero (un evento hecho a mano
+  con `desplazando: true`, recortado dentro del tablero) para que lo arrastrado siga debajo; `onPointerUp` lo para. El bloque
+  cuenta lo que se ha desplazado desde que empezó (`sl0`/`st0`). El borde de un acto sigue con su `autoCrecer`.
+  **Solo con un arrastre de verdad** (1.1.24): hasta que el puntero se aleja 6 px de donde se pulsó (`inicioPuntero`) no arranca,
+  así un clic o un doble clic sobre un nodo junto al borde no desplazan nada; y el movimiento que se repite lleva la posición de
+  verdad a los arrastres que cuentan distancia (un acto, un bloque, el trazo de un salto): recortada al tablero, los descuadraba.
+- **Renombrar no desplaza el tablero** (1.1.24, Leo: «si está desplazada la trama y quiero cambiar el nombre a un nodo, me mueve al
+  inicio del scroll»): `editarEnSitio` enfoca con `preventScroll`. Con el nombre de un cuadro o un rombo (`renombrarSalto`) el
+  campo se coloca después de crearlo, y al enfocarlo aún estaba en la esquina del tablero: el navegador saltaba al principio.
+- **Pellizcar con el trackpad cambia el zoom de la vista** (1.1.51, Leo: «cuando hago un gesto de pellizco en un esquema, lo que
+  crece es la escala horizontal, que sea mejor el zoom el que se vea afectado por el gesto»; de la 1.1.23 a la 1.1.50 movía la
+  escala horizontal): Chrome y Electron dan el pellizco como `wheel` con `ctrlKey` (Ctrl + rueda también vale). `onWheel` (en
+  `document`, solo sobre `#board`; nada a mitad de un arrastre) lo acumula —cada evento con tope de ±30, para que una muesca de la
+  rueda no pase de un 35 %— y `aplicarPellizco`, una vez por fotograma, multiplica `ZOOM` por `exp(-delta · 0,01)` entre 0,4 y 3
+  (los topes de sus botones) con `zoomEn(nuevo, ancla)`: solo cambia `--zoom-esq`, sin repintar (el tablero mide en sus píxeles),
+  y corrige `scrollLeft` **y** `scrollTop` para que lo de debajo del puntero se quede ahí. **El ancla es la del principio del
+  gesto** (se vuelve a tomar si el puntero se mueve más de 4 px): con el esquema que cabe entero en alto no se puede desplazar en
+  vertical y el punto se corre, y recalculándola en cada fotograma esa deriva ya no se recuperaba. Por fotograma llama a
+  `alVista(false)` (app.js pinta el porcentaje); 180 ms después del último evento redondea a un porcentaje entero —el que se lee
+  abajo: con 0,998 el «+» iba a 1 y no se veía el paso—, repinta una vez conservando el desplazamiento (salvo si hay un arrastre o
+  se escribe un nombre en sitio: repintar cerraría el campo y guardaría lo que llevara) y llama a `alVista(true)` (`recordarZoom`
+  lo guarda en `vista.zoomEsq`). **Sin `alVista`** (tramas.html, que no tiene zoom de la vista) sigue como antes: la escala
+  horizontal y `alZoom`. Prueba de Electron con eventos de rueda reales en el scratchpad (`pellizco-electron.js`, 25
+  comprobaciones: anclaje en los dos ejes, topes, porcentaje, que la escala no se mueve, arrastre, nombre en sitio, tramas.html).
+- **El nombre de un nodo se escribe con su color** (1.1.23, Leo: «cuando estoy creando un nodo, siempre se ve lo que escribo en
+  morado; es hasta que doy Enter cuando toma el color de la trama»): `.cap-edit` (al crear o con doble clic) lleva el `--c` del
+  nodo en el borde, el fondo, el halo y la selección, como su rótulo, y no el acento (`#board .pt .cap-edit` en la piel).
+- **El campo de una nota que se escribe va centrado bajo su sitio** (1.1.23, Leo: «se desplaza un poco a la izquierda cuando voy
+  a escribir el texto»): sin su texto la nota se encoge y el campo (`.nota-edit`, centrado en ella) se corría; `editarEnSitio`
+  lo centra en su guía (`--gx`), sin salirse de la pista por la izquierda.
 - **El trazo de un salto abre el panel de su nodo de salida** (Leo, 16-09-2026: «si selecciono la diagonal, no se abre
   el texto en la descripción; debe poderse escribir como si eligiera uno de sus nodos»): con `sel.tipo === 'salto'`,
   `panel()` pinta el panel del punto `deId` (cabecera «Relación» o «Cambio de escena»), así que ahí se escribe su
@@ -464,13 +670,15 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   un extremo) o, al crear un salto, en sitio (`renombrarSalto`: el nombre pasa a los dos extremos; input `.salto-nombre-edit`). El
   doble clic se reconoce por `click.detail` 2, y **un clic seco en el trazo ya no redibuja** al soltar (`mov` sin movimiento, con 3 px
   de margen): si redibujaba, la etiqueta se sustituía entre `pointerup` y `click` y el navegador no daba el clic.
-- **Esc apaga el camino iluminado, no la selección** (Leo, 16-09-2026: «Esc solo debe ser para escapar de que se me muestre
-  el recorrido, no para que me cierre el panel»): con un camino a la vista, Esc pone `sinRuta` y redibuja sin él, dejando el
-  nodo elegido y su descripción; elegir otra cosa lo vuelve a encender. Con el panel al lado (tramas.html, Personajes) un Esc
-  sin camino sigue soltando la selección. Con el recorrido encendido, lo que queda apagado **se ve entero al pasar el ratón**
-  (`body.con-ruta .pt:hover`, y lo elegido siempre). Y **ni su rótulo ni las notas se atenúan** (Leo, 16-09-2026: «mantén el texto
-  de los tooltips sin atenuar», «las notas tampoco»): la opacidad baja va en los hijos del nodo menos en `.cap`, no en
-  el `.pt` entero, y `body.con-ruta .nota` se quedó en 1.
+- **Ya no hay camino iluminado** (1.1.25, Leo: «quita mi regla de que al seleccionar un nodo se sigue un camino por medio de
+  los cuadros o rombos, todo que se vea igual»): elegir un nodo no enciende el recorrido que siguió la historia hasta él ni apaga
+  lo demás. `calcularRuta()` deja `ruta` en null, así que `body.con-ruta`, `.cadena.ruta`, `.pt.en-ruta` y la opacidad de los
+  saltos fuera del camino ya no salen (el CSS sigue ahí) y `sinRuta` desapareció: Esc con un nodo elegido y el panel abajo no hace
+  nada (con el panel al lado, tramas.html, suelta la selección). `m.recorrido()` sigue en el modelo y en sus pruebas. **Y nada se
+  apaga nunca** (Leo, al ver que lo de fuera de escena seguía: «no, ni así, que no se apague en ningún momento»): `render()` usa
+  siempre `SIN_PRESENCIA`, así que lo que queda entre la salida y la vuelta de un salto ya no lleva `.fuera` (ni en el tablero ni
+  en la tira del editor, texto.js, ni el aviso «fuera de escena» del panel del nodo). `m.presencia()` sigue en el modelo. Lo único
+  que se ve apagado es lo que se descarta a mano (nodo o trama).
 - **Al pasar el ratón por un nodo** (Leo, 15-09-2026) ya no sale el globo `#tip` (las notas sí lo llevan): su rótulo fijo enseña
   el nombre entero (`.pt:hover .cap` sin `max-width`, el nodo por encima de los vecinos). Además se enciende (el centro se rellena de su color,
   que `.dot` lleva también en `color`, con halo) y su rótulo va en negrita; lo mismo en la tira del editor.
@@ -509,14 +717,14 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   abre el mismo menú sin tocar lo elegido (si no estaba elegida, la elige). **Insertar** mete tantas columnas como haya
   elegidas (Excel) a un lado o a otro, y quedan elegidas las nuevas; **Supr** o «Eliminar» las borra con confirmación
   (`m.resumenColumnas` para el texto: nodos, saltos, notas y los actos que se quedarían sin columnas). En el modelo:
-  `insertarColumnas(cg, cuantas, lado)` (las añade al acto que contiene esa columna, hasta `MAX_CELDAS`),
+  `insertarColumnas(cg, cuantas, lado)` (dentro de un acto lo alargan y los actos de detrás se corren),
   `moverColumnas(cgs, delta)` (**arrastrar la cabecera de una columna ya elegida mueve las elegidas con lo que tengan
   dentro**, Leo 16-09-2026: se sacan de la cuadrícula y se meten `delta` más allá, lo demás conserva su orden y los actos no
   cambian de ancho —lo que cambia de acto es el contenido—; sueltas, quedan juntas en el destino; la vista previa
   (`previaColumnas`) corre las rayas, los nodos y los trazos hasta soltar, y al soltar lo elegido sigue a las columnas),
-  `borrarColumnas(cgs)` (borra sus nodos con `borrarPuntos`, corre lo de la derecha, quita las celdas de atrás hacia
-  delante con las posiciones calculadas antes de tocar nada, elimina los actos que se quedan a cero y repara las notas;
-  nunca deja el tablero sin columnas) y `resumenColumnas(cgs)`. Por eso `normalizar` ya **no sube el ancho de un acto a
+  `borrarColumnas(cgs)` (borra sus nodos con `borrarPuntos`, corre lo de la derecha tantas columnas como se quitaron antes,
+  acorta los actos que las tenían y elimina los que se quedan a cero, y repara las notas; nunca deja el tablero sin columnas) y
+  `resumenColumnas(cgs)`. Por eso `normalizar` ya **no sube el ancho de un acto a
   `MIN_CELDAS`** (respeta desde 1); `MIN_CELDAS` es el mínimo del divisor y de la barra del panel, y **vale 1** (Leo,
   16-09-2026: «lo mínimo que puede tener un acto no debe ser 7, debe ser 1»; antes 6), también para los momentos. Todo entra en
   Deshacer como un paso (lo registra el `render()` de siempre).
@@ -526,20 +734,14 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   una celda. El hueco no es de ningún acto y ahí no sale el «+» de crear (`onMouseMove` lo esconde si `celdaEn < 0`).
 - **Después de la última columna hay una más** (1.1.5, Leo 17-09-2026: «cuando llego al final de una trama ya no se me sugiere
   agregar nuevos nodos»): las pistas miden `W + G()` y, pasado el final, `onMouseMove` pone el «+» ahí con `celdaObj.extender`.
-  Nada cambia hasta crear: `extender(q)` llama a `m.asegurarCeldas(total)` (el último acto crece o, si ya tiene `MAX_CELDAS`,
-  nace otro de una columna) y devuelve dónde quedó; vale para el menú de crear y para arrastrar el «+» a otra trama (salto).
-- **El borde de un acto se arrastra columna a columna** (1.1.8, Leo 17-09-2026: «cuando arrastre hacia la derecha en la última
-  línea vertical quiero que se vayan agregando más líneas… a la izquierda, que vaya quitando líneas y moviendo los nodos y notas;
-  si ya no se puede comprimir más, ya no pasa nada»; antes `fijarAncho` recortaba y amontonaba los nodos en la última celda, y
-  el «+» de acto nuevo tapaba el asa del último). El arrastre `res` lleva `n` (columnas aplicadas) y `pila` (el acto y los que
-  nazcan): a la derecha `m.crecerActo(id)` (una columna al final; el último acto, lleno, abre otro de una columna), a la
-  izquierda `m.encogerActo(id)` (quita la columna vacía más a la derecha del acto —sin nodos en ninguna trama ni notas de
-  raya— con `borrarColumnas`, así lo de detrás se junta; un acto nacido en el arrastre y vacío se borra). Si ya no se comprime,
-  se rebasa `x0` para que seguir a la izquierda no haga nada y volver a la derecha crezca al momento. `#addActo` va 10 px
-  más allá del borde para dejar libre el asa. `fijarAncho` sigue para el panel del acto.
+  Nada cambia hasta crear: `extender(q)` llama a `m.asegurarCeldas(total)` (nace esa columna; los actos no cambian) y
+  devuelve dónde quedó; vale para el menú de crear y para arrastrar el «+» a otra trama (salto).
+- **El borde de un acto se arrastra columna a columna** (1.1.8; desde la 1.1.24 **solo cambia dónde acaba el acto**: antes
+  añadía y quitaba columnas y movía los nodos): el arrastre `res` (`{ a, x0, fin0 }`) llama a `m.moverBorde(id, fin0 + columnas
+  recorridas)` y redibuja si cambió. `#addActo` va detrás del último acto.
   **Pegado al borde crece solo** (1.1.9, Leo 17-09-2026: «para que funcione tengo que arrastrar a la izquierda y luego a la
   derecha»: el final del último acto queda junto al borde del tablero y no había sitio para llevar el puntero más allá):
-  `autoCrecer()` —con el puntero a menos de `BORDE_AUTO` (40 px) del borde derecho de `#board`— añade una columna cada 110 ms,
+  `autoCrecer()` —con el puntero a menos de `BORDE_AUTO` (40 px) del borde derecho de `#board`— alarga el acto una columna cada 110 ms (pasado el final nacen columnas),
   desplaza el tablero lo mismo y corre `res.x0`, así el borde sigue bajo el puntero; para al alejarse, al soltar, si el puntero
   sale de la ventana (`mouseleave` del documento) o si vuelve sin botón (`buttons === 0` cuenta como soltar: al simularlo, los
   `pointermove` deben llevar `buttons: 1`).
@@ -547,11 +749,36 @@ La especificación de dominio está en `docs/tramas/` (spec y mecanismo) y manda
   `css/tramas.css`, 120 y 57 —44 de actos más 13 de la tira de columnas—; la piel de ClapCraft pone 80 y 46): `tablero.js` los lee con
   `getComputedStyle` al cargar (`medida()`) para colocar los cables del SVG. Cambiar `.row`/`.axis`
   por CSS sin tocar esas variables desalinea los saltos (pasó el 13-09-2026).
+- **Ocultar tramas** (1.1.40, Leo: «que se puedan ocultar tramas, como cuando se ocultan filas de Excel; no las elimina, solo las
+  oculta y se pueden mostrar de nuevo más adelante; se ocultan con todo y sus elementos; solo se puede desocultar desde el esquema,
+  no desde el editor»): `linea.oculta` en el modelo (`ocultarLinea(id, v)`, `mostrarLinea`, `mostrarTodasLasLineas`,
+  `lineasVisibles`; `normalizar` la conserva y nunca deja todas ocultas: **siempre queda una a la vista**). No se borra nada: sus
+  nodos, saltos y notas siguen ahí y vuelven con ella. **Borrar la última que se ve deja otra a la vista** (1.1.48: con las demás
+  ocultas, `borrarLinea` dejaba el esquema con cero filas —solo la franja de ocultas— hasta volver a abrir el proyecto, que era
+  cuando `normalizar` lo arreglaba). **Y al reordenar tramas arrastrando, `moverFila` traduce el sitio donde se suelta —que cuenta
+  filas a la vista— al índice de la lista entera, donde también están las ocultas** (1.1.48: con una oculta por encima, soltar una
+  trama debajo de otra las dejaba al revés o no la movía). El tablero no pinta su fila, `altoFilas`/`filaEn` no la cuentan, `cables()`
+  se salta los saltos con una punta escondida y, si hay ocultas, va una franja al final (`.row.ocultas`) con su cuenta: su botón
+  (`#verOcultas`) abre el menú con cada una y «Mostrar todas» (`data-mostrar-linea`, `data-mostrar-todas`). Se oculta desde el panel
+  flotante de la trama («Ocultar» → `T.tablero.ocultarLinea`). En el editor (texto.js) la tira solo recorre las visibles, sus
+  flechas las saltan y un cuadro que lleva a una oculta avisa en lugar de cambiar de trama.
+- **Zoom de la vista** (1.1.40, Leo: «implementa un zoom en los esquemas para verlos más cerca»): `#canvas` lleva `zoom` de CSS
+  (`--zoom-esq`, que escribe `T.tablero.vista(v)`, de 0,4 a 3), así que crece todo —nodos, rótulos, notas, eje— y las barras de
+  desplazamiento siguen valiendo. **Ojo con las medidas**: con `zoom`, `getBoundingClientRect`, las coordenadas del puntero y
+  `scrollLeft` van en píxeles de pantalla (× ZOOM) y `offsetLeft`, los estilos en línea y la geometría del tablero (`px`, `G`,
+  `yFila`) en los suyos; por eso `L(d)` pasa de pantalla a tablero, `P(d)` al revés y `celdaCli(dx)` es `celdaEn` con una distancia
+  de pantalla. Van por ahí los arrastres (nodo, nota, salto, bloque, columnas, acto y su borde), el «+» de la celda, la marquesina,
+  la marca de reordenar filas y el ancla de una raya para el panel flotante. En la barra de abajo, «− 100 % +» (`.zoom-vista`,
+  `[data-zoom]`, pasos de `PASOS`, el porcentaje vuelve al 100 %) y Cmd/Ctrl + − 0 con el esquema delante; se recuerda en
+  `vista.zoomEsq`. La escala horizontal y el alto de carril siguen siendo otra cosa; desde la 1.1.51 el pellizco mueve este zoom
+  (ver «Pellizcar con el trackpad»).
+- **Un clic en el nombre de una trama o de un acto la elige** (1.1.40): su campo es de solo lectura hasta el doble clic —lo dice su
+  título, «Clic: seleccionar · doble clic: renombrar»—, pero el clic no hacía nada y el acto parecía no dejarse elegir.
 - **Fondo de los actos**: `acto.fondo` es un color de `FONDOS`, `'ninguno'` («Sin fondo», elegido a
   mano) o `null` = automático por posición (`FONDOS_AUTO`: azul, ámbar, verde, violeta, rojo, gris;
   `T.fondoEfectivo(acto, i)`), como en el diseño. El panel del acto marca el automático.
 - `T.tablero.simple(true)` (el tablero de un personaje en ClapCraft): sin fuera de escena ni camino
-  iluminado, sin rombos («Salto alternativo a…» fuera del menú de crear) y sin sentido en los saltos (el
+  iluminado, sin rombos y sin sentido en los saltos (el
   trazo no lleva flecha y el menú de un salto solo tiene Eliminar: ni convertir ni invertir).
 - El ancho de la columna de tramas es `T.tablero.gutter(px)` (110–420), que escribe `--gutter` en el
   `<html>`; `css/tramas.css` lo lee en `.label` y `.axis .gutter`. tramas.html no lo cambia (190).
@@ -596,16 +823,70 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   `{ id, nombre, fijado, creado, modificado, datos, notas, notaActual }` con `activo`. Hoy la página
   solo usa uno (el activo); las operaciones de lista (fijar, mover, colocar, lista) quedan probadas por
   si vuelve un gestor. Cada operación devuelve `{ ok, aviso? }`. `npm test` corre `test/claquedraw.test.js`.
-- `js/claquedraw/app.js`: **una pestaña por guion** de la biblioteca (`#pestanas`, `renderPestanas`);
-  un solo tablero montado, `montar(id)` vuelca el anterior (tablero, nota y archivo pendiente) y carga
-  el otro. `volcar()` escribe el tablero en el guion (`abiertoId`) y persiste toda la biblioteca en
-  `localStorage` (`guiones.claquedraw.biblioteca`; vista en `guiones.claquedraw.vista`). Nuevo abre una
-  pestaña «Sin título N» (`nombreSinTitulo()`: el número libre más bajo; los «Capítulo N» antiguos sin
-  archivo se renombran al arrancar); el asterisco de la pestaña y del título es `modificado(id)`
-  (sin archivo: no virgen; con archivo: `sucio`); Abrir… abre en pestaña nueva, reutiliza la actual si está virgen (`esVirgen`)
-  o salta a la que ya tenga ese archivo; cerrar (`cerrarPestana`) escribe y cierra si hay archivo,
-  pregunta si hay contenido sin archivo, y sin pestañas queda «Sin proyectos» (ver abajo). Primer arranque: hereda
-  `guiones.tramas.doc` si existe (sin borrarlo).
+- `js/claquedraw/app.js`: **una ventana por proyecto** (1.1.33, Leo: «que los proyectos se abran en nuevas ventanas y pueda tener
+  varios abiertos a la vez»). La ventana lleva un proyecto (o ninguno: «Sin proyectos» / «Nuevo proyecto») y lo dice su dirección,
+  `claquedraw.html?p=<id>` (`informarVentana` la pone con `history.replaceState` y se lo cuenta a Electron: `api.ventanaProyecto({
+  id, nombre, ruta, nuevo })`). `biblioteca` sigue siendo una `C.Biblioteca`, con un solo guion, y `persistir()` lo escribe **en
+  su clave**, `guiones.claquedraw.p.<id>` (y `guiones.claquedraw.ultimo`, que en el navegador abre la página sin nada pedido):
+  dos ventanas no se pisan. Hasta la 1.1.32 todos iban en `guiones.claquedraw.biblioteca`: `repartir()` lo pasa una sola vez
+  (el activo se queda en la ventana y los demás se abren en las suyas, `otrosDeAntes`). La vista (`guiones.claquedraw.vista`) es
+  de todas: `guardarVista` relee lo guardado y solo toca, de los mapas por proyecto (`archivos`, `pestanas`, `pantallas`), los
+  de sus proyectos (`idsPropios`). **Lo que la ventana quita de la vista se quita también de lo guardado** (1.1.51, `conocidas`: las
+  claves que ha tenido; si falta una, la quitó): la mezcla con lo guardado la devolvía, así que volver al 100 % (`zoomEsq`),
+  restablecer las escalas (`zoom`, `alto`) o el ancho del menú (`ladoAncho`) no se recordaba y al abrir otra vez la app volvía el
+  valor de antes. **Abrir o crear con un proyecto ya en la ventana (`ocupada()`: uno que no sea un «Sin título»
+  sin tocar) va a otra ventana** (`abrirVentana(q)`: en Electron `api.abrirVentana`, que trae delante la que ya tenga ese
+  proyecto o archivo; en el navegador, `window.open`): `nuevo()` → `?nuevo`, `abrirRuta` → `?ruta` (antes `api.buscarRuta`: si
+  otra ventana lo tiene, va a ella; si esta, lo dice), `abrirHandle` → `?h=<clave>` (el handle por IndexedDB,
+  `pendiente:<clave>`), un archivo sin ruta ni handle → `?t=<clave>` (su texto en `guiones.claquedraw.pendiente.<clave>`); la
+  ventana nueva lo atiende al arrancar (`pedido()`). `elegirArchivoNuevo` rechaza un archivo que ya es de otra ventana.
+  **Cerrar el proyecto** (`cerrarProyecto`: Archivo › Cerrar proyecto, Cmd+Shift+W, Cmd+W con una sola pestaña) escribe lo
+  pendiente o pregunta si no tiene archivo, lo quita de este equipo (`quitarDeLaVentana`: su clave, sus pestañas, su vínculo) y
+  cierra la ventana (`api.cerrarVentana`), salvo si es la única, que se queda en «Sin proyectos»; el botón rojo de la ventana
+  pasa por lo mismo (Electron no la cierra: manda la orden `cerrarVentana` y la página la cierra con `forzar`). Cancelar un
+  proyecto nuevo en una ventana abierta para eso la cierra. En `electron/main.js`: `ventanas` (por `webContents.id`: `proyecto`,
+  `ruta`, `nuevo`, `cerrable`), `ventanas.json` en los datos de la app con las ventanas y su sitio (**salir de la app no las
+  olvida**: al arrancar se abre una por cada una; cerrar una ventana sí), las IPC `ventana:proyecto`, `ventana:abrir`,
+  `ventana:buscarRuta` y `ventana:cerrar`, y una ventana nueva sale 28 px más abajo y a la derecha. El asterisco del título es
+  `modificado(id)` (sin archivo: no virgen; con archivo: `sucio`). Primer arranque: hereda `guiones.tramas.doc` si existe (sin
+  borrarlo).
+  **Arriba, las pestañas del proyecto** (1.1.33, Leo: «que en los elementos del árbol o en notas y segmentos exista en los tres
+  puntos la opción "Abrir en pestaña"… si ya tengo un elemento abierto en una pestaña, no se duplica»; «los documentos de los
+  esquemas y los esquemas también se puedan abrir en pestañas diferentes»): la franja lleva a la izquierda el nombre del
+  proyecto (`.franja-proyecto`, doble clic lo renombra) y detrás sus pestañas, cada una **una pantalla** (`pantallaActual()`: vista,
+  árbol, esquema montado, biblioteca, segmento expandido `seg`, nota, papelera, documento `doc`) con la inicial de su clase
+  (`rotuloDe`: E esquema, D su documento, B biblioteca, P personaje, S segmento, N nota; su color si lo tiene). `vista.pestanas[id]
+  = { lista: [{ id, p }], activa }`. Lo que se hace en el árbol cambia la de delante (`recordarPantalla` la apunta, como antes la
+  última pantalla); **«Abrir en pestaña»** en los ⋯ del gestor (esquemas —y «Abrir el documento en pestaña»—, bibliotecas,
+  personajes, segmentos, notas y papelera; `o.abrirEnPestana({ tipo, id, clave })` → `pantallaDe`) abre otra detrás de la de
+  delante o, si ya hay una con ese elemento (`claveDe`), va a ella. Cambiar de pestaña (`cambiarPestana`) apunta la que se deja y
+  repone la otra (`reponer`, que ya no remonta el esquema si es el mismo y monta sin abrir el editor, `montarEsquema(eid, {
+  sinEditor })`, para no crear el documento de un esquema al pasar por él). Se ordenan arrastrándolas (`pestArr`), se cierran con
+  su × o el botón central (la última no tiene ×), Cmd+W cierra la de delante y Ctrl+Tab pasa de una a otra; una cuyo elemento ya
+  no existe se quita al redibujar (`podarPestanas`). Las pestañas de antes eran los proyectos (1.1.26: se ordenaban igual).
+  **Cada pestaña guarda su nota elegida con su ventana abierta** (1.1.34, Leo: «el sidepanel de los segmentos cuando presiono una
+  nota se cierra cuando cambio de pestaña»; desde la 1.1.54 es la ventana de la nota): `p.sel` (`C.gestor.notaElegida()`, la de la
+  ventana abierta) y `reponer` la vuelve a elegir con `C.gestor.elegirNota(sel)`, que la deja para reabrirse (`reabrir`), antes de abrir la biblioteca o el segmento (así otra pestaña no hereda la de esta). El
+  cierre estaba en el clic «fuera de las notas» del gestor: cuando llega ahí, la pestaña pulsada ya no está en la página (la franja
+  se redibuja al cambiar) y `closest('#pestanas')` no la encontraba; ahora mira `e.composedPath()` (`enPestanas`). Abrir y cerrar
+  la ventana apuntan la pantalla (`o.alNavegar`).
+  **‹ › en las cabeceras: el historial de la pestaña** (1.1.35, Leo: «a la izquierda del nombre del contenedor en las pantallas
+  unos botones < > para poder regresar a la pantalla anterior»): `t.atras` / `t.adelante` (hasta `MAX_HISTORIA`, 40) viajan con
+  la pestaña en `vista.pestanas`; `recordarPantalla`, cuando lo de delante cambia de elemento (`claveDe`), mete lo de antes en
+  `atras` y olvida `adelante`; `irHistoria(±1)` repone (saltando lo que ya no existe). Los botones (`.nav-hist`, `HISTORIA`) los
+  pone un MutationObserver sobre `main` delante de cada `.esq-titulo` (esquema, documento, biblioteca, segmento expandido, nota:
+  las cabeceras se rehacen a menudo) y `pintarHistoria` los apaga sin nada a ese lado; el clic se atiende en captura y no llega al
+  gestor. También Cmd/Ctrl+[ y ] (no con el foco en un campo) y las órdenes `atras`/`adelante`. **«Contenedores» y «Personajes»
+  del pie del menú solo cambian el árbol** (`o.verArbol` + `renderLado`; Leo: «no me debe cambiar de pantalla hasta que presione
+  algún elemento del árbol… afecta la navegación entre pestañas»; antes montaban un esquema o abrían un personaje). **El «+»
+  detrás de la última pestaña** (`[data-nueva-pestana]`, `nuevaPestana`, Cmd+T y Archivo › Pestaña nueva) abre una pestaña al
+  final en el primer elemento de Contenedores (`primerElemento`: el primer esquema o biblioteca en el orden del árbol, entrando en
+  carpetas y grupos).
+  **El editor recuerda dónde se quedó cada documento** (1.1.33, Leo: «no se debe perder la línea… al hacer cambios de pestaña;
+  actualmente si cambio de pantalla en el árbol se pierde la línea del editor»): texto.js apunta por documento (`op.clave` de
+  `abrirDocumento`, la id de su nota) el bloque y el carácter del cursor y el desplazamiento de la hoja (`selectionchange` y
+  `scroll` del marco, solo con el editor a la vista y sin contar el medio segundo tras abrir, en que el cálculo de páginas mueve
+  la hoja) y `reponer` los deja igual al volver a abrirlo; sin nada apuntado, arriba (`alPrincipio`).
 - **Proyectos: «Nuevo proyecto» y «Sin proyectos»** (Leo, 15-09-2026, `docs/diseno/rediseno-13/`: «la pestaña en realidad es un
   proyecto»; el menú Archivo dice Nuevo proyecto…, Abrir proyecto… y Cerrar proyecto). **Nuevo** (Ctrl+N, el «+», `btnNuevo`, el
   menú) ya no crea un «Sin título»: abre la **pestaña de creación** (`.pestana-proyecto`, una sola, en memoria; se puede ir a
@@ -630,8 +911,8 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   proyecto abierto se rechaza (se pisarían). Después `biblioteca.crear({ nombre, documentos: plantillas.documentos(id) })`,
   monta y `archivoNuevo` vincula y escribe con `escribirArchivo` (si no queda escrito: desvincula y, en el navegador, descarga
   una copia). **La pestaña lleva el nombre del proyecto, no el del archivo.** Desaparecieron `archivoEnCarpeta`,
-  `carpetaInicial`, `elegirCarpeta` y los IPC `proyecto:carpeta`, `proyecto:elegirCarpeta` y `proyecto:crear`. **Sin proyectos** (`body.sin-proyectos`, `#sinProyectos`): al cerrar la
-  última pestaña (`quedarSinProyectos`: nada montado, `abiertoId = null`) y en el primer arranque (`vista.iniciada`; salvo si
+  `carpetaInicial`, `elegirCarpeta` y los IPC `proyecto:carpeta`, `proyecto:elegirCarpeta` y `proyecto:crear`. **Sin proyectos** (`body.sin-proyectos`, `#sinProyectos`): al cerrar el
+  proyecto de la última ventana (`quedarSinProyectos`: nada montado, `abiertoId = null`) y en el primer arranque (`vista.iniciada`; salvo si
   hay un tablero de tramas.html que heredar). Riel de 44 px, «Nuevo proyecto», «Abrir un proyecto», **recientes**
   (`guiones.claquedraw.recientes`, ocho como mucho: `recordarReciente` al abrir, crear, «Guardar como…», montar y cerrar un
   proyecto con archivo; clave = ruta o `h:<nombre>` con el handle en IndexedDB `reciente:<clave>`; tono de la plantilla o por
@@ -643,7 +924,8 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   el archivo de otro proyecto abierto), cerrar todo y abrir un reciente, y que ese proyecto se sigue guardando (Leo, 15-09-2026: «ve que el guardado siga
   funcionando»): notas y texto de sección llegan solos a su archivo, cerrar justo tras un cambio lo escribe, reabrir desde
   recientes no reescribe, crear otro proyecto escribe lo pendiente del anterior y, al volver a arrancar, los dos siguen
-  vinculados sin reescribirse (71 comprobaciones en la 1.1.22, con renombrar el proyecto sin tocar su archivo, su contenedor
+  vinculados sin reescribirse (78 comprobaciones en la 1.1.33, ya con una ventana por proyecto: «Abrir…» y «Nuevo proyecto» en otra
+  ventana, abrir dos veces el mismo archivo no abre otra, `ventanas.json`, cerrar ventanas y las pestañas; antes 71, con renombrar el proyecto sin tocar su archivo, su contenedor
   detrás y exportar a Markdown; «guarda la nota nueva creada en el segmento expandido» falla alguna vez por los tiempos del
   arrastre sintético: repetir antes de buscar un fallo). En el panel de navegador la tecla Enter de la herramienta no llega al campo: se prueba con
   `KeyboardEvent` sintético.
@@ -728,6 +1010,65 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   texto viejo vuelva a la nota al recargar el editor), el doble clic la renombra y su «×» la elimina. **La comparación**
   (`comparar(a, b)`, sin DOM, `test/versiones.test.js`) enfrenta los dos textos por párrafos (subsecuencia común más
   larga) y los pinta en una capa: lo igual apagado, lo añadido en verde y lo quitado tachado en rojo.
+  **La tira se edita con un panel flotante** (1.1.36, Leo: «quiero poder agregar, editar, eliminar nodos y notas desde la línea del
+  tiempo del editor. No quiero un panel inferior como en el esquema… quizás un panel flotante… incluso si hay varias notas en un
+  mismo nodo o raya»; y «en esta vista no dejes hacer relaciones»). `pintarLugares` pone sobre la raya un «+» (`.hilo-mas`, se ve al
+  pasar el ratón) en cada **lugar**: delante del primer nodo, entre cada dos (el enlace) y detrás del último, o uno solo en una trama
+  sin nodos (`lugares`, en los mismos sitios donde `pintarNotas` pone los puntos de sus notas). El clic en un nodo (o en sus puntos)
+  abre `abrirFlot({ tipo: 'nodo' })`: título (en un salto, de los dos extremos), descripción con formato (MdVivo) y sus notas; el de
+  un «+» o de los puntos de un enlace o raya, `{ tipo: 'lugar' }`: «＋ Nodo aquí» (`nodoEn`: en medio del hueco entre sus dos nodos
+  o, si van pegados, en una columna nueva, `insertarColumnas`; delante del primero en la columna de antes o en una nueva; detrás
+  del último en la siguiente) y sus notas (`notasDelLugar`: las del enlace y las de las rayas de entre sus nodos, o las de las
+  rayas de ese lado); «＋ Nota» (`crearNota` de nodo o de enlace, `crearNotaAbierta` en una raya), cada nota con su campo y su ×.
+  Borrar pide confirmación (`Tramas.tablero.confirmar`; el de un nodo cuenta las notas que se van con él). **Aquí no se crean
+  cuadros ni rombos**: el clic en uno sigue pasando la tira a la otra trama y su panel sale con el clic derecho. Los cambios van al
+  modelo montado (`o.modelo()`, el del tablero) y se guardan con `o.alCambiarTablero`; el tablero se repinta al volver a él. El panel
+  (`.hilo-flot`, fijo, 340 px, en el `body`) se cierra con Esc, un clic fuera (también en la hoja: el `mousedown` del marco) o al
+  cerrar el documento, y mientras está abierto no salen los globos de la tira.
+  **Desde la 1.1.37 el panel es `js/claquedraw/flotante.js`** (`C.flotante`: `abrir(que, ancla, ctx)`, `abrirNota(id, ancla, ctx)`,
+  `cerrar`), compartido con el tablero: la tira le da su contexto (`ctxTira`: repintar la tira, `anclaDe`, `marcar`, `conNodo`) y
+  los lugares admiten además la raya de una columna (`{ lineaId, col }`). **En el esquema sale solo al crear** (Leo: «el panel
+  solo aparece en la creación, con un clic; si el nodo o nota ya existen, se abre el panel inferior»; y que conviva con él): el
+  tablero tiene el gancho `alCrear({ tipo, id }, el)` (tablero.js; sin él, tramas.html, todo como antes): el «+» de una celda (y
+  el doble clic en una pista) crea el nodo **con un clic** (`crearAqui`, sin el menú, que solo tenía el nodo) y «Agregar nota» /
+  «＋ Nota» (`escribirNotaNueva`) lo llaman en lugar de escribir en sitio; app.js abre el panel con `ctxTablero` (repinta el
+  tablero, y con él el panel de abajo, 150 ms después y guarda). El tablero ignora los clics dentro de `.hilo-flot`. **Color solo
+  al crear** (Leo: «solo se necesita en ese panel un selector de color al momento de crear, tanto en el esquema como el editor»):
+  un nodo recién creado (`que.nuevo`) lleva bajo el título «trama» y los 24 tonos (`Tramas.PALETA`), y cada nota creada con el
+  panel abierto (`nuevas`), «papel» y los tonos (`colorearNota`); lo que ya existía no los enseña.
+  **Desde la 1.1.38 sustituye al panel de abajo en el esquema** (Leo: «es extremadamente cómodo este panel flotante, sustitúyelo
+  por el panel inferior, igual para que aparezca en las tramas, edición de nodos, edición de notas de manera individual o masiva si
+  selecciono el nodo… que permanezca abajo del nodo o nota que estoy creando o editando»). `T.tablero.panelFlotante(fn)` (app.js al
+  arrancar; `body.panel-flotante` esconde `#panel` y `#panelAsa`): `panel()` ya no pinta nada y llama a `fn({ tipo, id } | null)` en
+  cada cambio de selección y en cada render. app.js (`alElegir` → `queDeSel`): nodo → su panel (título, descripción, sus notas);
+  salto → el de su nodo de salida; nota → el panel de su sitio con ella señalada (`que.marca`, `.hilo-flot-nota.on`); enlace y raya
+  → sus notas; **trama** y **acto** → paneles nuevos de flotante.js (`pintarPieza`: nombre; tipo, 24 colores y Descartar; ancho con
+  `fijarAncho`, fondo, y la papelera por `T.tablero.borrarLinea/borrarActo`). Lo mismo ya abierto solo se refresca
+  (`C.flotante.igual`, `refrescar`: no repinta mientras el foco está dentro). **Va pegado a lo suyo**: `T.tablero.anclaDe(tipo, id)`
+  da el elemento (o, para una raya, una caja a mitad de ella), `colocar` lo pone debajo (encima si no cabe; nunca sobre el menú
+  lateral: `ctx.area()` es `#board`), se recoloca con cualquier `scroll` (en captura) y `resize`, y se esconde (`visibility`)
+  mientras lo suyo está fuera de `#board`. Cerrarlo (Esc, ×, clic fuera) suelta lo elegido sin redibujar (`T.tablero.soltar`); un
+  clic en lo propio (`ctx.dentro`: su `.pt` o su `.nota`) no lo cierra; cambiar de vista lo cierra. **El clic fuera va por
+  `pointerdown`** (el tablero cancela el `pointerdown` y entonces no llega `mousedown`, así que un clic en el tablero no lo cerraba),
+  también en el documento del marco del editor (`oirMarco`), y al cerrar se avisa `alCambiar` para que se guarde ya. El panel de
+  abajo sigue en tramas.html. Prueba de Electron con ratón real en el scratchpad (`flot2-electron.js`, 19 comprobaciones).
+  **Nada vacío, Enter/Tab y el color en el punto** (1.1.39, Leo): (1) **el punto de color abre su menú** («es difícil cambiar el
+  color de las notas y nodos una vez creados»): el panel de un nodo lleva su punto delante del título (`.hilo-flot-punto`) y cada
+  nota el suyo (`.hilo-np`, ahora un botón), los dos con `data-flot-menu-color` (vacío = el nodo, o la id de la nota) →
+  `abrirMenu` pinta `.hilo-flot-menu` dentro del panel con «trama»/«papel» y los 24 tonos (`data-flot-pick`); al elegir se aplica
+  (`editarPunto` / `colorearNota`), se cierra y `pintarColores` deja los puntos al día. Las filas de color de lo recién creado
+  siguen. (2) **No se permiten nodos ni notas vacíos**: `limpiar()` (al cerrar y al pasar a otra cosa) borra un nodo **recién
+  creado** sin título —uno que ya existía recupera su `tituloAntes`— y las notas del panel que se quedaron sin texto; las notas
+  nacen **sin texto propuesto** (`crearNota(…, '')`; `ponerNota` del tablero solo pone «Nota nueva» sin panel flotante). (3)
+  **Teclado** (`teclas`, en captura para ir antes que MdVivo): **Enter** cierra el panel (lo vacío no se crea) y **Mayús+Enter**
+  es el salto de renglón (en la descripción, `insertParagraph`); **Tab** desde el título (con nombre) o desde una nota con texto
+  abre otra nota lista para escribir, y sin nombre o sin texto no hace nada y el campo tiembla (`.tiembla`). Prueba con ratón y
+  teclado reales: `flot3-electron.js` (19 comprobaciones).
+  **Arrastrando no sale** (1.1.40, Leo: «al arrastrar un nodo para moverlo, aparece el panel flotante, no debe aparecer en esos
+  casos»): `arrastreVivo` se enciende con cada `pointerdown` sobre `#canvas`, y mientras dura, `panel()` cierra el flotante
+  (`ganchos.alElegir(null)`) y apunta `panelPendiente`; un `pointerup` registrado **detrás** del suyo lo apaga y, solo si no hubo
+  movimiento (clic seco), vuelve a llamar a `panel()`. Para no perder lo elegido, `ctx.marcar(null)` de app.js no suelta la
+  selección si `T.tablero.enArrastre()`.
   **Una trama sin nodos** enseña su aviso («Esta trama aún no tiene nodos…») **encima de la raya**, donde irían los títulos
   (`.hilo-pista.vacia .hilo-vacio`, absoluto; 1.0.79): centrado, la raya lo tachaba.
   **Las notas del esquema también van en la tira, como puntos** (1.1.16, Leo: «quiero ver las notas que agregué en el esquema
@@ -904,7 +1245,15 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   esquema y pasa a Texto); ⋯: abrir, renombrar (`o.editarTituloNodo`, también el título de su nota),
   ver en el esquema, eliminar (confirmación; `o.borrarNodo` borra el nodo del esquema, montado o no, y
   poda su nota). «Ver esquema» monta el esquema. Quitar el enlace hace desaparecer la sección y
-  enlazar la trae. Las migas de la nota abierta
+  enlazar la trae. **Se vuelve al editor que se dejó** (1.1.28, Leo: «si está abierto el editor de una nota de segmento, me paso a
+  un esquema y luego quiero regresar al editor, me saca del editor y me regresa a la vista expandida»): `salir()` (al irse de
+  Documentos a otra vista) apunta la nota abierta en `notaAntes`, y `volverANota()` la abre otra vez al volver con Ver ›
+  Documentos (`mostrar`) o pulsando su biblioteca en el árbol, si sigue existiendo; ir a otra biblioteca, a la papelera, a «Ver
+  biblioteca» (`abrirSub`), abrir otra nota o cambiar de proyecto la olvidan. **Lo mismo con el documento del esquema** (1.1.29,
+  Leo: «si abro el editor del esquema y luego me paso a un editor de un segmento, al regresar al editor del esquema me aparece en
+  su lugar el esquema»): `verVista` apunta en `textoAntes` el esquema cuyo documento estaba en la vista Texto al irse a
+  Documentos, y el gancho `abrirEsquema` (pulsar ese esquema en el menú) vuelve a `verVista('texto')`; desde su tablero, al
+  tablero. Cualquier otra vista que no sea Documentos lo olvida. Las migas de la nota abierta
   (`#migas`: contenedor › subcontenedor › segmento › nota) siguen (`‹` cierra la nota). app.js lleva
   `esquemaId` (el esquema montado o null) y `montarEsquema(eid)` lo carga en el único `T.Modelo` del
   tablero; `volcar()` escribe donde toca y las notas de los nodos van por el acceso `notas`/`o.notas`
@@ -938,7 +1287,7 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   Nuevo esquema…, Nueva biblioteca…, Renombrar, Fijar / Quitar de fijados, Eliminar contenedor; el de
   un hijo ya no tiene Subir/Bajar (se ordena arrastrando). El diálogo de creación no habilita «Crear»
   hasta que hay nombre. En la biblioteca, «＋ nota» es la primera fila de cada tarjeta y la nota nueva
-  entra arriba (`nuevaNota` la coloca delante de la primera); caben «＋ nota» y cinco notas (256 px) y
+  entra arriba (`nuevaNota` la coloca delante de la primera) y se abre en su ventana con el nombre elegido (1.1.54); caben «＋ nota» y cinco notas (256 px) y
   con más la tarjeta se desplaza (la cronología, cinco nodos). Segmentos y cronología van en
   `.gd-bloque[data-seccion]` y se intercalan arrastrando su título (`pd.tipo = 'seccion'`,
   `ordenarSecciones(subId, cronologiaPrimero)`, guardado en la biblioteca como `segmentosPrimero`: por defecto la cronología va arriba).
@@ -955,7 +1304,20 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   `::-webkit-scrollbar*` al principio de `css/clapcraft.css` (pulgar en `--foco`) y, dentro del marco,
   `html.clapcraft ::-webkit-scrollbar*` en `css/clapcraft-editor.css`; por eso `.gd-side`, `.pestanas` y
   `.gd-arbol` llevan `scrollbar-width: auto` y las pestañas `overflow-y: hidden`.
-- **Personajes** (Leo, 14-09-2026). **Elenco**: los personajes del guion son los que se escriben en el
+- **Lo que se va a la papelera se puede deshacer** (1.1.40, Leo: «cuando aparece notificación que se va a la papelera, que dure tres
+  segundos la notificación pero que tenga un botón de deshacer»): `avisar(msg, accion)` en tablero.js pinta el botón
+  (`.aviso-accion`) y alarga el aviso a 3 s; en el gestor, `conDeshacer(r, fn)` lo usa al tirar una nota, una biblioteca o un
+  esquema, y app.js al eliminar un personaje (con `alRestaurar`, el mismo gancho `restaurado`). Deshacer llama a
+  `restaurarNota` / `restaurarPieza`, así que vuelve a su sitio con todo lo suyo. **Y tirar una nota pregunta antes** (Leo: «cuando
+  se elimine una nota de segmentos, que aparezca dialog modal de confirmación»): `tirarNota` abre el modal; arrastrarla a la
+  papelera no pregunta (es un gesto deliberado) y también trae su «Deshacer».
+- **Personajes** (Leo, 14-09-2026). **La etiqueta lleva dos letras** (1.1.40, Leo: «en lugar de la letra P, las primeras dos letras
+  del nombre, la segunda en minúscula —"Lestat" es "Le"—; con más de un nombre, las dos iniciales en mayúscula —"Pez Gota" es
+  "PG"»): `C.iniciales(nombre)` en documentos.js (con su prueba) lo usan el chip del árbol, el de la papelera y el círculo del
+  carril en un esquema de personaje. **Renombrar o recolorear un personaje con un editor abierto** lo cambia al instante (1.1.38, Leo: «no se cambia al instante sino
+  que tengo que recargar»): `renombrarPersonaje`/`colorPersonaje` de app.js guardan lo del editor (`guardarEditor`), reescriben las
+  notas y el editor relee la suya sin cerrarse (`releerEditor` → `C.texto.recargar(doc)`, con el elenco nuevo y el cursor y el
+  desplazamiento donde estaban); antes lo cerraban (`soltarEditor`) y lo viejo seguía a la vista. **Elenco**: los personajes del guion son los que se escriben en el
   editor con «/» (bloques `p.sp-character` y registro `characters` de cada nota) más los creados en
   Personajes: `documentos.elenco = [{ id, nombre, color (paleta de 16 del editor), auto? }]`. Guardar una
   nota (`guardarNota` / `guardarNotaEsquema`) añade los nombres nuevos (`sincronizarElenco`, con `auto`) y
@@ -1086,27 +1448,119 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   `[data-orden][data-sub]`, tarjetas `[data-clave]`); sin orden guardado, el natural (bandeja y segmentos;
   Apariciones, bandeja, momentos y segmentos), y lo nuevo entra al final. Todas llevan el asa de seis puntos
   (`.gd-asa`) en la cabecera, también actos, momentos, Apariciones y bandeja. **Nombre al crear**: una nota
-  nueva (`nuevaNota`) y un nodo nuevo del tablero (`nombrarRecien` en tablero.js, tras crear nodo o salto desde
+  nueva (`nuevaNota`, en su ventana desde la 1.1.54) y un nodo nuevo del tablero (`nombrarRecien` en tablero.js, tras crear nodo o salto desde
   el menú o arrastrando el «+») quedan con el nombre propuesto escrito y seleccionado en sitio, como un segmento;
   en blanco se queda el propuesto («Sin título», «Punto nuevo», «Evento», «Cambio de escena», «Relación»); en
   un salto el otro extremo toma el nombre si seguía con el propuesto. `aplicarOrden` pone lo nuevo detrás del último de sus predecesores
-  naturales. **Panel de la nota** (1.1.16, Leo: «en un segmento expandido, al hacer clic en una nota, aparezca un panel lateral
-  con el nombre, el color y un campo de descripción amplio… texto plano… que se vea si abro el documento»; y después «el mismo
-  panel en las bibliotecas»): `.gd-exp-lado` a la derecha de `.gd-exp-medio` (el segmento expandido) o de `.gd-bib-medio` (el
-  tablero de la biblioteca). `mostrarLado(id)` pinta el nombre (renombra al escribir) y la descripción, que ocupa todo el alto
-  (el color se quitó del panel en la 1.1.17, Leo: «que se siga haciendo desde los tres puntos, para no afectar al campo
-  descripción, que es el importante»; «⋯ › Color…» deja el panel abierto):
-  un `contenteditable` de texto plano **que es el texto del documento** (`htmlDeLado`: un `<p>` por renglón, las tablas como
-  tablas editables y lo demás —imágenes, bases de datos, portada, diálogos dobles— como una marca fija `data-f`);
-  `htmlDeLadoEditado` lo devuelve conservando el formato de lo que no cambió (subsecuencia común por renglones; los cambiados
-  heredan el tipo de guion del renglón viejo más parecido) y `guardarLadoYa` lo guarda a los 400 ms y al salir, sin reescribir
-  si no se tocó. Pegar pega texto; Cmd+B/I/U no hacen nada. Un clic fuera de las notas (también dentro del gestor) o Esc lo
-  cierra, y quita la marca. Tras redibujar la biblioteca se vuelve a abrir si la nota sigue elegida (`notaSel`). En su cabecera,
-  **expandir** (`ic-expand`, `[data-gd-lado-abrir]`; antes un lápiz que Leo no reconocía) abre el documento en el editor. **Su
-  ancho se arrastra** por el borde izquierdo (1.1.18, Leo: «quiero poder hacer más ancho el sidepane… el de los segmentos»):
-  `.gd-lado-asa` (8 px por dentro: `aside` de tramas.css le daba `overflow: auto`, que recortaba media asa y el arrastre caía
-  en el borde) → `arrastrarLadoNota`, de 280 a 900 px sin dejar el tablero por debajo de 320, en `--lado-nota` y
-  `vista.ladoNota`; doble clic, 360. El clic que cierra el arrastre cae en el tablero: `suprimirClic` para que no cierre el panel.
+  naturales. **La ventana de una nota** (1.1.54, de ClapBook; allí Leo: «En lugar del sidepanel que usamos como vista previa en
+  los segmentos y bibliotecas, que sea mejor un modal como en notion, que puede expandirse y se cierra si se presiona fuera del
+  modal», y «se extrañan las flechas de < > para navegar por las otras notas del segmento… Se debe conservar donde dejo el
+  scroll»). Hasta la 1.1.53 era un panel lateral (`.gd-exp-lado`, 1.1.16; ensanchable, 1.1.18) que vivía en `main`: cada render lo
+  rehacía (parpadeaba, perdía lo escrito en los últimos 400 ms y `renderMain` lo reabría con un `setTimeout`) y se cerraba al crear
+  una nota o al plegar el menú, lo mismo que Leo vio en ClapBook. Ahora un clic en una tarjeta de nota (de la biblioteca o del
+  segmento expandido) la abre en una ventana encima de todo (`capaNota`: `div.gd-modal-capa` en el `body`, z 70, con
+  `body.con-ventana`; se crea una vez). Cabecera (`.gd-modal-cab`, 46 px): ⤢ (`[data-gd-lado-abrir]`, `expandirLado`: al editor),
+  la ruta «CONTENEDOR [biblioteca] › [segmento]» con los chips de las cabeceras (`rutaLadoHtml`; `[data-gd-ruta=bib|seg]` →
+  `irARuta`: la biblioteca, o el segmento expandido con la nota marcada; en Personajes, el personaje), ‹ n/N › (`navHtml`,
+  `moverLado`, por `vecinasDe`: las notas del segmento **en el orden en que se ven**, con sus filtros, lo que se busque en esa
+  vista y el orden de sus tarjetas pintadas —`ordenVisto`—; **ese orden se congela mientras se navega**, `ordenNav`, porque con
+  «Modificadas recientemente» escribir en una la subía y › volvía a la de antes; se olvida al cerrar la ventana o el editor y no al
+  pasar de una al otro, `navSigue`; en la última, «＋» `[data-gd-nota-nueva]` → `nuevaNota(…, { alFinal: true })`), el punto de su color
+  (`[data-gd-lado-color]` → `paletaNota`; con color, la ventana lleva arriba una raya de ese tono), «Copiar enlace para Claude», el
+  ⋯ de la nota (`MENUS.nota` por `data-nota-id`, `notaDeBoton`; «Renombrar» enfoca el nombre, y hay «Exportar…»), la papelera
+  (`tirarNota`, que pregunta) y ×. Debajo, en `.gd-modal-papel` (760 px), el nombre grande (`[data-gd-lado-titulo]`: renombra al
+  escribir, Enter lo aplica y pasa al campo, vacío vuelve al de antes; `tituloCargado` es el que conoce la ventana: si Claude
+  renombra la nota con el foco en ese campo, se pone el suyo, y lo que no escribió Leo nunca renombra), **el documento con su formato** (el campo, abajo) y
+  `.gd-modal-cola` (un clic ahí, el cursor al final). **Se cierra** con un clic en el fondo solo si el `mousedown` también cayó en
+  él (`capa._fuera`) y han pasado más de 350 ms desde que se abrió (`abiertaEn`: el segundo clic de un doble clic en la tarjeta ya
+  cae aquí), con Esc (si no lo coge antes un menú) o con ×. **El doble clic en la tarjeta** (< 700 ms, el `dblclick` de la capa, y
+  solo si se abrió con un clic en su tarjeta, `porTarjeta`: dos clics seguidos en › o en «＋» abrían el editor) la lleva al editor, y **«Contraer»** (`[data-gd-contraer-nota]` en `#migas`, junto a su papelera nueva, `[data-gd-miga-tirar]`)
+  devuelve la nota del editor a su ventana (`contraerNota`; Leo en ClapBook: «Pon junto al bote de basura un botón para contraer la
+  nota y se vea de nuevo el modal»). Cada nota vuelve con el desplazamiento y el cursor donde se dejaron (`posLado`: bloque y
+  carácter, como `apuntar` de texto.js; en memoria). **Convivencia**: como la capa no está en `main`, nada la rehace; `navegar` la
+  cierra al salir de su biblioteca, y también `abrirNota`, `tirarNota`, la papelera y una biblioteca o un segmento que desaparece;
+  tras pintar una biblioteca, `ventanaTrasPintar` la pone al día (`refrescarVentana`: cabecera, nombre y, si el documento cambió
+  fuera —Claude, una versión, un personaje renombrado— y aquí no se tocó, el campo, con el cursor donde estaba) o la cierra. Ir a
+  una biblioteca, un segmento, una sección o una pieza del árbol por un enlace (`mostrarEnlace`) o desde el historial de Claude la
+  cierra antes (la taparía). **Se reabre sola una vez**
+  (`reabrir`): al volver a una pestaña que la tenía (`elegirNota`) o a la vista Documentos si se dejó con ella abierta (`salir`), y
+  solo con esa vista delante (el menú también se pinta desde las otras, y se reabría encima del editor). Con una nota en el editor,
+  `render()` no pinta `main`. **La capa corta lo que el tablero de tramas oye en `document`**: `click`, `dblclick` y `contextmenu`
+  no salen de ella, ni las teclas de borrar, las flechas, Enter, espacio y Cmd+Z/Y/D (con el foco en un botón de la ventana
+  borrarían o desharían en el esquema escondido); por eso nada de dentro lleva `data-nota` (el tablero lo tomaría por uno de sus
+  post-it) ni `.esq-titulo` (app.js le metería los ‹ › del historial). Cmd+S, Ctrl+Tab, Cmd+Shift+C y Cmd+W llegan a app.js (Cmd+W
+  cierra antes la ventana, `cerrarLoDeDelante`). El clic del documento del gestor no hace nada con la ventana abierta (lo que se
+  abre encima —`#dlg`, un menú— no la cierra), respeta al botón que abrió un menú (`disparador`: es su alternar) y no cuenta el de
+  un botón que un redibujo ya quitó (`isConnected`). Los menús y el aviso van encima (`.gd-pop` z 80; `body.con-ventana #aviso`
+  z 95). **Lo escrito en ella se vuelca con el editor**: `volcarTexto()` de app.js (antes `C.texto.volcar()` a secas) llama también
+  a `C.gestor.guardarPanel()` en todos los sitios (guardar, Claude y su historial, pestañas, cerrar, `beforeunload`), y Claude ve
+  la nota de la ventana (`estadoEnPantalla`, «Documentos (una nota en su ventana)»; `refDeLoQueSeVe` y Cmd+Shift+C). **Una nota
+  nueva se abre en su ventana** con el nombre propuesto elegido (`nuevaNota` → `mostrarLado(id, { enfocarTitulo: true })`; antes se
+  renombraba en su tarjeta); con una nota en el editor, lo cierra antes (se creaba detrás de él).
+  **El campo** es el documento, **con su formato y en los dos sentidos** (1.1.32, Leo: «para el de segmentos, que sea
+  bidireccional con el editor»; hasta entonces cada párrafo era un renglón de texto plano y al guardar las listas se volvían
+  párrafos): `htmlDeLado` copia el documento tal cual —negritas, colores, títulos, listas, citas, elementos de guion con una
+  pista de lo que son (mayúsculas, el «( )» y los «[ ]» que el editor pinta con CSS, el chip del personaje)— con cada bloque
+  señalado por `data-l` (su índice en `ladoOrig`, apuntado al pintarlo), las tablas editables, las imágenes a la vista (1.1.54,
+  `.gd-lado-img`: no se editan) y lo demás que no es texto (bases de datos, portada, diálogo doble, `.ed-fijo`) como una marca
+  `data-f`. `htmlDeLadoEditado` rehace el documento desde el campo: el bloque que no cambió (`ladoVista`) vuelve tal cual, el que
+  cambió conserva sus atributos (clase, alineación, `data-ch`) con lo de ahora dentro, las marcas vuelven a ser lo que eran, el
+  texto suelto va en un `<p>`, los `\u200B` de los atajos no pasan y un bloque vacío lleva su `<br>`. Escribe con `MdVivo.vivo`
+  (Markdown al escribir; un elemento de guion no se vuelve lista ni título) y `guardarLadoYa` lo guarda a los 400 ms y al salir,
+  sin reescribir si no se tocó. **Formato en la ventana** (1.1.54, de ClapBook: «Cuando seleccione un texto y le haga clic
+  derecho, debo tener opciones de subrayado… varios colores»): el clic derecho sobre el campo (`menuFormato`, un `C.gestor.pop`
+  anclado al ratón, `anclaEn`) da, con algo elegido, negrita, cursiva, subrayado, tachado, código y enlace (`.gd-fmt-barra`,
+  encendidos si ya están), **resaltar** y **color de letra** con los 16 tonos de la paleta del editor en el par del tema
+  (`colores(i)`: el mismo HTML que su cinta, `<span style="background-color">` / `color`; el resaltado se apunta en
+  `guiones.editor.hilite`, el de la cinta) y «Quitar el formato»; lo de un enlace (abrir, editar, quitar, copiar la dirección);
+  cortar, copiar y pegar; y el enlace para Claude. Todo va por `MdVivo.formato` tras devolver el foco y lo elegido (`volverA`: el
+  menú se lleva el foco). **Cmd+K** o «Enlace…» abre `.gd-enlace-cuadro` (`cuadroEnlace`: texto y dirección; si lo elegido ya es
+  una dirección, va a Dirección) y **Cmd+clic** en un enlace lo abre (`abrirDireccion`: la dirección se lee con `new URL`, como la
+  lee el navegador —sin tabuladores ni saltos—, y solo pasan `clapcraft:`, con `o.irAEnlace`, y `http(s):` y `mailto:`, al
+  navegador). Tras cerrar el menú o el cuadro con Esc, el foco y lo elegido vuelven al campo (`ancla._volver`, `devolverFoco`). Los atajos del editor los pone MdVivo: Cmd+Mayús+X, Cmd+Mayús+H (el último
+  resaltado de la cinta, `colorResaltado`), Cmd+Alt+0…6, y Cmd+E, código (de ClapBook). Al pegar, una dirección sobre lo elegido
+  es un enlace y lo que parece Markdown entra con su formato (`op.markdown`, como `insertPlainText` del editor). **No se portó** lo
+  propio del editor de Markdown de ClapBook (CodeMirror): el subrayado de colores con línea (aquí el marcador es el resaltado y el
+  subrayado va en el color del texto), los colores de títulos y del texto como preferencia de la vista, los colores de bloque,
+  Typewriter y el panel y el pie de la nota (esquema, enlaces, versiones: están en el editor, ⤢).
+  **Buscar, filtrar y ordenar** (1.1.54, de ClapBook; allí Leo: «En las bibliotecas, se necesita unos filtros y ordenamientos
+  generales (como los que se tienen en los segmentos expandidos) para que se ordenen y filtren el contenido de los segmentos
+  contraídos, los filtros se deben guardar entre sesiones. El filtro general es más fuerte que el filtro por segmento en las
+  bibliotecas, pero en los segmentos expandidos es más fuerte el filtro del segmento. Cuando digo filtro, también incluyo el
+  ordenamiento», y un buscador en las bibliotecas). ClapCraft no tiene etiquetas: **el filtro es el color de la nota** (los 24
+  tonos o «Sin color»; `menuColores`, con cuántas lo llevan). La cabecera de la biblioteca lleva la caja de buscar y el color y el
+  orden generales (`colorBib`, `ordenBib`: modificadas, creadas, antiguas, por título, por color o «Cada segmento, el suyo»); el
+  rótulo del segmento expandido, los suyos (`colorSeg`, `ordenSeg`, con «Como la biblioteca: …»; sustituyen al «Orden manual»
+  fijo). En la biblioteca manda el general y lo que no pone lo pone el de cada segmento; en el expandido, al revés (lo heredado va en
+  cursiva y con borde discontinuo, `.heredado`); en un segmento, «Todas las notas» (`color: ''`) y «Orden manual» se guardan para
+  mandar sobre el general. Las reglas son `C.busqueda.efectivo(g, sg, enExpandido)` y el filtrado `C.busqueda.filtrar`
+  (`js/claquedraw/busqueda.js`, puro, `test/busqueda.test.js`). La tarjeta con su propio filtro lleva una marca (`.gd-etq-filtro`),
+  con un color la cuenta dice «n/total», y un cuerpo con un orden que no es el manual no se ordena a mano (`.ordenada`: al
+  arrastrar, en su cuerpo la nota se queda en su sitio y en otro va al final). Con orden por creación, la fecha que se enseña es esa
+  (`fechaSegun`). Se recuerdan en la vista de esta máquina (`vista.filtros`: `bib:<biblioteca>` y
+  `seg:<biblioteca>|<bandeja|etq:id>`), **mezclados clave a clave** con los de las otras ventanas (`ponerFiltroVista` y
+  `filtrosTocados` en `guardarVista`: cada una escribe solo los que tocó). **Buscar** (`aplicarBusqueda`: `C.busqueda.puntuar` en el
+  título y el texto del documento —`C.conversor.textoPlano`, con caché—, sin acentos ni mayúsculas, con "frases", -excluir y
+  titulo:) esconde las tarjetas que no casan sin redibujar, apaga los segmentos sin ninguna (`.sin-coincidencias`) y cuenta
+  «n de N» (sin contar las de una sección contraída o escondida, `seccionOculta`; la contraída con alguna lo dice en su título, y
+  Enter no abre una de ellas); tras un render de la misma vista se repone con el foco donde estaba (`focoBusqueda`, `reponerBusqueda`) y en otra se
+  olvida. Esc la vacía, Enter abre la primera que casa en su ventana y **Cmd+F** con la biblioteca delante va a la caja
+  (`C.gestor.buscarEnVista`, keydown de app.js; en Electron el menú no lleva Cmd+F). Una nota nueva con un filtro de color nace de
+  ese color, y lo que se buscaba se olvida (si no, no se vería).
+  **Correcciones que venían de ClapBook** (1.1.54): la papelera recuerda el segmento de la nota y su sitio (`etiquetaId`, `antesDe`
+  y `despuesDe` en su entrada —la que la seguía y la que iba delante; si una se tiró antes y era la de al lado, esa—, que
+  `normalizar` conserva): restaurarla en su biblioteca —también con el «Deshacer» del aviso— la devuelve a su segmento y a su sitio
+  (antes, siempre a la bandeja y al final). Las vecinas que también están en la papelera se atraviesan (`alcanza`: delante de la
+  primera de detrás que esté a la vista, o detrás de la última de delante), así que tiradas y restauradas una a una en cualquier
+  orden vuelven en el suyo (la prueba recorre las 748 combinaciones con cuatro notas); «Mover a la izquierda/derecha» de un segmento
+  (`moverEtiqueta`) va por su sección y por `ordenSegmentos` (no hacía nada visible en cuanto se había arrastrado una tarjeta, y con
+  secciones cruzaba de una a otra); arrastrar un segmento al tablero de otra sección —también vacía— funciona (`moverArrastre` lo
+  bloqueaba); `autodesplazar` usa el primer antepasado que se desplace (el cuerpo de una tarjeta con más de cinco notas, el
+  lienzo); **la primera biblioteca de un contenedor es la del árbol** (`primeraBiblioteca`, `todasLasBibliotecas`: `c.subs[0]`
+  podía ser la oculta de guiones de un esquema, y se abría o se restauraba ahí); `moverNota` marca también la biblioteca de la que
+  sale; un clic en el menú lateral ya no suelta la nota elegida; plegar o ensanchar el menú no redibuja el gestor (era el
+  parpadeo); el globo enseña el nombre entero de una nota cortada (las tarjetas ya no llevan `title`); `contraer` avisa a la
+  pestaña; y `CSS.escape` en los selectores hechos con ids.
   **Segmento expandido** (Leo, 15-09-2026, `docs/diseno/rediseno-5/Pantalla_Segmento.dc.html`): todas las
   cabeceras de segmento (bandeja, segmentos, actos de la cronología, momentos y Apariciones) llevan el icono
   `ic-expand` (`[data-gd-expandir]`); `C.gestor.expandir(subId, clave, sel)` guarda `expandido = { subId, clave }`
@@ -1236,7 +1690,7 @@ tablero no tiene tira** (`o.sinTira` → `#texto.sin-tira`) y **el menú sigue e
   entra con doble clic en un nodo —capturado en `#board` antes de que el tablero lo
   tome por renombrar— o con «Abrir documento» en el panel, y se sale con el botón «‹ Esquema» que
   texto.js monta en la barra de título del editor, `#cdVolver`, o `Ctrl/Cmd+Shift+G`), y
-  `Ctrl/Cmd+Shift+F` abre Documentos. Los controles solo del tablero llevan `.solo-esquema`.
+  `Ctrl/Cmd+Shift+F` abre Documentos (desde la 1.1.54 también con el foco en el editor: `onKey` de texto.js lo reenvía, `o.documentos`). Los controles solo del tablero llevan `.solo-esquema`.
   Los atajos dentro del marco van en fase de captura y no pueden repetir los del editor
   (`Ctrl+Shift+E` centra, `L` alinea, `X` tacha, `H` resalta, `7/8` listas, `V` pega plano…).
 - **Pantalla Esquema del rediseño 3**: eje de 34 px (`--eje`, rótulo «TR»), la columna de tramas es un
@@ -1320,3 +1774,178 @@ tablero no tiene tira** (`o.sinTira` → `#texto.sin-tira`) y **el menú sigue e
   `claquedraw-web` en el 5174. No simular clics en nodos del tablero con `PointerEvent` sin
   coordenadas: el tablero los toma por arrastres y mueve nodos. Las capturas del panel llegan con
   retraso respecto a la acción: comprobar el estado por JavaScript y capturar después de esperar.
+
+## Claude: acceso desde Cowork y Claude Code (1.1.49)
+
+Leo, 25-09-2026: «Haz que como Claude (cowork principalmente y también una "extensión" dentro del programa que puede existir o no)
+puedas acceder al contenido de la aplicación, tanto texto y muy principalmente la gestión de esquemas». Cuatro piezas:
+
+- **`js/claquedraw/herramientas.js`** (`Claquedraw.herramientas`, modelo puro, `test/herramientas.test.js`): las herramientas
+  (`LISTA`: nombre, descripción, `inputSchema` y `annotations` de MCP) y `ejecutar(ctx, nombre, args)` → `{ ok, texto, datos? }` o
+  `{ ok: false, error }`. No saben dónde está el proyecto: el **contexto** da `docs` (C.Documentos), `cambio()` y, en la app,
+  `estado()` (qué hay en pantalla), `mostrar(que)` y `renombrarProyecto(n)`. Herramientas: `ver_proyecto` (el árbol con ids, en el
+  orden de `nivelArbol`/`nivelGrupo`), `leer_esquema` (texto: tramas, actos y la línea del tiempo columna a columna con
+  descripciones y notas bajo su sitio; o `json`), **`editar_esquema`** (un lote de operaciones sobre una **copia** del T.Modelo, que
+  pasa al esquema con `guardarEsquema` solo si todas salen: **entero o nada**; con relaciones reflejadas si es de personaje),
+  `leer_documento`/`escribir_documento` (el guion de un esquema, que se crea como `documentoDe` de app.js, o una nota; modos
+  reemplazar, anadir, insertar y sustituir por bloques; antes de reemplazar o sustituir, **versión «Antes de Claude»**, una por
+  sesión: no se repite si la última lo es y tiene menos de 20 minutos), `leer_biblioteca`, `editar_biblioteca` y `editar_proyecto`
+  (lotes sobre los documentos: si uno falla se deshace con `reponerEnSitio`, **en el mismo objeto**, porque el gestor de la app
+  guarda la referencia y `g.documentos !== d.datos` lo haría rehacerse), `buscar` y `mostrar_en_clapcraft` (solo en vivo).
+  Reglas de la interfaz que se respetan: **columnas desde 1** (la cabecera del tablero dice `c + 1`); todo por id o por nombre si
+  es único (`encontrar`, sin mayúsculas ni acentos; si no, la lista de candidatos) y lo creado en el lote por `ref`/`$ref`; un nodo
+  necesita título y una nota texto (como en la app, 1.1.39/1.1.42); `crear_salto` crea sus **dos** extremos en una celda libre
+  (como arrastrar el «+»: nunca convierte un nodo existente); el título de un salto va en sus dos extremos; `crear_acto` no pisa a
+  otro (usa `_ordenarActos` del modelo). `limpiarHtml` deja solo etiquetas y atributos del editor para `formato: "html"`.
+- **`js/claquedraw/conversor.js`** (`Claquedraw.conversor`, `test/conversor.test.js`): HTML del editor ↔ texto, sin DOM (un
+  analizador pequeño con `ini`/`fin` de cada nodo: un bloque que no se toca vuelve **tal cual** estaba). Modo **guion** al estilo
+  Fountain (escena INT./EXT. o `.`, PERSONAJE + (paréntesis) + diálogo sin línea en blanco, `> TRANSICIÓN:`, `#` acto, `##`
+  secundario, `[[nota]]`, `^` diálogo doble, `!` fuerza acción, portada con `Título:`…) y modo **prosa** (Markdown, las reglas de
+  js/markdown.js en cadenas; un salto de renglón dentro de un párrafo es un `<br>`); en los dos, `{tipo}` fuerza el tipo y
+  `{bloque N}` conserva lo que no es texto (imágenes, bases de datos). Personajes: la clave de js/characters.js, **manda el
+  elenco** (como `setGlobal`), un nombre en mayúsculas se guarda en «Título» (el CSS lo pone en mayúsculas), la anotación tras el
+  doble espacio se lee `(V.O.)`, color libre para los nuevos, y `registroDe` rehace el registro desde el HTML (poda como
+  `C.refresh`). La transición recibe «:» o «.» como `alSalir` de formato.js y FADE IN lleva `data-izq`.
+- **`claude/servidor.js`**: servidor **MCP por stdio, sin dependencias** (JSON-RPC por líneas; `initialize` con las versiones
+  2024-11-05 a 2025-11-25, `tools/list`, `tools/call`, `ping`; cola: una llamada detrás de otra). Carga los modelos de `js/` con
+  `require` y añade `listar_proyectos` (abiertos en la app, recientes y los `.clapcraft` del equipo por Spotlight y las carpetas
+  de siempre) y `crear_proyecto` (plantillas; en `~/Documents/ClapCraft` o `~/Documents`). Cada llamada va **en vivo** si el
+  proyecto está abierto en la app con la conexión encendida (por el puente) o **al archivo** (gunzip, ejecutar, gzip a un
+  temporal y `rename`), volviendo a mirar justo antes de escribir si la app lo abrió entretanto. Con la conexión apagada y el
+  proyecto abierto, solo lee (avisando). **Se arranca con el Node de la propia app**: `ELECTRON_RUN_AS_NODE=1 ClapCraft
+  app.asar/claude/servidor.js` (en ese modo Electron lee el asar con `require`, comprobado con la 1.1.48 instalada), así va a la
+  par de la versión instalada; `node claude/servidor.js` desde el repositorio también vale (`CLAPCRAFT_PUENTE` apunta a otro
+  `puente.json`, para las pruebas).
+- **`electron/claude.js`** (la «extensión» dentro del programa, que se puede apagar): un **socket Unix** `claude.sock` en los datos
+  de la app (0600; con más de 100 caracteres de ruta, en `os.tmpdir()`; en Windows una tubería) y **`puente.json`** (pid, socket,
+  `activo`, proyectos abiertos con su ruta), escrito también apagado para que el servidor no pise lo abierto. Peticiones `hola`,
+  `proyectos` (con los recientes, que pide a una ventana: `_recientes`, y la última ventana enfocada como «delante»), `herramienta`
+  (a la ventana del proyecto: `claude:peticion` → `claude:respuesta`) y `abrir` (abre el archivo con `abrirRuta` y espera su
+  ventana). Menú **Claude**: «Permitir que Claude acceda» (casilla, en `claude.json`; `alternar`) y «Conectar con Claude…»
+  (deja `clapcraft.plugin` en Descargas con `claude/plugin.js` y ofrece copiar el `claude mcp add …` para Claude Code). **Vigila
+  el archivo de cada ventana** (`fs.watch` de su carpeta) y avisa `archivo:cambiado`, salvo lo que la app escribió hace menos de
+  2 s (`escrito(ruta)` en `file:write` y `file:save`).
+- **En la ventana** (app.js, «Claude»): `atenderClaude` vuelca tablero y editor, ejecuta con `ctx.docs = docs()` y, si cambió
+  algo, `ponerAlDia`: el esquema montado se recarga del guardado (`modelo.cargar` + `T.tablero.render()`, que lo registra en su
+  Deshacer como un paso), el editor relee su nota (`C.texto.recargar`), se persiste y se redibuja; el aviso («Claude cambió el
+  esquema «X» (5 cambios)») trae **Deshacer**, que repone los documentos de antes de esa petición en el mismo objeto.
+  `mostrarClaude` monta el esquema, elige el nodo (`seleccionarEnTablero`) o abre el documento o la nota.
+- **Lo que cambia fuera** (app.js): la **firma** de lo último escrito o leído de cada archivo (`firmaDe`: el contenido con los
+  documentos normalizados y las claves ordenadas, FNV-1a + largo) va en `vista.archivos[id].firma` (`anotarEscrito`, en todos los
+  sitios que ponían `ultimoEscrito`). Al arrancar, `cambiadoFuera`: si el archivo ya no tiene esa firma, alguien lo cambió con la
+  app cerrada y se carga (`cargarDelArchivo`: `C.texto.soltar`, `g.documentos` del archivo y `montar`); si además lo local cambió
+  desde la firma, se pregunta. Antes de la 1.1.49 **lo local pisaba el archivo al volver a arrancar** («lo local es lo último»),
+  que es lo que habría borrado lo que Claude escribió con la app cerrada. Sin firma (proyectos de antes), como siempre. Con el
+  proyecto abierto, `archivo:cambiado` hace lo mismo (lo que ya tenía o lo que escribió la propia ventana no cuenta).
+- **El plugin** (`claude/plugin/`, `npm run plugin` → `dist/clapcraft.plugin`, también en `predist`): `.claude-plugin/plugin.json`
+  (la versión de la app), `.mcp.json` (`/bin/sh ${CLAUDE_PLUGIN_ROOT}/lanzar.sh`), `lanzar.sh` (busca ClapCraft.app en
+  Aplicaciones, `~/Applications` o por Spotlight, `dev.leo.clapcraft`, y la arranca en modo Node con su servidor) y la skill
+  `skills/clapcraft` (qué es cada cosa, cómo trabajar, el criterio —Leo decide; sugerencias como notas; las notas de enlace
+  «Pero»/«Por lo tanto» y «TH» de sus proyectos— y las referencias de operaciones y del texto). En el repositorio van **sin
+  punto** (`claude-plugin/`, `mcp.json`: electron-builder puede dejar fuera lo que empieza por punto) y `claude/plugin.js` se lo
+  pone al empaquetar; el zip lo arma `claude/zip.js` (deflate de zlib, CRC32 propio) con el plugin en la raíz.
+  `claude plugin validate` lo da por bueno. `claude/**` va en `build.files`.
+- **El historial de Claude** (1.1.50, `js/claquedraw/historial.js`, `C.historial`, `test/historial.test.js`). Leo, 25-09-2026:
+  «¿Se pueden revertir los cambios hechos con IA? Necesito que exista una especie de historial para ver los cambios que ha hecho
+  la IA». `ejecutar` (herramientas.js) saca la foto de los documentos antes de toda herramienta que escribe (salvo
+  `revertir_cambio` y `mostrar_en_clapcraft`) y, si algo cambió, `anotar` deja una entrada en **`documentos.historialClaude`**
+  (viaja con el proyecto; `normalizar` de documentos.js la conserva con `sanear`, y sin cambios de Claude la clave no existe):
+  `{ id, fecha, herramienta, titulo, donde: { tipo: esquema|nota|biblioteca|proyecto, id }, detalle (lo que devolvió), origen
+  (Claude Code, Cowork o Claude, del `clientInfo` del saludo MCP; el puente lo pasa como `origen`), modo (vivo|archivo),
+  nombreProyecto?, parche, revertido? }`. **El parche** es la diferencia antes → después: por claves en los objetos y, en las
+  listas cuyos elementos tienen id (en la papelera, el de lo que guarda), elemento a elemento —`q` lo quitado con su valor y sus
+  tres vecinos de delante, `p` la huella de lo puesto, `c` lo cambiado dentro, `o` el orden—; de lo de después solo la huella
+  (FNV-1a del contenido con las claves ordenadas). `modificado` y `columnas` no cuentan (se ponen solos). **Revertir** aplica el
+  parche al revés sobre lo de ahora: quita lo puesto si su huella sigue igual, deshace lo cambiado, devuelve el orden y repone lo
+  quitado detrás de su vecino (en ese orden: al revés, el reordenamiento descolocaba lo repuesto). Lo que se tocó después es un
+  **choque** (`describir` lo dice en palabras: «contenedor «X» › esquema «Y» › nodo «Z»»): sin `forzar` no se hace nada; con él,
+  en esas partes vuelve lo de antes. Luego los esquemas tocados pasan por `normalizar` de Tramas (lo que se cae, se avisa) y los
+  documentos por `normalizarDocumentos`, y todo va **en el mismo objeto** (como `reponerEnSitio`). `reponer` deshace una
+  reversión. Tope: 150 entradas; los parches más viejos se quitan pasado 1,5 MB (el proyecto también vive en el localStorage de la
+  app) salvo los 3 últimos. `antesDe` da cómo estaba (lo de ahora con ese cambio deshecho a la fuerza) y `vistaCambio`
+  (herramientas.js) lo pone en texto frente a lo de ahora. **Aguante**: cambios al azar con las herramientas de verdad y,
+  revertidos del último al primero, el proyecto vuelve idéntico (4 semillas en `npm test`; probado con 40 × 60).
+  Herramientas `ver_historial` y `revertir_cambio`. **En la app** (app.js): el aviso de cada cambio trae «Deshacer» (revierte esa
+  entrada) e «Historial» (`T.tablero.avisar` acepta ahora una lista de acciones: con dos, 5 s); menú **Claude › Historial de
+  cambios…** → orden `historialClaude` → `abrirHistorialClaude`: el panel (`.hc-capa`, z 80, en la piel; el aviso sube a z 100
+  con el panel abierto) por días, con hora, título, origen, modo, marca de revertido, el detalle (tres líneas y «N más…») **sin los
+  ids** (`sinIds`: quita los ids fuera de «», que para Claude sí hacen falta) y sus acciones «Ir» (`mostrarClaude`), «Ver
+  cambios» (`C.versiones.abrirComparacion` con «Antes de Claude» y «Ahora»; Esc cierra primero la comparación) y «Revertir»
+  (`revertirClaude`: `probar`; con choques, `confirmar` «Revertir de todos modos»; luego `ponerAlDia` y el aviso con «Deshacer»,
+  que llama a `reponer`). Al montar un proyecto, `avisarCambiosDeClaude` dice lo que hizo Claude con el proyecto cerrado (una vez:
+  lo último visto se apunta en `guiones.claquedraw.claudeVisto` por la ruta del archivo, porque al reabrirlo desde recientes el
+  proyecto estrena id). Las notas del esquema ya dicen el título de su nodo, no solo su id («en el nodo p6 «Título»»).
+- **Enlaces** (1.1.52, `js/claquedraw/enlaces.js`, `C.enlaces`, `test/enlaces.test.js`). Leo, 25-09-2026: «Pon unos "puntos" o "links" a
+  bibliotecas, segmentos, notas, personajes, esquemas, etc. Para facilitar el decirle a Claude a qué puntos me refiero cuando le
+  hablo de algo». Cada cosa tiene su enlace `clapcraft://<proyecto>/<ruta>`: `<proyecto>` es el nombre del archivo sin la
+  extensión (`proyectoDe`, con las reglas de `C.nombreArchivo`: `slug`; sin archivo, el del proyecto) y la ruta dice qué es con los
+  ids de las herramientas —`contenedor|carpeta|grupo|personaje/<id>`, `esquema/<id>`, `esquema/<id>/documento`,
+  `esquema/<id>/nodo|salto|trama|acto|nota/<id>`, `esquema/<id>/enlace/<nodo>/<nodo>`, `esquema/<id>/raya/<trama>/<columna>`,
+  `esquema/<id>/columna/<n>` o `columnas/<a>-<b>` (desde 1), `biblioteca/<id>[/seccion|segmento/<id | bandeja>]`, `nota/<id>`—; un
+  tramo de texto lleva `?b=<desde>-<hasta>` (los bloques de `C.conversor.bloques`, desde 1) y `h=`, la huella del primero (FNV-1a de
+  su texto plano), para encontrarlo aunque se haya movido (`tramo(html, ref)`: `movido`, o `perdido` si el texto cambió). `crear`,
+  `leer`, `extraer` (los de un texto pegado), `resolver(docs, ref, op)` (lo encontrado y su **etiqueta**, «Nodo «X» · esquema «Y»»;
+  o el aviso de que ya no está o está en la papelera) y `markdown` (`[etiqueta](url)`, corchetes escapados).
+  **Copiar** (app.js, «enlaces»: `copiarEnlaces(refs, { extracto })`, un renglón por enlace, al portapapeles por `api.copiarTexto`
+  —IPC `portapapeles:escribir`— y un aviso «Enlace copiado: … Pégalo en Claude.»): «Copiar enlace para Claude» en los ⋯ del gestor
+  (`conEnlace`: esquemas, bibliotecas, contenedores, carpetas, grupos, personajes, secciones, segmentos, notas, nodos de la
+  cronología), en la ventana de una nota (`data-gd-lado-enlace`), en los menús del tablero (`T.tablero.extras(fn)`: el tablero
+  pide `[{ texto, fn }]` para `{ tipo: punto|salto|nota|enlace|raya|columnas|varios|notas }` y los pone en `<!--extras-->` o delante
+  de lo que borra, y en las barras de lo elegido), en el panel flotante (`ctx.copiarEnlace`: la cabecera y cada nota), en el clic
+  derecho del editor (`#cdEnlace`, que texto.js mete en `#ctxMenu`: el párrafo del cursor o lo seleccionado) y en el asa de bloques
+  (`Ed.blocks.extras`, gancho nuevo de blocks.js), y el botón `[data-enlace-cab]` detrás del título de cada cabecera (lo pone el
+  mismo MutationObserver que ‹ ›; copia `refDeLoQueSeVe()`). **Cmd+Shift+C** (menú Claude › Copiar enlace para Claude; en el
+  navegador, la página y el marco) copia lo elegido —lo seleccionado en el editor (`C.texto.tramo()`: el mapa de bloques del DOM
+  como los cuenta el conversor, `mapaBloques`), los nodos, notas o columnas elegidos (`T.tablero.elegidos()`) o lo elegido, la nota
+  marcada en la biblioteca (`C.gestor.notaMarcada()`)— o, sin nada, lo que se ve.
+  **Abrir** (`irAEnlace(texto)` → `mostrarEnlace(x)`): el de este proyecto va a su sitio —`T.tablero.ir(que)` elige y centra en el
+  tablero (nodo, salto, trama, acto, nota, enlace, raya o columnas; lo de una trama oculta, lo dice), `C.texto.irATramo(clave, a, b)`
+  selecciona los bloques de un tramo cuando el editor tiene el documento, `C.gestor.expandir` un segmento, `verSeccion` una sección,
+  `revelar(tipo, id)` despliega y marca un contenedor, una carpeta o un grupo en el árbol—; el de otro, a Electron (`api.irEnlace` →
+  `claude.irAEnlace` en electron/claude.js: la ventana de ese proyecto, o su archivo por los recientes o `claude/archivos.js`, que
+  se abre; ahí, `enlace:ir`, sin rebotar: `deFuera`). Llegan por **Claude › Ir al enlace copiado** (el portapapeles, o un diálogo
+  para pegarlo), por `open-url` (el protocolo `clapcraft://` va en `build.protocols`; `setAsDefaultProtocolClient` solo empaquetada)
+  y por `mostrar_en_clapcraft { enlace }`.
+  **Claude**: `ver_enlace` (uno o varios, tal como los pega Leo; en el servidor, los de varios proyectos por separado) dice qué es
+  cada uno, dónde está y lo que tiene, con los ids para cambiarlo (un tramo, sus bloques numerados con uno de contexto). Un enlace
+  vale en lugar del id en cualquier herramienta (`encontrar`, `enlaceDelEsquema`: el de otro esquema no vale, que los ids de nodos
+  solo son únicos dentro del suyo) y, sin `proyecto`, el servidor lo toma del primer enlace de la petición (`porEnlace`: abiertos,
+  recientes y los del equipo por el nombre de su archivo); sin `esquema` o `biblioteca`, también (`completar`). `ver_proyecto` y
+  `leer_esquema` dicen su enlace. La skill lo explica en `references/enlaces.md`.
+  **Cuando el archivo cambia de nombre** (1.1.53, Leo: «que se haga una comprobación y corrección de los enlaces si es que cambié el
+  nombre»). El proyecto guarda dentro con qué nombre se hacen sus enlaces y los que tuvo antes, `documentos.enlace = { proyecto,
+  antes? }` (`normalizar` lo conserva). Se **sella** al escribirse su archivo o al copiar un enlace (`sellarEnlaces`: solo si ya se
+  escribe algo, así abrir un proyecto no lo reescribe; el servidor MCP sella lo que escribe y lo que crea). `C.enlaces.renombrar(datos,
+  ahora, op)` lo pone al día: el nombre nuevo a `proyecto`, los viejos a `antes` y, salvo `corregir: false`, **corrige los enlaces
+  de dentro** (`corregir`: notas y documentos, títulos y descripciones de nodos, notas de los esquemas; solo los de ese proyecto,
+  sin tocar los de otros ni los que solo se le parecen). En la app, `comprobarEnlaces(id, op)`: **renombrado con el proyecto
+  abierto** —electron/claude.js vigila el archivo con su **inodo**; si desaparece de su ruta, `buscarPorInodo` lo busca en su carpeta
+  y en las de siempre, la ventana sigue con él (`archivo:renombrado` → `seguirArchivo`: su ruta, la vista, los recientes, lo visto
+  de Claude) y ya no se vuelve a crear el archivo con el nombre viejo—; **con ClapCraft cerrado** —la ventana guardada lo encuentra
+  por el inodo que apunta la vista (`vista.archivos[id].ino`, `archivo:buscar`)—; **con el proyecto cerrado** —al abrirlo, su sello
+  dice otro nombre y ningún otro archivo se llama así (`proyecto:hay`)—. Si el nombre de antes aún es de otro archivo, **es una
+  copia** (o un «Guardar como…»): toma su nombre al escribirse, con los del original de reserva, y sus enlaces siguen apuntando al
+  original. Un proyecto aún sin sello que se renombra se sella con el nombre del archivo que se renombró (`sellarConNombreDe`), y un
+  reciente cuyo archivo ya no está se busca por el inodo que guarda su entrada. Encontrar un proyecto por un enlace (`rangoNombre`): 0, el nombre de su archivo; 1, su sello; 2, uno de antes (3, en el
+  servidor, el nombre del proyecto); la ventana anuncia los suyos (`enlaces` en `ventana:proyecto` y en `puente.json`) y el servidor
+  lee los sellos de los archivos (`claude/archivos.js`, `sellosDe`, `buscarPorEnlace`). `ver_enlace` y `ver_proyecto` dicen si un
+  enlace lleva un nombre de antes. Los enlaces `clapcraft://` **viven también dentro de los documentos**: el conversor ya no se los
+  quita a Claude (`[t](clapcraft://…)` queda como enlace) y en el editor **Cmd+clic** en uno lleva a su sitio (su `window.open` va a
+  `setWindowOpenHandler`, que lo manda a `abrirEnlace`).
+  **Y se arregló el clic derecho del tablero**: con el ratón de verdad, el botón derecho sobre un nodo empezaba su arrastre, el
+  nodo se quedaba sin puntero (`pointer-events: none`) y el `contextmenu` —que en macOS llega tras el `mousedown`— caía en la raya,
+  así que no salía su menú; ahora solo el botón principal arrastra un nodo o una nota (`onPointerDown`), el panel flotante no se
+  abre con el menú del clic derecho abierto (`alElegir`) y `#menu` va por encima de él (z 80). Estaba desde antes de la 1.1.51.
+- **Pruebas**: `test/conversor.test.js`, `test/herramientas.test.js` y `test/mcp.test.js` (el servidor por stdio: archivo, un
+  puente de mentira que hace de la app y la conexión apagada) en `npm test`; `npm run test:claude` (`pruebas/claude-electron.js`,
+  51 comprobaciones (también el historial: el aviso con sus dos botones, el panel desde el menú, «Ver cambios», revertir con choque y confirmación, «Deshacer» de lo revertido, el historial en el archivo y el aviso al reabrir); con la app de verdad y el servidor arrancado con el Node de Electron: en vivo, avisos, Deshacer del aviso y del
+  tablero, el editor abierto, «Antes de Claude», mostrar, apagar y encender, el proyecto cerrado, el archivo cambiado fuera con la
+  ventana abierta y con la ventana cerrada), y `test/enlaces.test.js` en `npm test` y `npm run test:enlaces`
+  (`pruebas/enlaces-electron.js`, 69 comprobaciones, con el portapapeles sustituido: el de verdad es el de Leo): copiar desde cada
+  sitio, el clic derecho con el ratón de verdad (`sendInputEvent`), un tramo del editor, `ver_enlace` en vivo con lo copiado, ir a un
+  nodo, una nota, un tramo, un segmento, una trama, una raya, un enlace, un contenedor y a uno que ya no está, el de otro proyecto
+  cerrado, que se abre en su ventana, un enlace dentro de una nota (Cmd+clic) y los renombrados: con el proyecto abierto
+  (`fs.renameSync` con la ventana viva), con ClapCraft cerrado (la página a `about:blank`, se renombra y vuelve con `?p=`), con el
+  proyecto cerrado (se abre el renombrado, también desde «Recientes», que guardan el inodo), una copia y un proyecto sin sello. Ojo al probar: el `click()` de un MenuItem casilla ya la alterna (no ponerle
+  `checked` antes), y el escritor de archivos de esta sesión convierte las secuencias `\uXXXX` en caracteres literales: pasar
+  el normalizador de invisibles tras escribir un JS.

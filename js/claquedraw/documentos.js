@@ -30,7 +30,7 @@
    elimina. `migrado` recuerda que el esquema del proyecto (que vivía en el guion) ya pasó aquí.
    Una nota vive en un subcontenedor y lleva como mucho una etiqueta suya; sin etiqueta está en la
    bandeja. El orden de todo es el manual. La papelera guarda las notas tiradas con su origen (el
-   subcontenedor) y la fecha; se vacía a mano o sola a los 30 días (`purgarPapelera`).
+   subcontenedor), su segmento, la nota que la seguía y la fecha; se vacía a mano o sola a los 30 días (`purgarPapelera`).
    Modelo puro, sin DOM: se carga en Node (test/documentos.test.js). Cada operación devuelve
    { ok, aviso?, ... }. Los datos viven dentro del guion (`guion.documentos`) y viajan en el .clapcraft. */
 (function (raiz) {
@@ -68,6 +68,15 @@
   const limpio = s => String(s || '').replace(/\u200B/g, '').replace(/\s+/g, ' ').trim();
   const sinSufijo = s => limpio(String(s || '').replace(/\u200B/g, '').split(DOBLE)[0]).replace(/\s*\([^)]*\)\s*$/, '');
   const clavePersonaje = s => sinSufijo(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  /* Las dos letras de la etiqueta de un personaje (1.1.40, Leo: «en lugar de la letra P, las primeras dos letras del nombre, la
+     segunda en minúscula —"Lestat" es "Le"—, pero con más de un nombre las dos iniciales en mayúscula —"Pez Gota" es "PG"»). */
+  const iniciales = nombre => {
+    const t = String(nombre || '').trim().replace(/\s+/g, ' ');
+    if (!t) return '·';
+    const partes = t.split(' ');
+    if (partes.length > 1) return (partes[0][0] + partes[1][0]).toUpperCase();
+    return t[0].toUpperCase() + (t[1] || '').toLowerCase();
+  };
   const RE_PERSONAJE = /(<p\b[^>]*\bclass="[^"]*\bsp-character\b[^"]*"[^>]*>)([\s\S]*?)(<\/p>)/gi;
   const textoDe = h => String(h).replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
   const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -86,7 +95,7 @@
   const nombreEnPapelera = x => (x.nota ? x.nota.titulo : x.tipo === 'esquema' ? x.esquema.nombre : x.tipo === 'personaje' ? x.personaje.nombre : x.sub.nombre);
   const no = aviso => ({ ok: false, aviso });
   const si = extra => Object.assign({ ok: true }, extra || {});
-  const plano = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const plano = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const sinSeparadores = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const comparar = (a, b) => a.localeCompare(b, 'es', { sensitivity: 'base', numeric: true });
   const texto = (v, defecto) => { const s = String(v ?? '').trim(); return s || defecto; };
@@ -309,7 +318,9 @@
     (Array.isArray(src.papelera) ? src.papelera : []).forEach(x => {
       if (x && x.tipo && x.tipo !== 'nota') { const p = pieza(x); if (p) d.papelera.push(p); return; }
       const n = x && x.nota; const id = n && String(n.id || ''); if (!id || ids.has(id)) return; ids.add(id);
-      d.papelera.push({ nota: nota(n, +n.creado || 0, String(n.subId || '')), origenId: String(x.origenId || n.subId || n.contenedorId || ''), origenNombre: texto(x.origenNombre, ''), eliminadoEn: +x.eliminadoEn || 0 });
+      /* con su segmento y su sitio de antes (`etiquetaId`, `antesDe`, `despuesDe`: al restaurarla vuelve ahí), solo si los trae */
+      d.papelera.push(Object.assign({ nota: nota(n, +n.creado || 0, String(n.subId || '')), origenId: String(x.origenId || n.subId || n.contenedorId || ''), origenNombre: texto(x.origenNombre, ''), eliminadoEn: +x.eliminadoEn || 0 },
+        x.etiquetaId ? { etiquetaId: String(x.etiquetaId) } : {}, x.antesDe ? { antesDe: String(x.antesDe) } : {}, x.despuesDe ? { despuesDe: String(x.despuesDe) } : {}));
     });
     /* el elenco: lo guardado y, además, los personajes de los registros de las notas que aún no estén */
     const claves = new Set();
@@ -333,6 +344,19 @@
     agruparEnlaces(d);
     mudarEsquemasPersonaje(d);
     versionarGuiones(d);
+    /* **el historial de Claude** (js/claquedraw/historial.js, 1.1.50): viaja con el proyecto; solo se guarda si lo hay (así un
+       proyecto sin cambios de Claude se abre idéntico a como se guardó) */
+    if (Array.isArray(src.historialClaude) && src.historialClaude.length) {
+      const h = C.historial ? C.historial.sanear(src.historialClaude) : clonar(src.historialClaude);
+      if (h.length) d.historialClaude = h;
+    }
+    /* el nombre con que se hacen los enlaces del proyecto y los que tuvo antes (1.1.52, js/claquedraw/enlaces.js): si su archivo
+       se renombra, los enlaces viejos lo siguen encontrando */
+    const en = src.enlace;
+    if (en && typeof en === 'object' && typeof en.proyecto === 'string' && en.proyecto.trim()) {
+      const antes = (Array.isArray(en.antes) ? en.antes : []).filter((x, i, l) => typeof x === 'string' && x.trim() && x !== en.proyecto && l.indexOf(x) === i).slice(0, 20);
+      d.enlace = Object.assign({ proyecto: en.proyecto.trim() }, antes.length ? { antes } : {});
+    }
     return d;
   }
 
@@ -467,6 +491,31 @@
     /* Las bibliotecas del contenedor; la de los guiones de un esquema no está en el árbol (Leo, 16-09-2026). */
     subsDe(cid) { const c = this.contenedor(cid); return c ? c.subs.filter(s => !s.guionEid) : []; }
     esGuiones(subId) { const r = this.sub(subId); return !!(r && r.sub.guionEid); }
+    /* Las bibliotecas de un contenedor en el orden del árbol (entrando en carpetas y grupos); nunca la oculta de los guiones
+       de un esquema (`guionEid`), que `nivelArbol` y `nivelGrupo` ya no dan. */
+    _bibliotecasArbol(cid) {
+      const res = [];
+      const ir = xs => xs.forEach(x => {
+        if (x.tipo === 'sub') res.push(x.obj);
+        else if (x.tipo === 'carpeta') ir(this.nivelArbol(cid, x.id));
+        else if (x.tipo === 'grupo') ir(this.nivelGrupo(x.id));
+      });
+      ir(this.nivelArbol(cid, null));
+      return res;
+    }
+    /* La primera biblioteca de un contenedor tal como se ve en el árbol, o null si no tiene ninguna a la vista: `c.subs[0]`
+       puede ser la oculta de los guiones de un esquema (ahí se abría una biblioteca invisible y una nota restaurada se
+       quedaba escondida). */
+    primeraBiblioteca(cid) {
+      if (!this.contenedor(cid)) return null;
+      return this._bibliotecasArbol(cid)[0] || this.subsDe(cid)[0] || null;
+    }
+    /* Todas las bibliotecas a la vista, [{ contenedor, sub }], en el orden del menú: los contenedores fijados primero y,
+       dentro de cada uno, el orden del árbol. Sin los contenedores ocultos (Personajes). */
+    todasLasBibliotecas() {
+      const L = this.contenedores();
+      return [...L.fijados, ...L.sueltos].flatMap(c => this._bibliotecasArbol(c.id).map(sub => ({ contenedor: c, sub })));
+    }
     /* ---------- los guiones generados viven con su esquema (Leo, 16-09-2026: «se va directamente al esquema para
        que ya no pueda desenlazarse»): una biblioteca oculta por esquema, que se mueve y se borra con él. ---------- */
     bibliotecaGuiones(eid, crear) {
@@ -1375,12 +1424,28 @@
       const e = this.etiqueta(id); if (!e) return no('Ese segmento ya no existe');
       e.color = color(col); this._tocarSub(e.subId); return si({ etiqueta: e });
     }
+    /* «Mover a la izquierda/derecha» del menú de un segmento: cambia el sitio con su vecino **de su misma sección y en el
+       orden que se ve**. En la sección de partida manda `ordenSegmentos` (sin contar la bandeja) y se intercambian ahí
+       también; antes solo se tocaba `datos.etiquetas`, así que en cuanto se había arrastrado una tarjeta no pasaba nada, y
+       con secciones cambiaba el sitio con un segmento de otra. */
     moverEtiqueta(id, salto) {
       const e = this.etiqueta(id); if (!e) return no('Ese segmento ya no existe');
-      const todas = this.datos.etiquetas, grupo = this.etiquetasDe(e.subId);
+      const r = this.sub(e.subId), sec = e.seccionId || null;
+      let grupo = this.etiquetasDe(e.subId, sec), orden = null;
+      if (!sec) {
+        orden = this.ordenSegmentos(e.subId, ['bandeja', ...grupo.map(x => 'etq:' + x.id)]);
+        const porClave = new Map(grupo.map(x => ['etq:' + x.id, x]));
+        grupo = orden.filter(k => porClave.has(k)).map(k => porClave.get(k));
+      }
       const i = grupo.indexOf(e), j = i + (salto < 0 ? -1 : 1);
       if (j < 0 || j >= grupo.length) return no('Ya está en el extremo');
-      const a = todas.indexOf(e), b = todas.indexOf(grupo[j]); todas[a] = grupo[j]; todas[b] = e;
+      const otra = grupo[j], todas = this.datos.etiquetas;
+      const a = todas.indexOf(e), b = todas.indexOf(otra); todas[a] = otra; todas[b] = e;
+      if (orden && r && r.sub.ordenSegmentos) {
+        const x = orden.indexOf('etq:' + e.id), y = orden.indexOf('etq:' + otra.id);
+        orden[x] = 'etq:' + otra.id; orden[y] = 'etq:' + e.id; r.sub.ordenSegmentos = orden;
+      }
+      this._tocarSub(e.subId);
       return si({ etiqueta: e });
     }
     /* Soltar tras arrastrar: queda antes de `antesDe` (una etiqueta del mismo sitio) o al final. */
@@ -1543,34 +1608,73 @@
       /* los guiones viven con su esquema: se mueven entre los segmentos de esa biblioteca, y nada más entra ahí */
       if (this.esGuiones(n.subId) && destino !== n.subId) return no('Un guion vive con su esquema: no se mueve a una biblioteca');
       if (this.esGuiones(destino) && !this.esGuiones(n.subId)) return no('Ahí solo van los guiones de ese esquema');
+      const origen = n.subId;
       n.subId = destino; n.etiquetaId = etiquetaId || null;
       const resto = this.datos.notas.filter(x => x !== n);
       const ref = antesDe && antesDe !== id ? resto.find(x => x.id === antesDe && x.subId === destino && x.etiquetaId === n.etiquetaId) : null;
       resto.splice(ref ? resto.indexOf(ref) : resto.length, 0, n); this.datos.notas = resto;
-      this._tocarSub(destino);
+      this._tocarSub(destino); if (origen !== destino) this._tocarSub(origen);   // la biblioteca de la que sale también cambia
       return si({ nota: n });
     }
     /* ---------- papelera ---------- */
+    /* La entrada de la papelera recuerda su segmento (`etiquetaId`) y la nota que la seguía en su mismo sitio (`antesDe`,
+       misma biblioteca y mismo segmento; nada si era la última): así restaurarla, también con el «Deshacer» del aviso, la
+       deja donde estaba. Antes volvía siempre a la bandeja. */
     tirarNota(id) {
       const n = this.nota(id); if (!n) return no('Esa nota ya no existe');
       const r = this.sub(n.subId);
-      this.datos.notas = this.datos.notas.filter(x => x !== n);
+      const etiquetaId = n.etiquetaId || null, notas = this.datos.notas, i = notas.indexOf(n);
+      const aqui = x => x.subId === n.subId && (x.etiquetaId || null) === etiquetaId;
+      /* sus vecinas: la que la seguía y la que iba delante; si una de ellas se tiró antes (y era justo la de al lado), esa, que
+         está más cerca que la siguiente a la vista (se tiraron varias seguidas de abajo arriba) */
+      const enPap = campo => this.datos.papelera.find(x => x.nota && x.origenId === n.subId && (x.etiquetaId || null) === etiquetaId && x[campo] === n.id);
+      const sigP = enPap('despuesDe'), antP = enPap('antesDe');
+      const sig = sigP ? sigP.nota : notas.slice(i + 1).find(aqui), ant = antP ? antP.nota : notas.slice(0, i).reverse().find(aqui);
+      this.datos.notas = notas.filter(x => x !== n);
       n.etiquetaId = null;
-      this.datos.papelera.push({ nota: n, origenId: n.subId, origenNombre: r ? r.contenedor.nombre + ' › ' + r.sub.nombre : '', eliminadoEn: this.ahora() });
+      this.datos.papelera.push(Object.assign({ nota: n, origenId: n.subId, origenNombre: r ? r.contenedor.nombre + ' › ' + r.sub.nombre : '', eliminadoEn: this.ahora() },
+        etiquetaId ? { etiquetaId } : {}, sig ? { antesDe: sig.id } : {}, ant ? { despuesDe: ant.id } : {}));
       if (r) this._tocarSub(n.subId);
       return si({ nota: n, aviso: '«' + n.titulo + '» va a la papelera' });
     }
-    /* Vuelve a su subcontenedor de origen (o al que se indique, o al primero que haya), a la bandeja.
-       `subId` puede ser también un contenedor: va a su primer subcontenedor. */
+    /* Vuelve a su biblioteca de origen (o a la que se indique, o a la primera que haya a la vista). En la de origen, a su
+       segmento si sigue ahí (si no, a la bandeja) y delante de la nota que la seguía si sigue en ese sitio (si no, al
+       final); en otra biblioteca, a la bandeja y al final. `subId` puede ser también un contenedor: va a su primera
+       biblioteca del árbol (`primeraBiblioteca`, nunca la oculta de los guiones). */
     restaurarNota(id, subId) {
       const x = this.enPapelera(id); if (!x) return no('Esa nota no está en la papelera');
-      const c = subId && this.contenedor(subId);
-      let destino = (subId && this.sub(subId)) || (c && c.subs[0] && this.sub(c.subs[0].id)) || this.sub(x.origenId) || null;
-      if (!destino) { const cc = this.datos.contenedores.find(y => !y.oculto && y.subs.length); destino = cc ? this.sub(cc.subs[0].id) : null; }
+      const c = subId && this.contenedor(subId), pb = c && this.primeraBiblioteca(c.id);
+      let destino = (subId && this.sub(subId)) || (pb && this.sub(pb.id)) || this.sub(x.origenId) || null;
+      if (!destino) { const b = this.todasLasBibliotecas()[0]; destino = b ? this.sub(b.sub.id) : null; }
       if (!destino) return no('No hay ninguna biblioteca donde restaurarla');
       this.datos.papelera = this.datos.papelera.filter(y => y !== x);
-      x.nota.subId = destino.sub.id; x.nota.etiquetaId = null; x.nota.modificado = this.ahora();
-      this.datos.notas.push(x.nota); this._tocarSub(destino.sub.id);
+      const aOrigen = destino.sub.id === x.origenId, e = aOrigen && x.etiquetaId ? this.etiqueta(x.etiquetaId) : null;
+      x.nota.subId = destino.sub.id; x.nota.etiquetaId = e && e.subId === destino.sub.id ? e.id : null; x.nota.modificado = this.ahora();
+      /* su sitio: delante de la primera de las que la seguían que esté a la vista, o detrás de la última de las que iban delante; las
+         que siguen en la papelera se atraviesan (se tiraron varias seguidas y se restauran en cualquier orden): de cada entrada de su
+         mismo sitio se siguen `antesDe` y `despuesDe`, y también las entradas que la señalan a ella. Con el `etiquetaId` guardado en la
+         entrada, no el ya resuelto: si el segmento se borró, la cadena se corta igual. Sin nada a la vista, al final. */
+      let pos = this.datos.notas.length;
+      if (aOrigen) {
+        const mismoSitio = p => p && p.nota && p.origenId === x.origenId && (p.etiquetaId || null) === (x.etiquetaId || null);
+        const pap = this.datos.papelera.filter(mismoSitio);
+        const presente = id => this.datos.notas.find(y => y.id === id && y.subId === x.nota.subId && (y.etiquetaId || null) === x.nota.etiquetaId) || null;
+        const alcanza = hacia => {                              // 'antesDe': las que van detrás; 'despuesDe': las de delante
+          const otro = hacia === 'antesDe' ? 'despuesDe' : 'antesDe', hallados = [], vistos = new Set([x.nota.id]), cola = [x];
+          while (cola.length) {
+            const e = cola.shift();
+            [e[hacia], ...pap.filter(p => p[otro] === e.nota.id).map(p => p.nota.id)].forEach(id => {
+              if (!id || vistos.has(id)) return; vistos.add(id);
+              const y = presente(id); if (y) { hallados.push(this.datos.notas.indexOf(y)); return; }
+              const p = pap.find(q => q.nota.id === id); if (p) cola.push(p);
+            });
+          }
+          return hallados;
+        };
+        const detras = alcanza('antesDe'), delante = detras.length ? [] : alcanza('despuesDe');
+        if (detras.length) pos = Math.min(...detras); else if (delante.length) pos = Math.max(...delante) + 1;
+      }
+      this.datos.notas.splice(pos, 0, x.nota); this._tocarSub(destino.sub.id);
       return si({ nota: x.nota, sub: destino.sub, contenedor: destino.contenedor, aviso: '«' + x.nota.titulo + '» vuelve a «' + destino.contenedor.nombre + ' › ' + destino.sub.nombre + '»' });
     }
     eliminarDefinitivo(id) {
@@ -1766,6 +1870,6 @@
     }
   }
 
-  Object.assign(C, { Documentos, nombreEnPapelera, ID_PERSONAJES, ID_ESQUEMAS_PERSONAJE: ID_ESQUEMAS, COLORES_CARPETA, HOJA_PERSONAJE, TONOS_NOTA: TONOS, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
+  Object.assign(C, { Documentos, nombreEnPapelera, iniciales, ID_PERSONAJES, ID_ESQUEMAS_PERSONAJE: ID_ESQUEMAS, COLORES_CARPETA, HOJA_PERSONAJE, TONOS_NOTA: TONOS, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -17,10 +17,10 @@ function base() {
     puntos: [], saltos: [], notas: []
   });
 }
-/* como base(), pero con un acto de 20 celdas: base() ya está en el máximo y no admite columnas nuevas */
-const corto = () => { const m = base(); m.acto('a1').celdas = 20; return m; };
-const P = (m, id, lineaId, celda, extra) => m.datos.puntos.push(Object.assign(
-  { id, lineaId, actoId: 'a1', celda, titulo: id, descripcion: '', color: null, cortado: false }, extra));
+/* como base(), pero con 20 columnas (y su acto de 20) */
+const corto = () => { const m = base(); m.acto('a1').celdas = 20; m.datos.columnas = 20; return m; };
+const P = (m, id, lineaId, col, extra) => m.datos.puntos.push(Object.assign(
+  { id, lineaId, col, titulo: id, descripcion: '', color: null, cortado: false }, extra));
 const S = (m, id, deId, aId, tipo) => m.datos.saltos.push({ id, deId, aId, tipo: tipo || 'cuadro' });
 
 /* Principal sale en 18 hacia Romance y vuelve en 30. */
@@ -76,11 +76,11 @@ test('5. los extremos de un salto nunca se apagan por ese mismo salto', () => {
 /* ---------- saltos ---------- */
 test('6. un cuadro no llega a una trama alternativa; un rombo sí', () => {
   const m = conIdaYVuelta();
-  const r = m.moverPunto('q3', { actoId: 'a1', celda: 18, lineaId: 'l3' });
+  const r = m.moverPunto('q3', { col: 18, lineaId: 'l3' });
   assert.equal(r.ok, false);
   assert.equal(m.punto('q3').lineaId, 'l2');
   m.datos.saltos[0].tipo = 'rombo';
-  assert.equal(m.moverPunto('q3', { actoId: 'a1', celda: 18, lineaId: 'l3' }).ok, true);
+  assert.equal(m.moverPunto('q3', { col: 18, lineaId: 'l3' }).ok, true);
   assert.equal(m.punto('q3').lineaId, 'l3');
   // tampoco al crearlo
   P(m, 'z', 'l1', 50);
@@ -114,11 +114,11 @@ test('8. eliminar un salto quita sus dos nodos y las notas que los usaban', () =
 
 test('9. mover cualquiera de los dos extremos deja a ambos en la misma celda', () => {
   const m = conIdaYVuelta();
-  m.moverPunto('q3', { actoId: 'a1', celda: 20 });
-  assert.equal(m.punto('q1').celda, 20);
-  m.moverSalto('s1', 'a1', 15);
-  assert.equal(m.punto('q1').celda, 15);
-  assert.equal(m.punto('q3').celda, 15);
+  m.moverPunto('q3', { col: 20 });
+  assert.equal(m.punto('q1').col, 20);
+  m.moverSalto('s1', 15);
+  assert.equal(m.punto('q1').col, 15);
+  assert.equal(m.punto('q3').col, 15);
 });
 
 test('10. un nodo que ya es extremo de un salto no admite un segundo', () => {
@@ -141,7 +141,7 @@ test('11. crear un nodo dentro del tramo de una nota la reancla al primer medio 
   const m = base();
   P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12);
   m.datos.notas.push({ id: 'n1', deId: 'a', aId: 'b', texto: 'lento' });
-  const r = m.nuevoPunto('l1', 'a1', 8);
+  const r = m.nuevoPunto('l1', 8);
   assert.equal(m.nota('n1').deId, 'a');
   assert.equal(m.nota('n1').aId, r.punto.id);
 });
@@ -150,7 +150,7 @@ test('12b. crear un nodo fuera de ese tramo no toca la nota', () => {
   const m = base();
   P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12);
   m.datos.notas.push({ id: 'n1', deId: 'a', aId: 'b', texto: 'lento' });
-  m.nuevoPunto('l1', 'a1', 20); m.nuevoPunto('l2', 'a1', 8);
+  m.nuevoPunto('l1', 20); m.nuevoPunto('l2', 8);
   assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId], ['a', 'b']);
 });
 
@@ -190,20 +190,20 @@ test('notas de un nodo: varias, y se van con él (Leo, 16-09-2026)', () => {
 test('soltar un nodo sobre otro los intercambia (Leo, 15-09-2026)', () => {
   const m = base();
   P(m, 'a', 'l1', 4); P(m, 'b', 'l1', 12); P(m, 'c', 'l2', 20);
-  let r = m.moverPunto('a', { actoId: 'a1', celda: 12 }, { intercambiar: true });   // misma trama
+  let r = m.moverPunto('a', { col: 12 }, { intercambiar: true });   // misma trama
   assert.equal(r.ok, true); assert.equal(r.intercambio.id, 'b');
-  assert.deepEqual([m.punto('a').celda, m.punto('b').celda], [12, 4]);
-  r = m.moverPunto('a', { actoId: 'a1', celda: 20, lineaId: 'l2' }, { intercambiar: true });   // otra trama: cada uno a la del otro
+  assert.deepEqual([m.punto('a').col, m.punto('b').col], [12, 4]);
+  r = m.moverPunto('a', { col: 20, lineaId: 'l2' }, { intercambiar: true });   // otra trama: cada uno a la del otro
   assert.equal(r.ok, true);
-  assert.deepEqual([m.punto('a').lineaId, m.punto('a').celda, m.punto('c').lineaId, m.punto('c').celda], ['l2', 20, 'l1', 12]);
-  assert.equal(m.moverPunto('b', { actoId: 'a1', celda: 12 }).ok, false);                 // sin intercambiar, sigue sin poder
+  assert.deepEqual([m.punto('a').lineaId, m.punto('a').col, m.punto('c').lineaId, m.punto('c').col], ['l2', 20, 'l1', 12]);
+  assert.equal(m.moverPunto('b', { col: 12 }).ok, false);                 // sin intercambiar, sigue sin poder
 });
 
 test('al intercambiar dos nodos las notas se quedan en su tramo', () => {
   const m = base();
   P(m, 'a', 'l1', 2); P(m, 'b', 'l1', 6); P(m, 'c', 'l1', 10);
   m.datos.notas.push({ id: 'n1', deId: 'a', aId: 'b', texto: '1' }, { id: 'n2', deId: 'b', aId: 'c', texto: '2' });
-  assert.equal(m.moverPunto('a', { actoId: 'a1', celda: 6 }, { intercambiar: true }).ok, true);   // a ↔ b
+  assert.equal(m.moverPunto('a', { col: 6 }, { intercambiar: true }).ok, true);   // a ↔ b
   assert.deepEqual([m.nota('n1').deId, m.nota('n1').aId], ['b', 'a']);                   // sigue en 2–6
   assert.deepEqual([m.nota('n2').deId, m.nota('n2').aId], ['a', 'c']);                   // sigue en 6–10
   assert.equal(m._tramoValido('a', 'c', 'n2'), null);
@@ -215,16 +215,16 @@ test('intercambio con un salto: sus dos extremos van juntos y cada uno sigue en 
   const s = m.datos.saltos[0], otro = s.aId;
   P(m, 'x', 'l1', 30); P(m, 'y', 'l2', 30); P(m, 'z', 'l2', 40);
   /* el extremo de l1 sobre x: y está en la otra trama en la misma celda, así que no caben los dos */
-  assert.equal(m.moverPunto('q', { actoId: 'a1', celda: 30 }, { intercambiar: true }).ok, false);
+  assert.equal(m.moverPunto('q', { col: 30 }, { intercambiar: true }).ok, false);
   /* el salto sobre z (en la trama de la pareja): el salto va a 40 y z a 10 */
-  const r = m.moverSalto(s.id, 'a1', 40, { intercambiar: true });
+  const r = m.moverSalto(s.id, 40, { intercambiar: true });
   assert.equal(r.ok, true);
-  assert.deepEqual([m.punto('q').celda, m.punto(otro).celda, m.punto('z').celda, m.punto('z').lineaId], [40, 40, 10, 'l2']);
+  assert.deepEqual([m.punto('q').col, m.punto(otro).col, m.punto('z').col, m.punto('z').lineaId], [40, 40, 10, 'l2']);
   /* un nodo suelto sobre un extremo: el salto entero se va a su celda (si la pareja cabe allí) */
-  assert.equal(m.moverPunto('x', { actoId: 'a1', celda: 40 }, { intercambiar: true }).ok, false);   // la pareja caería sobre y (l2, 30)
+  assert.equal(m.moverPunto('x', { col: 40 }, { intercambiar: true }).ok, false);   // la pareja caería sobre y (l2, 30)
   P(m, 'w', 'l1', 50);
-  assert.equal(m.moverPunto('w', { actoId: 'a1', celda: 40 }, { intercambiar: true }).ok, true);
-  assert.deepEqual([m.punto('w').celda, m.punto('q').celda, m.punto(otro).celda], [40, 50, 50]);
+  assert.equal(m.moverPunto('w', { col: 40 }, { intercambiar: true }).ok, true);
+  assert.deepEqual([m.punto('w').col, m.punto('q').col, m.punto(otro).col], [40, 50, 50]);
   /* los dos extremos del mismo salto no se intercambian */
   assert.equal(m.intercambiarPuntos('q', otro).ok, false);
 });
@@ -284,38 +284,76 @@ test('el flujo sigue los saltos en orden desde la principal', () => {
 });
 
 /* ---------- tramas y actos ---------- */
-test('la trama principal no se elimina ni cambia de tipo, y no se promueve otra', () => {
+test('caben varias tramas principales, pero siempre queda al menos una (Leo, 18-09-2026)', () => {
   const m = base();
-  assert.equal(m.borrarLinea('l1').ok, false);
-  assert.equal(m.fijarTipo('l1', 'secundaria').ok, false);
-  assert.equal(m.fijarTipo('l2', 'principal').ok, false);
-  assert.equal(m.nuevaLinea('principal').linea.tipo, 'secundaria');
-  assert.equal(m.datos.lineas.filter(l => l.tipo === 'principal').length, 1);
+  assert.equal(m.borrarLinea('l1').ok, false, 'la única principal no se elimina');
+  assert.equal(m.fijarTipo('l1', 'secundaria').ok, false, 'ni deja de serlo');
+  assert.equal(m.nuevaLinea('principal').linea.tipo, 'principal', 'se crean las que sean');
+  assert.equal(m.fijarTipo('l2', 'principal').ok, true, 'y cualquiera pasa a serlo');
+  assert.equal(m.datos.lineas.filter(l => l.tipo === 'principal').length, 3);
+  assert.equal(m.fijarTipo('l1', 'alterna').ok, true, 'con otra principal, deja de serlo');
+  assert.equal(m.borrarLinea('l2').ok, true, 'o se elimina');
+  assert.equal(m.lineaPrincipal().id, m.datos.lineas.find(l => l.tipo === 'principal').id, 'la historia sale de la primera');
+  const n = new T.Modelo({ actos: [{ id: 'a1', celdas: 10 }], lineas: [{ id: 'x', tipo: 'principal' }, { id: 'y', tipo: 'principal' }, { id: 'z', tipo: 'secundaria' }] });
+  assert.deepEqual(n.datos.lineas.map(l => l.tipo), ['principal', 'principal', 'secundaria'], 'al abrir se conservan');
+  const o = new T.Modelo({ actos: [{ id: 'a1', celdas: 10 }], lineas: [{ id: 'x', tipo: 'secundaria' }, { id: 'y', tipo: 'alterna' }] });
+  assert.equal(o.datos.lineas[0].tipo, 'principal', 'sin ninguna, la primera pasa a serlo');
 });
 
-test('eliminar un acto muda sus nodos al vecino con la celda recortada', () => {
+/* Leo, 18-09-2026: «que las líneas verticales existan sin depender de un acto, que pueda mover los actos sin que se muevan
+   las líneas… y pueden haber o no más de uno». */
+test('eliminar un acto no mueve nada: sus columnas y sus nodos se quedan, y puede no quedar ninguno', () => {
   const m = new T.Modelo({ actos: [{ id: 'a1', celdas: 10 }, { id: 'a2', celdas: 20 }],
     lineas: [{ id: 'l1', tipo: 'principal' }],
     puntos: [{ id: 'p', lineaId: 'l1', actoId: 'a2', celda: 15 }] });
-  const r = m.borrarActo('a2');
-  assert.equal(r.mudados, 1);
-  assert.deepEqual([m.punto('p').actoId, m.punto('p').celda], ['a1', 9]);
-  assert.equal(m.borrarActo('a1').ok, false);
+  assert.equal(m.cg(m.punto('p')), 25, 'lo guardado antes pasa a su columna global');
+  assert.equal(m.borrarActo('a2').ok, true);
+  assert.equal(m.cg(m.punto('p')), 25); assert.equal(m.totalCeldas(), 30);
+  assert.equal(m.actoEn(25), null, 'esa columna ya no es de ningún acto');
+  assert.equal(m.borrarActo('a1').ok, true, 'puede no quedar ninguno');
+  assert.equal(m.datos.actos.length, 0); assert.equal(m.totalCeldas(), 30);
+  const otra = new T.Modelo(JSON.parse(JSON.stringify(m.toJSON())));
+  assert.equal(otra.datos.actos.length, 0, 'y así se guarda y se abre'); assert.equal(otra.totalCeldas(), 30);
+  assert.equal(m.nuevoActo().acto.desde, 0, 'uno nuevo empieza en la primera columna libre');
 });
 
-test('reducir el ancho de un acto recorta la celda sin borrar nodos y mantiene los saltos alineados', () => {
-  const m = base();
-  P(m, 'a', 'l1', 50); P(m, 'b', 'l2', 50); S(m, 's', 'a', 'b');
-  m.fijarAncho('a1', 20);
-  assert.equal(m.punto('a').celda, 19);
-  assert.equal(m.punto('b').celda, 19);
+test('lo que dura un acto se cambia sin mover nodos ni columnas; el borde entre dos pegados es de los dos', () => {
+  const m = new T.Modelo(T.inicial());                                   // 14 + 22 + 15 = 51 columnas
+  P(m, 'a', 'l1', 20); P(m, 'b', 'l1', 40);
+  assert.equal(m.fijarAncho('a1', 10).ok, true);                         // I acaba antes: II empieza antes
+  assert.deepEqual(m.datos.actos.map(a => [a.desde, a.celdas]), [[0, 10], [10, 26], [36, 15]]);
+  assert.deepEqual([m.cg(m.punto('a')), m.cg(m.punto('b')), m.totalCeldas()], [20, 40, 51], 'nada más se mueve');
+  assert.equal(m.moverBorde('a2', 30).ok, true);                          // II y III se reparten el borde
+  assert.deepEqual(m.datos.actos.map(a => [a.desde, a.celdas]), [[0, 10], [10, 20], [30, 21]]);
+  assert.equal(m.moverBorde('a1', 99).ok, true);                          // no se come al siguiente: le deja una columna
+  assert.deepEqual(m.acto('a2').celdas, 1); assert.equal(m.acto('a1').celdas, 29);
+  assert.equal(m.moverBorde('a3', 80).ok, true, 'el último, pasado el final, crea columnas');
+  assert.equal(m.totalCeldas(), 80); assert.equal(m.cg(m.punto('b')), 40);
+  assert.equal(m.fijarAncho('a3', 0).ok, true); assert.equal(m.acto('a3').celdas, 1, 'como mínimo, una columna');
 });
 
-test('la celda global y ubicarCelda son inversas entre actos', () => {
+test('mover un acto entero: con su largo, sin pisar a sus vecinos y sin mover nada más', () => {
+  const m = new T.Modelo({ columnas: 40, actos: [{ id: 'a1', desde: 0, celdas: 5 }, { id: 'a2', desde: 10, celdas: 5 }, { id: 'a3', desde: 20, celdas: 5 }],
+    lineas: [{ id: 'l1', tipo: 'principal' }], puntos: [{ id: 'p', lineaId: 'l1', col: 12 }] });
+  assert.equal(m.actoEn(12).id, 'a2');
+  assert.equal(m.moverActo('a2', 15).ok, true);
+  assert.deepEqual([m.acto('a2').desde, m.acto('a2').celdas], [15, 5]);
+  assert.equal(m.cg(m.punto('p')), 12, 'el nodo se queda en su columna'); assert.equal(m.actoEn(12), null, '…y ya no es del acto');
+  m.moverActo('a2', 99); assert.equal(m.acto('a2').desde, 15, 'no pisa al siguiente');
+  m.moverActo('a2', 0); assert.equal(m.acto('a2').desde, 5, 'ni al anterior');
+  assert.equal(m.moverActo('a3', 50).ok, true); assert.equal(m.totalCeldas(), 55, 'el último, pasado el final, crea columnas');
+  assert.equal(m.anchoMaximo('a1'), 9, 'pegado al siguiente, puede quedarse con todo menos una columna de él');
+  m.moverActo('a2', 15); assert.equal(m.anchoMaximo('a1'), 15, 'con hueco, hasta donde empieza el siguiente');
+});
+
+test('la columna de un nodo y el acto que la cubre; lo guardado con actos seguidos pasa a columnas', () => {
   const m = new T.Modelo(T.ejemplo());
   assert.equal(m.cg(m.punto('p4')), 14 + 8);
-  assert.deepEqual(m.ubicarCelda(22), { actoId: 'a2', celda: 8 });
-  assert.deepEqual(m.ubicarCelda(500), { actoId: 'a3', celda: 14 });
+  assert.equal(m.actoEn(22).id, 'a2'); assert.equal(m.actoEn(50).id, 'a3'); assert.equal(m.actoEn(51), null);
+  assert.equal(m.totalCeldas(), 51);
+  assert.deepEqual(m.datos.actos.map(a => a.desde), [0, 14, 36]);
+  assert.equal(m.columna(500), 50, 'una columna que exista');
+  assert.equal('actoId' in m.punto('p4'), false, 'los nodos ya no guardan acto ni celda');
 });
 
 /* ---------- saneado e historial ---------- */
@@ -335,7 +373,7 @@ test('normalizar deja un JSON ajeno cumpliendo las invariantes', () => {
   assert.equal(m.datos.saltos.length, 1);
   assert.equal(m.datos.saltos[0].tipo, 'rombo');          // toca una alternativa
   assert.equal(m.punto('p1').cortado, false);             // es extremo
-  assert.equal(m.punto('p2').celda, m.punto('p1').celda); // misma celda
+  assert.equal(m.punto('p2').col, m.punto('p1').col); // misma celda
   assert.equal(m.datos.notas.length, 0);
 });
 
@@ -368,14 +406,14 @@ test('un salto no se crea sobre un nodo existente: la celda de destino tiene que
 test('una celda es de un solo nodo: ni crear ni mover ponen un nodo sobre otro', () => {
   const m = base();
   P(m, 'a', 'l1', 10); P(m, 'b', 'l1', 20); P(m, 'c', 'l2', 20);
-  assert.equal(m.nuevoPunto('l1', 'a1', 10).ok, false);                      // crear encima
-  assert.equal(m.nuevoPunto('l1', 'a1', 11).ok, true);                       // al lado sí
-  assert.equal(m.moverPunto('a', { actoId: 'a1', celda: 20 }).ok, false);    // mover encima (misma trama)
-  assert.equal(m.punto('a').celda, 10);
-  assert.equal(m.moverPunto('a', { actoId: 'a1', celda: 20, lineaId: 'l2' }).ok, false); // encima en otra trama
+  assert.equal(m.nuevoPunto('l1', 10).ok, false);                      // crear encima
+  assert.equal(m.nuevoPunto('l1', 11).ok, true);                       // al lado sí
+  assert.equal(m.moverPunto('a', { col: 20 }).ok, false);    // mover encima (misma trama)
+  assert.equal(m.punto('a').col, 10);
+  assert.equal(m.moverPunto('a', { col: 20, lineaId: 'l2' }).ok, false); // encima en otra trama
   assert.equal(m.punto('a').lineaId, 'l1');
-  assert.equal(m.moverPunto('a', { actoId: 'a1', celda: 10 }).ok, true);     // quedarse donde está
-  assert.equal(m.moverPunto('a', { actoId: 'a1', celda: 30, lineaId: 'l2' }).ok, true);
+  assert.equal(m.moverPunto('a', { col: 10 }).ok, true);     // quedarse donde está
+  assert.equal(m.moverPunto('a', { col: 30, lineaId: 'l2' }).ok, true);
 });
 
 test('un salto no se mueve a una celda donde cualquiera de sus dos extremos caería sobre un nodo', () => {
@@ -383,11 +421,11 @@ test('un salto no se mueve a una celda donde cualquiera de sus dos extremos caer
   P(m, 'q', 'l1', 10); m.crearSalto('q', 'l2');                              // extremos en 10 (l1 y l2)
   P(m, 'x', 'l1', 30); P(m, 'y', 'l2', 40);
   const s = m.datos.saltos[0];
-  assert.equal(m.moverSalto(s.id, 'a1', 30).ok, false);                      // choca en l1
-  assert.equal(m.moverSalto(s.id, 'a1', 40).ok, false);                      // choca en l2
-  assert.equal(m.moverSalto(s.id, 'a1', 35).ok, true);
-  assert.equal(m.punto(s.deId).celda, 35); assert.equal(m.punto(s.aId).celda, 35);
-  assert.equal(m.moverSalto(s.id, 'a1', 35).ok, true);                       // sobre sí mismo: no choca
+  assert.equal(m.moverSalto(s.id, 30).ok, false);                      // choca en l1
+  assert.equal(m.moverSalto(s.id, 40).ok, false);                      // choca en l2
+  assert.equal(m.moverSalto(s.id, 35).ok, true);
+  assert.equal(m.punto(s.deId).col, 35); assert.equal(m.punto(s.aId).col, 35);
+  assert.equal(m.moverSalto(s.id, 35).ok, true);                       // sobre sí mismo: no choca
 });
 
 test('paleta de 24 tonos: las notas tienen color, que se guarda; los colores antiguos siguen valiendo', () => {
@@ -414,8 +452,8 @@ test('mover un bloque de nodos: tiempo y tramas, con su salto entero (Leo, 15-09
   P(m, 'z', 'l2', 30);
   const r = m.moverBloque(['a', 'b', 'q'], 10, 0);                          // la pareja entra sola
   assert.equal(r.ok, true); assert.equal(r.movidos, 4);
-  assert.deepEqual(['a', 'b', 'q', otro].map(id => m.punto(id).celda), [12, 14, 16, 16]);
-  assert.equal(m.punto('z').celda, 30, 'sin choque nada más se mueve');
+  assert.deepEqual(['a', 'b', 'q', otro].map(id => m.punto(id).col), [12, 14, 16, 16]);
+  assert.equal(m.punto('z').col, 30, 'sin choque nada más se mueve');
   assert.equal(m.moverBloque(['a'], 0, -1).ok, false, 'no hay tramas por arriba');
   assert.equal(m.moverBloque(['a'], -40, 0).ok, false, 'no cabe antes del principio');
 });
@@ -520,7 +558,7 @@ test('columnas: varias a la vez, el acto que se queda sin ninguna desaparece y s
     actos: [{ id: 'a1', nombre: 'Acto I', celdas: 2, fondo: null }, { id: 'a2', nombre: 'Acto II', celdas: 3, fondo: null }],
     lineas: [{ id: 'l1', nombre: 'Principal', tipo: 'principal', color: 'azul' }], puntos: [], saltos: [], notas: []
   });
-  P(m, 'p', 'l1', 1, { actoId: 'a2' });                                      // celda global 3
+  P(m, 'p', 'l1', 3);                                                        // columna 3 (la segunda de Acto II)
   assert.equal(m.resumenColumnas([0, 1]).actos, 1, 'Acto I se quedaría sin columnas');
   const r = m.borrarColumnas([0, 1, 0, 99]);                                 // repetidas y fuera de rango no cuentan
   assert.equal(r.ok, true); assert.equal(r.columnas, 2); assert.equal(r.actos, 1);
@@ -557,7 +595,7 @@ test('columnas: moverlas al principio y al final, sin salirse', () => {
 test('notas apiladas: se reordenan una encima o debajo de otra (Leo, 16-09-2026)', () => {
   const m = new T.Modelo(T.inicial());
   const l = m.datos.lineas[0].id, a = m.datos.actos[0].id;
-  const p1 = m.nuevoPunto(l, a, 2).punto, p2 = m.nuevoPunto(l, a, 6).punto;
+  const p1 = m.nuevoPunto(l, 2).punto, p2 = m.nuevoPunto(l, 6).punto;
   const n1 = m.crearNota(p1.id, null, 'A').nota, n2 = m.crearNota(p1.id, null, 'B').nota, n3 = m.crearNota(p1.id, null, 'C').nota;
   const t1 = m.crearNota(p1.id, p2.id, 'T1').nota, t2 = m.crearNota(p1.id, p2.id, 'T2').nota;
   const enNodo = () => m.notasDe(p1.id, null).map(x => x.texto);
@@ -581,7 +619,7 @@ test('notas apiladas: se reordenan una encima o debajo de otra (Leo, 16-09-2026)
   assert.deepEqual(enNodo(), ['A', 'B', 'C']); assert.deepEqual(enTramo(), ['T1', 'T2'], 'cada una sigue en su sitio');
   /* pero no contra una nota de otra trama, que no se ve al lado */
   const l2 = m.nuevaLinea('secundaria').linea;
-  const q1 = m.nuevoPunto(l2.id, a, 4).punto;
+  const q1 = m.nuevoPunto(l2.id, 4).punto;
   const otra = m.crearNota(q1.id, null, 'Otra trama').nota;
   assert.equal(m.colocarNota(n1.id, otra.id).ok, false);
   assert.equal(m.colocarNota('n-no-existe', null).ok, false);
@@ -591,7 +629,7 @@ test('notas apiladas: se reordenan una encima o debajo de otra (Leo, 16-09-2026)
 
 test('el enlace entre dos nodos tiene color propio y admite varias notas; varias notas se borran de una vez (Leo, 16-09-2026)', () => {
   const m = base();
-  const p1 = m.nuevoPunto('l1', 'a1', 2).punto, p2 = m.nuevoPunto('l1', 'a1', 6).punto, p3 = m.nuevoPunto('l1', 'a1', 9).punto;
+  const p1 = m.nuevoPunto('l1', 2).punto, p2 = m.nuevoPunto('l1', 6).punto, p3 = m.nuevoPunto('l1', 9).punto;
   assert.equal(m.siguienteEnTrama(p1.id), p2); assert.equal(m.siguienteEnTrama(p3.id), null);
   assert.equal(m.colorearEnlace(p1.id, 'rojo').ok, true);
   assert.equal(m.punto(p1.id).colorEnlace, 'rojo');
@@ -611,12 +649,12 @@ test('el enlace entre dos nodos tiene color propio y admite varias notas; varias
 
 test('las notas de un nodo van con él: al moverlo, al intercambiarlo y al borrarlo (Leo, 16-09-2026)', () => {
   const m = base();
-  const p = m.nuevoPunto('l1', 'a1', 2).punto, q = m.nuevoPunto('l1', 'a1', 8).punto, r = m.nuevoPunto('l1', 'a1', 12).punto;
+  const p = m.nuevoPunto('l1', 2).punto, q = m.nuevoPunto('l1', 8).punto, r = m.nuevoPunto('l1', 12).punto;
   const np = m.crearNota(p.id, null, 'De P').nota, nq = m.crearNota(q.id, null, 'De Q').nota;
   const enlace = m.crearNota(q.id, r.id, 'Enlace').nota;
-  assert.equal(m.moverPunto(p.id, { actoId: 'a1', celda: 5 }).ok, true);
+  assert.equal(m.moverPunto(p.id, { col: 5 }).ok, true);
   assert.equal(m.nota(np.id).deId, p.id, 'moverlo a una celda libre');
-  assert.equal(m.moverPunto(p.id, { actoId: 'a1', celda: 8, lineaId: 'l1' }, { intercambiar: true }).intercambio, m.punto(q.id));
+  assert.equal(m.moverPunto(p.id, { col: 8, lineaId: 'l1' }, { intercambiar: true }).intercambio, m.punto(q.id));
   assert.equal(m.nota(np.id).deId, p.id, 'intercambiado, su nota sigue con él');
   assert.equal(m.nota(nq.id).deId, q.id, 'y la del otro, con el otro');
   assert.deepEqual([m.nota(enlace.id).deId, m.nota(enlace.id).aId], [p.id, r.id], 'la de un enlace se queda en su tramo');
@@ -633,7 +671,7 @@ test('notas de una raya: en cualquier tramo de la trama, haya nodos o no (Leo, 1
   assert.deepEqual(m.notasDeLinea('l2').map(n => n.texto), ['Sin nodos']);
   assert.deepEqual(m.notasAbiertas('l2', 4).map(n => n.texto), ['Sin nodos']);
   /* tras el último nodo, justo en la raya que sigue: no es una nota del nodo */
-  const p = m.nuevoPunto('l1', 'a1', 3).punto;
+  const p = m.nuevoPunto('l1', 3).punto;
   const tras = m.crearNotaAbierta('l1', 3, 'Después').nota;
   assert.equal(m.notasDe(p.id, null).length, 0, 'no es una nota del nodo');
   /* viaja en los datos */
@@ -648,7 +686,7 @@ test('notas de una raya: en cualquier tramo de la trama, haya nodos o no (Leo, 1
   m.moverColumnas([5], -5);
   assert.equal(m.colNota(m.nota(tras.id)), 0, 'mover su columna la lleva');
   /* moverla a un enlace de verdad le quita la raya, y al revés */
-  const a = m.nuevoPunto('l1', 'a1', 2).punto, b = m.nuevoPunto('l1', 'a1', 6).punto;
+  const a = m.nuevoPunto('l1', 2).punto, b = m.nuevoPunto('l1', 6).punto;
   assert.equal(m.moverNota(tras.id, a.id, b.id).ok, true);
   assert.equal('abierta' in m.nota(tras.id), false); assert.equal('celda' in m.nota(tras.id), false);
   assert.equal(m.moverNotaAbierta(tras.id, 'l1', 9).ok, true);
@@ -662,25 +700,17 @@ test('notas de una raya: en cualquier tramo de la trama, haya nodos o no (Leo, 1
   assert.equal(m.nota(vacia.id), undefined);
 });
 
-test('arrastrar el borde de un acto: crece columna a columna y encoge quitando las vacías (Leo, 17-09-2026)', () => {
+test('arrastrar el borde de un acto: columna a columna, solo cambia lo que dura (Leo, 18-09-2026)', () => {
   const m = corto();                                                   // un acto de 20 columnas
   P(m, 'x', 'l1', 2); P(m, 'y', 'l2', 10); P(m, 'z', 'l1', 12);
   const n = m.crearNotaAbierta('l3', 16, 'raya').nota;
-  assert.equal(m.crecerActo('a1').ok, true); assert.equal(m.acto('a1').celdas, 21);
-  /* encoger quita primero las vacías de la derecha (20, 19, 18, 17) y luego junta lo de detrás */
-  for (let i = 0; i < 4; i++) assert.equal(m.encogerActo('a1').ok, true);
-  assert.equal(m.acto('a1').celdas, 17); assert.equal(m.colNota(m.nota(n.id)), 16);
-  assert.equal(m.encogerActo('a1').ok, true);                          // la 15, vacía: la nota pasa a la 15
-  assert.equal(m.colNota(m.nota(n.id)), 15);
-  while (m.encogerActo('a1').ok);                                      // hasta que no quede ninguna vacía
-  assert.equal(m.acto('a1').celdas, 4, 'quedan solo las columnas con algo');
-  assert.deepEqual(['x', 'y', 'z'].map(id => m.cg(m.punto(id))), [0, 1, 2], 'en su orden, juntos');
-  assert.equal(m.colNota(m.nota(n.id)), 3);
-  assert.equal(m.encogerActo('a1').ok, false, 'sin columnas vacías no hace nada');
-  /* el último acto lleno abre otro acto de una columna */
-  const lleno = base();
-  const r = lleno.crecerActo('a1');
-  assert.equal(r.ok, true); assert.equal(lleno.datos.actos.length, 2); assert.equal(lleno.datos.actos[1].celdas, 1);
+  assert.equal(m.crecerActo('a1').ok, true); assert.equal(m.acto('a1').celdas, 21); assert.equal(m.totalCeldas(), 21, 'el último, al final, crea la columna');
+  for (let i = 0; i < 15; i++) assert.equal(m.encogerActo('a1').ok, true);
+  assert.equal(m.acto('a1').celdas, 6);
+  assert.deepEqual(['x', 'y', 'z'].map(id => m.cg(m.punto(id))), [2, 10, 12], 'los nodos no se mueven');
+  assert.equal(m.colNota(m.nota(n.id)), 16); assert.equal(m.totalCeldas(), 21, 'ni las columnas');
+  while (m.encogerActo('a1').ok);
+  assert.equal(m.acto('a1').celdas, 1); assert.equal(m.encogerActo('a1').ok, false, 'como mínimo, una columna');
 });
 
 test('copiar, pegar y duplicar nodos y notas, con contenido y color (Leo, 17-09-2026)', () => {
@@ -731,4 +761,84 @@ test('lo pegado no se mete entre nodos y se lleva las notas de sus enlaces y de 
   assert.equal(m.notasDe(nb.id, nc.id).length, 1, 'la nota sigue en su enlace (antes pasaba a ser del nodo)');
   const abiertas = m.datos.notas.filter(n => n.abierta && n !== raya);
   assert.equal(abiertas.length, 1); assert.equal(m.colNota(abiertas[0]) - m.cg(nc), 2, 'la de la raya, a su distancia');
+});
+
+test('filas y columnas con su propio tamaño (1.1.41)', () => {
+  const m = new T.Modelo(T.inicial());
+  const l = m.datos.lineas[0];
+  m.asegurarCeldas(9);
+  assert.equal(m.anchoCol(3), 1);
+  assert.equal(m.altoLinea(l.id), 1);
+  assert.ok(m.fijarAnchoCol(3, 2.5).ok);
+  assert.ok(m.fijarAltoLinea(l.id, 1.8).ok);
+  assert.equal(m.anchoCol(3), 2.5);
+  assert.equal(m.altoLinea(l.id), 1.8);
+  assert.deepEqual(m.tamanosPropios(), { cols: 1, filas: 1, total: 2 });
+  /* el ancho viaja con su columna al insertar, borrar y mover */
+  m.insertarColumnas(0, 1, 'izquierda');
+  assert.equal(m.anchoCol(4), 2.5);
+  m.borrarColumnas([0]);
+  assert.equal(m.anchoCol(3), 2.5);
+  m.moverColumnas([3], 2);
+  assert.equal(m.anchoCol(5), 2.5);
+  assert.equal(m.anchoCol(3), 1);
+  /* se guarda y vuelve igual */
+  const otra = new T.Modelo(JSON.parse(JSON.stringify(m.datos)));
+  assert.equal(otra.anchoCol(5), 2.5);
+  assert.equal(otra.altoLinea(l.id), 1.8);
+  /* y se restablece todo de una vez */
+  assert.equal(m.restablecerTamanos().restablecidos, 2);
+  assert.equal(m.anchoCol(5), 1);
+  assert.equal(m.altoLinea(l.id), 1);
+  assert.equal(m.tamanosPropios().total, 0);
+});
+
+test('una nota puede bajarse a su propio escalón sin dejar su nodo (1.1.46)', () => {
+  const m = new T.Modelo(T.inicial());
+  const l = m.datos.lineas[0];
+  m.asegurarCeldas(6);
+  const p = m.nuevoPunto(l.id, 2, { titulo: 'Nodo' }).punto;
+  const n = m.crearNota(p.id, null, 'Pero').nota;
+  assert.equal(n.nivel, undefined);
+  assert.ok(m.fijarNivelNota(n.id, 3).ok);
+  assert.equal(m.nota(n.id).nivel, 3);
+  assert.equal(m.nota(n.id).deId, p.id);                       // sigue siendo del nodo
+  /* se guarda y vuelve igual; y se quita con 0 */
+  const otra = new T.Modelo(JSON.parse(JSON.stringify(m.datos)));
+  assert.equal(otra.nota(n.id).nivel, 3);
+  m.fijarNivelNota(n.id, 0);
+  assert.equal(m.nota(n.id).nivel, undefined);
+});
+
+/* Lo que encontró el debugueo del 20-09-2026 (1.1.48), con un fuzz de miles de operaciones al azar
+   comprobando las invariantes de la spec tras cada una. */
+test('mover un nodo recoloca las notas de enlace: ni entre nodos que ya no son consecutivos ni entre tramas (1.1.48)', () => {
+  const m = new T.Modelo(T.inicial());
+  const l1 = m.datos.lineas[0], l2 = m.nuevaLinea('secundaria').linea;
+  m.asegurarCeldas(14);
+  const a = m.nuevoPunto(l1.id, 0, { titulo: 'A' }).punto;
+  const b = m.nuevoPunto(l1.id, 6, { titulo: 'B' }).punto;
+  const c = m.nuevoPunto(l1.id, 11, { titulo: 'C' }).punto;
+  const n = m.crearNota(a.id, b.id, 'entre A y B').nota;
+  /* un nodo que se mete en medio del tramo: la nota pasa a ir de A a él, como cuando se crea uno ahí */
+  m.moverPunto(c.id, { col: 3 });
+  assert.equal(m._tramoValido(n.deId, n.aId), null);
+  assert.deepEqual([m.punto(n.deId).titulo, m.punto(n.aId).titulo], ['A', 'C']);
+  /* y si uno de sus extremos se va a otra trama, la nota se queda en la suya (antes quedaba entre dos tramas
+     y `normalizar` la tiraba: desaparecía al guardar y volver a abrir) */
+  m.moverPunto(c.id, { col: 3, lineaId: l2.id });
+  assert.ok(m.nota(n.id), 'la nota sigue');
+  assert.equal(m._tramoValido(m.nota(n.id).deId, m.nota(n.id).aId), null);
+  assert.equal(m.punto(m.nota(n.id).deId).lineaId, l1.id);
+  const otra = new T.Modelo(JSON.parse(JSON.stringify(m.datos)));
+  assert.ok(otra.nota(n.id), 'y no se pierde al guardar y volver a abrir');
+});
+
+test('borrar la única trama a la vista deja otra visible (1.1.48)', () => {
+  const m = new T.Modelo(T.inicial());
+  const l1 = m.datos.lineas[0], l2 = m.nuevaLinea('principal').linea;
+  assert.ok(m.ocultarLinea(l2.id, true).ok);
+  assert.ok(m.borrarLinea(l1.id).ok);
+  assert.equal(m.datos.lineas.length, 1);
+  assert.equal(m.lineasVisibles().length, 1, 'el esquema nunca se queda sin ninguna fila');
 });

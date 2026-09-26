@@ -40,9 +40,8 @@
         if (!ca || !cb || ca === cb) continue;                 // solo donde los dos ya tienen carril
         const fin = mX.datos.puntos.length ? Math.max(...mX.datos.puntos.map(p => mX.cg(p))) + HUECO : HUECO;
         mX.asegurarCeldas(fin);
-        const u = mX.ubicarCelda(fin);
         const titulo = a.titulo || (mX.nombres && mX.nombres.cuadro) || 'Relación';
-        const r = mX.nuevoPunto(ca.id, u.actoId, u.celda, { titulo });
+        const r = mX.nuevoPunto(ca.id, fin, { titulo });
         if (!r.ok) continue;
         const sx = mX.crearSalto(r.punto.id, cb.id, 'cuadro');
         if (!sx.ok) continue;

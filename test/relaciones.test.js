@@ -32,10 +32,10 @@ test('una relación aparece al final de los demás esquemas donde los dos person
   const eA = esquema(d, lestat, louis), eB = esquema(d, louis, lestat);
   /* el esquema B ya tiene algo en su línea del tiempo */
   const mB = abrir(d, eB);
-  mB.nuevoPunto(mB.lineaPrincipal().id, mB.datos.actos[0].id, 9, { titulo: 'Se convierte' }); d.guardarEsquema(eB, mB.toJSON());
+  mB.nuevoPunto(mB.lineaPrincipal().id, 9, { titulo: 'Se convierte' }); d.guardarEsquema(eB, mB.toJSON());
   /* en A, una relación en la celda 4 entre Lestat y Louis */
   const m = abrir(d, eA);
-  const ev = m.nuevoPunto(carril(m, lestat.id).id, m.datos.actos[0].id, 4, { titulo: 'Lo muerde' }).punto;
+  const ev = m.nuevoPunto(carril(m, lestat.id).id, 4, { titulo: 'Lo muerde' }).punto;
   m.crearSalto(ev.id, carril(m, louis.id).id, 'cuadro');
   assert.deepEqual(C.relaciones.reflejar(d, T, m, eA, { marca }), [eB]);
   const rel = m.datos.saltos[0].rel; assert.ok(rel, 'la relación de A queda marcada');
@@ -60,7 +60,7 @@ test('solo se refleja donde los dos ya tienen carril: no se inventan carriles ni
   const eB = esquema(d, louis, claudia);                       // los dos están: la recibe
   const eC = esquema(d, louis, lestat);                        // falta Claudia: no la recibe
   const m = abrir(d, eA);
-  const ev = m.nuevoPunto(carril(m, louis.id).id, m.datos.actos[0].id, 6, { titulo: 'La adoptan' }).punto;
+  const ev = m.nuevoPunto(carril(m, louis.id).id, 6, { titulo: 'La adoptan' }).punto;
   m.crearSalto(ev.id, carril(m, claudia.id).id, 'cuadro');
   assert.deepEqual(C.relaciones.reflejar(d, T, m, eA, { marca }), [eB]);
   const mB = abrir(d, eB), s = mB.datos.saltos[0];
@@ -82,7 +82,7 @@ test('borrar la relación en un esquema la borra en el otro (Leo, 15-09-2026)', 
   const { d, lestat, louis } = elenco();
   const eA = esquema(d, lestat, louis), eB = esquema(d, louis, lestat);
   const m = abrir(d, eA);
-  const ev = m.nuevoPunto(carril(m, lestat.id).id, m.datos.actos[0].id, 4, { titulo: 'Lo muerde' }).punto;
+  const ev = m.nuevoPunto(carril(m, lestat.id).id, 4, { titulo: 'Lo muerde' }).punto;
   m.crearSalto(ev.id, carril(m, louis.id).id, 'cuadro');
   C.relaciones.reflejar(d, T, m, eA, { marca });
   d.guardarEsquema(eA, m.toJSON());
@@ -102,7 +102,7 @@ test('renombrar la relación después de crearla llega al reflejo, y renombrar e
   const { d, lestat, louis } = elenco();
   const eA = esquema(d, lestat, louis), eB = esquema(d, louis, lestat);
   const m = abrir(d, eA);
-  const ev = m.nuevoPunto(carril(m, lestat.id).id, m.datos.actos[0].id, 4, { titulo: 'Relación' }).punto;
+  const ev = m.nuevoPunto(carril(m, lestat.id).id, 4, { titulo: 'Relación' }).punto;
   m.crearSalto(ev.id, carril(m, louis.id).id, 'cuadro');
   /* primer guardado automático: aún con el nombre propuesto */
   C.relaciones.borrarReflejos(d, T, m, eA); C.relaciones.renombrarReflejos(d, T, m, eA);

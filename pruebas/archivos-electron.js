@@ -3,10 +3,12 @@
    carpeta temporal (y su propio almacenamiento, sin tocar los guiones de la app instalada), y comprueba:
    1. «Guardar como…» escribe un .clapcraft comprimido con gzip que es exactamente el guion de la pestaña;
    2. lo que se hace después (notas y texto en el editor, segmentos ordenados arrastrando, segmento expandido,
-      personajes con su tablero y su carrusel) se escribe solo en el archivo, sin pulsar Guardar;
-   3. «Abrir…» una copia trae el mismo guion, se ve igual (orden de tarjetas y notas) y no lo reescribe;
-   4. al volver a arrancar (recargar) retoma el archivo por su ruta, no lo reescribe, y los cambios siguen
-      llegando al archivo;
+      personajes con su tablero y su carrusel) se escribe solo en el archivo, sin pulsar Guardar; cada nota nueva se abre en su
+      ventana (1.1.54) con el nombre para escribir encima, y lo escrito en ella también llega al archivo;
+   3. «Abrir…» una copia la abre en otra ventana (una por proyecto, 1.1.33) con el mismo guion, se ve igual (orden de tarjetas
+      y notas), no la reescribe, abrirla otra vez no abre otra ventana y Electron apunta las ventanas para el próximo arranque;
+   4. al volver a arrancar (recargar) cada ventana retoma su proyecto y su archivo por su ruta, no lo reescribe, y los cambios
+      siguen llegando al archivo;
    5. «Nuevo proyecto» ya no pregunta la carpeta: «Crear proyecto» abre el diálogo de guardar con el nombre propuesto
       (sin espacios, acentos ni ñ), cancelarlo no crea nada, el archivo nace donde se eligió y la pestaña lleva el nombre del
       proyecto; el archivo de otro proyecto abierto no se pisa, y cerrar todo deja «Sin proyectos» con los recientes, que se
@@ -19,6 +21,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const zlib = require('zlib');
+const { spawn } = require('child_process');
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'clapcraft-prueba-'));
 const ARCHIVO = path.join(TMP, 'Mi guion.clapcraft'), COPIA = path.join(TMP, 'Copia del guion.clapcraft');
@@ -39,6 +42,9 @@ dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [COPIA] });
 require('../electron/main.js');
 
 const espera = ms => new Promise(r => setTimeout(r, ms));
+/* Electron vuelve a escribir su almacenamiento (`datos/`) al cerrarse, después del rmSync del final, y la carpeta temporal se
+   quedaba: se borra también un poco después, desde un proceso aparte que sobrevive a la app */
+const borrarDespues = dir => { try { spawn('/bin/sh', ['-c', 'sleep 3; rm -rf "$0"', dir], { detached: true, stdio: 'ignore' }).unref(); } catch (_) {} };
 const resultados = [];
 function comprobar(nombre, ok, detalle) {
   resultados.push({ nombre, ok: !!ok });
@@ -58,17 +64,56 @@ function leerArchivo(p) {
   const b = fs.readFileSync(p);
   return { gzip: b[0] === 0x1f && b[1] === 0x8b, bytes: b.length, texto: zlib.gunzipSync(b).toString('utf8') };
 }
+/* Una nota nueva se abre en su ventana (1.1.54, de ClapBook: `.gd-modal-capa`, en el `body`) con su nombre elegido en
+   `input.gd-modal-titulo`: se escribe encima, Enter lo aplica y pasa al campo del documento, se escribe ahí (opcional) y Esc cierra
+   la ventana. `nombrarNueva(titulo, texto)` (en la página) lo hace como el teclado y devuelve lo que vio; va delante del código de
+   cada `js(...)` que crea una nota. En `ventanasNuevas` se apunta lo de todas, para comprobarlo al final. */
+const NOMBRAR = `const nombrarNueva = async (titulo, texto) => {
+  for (let i = 0; i < 20 && !(document.activeElement && document.activeElement.matches('.gd-modal-titulo')); i++) await W(25);
+  const inp = document.activeElement, capa = document.querySelector('.gd-modal-capa');
+  const v = { titulo, enVentana: !!(capa && !capa.hidden && inp && inp.matches('.gd-modal-capa input.gd-modal-titulo')),
+    elegido: !!inp && inp.value.length > 0 && inp.selectionStart === 0 && inp.selectionEnd === inp.value.length };
+  inp.value = titulo; inp.dispatchEvent(new Event('input', { bubbles: true }));
+  inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await W(120);
+  const campo = document.activeElement;
+  v.alCampo = !!(campo && campo.matches('.gd-modal-capa [data-gd-lado-texto]'));
+  if (texto && v.alCampo) { document.execCommand('insertText', false, texto); await W(60); }
+  campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await W(150);
+  v.cerrada = !capa || capa.hidden;
+  return v;
+};`;
+const ventanasNuevas = [];
+const bienNueva = v => v && v.enVentana && v.elegido && v.alCampo && v.cerrada;
 
 app.whenReady().then(async () => {
   let win = null;
   for (let i = 0; i < 100 && !(win = BrowserWindow.getAllWindows()[0]); i++) await espera(50);
   if (win.webContents.isLoading()) await new Promise(r => win.webContents.once('did-finish-load', r));
   /* los errores de la página salen en la consola de la prueba (si no, un fallo dentro de la página solo se ve como un cuelgue) */
-  win.webContents.on('console-message', (ev) => { const nivel = ev.level ?? ev.params?.level; if (nivel === 'error' || nivel === 3) console.log('    [página] ' + (ev.message ?? ev.params?.message)); });
-  /* con la ventana tapada o en segundo plano Chromium frena los temporizadores de la página y las esperas (W) se alargaban
-     tanto que la prueba parecía colgada (pasó el 15-09-2026): la ventana de la prueba no se frena */
-  win.webContents.setBackgroundThrottling(false);
-  const js = code => win.webContents.executeJavaScript(`(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); ${code} })()`, true);
+  /* los errores de la página salen en la consola de la prueba (si no, un fallo dentro de la página solo se ve como un cuelgue);
+     con la ventana tapada o en segundo plano Chromium frena los temporizadores de la página y las esperas (W) se alargaban
+     tanto que la prueba parecía colgada (pasó el 15-09-2026): las ventanas de la prueba no se frenan */
+  const preparar = w => {
+    w.webContents.on('console-message', (ev) => { const nivel = ev.level ?? ev.params?.level; if (nivel === 'error' || nivel === 3) console.log('    [página] ' + (ev.message ?? ev.params?.message)); });
+    w.webContents.setBackgroundThrottling(false);
+  };
+  preparar(win);
+  /* **una ventana por proyecto** (1.1.33): `js` habla con la ventana `actual`; `nuevaVentana(accion)` espera la que abre la accion */
+  let actual = win;
+  const jsEn = (w, code) => w.webContents.executeJavaScript(`(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); ${code} })()`, true);
+  const js = code => jsEn(actual, code);
+  const deClapCraft = () => BrowserWindow.getAllWindows().filter(w => !w.isDestroyed() && /claquedraw\.html/.test(w.webContents.getURL()));
+  const listaEn = w => jsEn(w, `for (let i = 0; i < 100 && !(window.Claquedraw && Claquedraw.app); i++) await W(50); await W(700); return true;`);
+  async function nuevaVentana(accion) {
+    const antes = new Set(BrowserWindow.getAllWindows().map(w => w.id));
+    await accion();
+    for (let i = 0; i < 200; i++) {
+      const n = BrowserWindow.getAllWindows().find(w => !antes.has(w.id) && !w.isDestroyed() && /claquedraw\.html/.test(w.webContents.getURL() || '') );
+      if (n) { preparar(n); if (n.webContents.isLoading()) await new Promise(r => n.webContents.once('did-finish-load', r)); await listaEn(n); return n; }
+      await espera(50);
+    }
+    throw new Error('no se abrió ninguna ventana');
+  }
   /* sin proyectos abiertos (el primer arranque): se crea uno en blanco; su archivo va a la carpeta temporal, con el nombre
      propuesto («sin-titulo-1.clapcraft»), y «Guardar como…» lo lleva luego a «Mi guion» */
   const listo = () => js(`for (let i = 0; i < 100 && !(window.Claquedraw && Claquedraw.app); i++) await W(50);
@@ -120,7 +165,7 @@ app.whenReady().then(async () => {
 
     /* ---------- 2. cambios con el archivo vinculado: se escriben solos ---------- */
     const antes = fs.statSync(ARCHIVO).mtimeMs;
-    await js(`
+    const exp = await js(`${NOMBRAR}
       const G = Claquedraw.gestor, d = G.documentos();
       Claquedraw.app.vista('documentos'); G.abrirSub(d.datos.contenedores[0].subs[0].id); await W(300);
       /* arrastrar la bandeja detrás del último segmento (arrastre en vivo, como con el ratón) */
@@ -139,9 +184,21 @@ app.whenReady().then(async () => {
       for (let i = 1; i <= 10; i++) { window.dispatchEvent(new PointerEvent('pointermove', { clientX: r1.left + 40 + (r2.right - 20 - r1.left - 40) * i / 10, clientY: r2.top + 60, pointerId: 1 })); await W(16); }
       window.dispatchEvent(new PointerEvent('pointerup', { clientX: r2.right - 20, clientY: r2.top + 60, pointerId: 1 })); await W(600);   // el clic justo después de soltar no cuenta (400 ms)
       document.querySelector('#gdMain .gd-exp-add').click(); await W(200);
-      const inp = document.activeElement; inp.value = 'El cura del pueblo'; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await W(200);
+      const v = await nombrarNueva('El cura del pueblo', 'Lleva la sotana remendada.');
+      v.sigueExpandido = !!document.querySelector('#gdMain .gd-exp-grid');       // Esc cierra la ventana, no el segmento
+      /* un clic en la tarjeta de otra nota abre su ventana; Esc la cierra */
+      const otra = [...document.querySelectorAll('#gdMain .gd-exp-grid .gd-exp-nota[data-nota]')].find(x => !/El cura del pueblo/.test(x.textContent));
+      otra.click(); await W(200);
+      const capa = document.querySelector('.gd-modal-capa');
+      v.clicAbre = !capa.hidden && document.querySelector('.gd-modal-titulo').value === d.nota(otra.dataset.nota).titulo;
+      document.querySelector('.gd-modal').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await W(150);
+      v.clicCierra = capa.hidden;
       document.querySelector('#gdMain [data-gd-contraer].btn').click(); await W(200);
+      return JSON.stringify(v);
     `);
+    const vExp = JSON.parse(exp); ventanasNuevas.push(vExp);
+    comprobar('la nota nueva del segmento expandido se abre en su ventana con el nombre elegido; Enter pasa al campo y Esc la cierra (el segmento sigue expandido)', bienNueva(vExp) && vExp.sigueExpandido, exp);
+    comprobar('un clic en la tarjeta de una nota la abre en su ventana, y Esc la cierra', vExp.clicAbre && vExp.clicCierra, exp);
     await espera(2500);                                                   // el autoguardado espera 1 s tras el último cambio
     comprobar('los cambios se escribieron solos en el archivo (sin pulsar Guardar)', fs.statSync(ARCHIVO).mtimeMs > antes);
     const f2 = await mismo(ARCHIVO, 'el archivo sigue siendo exactamente el guion abierto');
@@ -151,6 +208,7 @@ app.whenReady().then(async () => {
     comprobar('el documento del esquema vive en su biblioteca oculta, fuera del árbol',
       !!subG && d2.notas.some(n => n.subId === subG.id && n.guion && n.guion.principal), JSON.stringify(subG));
     comprobar('guarda la nota nueva creada en el segmento expandido', d2.notas.some(n => n.titulo === 'El cura del pueblo'));
+    comprobar('y lo escrito en su ventana', d2.notas.some(n => n.titulo === 'El cura del pueblo' && /Lleva la sotana remendada\./.test(n.html || '')), JSON.stringify((d2.notas.find(n => n.titulo === 'El cura del pueblo') || {}).html));
     comprobar('el indicador vuelve a guardado (✓)', (await indicador()).includes('ok'), await indicador());
 
     /* ---------- 2b. el tablero: notas apiladas, su orden, renombrar sin Enter y un grupo vacío ---------- */
@@ -162,8 +220,8 @@ app.whenReady().then(async () => {
       const m = T.tablero.modelo();
       const l = m.datos.lineas[0].id;
       if (m.puntosDe(l).length < 2) {                          // el esquema de la prueba puede traer un solo nodo
-        m.nuevoPunto(l, m.datos.actos[0].id, 3, { titulo: 'Uno' });
-        m.nuevoPunto(l, m.datos.actos[0].id, 7, { titulo: 'Dos' });
+        m.nuevoPunto(l, 3, { titulo: 'Uno' });
+        m.nuevoPunto(l, 7, { titulo: 'Dos' });
       }
       const ps = m.puntosDe(l);
       m.crearNota(ps[0].id, null, 'Nota de nodo A');
@@ -210,25 +268,27 @@ app.whenReady().then(async () => {
     comprobar('un grupo vacío se guarda en el archivo', !!gr2b && gr2b.items.length === 0, JSON.stringify(d2b.contenedores[0].grupos));
 
     /* ---------- personajes: su biblioteca, un esquema de personaje y el documento de un evento ---------- */
-    await js(`
+    const vPer = await js(`${NOMBRAR}
       const G = Claquedraw.gestor, d = G.documentos(), T = window.Tramas;
       document.querySelector('[data-gd-ir-personajes]').click(); await W(600);
-      /* un personaje es su biblioteca: se abre y se le crea una nota en la bandeja */
+      /* un personaje es su biblioteca: se abre y se le crea una nota en la bandeja (en su ventana) */
       document.querySelector('#gdSide [data-personaje]').click(); await W(400);
       document.querySelector('#gdMain [data-clave="bandeja"] [data-gd-crear-nota]').click(); await W(200);
-      const inp = document.activeElement; inp.value = 'Ficha de Lestat'; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await W(300);
+      const vNota = await nombrarNueva('Ficha de Lestat'); await W(150);
       /* el «＋» del contenedor «Esquemas»: se elige el personaje y nace su esquema con la primera trama */
       const cont = [...document.querySelectorAll('#gdSide .gd-cont')].find(x => x.dataset.id === 'personajes:esquemas');
       cont.querySelector('[data-gd-nuevo-hijo]').click(); await W(250);
       [...document.querySelectorAll('.gd-pop button')].find(b => /Nuevo esquema/.test(b.textContent)).click(); await W(250);
       [...document.querySelectorAll('.gd-pop button')].find(b => /LESTAT/i.test(b.textContent)).click(); await W(700);
       const m = T.tablero.modelo();
-      const ev = m.nuevoPunto(m.datos.lineas[0].id, m.datos.actos[0].id, 3).punto;
+      const ev = m.nuevoPunto(m.datos.lineas[0].id, 3).punto;
       T.tablero.render(); await W(300);
       m.editarPunto(ev.id, { titulo: 'Nace en Auvernia', descripcion: 'Invierno de 1760.' }); T.tablero.render(); await W(400);
       /* un esquema de personaje no tiene documento: su cabecera no enseña «Abrir documento» (Leo, 16-09-2026) */
       if (!document.querySelector('#abrirDoc').hidden) throw new Error('un esquema de personaje no debe ofrecer «Abrir documento»');
+      return JSON.stringify(vNota);
     `);
+    ventanasNuevas.push(JSON.parse(vPer));
     await espera(3500);
     const f3 = await mismo(ARCHIVO, 'personajes: el archivo es exactamente el guion abierto');
     const d3 = JSON.parse(f3.texto).documentos, per = d3.contenedores.find(c => c.id === 'personajes');
@@ -248,7 +308,7 @@ app.whenReady().then(async () => {
       const e = d.datos.contenedores.filter(c => !c.oculto).flatMap(c => c.esquemas)[0];
       A.montarEsquema(e.id); A.vista('esquema'); await W(400);
       const tm = window.Tramas.tablero.modelo();                               // un nodo, para ver la tira con algo
-      tm.nuevoPunto(tm.datos.lineas[0].id, tm.datos.actos[0].id, 3, { titulo: 'Zarpan' });
+      tm.nuevoPunto(tm.datos.lineas[0].id, 3, { titulo: 'Zarpan' });
       window.Tramas.tablero.render(); await W(300);
       document.querySelector('#abrirDoc').click(); await W(900);
       const conTira = Claquedraw.texto.conTira() && !document.getElementById('texto').classList.contains('sin-tira') && !!document.querySelector('#hilo .hilo-nodo');
@@ -300,7 +360,7 @@ app.whenReady().then(async () => {
     comprobar('exporta a texto', fs.existsSync(gen.txt) && /EXT\. PUERTO/.test(fs.readFileSync(gen.txt, 'utf8')), gen.txt);
     comprobar('exporta a Markdown (la escena como encabezado)', fs.existsSync(gen.md) && /^### EXT\. PUERTO/m.test(fs.readFileSync(gen.md, 'utf8')), gen.md);
 
-    /* ---------- 3. «Abrir…» una copia: el mismo guion, se ve igual, no se reescribe ---------- */
+    /* ---------- 3. «Abrir…» una copia: en otra ventana, el mismo guion, se ve igual, no se reescribe ---------- */
     /* la copia lleva dentro su propio nombre, como si se hubiera guardado así (si no, al volver a arrancar la app
        escribe una vez el nombre del archivo dentro: es lo esperado, no un fallo) */
     const original = JSON.parse(leerArchivo(ARCHIVO).texto);
@@ -309,9 +369,12 @@ app.whenReady().then(async () => {
     const vistaOriginal = await js(`
       Claquedraw.app.vista('documentos'); const G = Claquedraw.gestor, d = G.documentos(); G.abrirSub(d.datos.contenedores[0].subs[0].id); await W(300);
       return [...document.querySelectorAll('#gdMain .gd-tablero[data-orden] > [data-clave]')].map(c => c.querySelector('.gd-etq-nom').textContent.trim() + ':' + [...c.querySelectorAll('[data-nota]')].map(n => n.textContent.trim()).join('|')).join(' / ');`);
-    await js(`document.querySelector('[data-gd-ir-contenedores]') && document.querySelector('[data-gd-ir-contenedores]').click(); await W(300); await Claquedraw.app.abrirArchivo(); await W(1200);`);
-    const pestanas = await js(`return Claquedraw.biblioteca.datos.guiones.map(g => g.nombre);`);
-    comprobar('«Abrir…» abre la copia en otra pestaña', pestanas.includes('Copia del guion') && pestanas.includes('Sin título 1'), JSON.stringify(pestanas));   // cada uno con su nombre, no el del archivo
+    const primera = win;
+    const segunda = await nuevaVentana(() => js(`document.querySelector('[data-gd-ir-contenedores]') && document.querySelector('[data-gd-ir-contenedores]').click(); await W(300); await Claquedraw.app.abrirArchivo(); await W(300);`));
+    await espera(900);
+    actual = segunda;
+    const nombres = [await jsEn(primera, `return Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`), await js(`return Claquedraw.biblioteca.total() === 1 && Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`)];
+    comprobar('«Abrir…» abre la copia en otra ventana, con su nombre', nombres[0] === 'Sin título 1' && nombres[1] === 'Copia del guion', JSON.stringify(nombres));
     const abierto = JSON.parse(await enPagina()), enArchivo = JSON.parse(leerArchivo(COPIA).texto);
     const dif = diferencia(enArchivo.documentos, abierto.documentos);
     comprobar('lo abierto es exactamente lo del archivo', !dif, dif);
@@ -320,48 +383,53 @@ app.whenReady().then(async () => {
       return [...document.querySelectorAll('#gdMain .gd-tablero[data-orden] > [data-clave]')].map(c => c.querySelector('.gd-etq-nom').textContent.trim() + ':' + [...c.querySelectorAll('[data-nota]')].map(n => n.textContent.trim()).join('|')).join(' / ');`);
     comprobar('la biblioteca abierta se ve igual (orden de tarjetas y notas)', vistaCopia === vistaOriginal, vistaOriginal + '\n      ≠ ' + vistaCopia);
     comprobar('recién abierto, el indicador dice guardado', (await indicador()).includes('ok'), await indicador());
+    /* abrirlo otra vez no abre una tercera ventana: va a la suya */
+    const cuantas = deClapCraft().length;
+    await jsEn(primera, `await Claquedraw.app.abrirRuta(${JSON.stringify(COPIA)}); await W(400);`);
+    comprobar('abrir un archivo que ya tiene ventana no abre otra', deClapCraft().length === cuantas, deClapCraft().length + ' ventanas');
     await espera(2500);
     comprobar('abrir no reescribe el archivo', fs.statSync(COPIA).mtimeMs === mtimeCopia && fs.readFileSync(COPIA).equals(copiaAntes));
+    /* Electron recuerda las ventanas con su proyecto, para abrirlas igual al volver a arrancar */
+    const sesion = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'ventanas.json'), 'utf8'));
+    const ids = [await jsEn(primera, `return Claquedraw.app.abiertoId();`), await js(`return Claquedraw.app.abiertoId();`)];
+    comprobar('las ventanas abiertas quedan apuntadas para el próximo arranque', ids.every(id => sesion.some(x => x.p === id)), JSON.stringify(sesion));
 
-    /* ---------- 4. volver a arrancar: retoma el archivo por su ruta ---------- */
-    await js(`window.dispatchEvent(new Event('beforeunload'));`);
+    /* ---------- 4. volver a arrancar: cada ventana retoma su proyecto y su archivo por su ruta ---------- */
+    for (const w of [primera, segunda]) await jsEn(w, `window.dispatchEvent(new Event('beforeunload'));`);
     await espera(300);
     const mtimeArchivo = fs.statSync(ARCHIVO).mtimeMs, mtimeCopia2 = fs.statSync(COPIA).mtimeMs;
-    win.webContents.reload();
-    await new Promise(r => win.webContents.once('did-finish-load', r));
-    await listo(); await espera(2500);
-    comprobar('al volver a arrancar no reescribe los archivos', fs.statSync(ARCHIVO).mtimeMs === mtimeArchivo && fs.statSync(COPIA).mtimeMs === mtimeCopia2,
-      'reescritos: ' + [fs.statSync(ARCHIVO).mtimeMs !== mtimeArchivo && 'Mi guion', fs.statSync(COPIA).mtimeMs !== mtimeCopia2 && 'Copia'].filter(Boolean).join(', ')
-      + ' · ' + await js(`const t = ${JSON.stringify(zlib.gunzipSync(copiaAntes).toString())}; const x = JSON.parse(t);
-          const a = JSON.stringify(Claquedraw.normalizarDocumentos(x.documentos)), g = Claquedraw.biblioteca.datos.guiones.find(g => g.nombre === 'Copia del guion'), b = JSON.stringify(g.documentos);
-          let i = 0; while (i < a.length && a[i] === b[i]) i++; return a === b ? 'mismo texto' : 'difiere en ' + i + ': «' + a.slice(i - 80, i + 80) + '» / «' + b.slice(i - 80, i + 80) + '»';`));
-    comprobar('las dos pestañas siguen vinculadas y guardadas', (await indicador()).includes('ok'), await indicador());
-    await js(`const G = Claquedraw.gestor, d = G.documentos(); Claquedraw.app.vista('documentos'); G.abrirSub(d.datos.contenedores[0].subs[0].id); await W(300);
-      document.querySelector('#gdMain [data-clave="bandeja"] [data-gd-crear-nota]').click(); await W(200);
-      const inp = document.activeElement; inp.value = 'Tras reabrir'; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await W(200);`);
+    for (const w of [primera, segunda]) { w.webContents.reload(); await new Promise(r => w.webContents.once('did-finish-load', r)); await listaEn(w); }
     await espera(2500);
-    const quien = await js(`return Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`);
-    const destino = quien === 'Copia del guion' ? COPIA : ARCHIVO;
-    await mismo(destino, 'tras volver a arrancar, los cambios llegan a su archivo («' + quien + '»)');
-    comprobar('y la nota nueva está en él', /Tras reabrir/.test(leerArchivo(destino).texto));
+    comprobar('al volver a arrancar no reescribe los archivos', fs.statSync(ARCHIVO).mtimeMs === mtimeArchivo && fs.statSync(COPIA).mtimeMs === mtimeCopia2,
+      'reescritos: ' + [fs.statSync(ARCHIVO).mtimeMs !== mtimeArchivo && 'Mi guion', fs.statSync(COPIA).mtimeMs !== mtimeCopia2 && 'Copia'].filter(Boolean).join(', '));
+    const tras2 = [await jsEn(primera, `return Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`), await jsEn(segunda, `return Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`)];
+    comprobar('cada ventana vuelve con su proyecto', tras2[0] === 'Sin título 1' && tras2[1] === 'Copia del guion', JSON.stringify(tras2));
+    comprobar('las dos siguen vinculadas y guardadas', (await jsEn(primera, `return document.getElementById('estadoGuardado').className;`)).includes('ok') && (await indicador()).includes('ok'), await indicador());
+    await js(`${NOMBRAR} const G = Claquedraw.gestor, d = G.documentos(); Claquedraw.app.vista('documentos'); G.abrirSub(d.datos.contenedores[0].subs[0].id); await W(300);
+      document.querySelector('#gdMain [data-clave="bandeja"] [data-gd-crear-nota]').click(); await W(200);
+      return JSON.stringify(await nombrarNueva('Tras reabrir'));`).then(v => ventanasNuevas.push(JSON.parse(v)));
+    await espera(2500);
+    await mismo(COPIA, 'tras volver a arrancar, los cambios llegan a su archivo');
+    comprobar('y la nota nueva está en él', /Tras reabrir/.test(leerArchivo(COPIA).texto) && !/Tras reabrir/.test(leerArchivo(ARCHIVO).texto));
 
-    /* ---------- 5. «Nuevo proyecto»: el archivo lo pide el diálogo de guardar del sistema (Leo, 18-09-2026) ---------- */
+    /* ---------- 5. «Nuevo proyecto»: en otra ventana; el archivo lo pide el diálogo de guardar del sistema (Leo, 18-09-2026) ---------- */
     const CARPETA = path.join(TMP, 'Proyectos');
     fs.mkdirSync(CARPETA);
-    /* como en la pantalla: el nombre en su campo, la plantilla y «Crear proyecto» */
-    const crearEnPantalla = (nombre, plantilla) => js(`Claquedraw.app.nuevo(); await W(200);
+    /* como en la pantalla: el nombre en su campo, la plantilla y «Crear proyecto» (en la ventana `actual`) */
+    const crearEnPantalla = (nombre, plantilla) => js(`
       const c = document.querySelector('#nuevoProyecto [data-np-nombre]'); c.value = ${JSON.stringify(nombre)}; c.dispatchEvent(new Event('input', { bubbles: true }));
       document.querySelector('#nuevoProyecto [data-np-plantilla="${plantilla}"]').click(); await W(100);
       document.querySelector('#nuevoProyecto [data-np-crear]').click(); await W(1500);
       return { total: Claquedraw.biblioteca.total(), nuevo: document.body.classList.contains('pantalla-nuevo'), campo: (document.querySelector('#nuevoProyecto [data-np-nombre]') || {}).value };`);
-    const pestana = () => js(`return (document.querySelector('.pestana.activa .pestana-nom') || {}).textContent;`);
-    comprobar('la pantalla de nuevo proyecto ya no pregunta dónde se guarda', await js(`Claquedraw.app.nuevo(); await W(200);
-      const r = !document.querySelector('#nuevoProyecto [data-np-carpeta]') && ![...document.querySelectorAll('#nuevoProyecto .np-rotulo')].some(e => /DÓNDE SE GUARDA/.test(e.textContent));
-      Claquedraw.app.cancelarProyecto(); await W(100); return r;`));
-    const total0 = await js(`return Claquedraw.biblioteca.total();`);
+    const rotulo = () => js(`return (document.querySelector('.franja-proyecto .pestana-nom') || {}).textContent;`);
+    let tercera = await nuevaVentana(() => js(`Claquedraw.app.nuevo(); await W(100);`));
+    comprobar('«Nuevo proyecto» con un proyecto abierto sale en otra ventana', await jsEn(tercera, `return document.body.classList.contains('pantalla-nuevo') && !Claquedraw.biblioteca.total();`));
+    actual = tercera;
+    comprobar('la pantalla de nuevo proyecto ya no pregunta dónde se guarda', await js(`
+      return !document.querySelector('#nuevoProyecto [data-np-carpeta]') && ![...document.querySelectorAll('#nuevoProyecto .np-rotulo')].some(e => /DÓNDE SE GUARDA/.test(e.textContent));`));
     cancelarGuardar = true;
     const cancelado = await crearEnPantalla('Entrevista del Año', 'serie');
-    comprobar('cancelar el diálogo no crea nada y la pantalla sigue con lo escrito', cancelado.total === total0 && cancelado.nuevo && cancelado.campo === 'Entrevista del Año', JSON.stringify(cancelado));
+    comprobar('cancelar el diálogo no crea nada y la pantalla sigue con lo escrito', cancelado.total === 0 && cancelado.nuevo && cancelado.campo === 'Entrevista del Año', JSON.stringify(cancelado));
     comprobar('el nombre propuesto va sin espacios, acentos ni ñ («entrevista-del-anio.clapcraft»)',
       ultimoGuardar && path.basename(ultimoGuardar.defaultPath || '') === 'entrevista-del-anio.clapcraft', ultimoGuardar && ultimoGuardar.defaultPath);
     guardarEn = CARPETA;
@@ -371,27 +439,40 @@ app.whenReady().then(async () => {
     const creado = fs.existsSync(NUEVO) && JSON.parse(leerArchivo(NUEVO).texto);
     comprobar('el proyecto nuevo trae el árbol de la plantilla y su nombre, no el del archivo', creado && creado.nombre === 'Entrevista del Año' && creado.documentos.contenedores[0].nombre === 'Temporada 1'
       && creado.documentos.contenedores[0].esquemas.length === 8, creado && JSON.stringify([creado.nombre, creado.documentos.contenedores[0].esquemas.map(e => e.nombre)]));
-    comprobar('la pestaña lleva el nombre del proyecto', await pestana() === 'Entrevista del Año', await pestana());
+    comprobar('la ventana lleva el nombre del proyecto', await rotulo() === 'Entrevista del Año', await rotulo());
     await mismo(NUEVO, 'el proyecto nuevo nace con su archivo idéntico');
-    /* el archivo de otro proyecto abierto no se pisa: se avisa y la pantalla sigue */
+    /* el archivo de otro proyecto abierto (en otra ventana) no se pisa: se avisa y la pantalla sigue */
     const bytesAntes = fs.readFileSync(NUEVO);
+    const cuarta = await nuevaVentana(() => js(`Claquedraw.app.nuevo(); await W(100);`));
+    actual = cuarta;
     rutaFija = NUEVO;
     const pisar = await crearEnPantalla('Otra cosa', 'blanco');
-    comprobar('elegir el archivo de otro proyecto abierto no lo pisa', pisar.nuevo && pisar.total === total0 + 1 && fs.readFileSync(NUEVO).equals(bytesAntes), JSON.stringify(pisar));
-    await js(`Claquedraw.app.cancelarProyecto(); await W(100);`);
-    await js(`
-      for (const g of Claquedraw.biblioteca.datos.guiones.slice()) { const p = Claquedraw.app.cerrar(g.id); await W(300); const b = document.querySelector('#dlg[open] #dlgOk'); if (b) b.click(); await p; await W(300); }`);
+    comprobar('elegir el archivo de otro proyecto abierto no lo pisa', pisar.nuevo && pisar.total === 0 && fs.readFileSync(NUEVO).equals(bytesAntes), JSON.stringify(pisar));
+    /* la ventana se cierra sola: su promesa puede no volver nunca, así que se espera a que se cierre */
+    await Promise.race([js(`Claquedraw.app.cancelarProyecto(); await W(100);`).catch(() => {}), new Promise(r => cuarta.once('closed', r)), espera(5000)]);
+    await espera(400);
+    comprobar('cancelar en una ventana abierta para crear la cierra', cuarta.isDestroyed(), deClapCraft().length + ' ventanas');
+    /* cerrar los proyectos: sus ventanas se cierran y la última se queda en «Sin proyectos» */
+    for (const w of deClapCraft()) {
+      if (deClapCraft().length === 1) { actual = w; break; }
+      /* la ventana se cierra desde dentro: su promesa no vuelve, así que se espera a que se cierre */
+      await Promise.race([jsEn(w, `const p = Claquedraw.app.cerrar(); await W(300); const b = document.querySelector('#dlg[open] #dlgOk'); if (b) b.click(); await p; await W(200);`).catch(() => {}),
+        new Promise(r => w.once('closed', r)), espera(5000)]);
+      await espera(300);
+    }
+    actual = deClapCraft()[0];
+    await js(`const p = Claquedraw.app.cerrar(); await W(300); const b = document.querySelector('#dlg[open] #dlgOk'); if (b) b.click(); await p; await W(300);`);
     const vacio = await js(`return { clase: document.body.className, total: Claquedraw.biblioteca.total(), recientes: [...document.querySelectorAll('.sinp-reciente .sinp-rec-nom')].map(e => e.textContent) };`);
-    comprobar('cerrar el último proyecto deja «Sin proyectos» con los recientes', vacio.total === 0 && /sin-proyectos/.test(vacio.clase) && vacio.recientes.includes('Entrevista del Año'), JSON.stringify(vacio));
-    await js(`document.querySelector('.sinp-reciente').click(); await W(1200);`);
+    comprobar('cerrar el último proyecto deja «Sin proyectos» con los recientes, en una sola ventana', deClapCraft().length === 1 && vacio.total === 0 && /sin-proyectos/.test(vacio.clase) && vacio.recientes.includes('Entrevista del Año'), deClapCraft().length + ' · ' + JSON.stringify(vacio));
+    await js(`[...document.querySelectorAll('.sinp-reciente')].find(e => /Entrevista del Año/.test(e.textContent)).click(); await W(1200);`);
     const reabierto = await js(`return Claquedraw.biblioteca.total() && Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()).nombre;`);
-    comprobar('un reciente se abre en su pestaña', reabierto === vacio.recientes[0], reabierto);
+    comprobar('un reciente se abre en la ventana vacía', reabierto === 'Entrevista del Año', reabierto);
     await mismo(NUEVO, 'el reciente abierto es exactamente su archivo');
 
     /* ---------- 6. guardado de un proyecto creado desde una plantilla ---------- */
-    const notaNueva = titulo => js(`const G = Claquedraw.gestor, d = G.documentos(); Claquedraw.app.vista('documentos'); G.abrirSub(d.datos.contenedores[0].subs[0].id); await W(300);
+    const notaNueva = titulo => js(`${NOMBRAR} const G = Claquedraw.gestor, d = G.documentos(); Claquedraw.app.vista('documentos'); G.abrirSub(d.datos.contenedores[0].subs[0].id); await W(300);
       document.querySelector('#gdMain [data-clave="bandeja"] [data-gd-crear-nota]').click(); await W(200);
-      const inp = document.activeElement; inp.value = ${JSON.stringify(titulo)}; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await W(150);`);
+      return JSON.stringify(await nombrarNueva(${JSON.stringify(titulo)}));`).then(v => ventanasNuevas.push(JSON.parse(v)));
     await notaNueva('Nota en la plantilla');
     await js(`const d = Claquedraw.gestor.documentos(), e = d.datos.contenedores[0].esquemas[0];
       Claquedraw.app.montarEsquema(e.id); Claquedraw.app.vista('esquema'); await W(400);
@@ -403,6 +484,19 @@ app.whenReady().then(async () => {
     await mismo(NUEVO, 'lo editado en el proyecto de la plantilla se escribe solo en su archivo');
     comprobar('lleva la nota y el documento del esquema', /Nota en la plantilla/.test(leerArchivo(NUEVO).texto) && /INT\. BARCO – DÍA/.test(leerArchivo(NUEVO).texto));
     comprobar('el indicador dice guardado', (await indicador()).includes('ok'), await indicador());
+
+    /* pestañas del proyecto (1.1.33): «Abrir en pestaña» abre la suya o va a la que ya lo tiene, y vuelven al recargar */
+    const pest = await js(`const A = Claquedraw.app, d = Claquedraw.gestor.documentos(), c = d.datos.contenedores[0];
+      A.abrirEnPestana({ tipo: 'esquema', id: c.esquemas[1].id }); await W(300);
+      A.abrirEnPestana({ tipo: 'documento', id: c.esquemas[0].id }); await W(900);
+      A.abrirEnPestana({ tipo: 'sub', id: c.subs[0].id }); await W(300);
+      const n = A.pestanas().lista.length;
+      A.abrirEnPestana({ tipo: 'documento', id: c.esquemas[0].id }); await W(900);
+      return { n, n2: A.pestanas().lista.length, modo: A.modo() };`);
+    comprobar('«Abrir en pestaña» abre pestañas y no duplica', pest.n >= 4 && pest.n2 === pest.n && pest.modo === 'texto', JSON.stringify(pest));
+    actual.webContents.reload(); await new Promise(r => actual.webContents.once('did-finish-load', r)); await listaEn(actual);
+    const pest2 = await js(`return { n: Claquedraw.app.pestanas().lista.length, modo: Claquedraw.app.modo() };`);
+    comprobar('las pestañas vuelven al recargar, con la de delante', pest2.n === pest.n && pest2.modo === 'texto', JSON.stringify(pest2));
 
     /* renombrar el proyecto: el nombre nuevo va dentro de su archivo, que se sigue llamando igual (Leo, 18-09-2026) */
     /* …y el contenedor que se llamaba como el proyecto cambia con él (la cabecera enseña el contenedor) */
@@ -418,6 +512,7 @@ app.whenReady().then(async () => {
     /* …también si se llama como su archivo, con otras mayúsculas o sin guiones (el proyecto de Leo: «amor toktiker», archivo
        «amor-tiktoker», contenedor «Amor tiktoker»), y la cabecera lo enseña al momento */
     const cabecera = await js(`const d = Claquedraw.gestor.documentos(), c = d.datos.contenedores.find(x => !x.oculto);
+      Claquedraw.app.vista('esquema'); await W(200);
       d.renombrarContenedor(c.id, 'ENTREVISTA DEL ANIO'); Claquedraw.gestor.render();
       Claquedraw.app.renombrar(Claquedraw.app.abiertoId(), 'La entrevista'); await W(50);
       return document.querySelector('#esquemaChip [data-chip-cont]').textContent;`);
@@ -429,7 +524,7 @@ app.whenReady().then(async () => {
 
     /* un cambio y cerrar enseguida (antes del segundo de espera del autoguardado): cerrar lo escribe */
     await notaNueva('Justo antes de cerrar');
-    await js(`await Claquedraw.app.cerrar(Claquedraw.app.abiertoId()); await W(300);`);
+    await js(`await Claquedraw.app.cerrar(); await W(300);`);
     comprobar('cerrar justo después de un cambio lo deja escrito', /Justo antes de cerrar/.test(leerArchivo(NUEVO).texto));
     comprobar('cerrado sin preguntar (tenía archivo) y sin proyectos', await js(`return !document.querySelector('#dlg[open]') && document.body.classList.contains('sin-proyectos');`));
     await js(`await Claquedraw.app.guardar(); Claquedraw.app.nuevo(); await W(100); Claquedraw.app.cancelarProyecto(); await W(100);`);
@@ -444,6 +539,9 @@ app.whenReady().then(async () => {
 
     /* otro proyecto con carpeta mientras el primero tiene un cambio pendiente: el pendiente se escribe */
     await notaNueva('Pendiente al crear otro');
+    const conNuevo = actual;
+    const quinta = await nuevaVentana(() => js(`Claquedraw.app.nuevo(); await W(100);`));
+    actual = quinta;
     await crearEnPantalla('Corto', 'corto');
     const CORTO = path.join(CARPETA, 'corto.clapcraft');
     comprobar('el cambio pendiente del otro proyecto llegó a su archivo', /Pendiente al crear otro/.test(leerArchivo(NUEVO).texto));
@@ -452,24 +550,29 @@ app.whenReady().then(async () => {
     await espera(2500);
     await mismo(CORTO, 'y sus cambios se escriben solos');
 
-    /* volver a arrancar: las dos pestañas vinculadas a sus archivos de la carpeta, sin reescribir, y siguen guardando */
-    await js(`window.dispatchEvent(new Event('beforeunload'));`); await espera(300);
+    /* volver a arrancar: las dos ventanas vinculadas a sus archivos de la carpeta, sin reescribir, y siguen guardando */
+    for (const w of [conNuevo, quinta]) await jsEn(w, `window.dispatchEvent(new Event('beforeunload'));`);
+    await espera(300);
     const mt1 = fs.statSync(NUEVO).mtimeMs, mt2 = fs.statSync(CORTO).mtimeMs;
-    win.webContents.reload(); await new Promise(r => win.webContents.once('did-finish-load', r));
-    await listo(); await espera(2500);
-    const tras = await js(`return { nombres: Claquedraw.biblioteca.datos.guiones.map(g => g.nombre + ':' + ((Claquedraw.app.archivo(g.id) || {}).ruta || '-')) };`);
-    comprobar('tras volver a arrancar siguen las dos pestañas con su archivo', tras.nombres.length === 2 && tras.nombres.every(n => !n.endsWith(':-')), JSON.stringify(tras));
+    for (const w of [conNuevo, quinta]) { w.webContents.reload(); await new Promise(r => w.webContents.once('did-finish-load', r)); await listaEn(w); }
+    await espera(2500);
+    const tras = [];
+    for (const w of [conNuevo, quinta]) tras.push(await jsEn(w, `const g = Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()); return g ? g.nombre + ':' + ((Claquedraw.app.archivo(g.id) || {}).ruta || '-') : '-';`));
+    comprobar('tras volver a arrancar siguen las dos ventanas con su archivo', tras.every(n => n !== '-' && !n.endsWith(':-')), JSON.stringify(tras));
     comprobar('y no se reescriben al arrancar', fs.statSync(NUEVO).mtimeMs === mt1 && fs.statSync(CORTO).mtimeMs === mt2);
     await notaNueva('Tras reiniciar');
     await espera(2500);
-    const actual = await js(`return Claquedraw.app.archivo().ruta;`);
-    await mismo(actual, 'tras volver a arrancar, lo nuevo llega a su archivo (' + path.basename(actual) + ')');
+    const rutaActual = await js(`return Claquedraw.app.archivo().ruta;`);
+    await mismo(rutaActual, 'tras volver a arrancar, lo nuevo llega a su archivo (' + path.basename(rutaActual) + ')');
+    const malas = ventanasNuevas.filter(v => !bienNueva(v));
+    comprobar('cada nota nueva (' + ventanasNuevas.length + ') se abrió en su ventana con el nombre elegido, Enter pasó al campo y Esc la cerró',
+      ventanasNuevas.length >= 8 && !malas.length, JSON.stringify(malas));
   } catch (err) {
     comprobar('la prueba terminó sin errores', false, err && err.stack || String(err));
   }
 
   const fallos = resultados.filter(r => !r.ok).length;
   console.log('\n' + (fallos ? '✖ ' + fallos + ' de ' + resultados.length + ' comprobaciones fallaron' : '✔ ' + resultados.length + ' comprobaciones correctas') + '\n');
-  if (!fallos) fs.rmSync(TMP, { recursive: true, force: true });
+  if (!fallos) { fs.rmSync(TMP, { recursive: true, force: true }); borrarDespues(TMP); }   // con fallos se queda, para mirarla
   app.exit(fallos ? 1 : 0);
 });

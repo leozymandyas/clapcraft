@@ -50,7 +50,10 @@
   };
 
   /* ---------- arranque ---------- */
-  T.tablero.iniciar({ modelo, alCambiar, zoom: vista.zoom });
+  T.tablero.iniciar({ modelo, alCambiar, zoom: vista.zoom, alZoom: z => {          // pellizcar: el control de la escala y la vista
+    const r = $('zoom'); if (r) r.value = z;
+    try { localStorage.setItem(CLAVE_VISTA, JSON.stringify({ zoom: z })); } catch (_) {}
+  } });
   cargado = JSON.stringify(modelo.datos);
   if (!leerGuardado()) guardarLocal(modelo.datos);
   marcarGuardado('Guardado');

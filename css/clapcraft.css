@@ -149,11 +149,45 @@ main { border-top: 1px solid var(--borde); }
 .pestana.activa { background: var(--panel); border-color: var(--borde); color: var(--tinta); font-weight: 500; }
 .pestana.activa::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--panel); }
 .pestana-sucio { width: 5px; height: 5px; border-radius: 50%; background: var(--foco); flex: none; }
+/* una pestaña se arrastra para cambiarla de sitio (Leo, 18-09-2026): va delante de las demás, que se apartan */
+.pestana.arrastrando { z-index: 3; background: var(--panel); border-color: var(--borde); box-shadow: var(--sombra-alta); cursor: grabbing; }
+body.moviendo-pestana, body.moviendo-pestana * { cursor: grabbing !important; user-select: none !important; }
 .pestana-cerrar { color: var(--palido); padding: 0; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; opacity: 0; }
 .pestana:hover .pestana-cerrar, .pestana.activa .pestana-cerrar { opacity: 1; }
 .pestana-cerrar:hover { color: var(--peligro); background: var(--peligro-bg); }
 .pestana-nueva { align-self: center; border: 0; color: var(--palido); font-size: 16px; padding: 0 6px; margin: 0 0 0 4px; height: 26px; }
 .pestana-nueva:hover { color: var(--tinta); background: var(--hover); border-radius: 4px; }
+.pestanas .pestana-nueva { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; padding: 0; }
+/* ‹ › delante del título de cada cabecera: la pantalla anterior y la siguiente de la pestaña (1.1.35) */
+.nav-hist { flex: none; display: inline-flex; align-items: center; gap: 1px; margin-right: 12px; }
+.nav-hist .icono { width: 26px; height: 26px; color: var(--tenue); }
+.nav-hist .icono:hover:not(:disabled) { color: var(--tinta); background: var(--hover); }
+.nav-hist .icono:disabled { color: var(--palido); opacity: .45; cursor: default; background: none; }
+/* el menú del clic derecho del tablero, por encima del panel flotante (z 70): si los dos salen a la vez, se ve el menú (1.1.52) */
+#menu { z-index: 80; }
+#menu .ic.ic-svg { background: none; border-radius: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--tenue); }
+/* el botón de enlace de cada cabecera, detrás del título (1.1.52): copia el enlace de lo que se ve, para Claude */
+.enlace-cab { flex: none; width: 26px; height: 26px; margin-left: 4px; color: var(--palido); }
+.enlace-cab:hover, .enlace-cab:focus-visible { color: var(--foco); background: var(--foco-suave); }
+.esq-titulo[hidden] + .enlace-cab { display: none; }
+/* 1.1.33: una ventana por proyecto. A la izquierda de la franja, el nombre del proyecto (doble clic lo renombra) y, detrás, sus
+   pestañas: lo abierto del proyecto, cada una con la inicial de su clase como en el árbol (E esquema, D su documento, B
+   biblioteca, P personaje, S segmento, N nota) y el color que se le haya puesto */
+.franja-proyecto { flex: none; align-self: center; display: inline-flex; align-items: center; gap: 7px; max-width: 220px; height: 26px;
+  margin: 0 10px 0 0; padding: 0 12px 0 2px; border-right: 1px solid var(--borde); font: 600 12.5px var(--sans); color: var(--tinta); cursor: default; user-select: none; }
+.franja-proyecto .pestana-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.franja-proyecto.editando { max-width: 300px; }
+.franja-proyecto.editando .pestana-nom { overflow: visible; }
+.pestana[data-id] { max-width: 220px; }
+.pestana .pestana-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pestana-tipo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; margin-right: -3px;
+  border: 1px solid transparent; border-radius: 4px; font: 600 9.5px var(--mono); letter-spacing: 0;
+  background: var(--p-grafito-bg); color: var(--p-grafito-tinta); }
+.pestana-tipo--esquema, .pestana-tipo--documento { background: var(--p-violeta-bg); border-color: var(--p-violeta-linea); color: var(--p-violeta-tinta); }
+.pestana-tipo--sub { background: var(--p-azul-bg); border-color: var(--p-azul-linea); color: var(--p-azul-tinta); }
+.pestana-tipo--icono { background: none; color: var(--palido); }
+.pestana-tipo.con-color { background: var(--chl); color: var(--chd); border-color: color-mix(in srgb, var(--chd) 30%, transparent); }
+html[data-theme="dark"] .pestana-tipo.con-color { background: var(--chd); color: var(--chl); border-color: color-mix(in srgb, var(--chl) 30%, transparent); }
 
 /* ---------- tablero de tramas (tramas.css): la «Pantalla Esquema» del rediseño ---------- */
 #board { background: var(--lienzo); }
@@ -279,10 +313,10 @@ aside h2 { font: 500 10px var(--mono); letter-spacing: .09em; color: var(--palid
 .hilo-pos { font-size: 9.5px; letter-spacing: .09em; color: var(--palido); }
 .field { margin-bottom: 11px; }
 .field label { font: 500 9.5px var(--mono); letter-spacing: .08em; color: var(--palido); margin-bottom: 5px; }
-.field input[type=text], .field textarea, .field select { background: var(--lienzo); border: 1px solid var(--borde); border-radius: 4px; font-family: var(--sans); font-size: 13px; padding: 7px 10px; color: var(--tinta); }
+.field input[type=text], .field textarea, .field select, .field .md-campo { background: var(--lienzo); border: 1px solid var(--borde); border-radius: 4px; font-family: var(--sans); font-size: 13px; padding: 7px 10px; color: var(--tinta); }
 .field input[type=text] { font-size: 14px; height: 32px; padding: 0 10px; }
-.field textarea { font-family: var(--sans); font-size: 13px; line-height: 1.55; min-height: 96px; }
-.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.field textarea, .field .md-campo { font-family: var(--sans); font-size: 13px; line-height: 1.55; min-height: 96px; }
+.field input:focus, .field textarea:focus, .field select:focus, .field .md-campo:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
 .sw { width: 18px; height: 18px; border-radius: 4px; border: 2px solid transparent; }
 .sw.on { border-color: var(--tinta); box-shadow: inset 0 0 0 2px var(--papel); }
 .sw.hereda { border: 1px solid var(--borde); background: var(--lienzo); font-size: 11.5px; height: 22px; }
@@ -371,9 +405,9 @@ body.panel-abajo #panel:has(> .field-crece) > .panel-acciones { grid-area: 4 / 1
 body.panel-abajo #panel:has(> .field-crece) > p.empty { grid-area: 5 / 1; width: auto; font-size: 11.5px; }
 body.panel-abajo #panel:has(> .field-crece) > .field-crece { grid-area: 1 / 2 / 6 / 3; width: auto; min-width: 0;
         border-left: 1px solid var(--regla); }
-body.panel-abajo #panel:has(> .field-crece) > .field-crece textarea { flex: 1; min-height: 0; font-size: 14px; line-height: 1.5; }
+body.panel-abajo #panel:has(> .field-crece) > .field-crece :is(textarea, .md-campo) { flex: 1; min-height: 0; font-size: 14px; line-height: 1.5; }
 body.panel-abajo #panel > .field-crece { flex: 1 1 auto; min-width: 240px; }
-body.panel-abajo #panel .field-crece textarea { flex: 1; min-height: 0; }
+body.panel-abajo #panel .field-crece :is(textarea, .md-campo) { flex: 1; min-height: 0; }
 body.panel-abajo #panel > .panel-meta { width: auto; flex-direction: row; align-items: center; }
 body.panel-abajo #panel > .panel-acciones { flex-direction: row; align-items: center; width: auto; }
 body.panel-abajo #panel > .panel-pista { gap: 4px; border-right: 0; color: var(--palido); }
@@ -436,7 +470,7 @@ body.panel-abajo.panel-plegado #panelAsa { display: none; }
 #panel .field label { font-size: 9.5px; letter-spacing: .09em; margin-bottom: 6px; }
 #panel #fTitulo { height: 36px; padding: 0 11px; border-radius: 5px; font-size: 14.5px; }
 .field-crece { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-#panel .field-crece textarea { flex: 1; min-height: 120px; resize: none; padding: 11px 12px; border-radius: 5px; font: 400 13.5px/1.55 var(--sans); }
+#panel .field-crece :is(textarea, .md-campo) { flex: 1; min-height: 120px; resize: none; padding: 11px 12px; border-radius: 5px; font: 400 13.5px/1.55 var(--sans); }
 #panel .field select { -webkit-appearance: none; appearance: none; height: 34px; padding: 0 30px 0 11px; border: 1px solid var(--borde); border-radius: 5px; background-color: var(--lienzo);
         font: 400 13.5px var(--sans); color: var(--tinta); cursor: pointer;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238d8d97' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.2 6.4 8 10.2l3.8-3.8'/%3E%3C/svg%3E");
@@ -832,6 +866,20 @@ html[data-theme="dark"] .gd-per-punto { background: var(--chd); box-shadow: inse
 .dlg-tipo.on .dlg-radio { background: var(--foco); border-color: var(--foco); color: var(--foco-sobre); }
 .dlg-tipo-desc { font-size: 12.5px; color: var(--tenue); line-height: 1.45; }
 .dlg-pista { font: 500 9.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--palido); }
+/* zoom de la vista del esquema (1.1.40) */
+.zoom-vista { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--regla); }
+.zoom-vista .icono { width: 24px; height: 24px; font: 500 15px var(--sans); line-height: 1; }
+.zoom-pct { min-width: 50px; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: none; cursor: pointer;
+  font: 500 10px var(--mono); letter-spacing: .06em; color: var(--palido); }
+.zoom-pct:hover { background: var(--foco-suave); color: var(--foco); }
+.zoom-pct.on { color: var(--foco); }
+/* el aviso con «Deshacer» (1.1.40): su botón recibe clics y el texto deja sitio al lado */
+#aviso.con-accion { pointer-events: auto; display: inline-flex; align-items: center; gap: 10px; padding-right: 6px; }
+/* el botón va en el acento del aviso, que es el mismo en claro y en oscuro (con `--toast-fg` se veía apagado; con el `--inverso`
+   de tramas.css, casi negro sobre el grafito, 1.1.43) */
+#aviso .aviso-accion { border: 0; background: color-mix(in srgb, var(--toast-acento) 18%, transparent); color: var(--toast-acento); cursor: pointer;
+  font: 600 12px var(--sans); padding: 4px 10px; border-radius: 4px; }
+#aviso .aviso-accion:hover { background: color-mix(in srgb, var(--toast-acento) 32%, transparent); }
 #aviso { border-radius: 5px; box-shadow: var(--sombra-alta); background: var(--toast-bg); color: var(--toast-fg); font-size: 12.5px; font-weight: 400; padding: 8px 13px 8px 34px; }
 #aviso::before { content: ''; position: absolute; left: 13px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); background: var(--toast-acento);
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.4 8.4 6.5 11.5 12.8 4.8'/%3E%3C/svg%3E") center / contain no-repeat;
@@ -892,6 +940,69 @@ html[data-theme="dark"] .gd-exp-banda-acc button:hover { background: rgba(255, 2
 .gd-exp-rot i { flex: 1; height: 1px; background: var(--regla); }
 .gd-exp-rot span + span { letter-spacing: .08em; }
 .gd-exp-rot svg { color: var(--tenue); flex: none; }
+/* ---------- buscar, filtrar y ordenar (1.1.54, de ClapBook) ----------
+   En la cabecera de la biblioteca (el filtro general: manda sobre las tarjetas) y en el rótulo del segmento expandido (el suyo:
+   ahí manda él; lo que viene de la biblioteca, en cursiva y con borde discontinuo). El filtro es el color de la nota. */
+.gd-buscar-vista { flex: 0 1 240px; min-width: 120px; display: flex; align-items: center; gap: 6px; height: 28px; box-sizing: border-box; padding: 0 8px;
+  border: 1px solid var(--borde); border-radius: 5px; background: var(--papel); color: var(--palido); font: 400 12.5px var(--sans); letter-spacing: 0; text-transform: none; cursor: text; }
+.gd-buscar-vista:focus-within { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); color: var(--tenue); }
+.gd-buscar-vista input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; color: var(--tinta); font: inherit; outline: none; }
+.gd-buscar-vista input::placeholder { color: var(--palido); opacity: 1; }
+.gd-buscar-vista input::-webkit-search-cancel-button { cursor: pointer; }
+.gd-buscar-cuenta { flex: none; font: 400 10.5px var(--mono); color: var(--palido); }
+.gd-buscar-cuenta:empty { display: none; }
+.esq-cab .gd-buscar-vista { margin-right: 4px; }
+.gd-exp-rot .gd-buscar-vista { flex-basis: 220px; height: 26px; }
+[data-nota][hidden] { display: none !important; }
+.buscando .gd-etq.sin-coincidencias { opacity: .45; }
+.buscando .gd-bloque.plegada.con-coincidencias > .gd-seccion .gd-seccion-tit::after { content: ' · con coincidencias'; color: var(--foco); text-transform: none; letter-spacing: 0; }
+.buscando .gd-etq .gd-nota-add, .buscando .gd-exp-add { display: none; }
+.gd-filtro { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; height: 26px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--borde);
+  border-radius: 5px; background: var(--papel); color: var(--tenue); font: 400 12px var(--sans); letter-spacing: 0; text-transform: none; white-space: nowrap; cursor: pointer; }
+.gd-filtro > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-filtro svg, .gd-exp-rot .gd-filtro svg, .gd-exp-rot .gd-buscar-vista svg { flex: none; color: inherit; }
+.gd-exp-rot .gd-filtro > span { letter-spacing: 0; }
+.gd-filtro:hover { background: var(--hover); color: var(--tinta); }
+.gd-filtro.on { border-color: var(--foco-linea); background: var(--foco-suave); color: var(--foco); }
+.gd-filtro.heredado { border-style: dashed; }
+.gd-filtro.heredado > span { font-style: italic; }
+.gd-filtro-punto { flex: none; width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14); }
+.gd-filtro-punto.sin { background: var(--papel); box-shadow: inset 0 0 0 1px var(--borde-fuerte); }
+.gd-filtro-quitar { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; margin-left: -3px; padding: 0; border: 0;
+  border-radius: 4px; background: none; color: var(--palido); cursor: pointer; }
+.gd-filtro-quitar:hover { background: var(--hover); color: var(--tinta); }
+.gd-filtro-vacio { padding: 2px 2px 12px; font: 400 13px var(--sans); color: var(--tenue); }
+.esq-cab .gd-filtro { flex: none; }
+.gd-etq-filtro { display: inline-flex; align-items: center; margin-right: 2px; color: inherit; opacity: .85; }
+.gd-pop kbd.gd-pop-atajo { margin-left: auto; padding-left: 14px; font: 400 10.5px var(--mono); color: var(--palido); background: none; border: 0; }
+/* con el menú lateral abierto la cabecera de la biblioteca se estrecha: los filtros se quedan en su icono */
+.gd-main > .esq-cab { container-type: inline-size; }
+.gd-main > .esq-cab .esq-titulo { flex: 0 1 auto; overflow: hidden; }
+@container (max-width: 860px) { .esq-cab .gd-filtro > span { display: none; } .esq-cab .gd-filtro { gap: 3px; } .esq-cab .gd-buscar-vista { flex-basis: 170px; } }
+@container (max-width: 640px) { .esq-cab .btn[data-gd-ver-esquema] { font-size: 0; gap: 0; padding: 0 7px; } }
+
+/* ---------- el formato en la ventana de una nota: el menú del clic derecho y el cuadro de un enlace (1.1.54) ---------- */
+.gd-pop { max-height: calc(100vh - 16px); overflow-y: auto; }
+.gd-fmt-barra { display: flex; gap: 2px; padding: 2px 4px 6px; }
+.gd-pop .gd-fmt-barra button { width: 30px; height: 28px; padding: 0; justify-content: center; font: 500 13px var(--sans); color: var(--tinta); }
+.gd-pop .gd-fmt-barra button code { font: 500 11px var(--mono); }
+.gd-pop .gd-fmt-barra button.activo { background: var(--foco-suave); color: var(--foco); }
+.gd-fmt-tonos { display: grid; grid-template-columns: repeat(8, 22px); gap: 4px; padding: 0 8px 6px; }
+.gd-pop .gd-fmt-tonos button { width: 22px; height: 22px; padding: 0; justify-content: center; border: 1px solid var(--borde); border-radius: 4px; }
+.gd-pop .gd-fmt-tonos button.letra { background: var(--papel); font: 700 13px var(--sans); }
+.gd-pop .gd-fmt-tonos button:hover { box-shadow: 0 0 0 2px var(--foco-halo); }
+.gd-enlace-cuadro { display: flex; flex-direction: column; gap: 8px; width: 300px; padding: 2px 6px 4px; }
+.gd-enlace-cuadro label { display: flex; flex-direction: column; gap: 4px; font: 400 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); }
+.gd-enlace-cuadro input { height: 30px; box-sizing: border-box; padding: 0 9px; border: 1px solid var(--borde); border-radius: 5px; background: var(--lienzo); color: var(--tinta);
+  font: 400 13px var(--sans); letter-spacing: 0; text-transform: none; outline: none; }
+.gd-enlace-cuadro input:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.gd-enlace-pie { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
+.gd-enlace-pie .spacer { flex: 1; }
+.gd-pop .gd-enlace-pie button { width: auto; height: 28px; padding: 0 12px; border-radius: 4px; font: 500 12.5px var(--sans); }
+.gd-pop .gd-enlace-pie .gd-enlace-ok { background: var(--foco); color: var(--foco-sobre); }
+.gd-pop .gd-enlace-pie .gd-enlace-ok:hover { background: var(--foco); filter: brightness(1.08); }
+.gd-pop .gd-enlace-pie .gd-enlace-quitar { color: var(--tenue); }
+.gd-pop .gd-enlace-pie .gd-enlace-quitar:hover { background: var(--peligro-bg); color: var(--peligro); }
 .gd-exp-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); grid-auto-rows: 168px;
   align-content: start; gap: 14px; padding: 2px 2px 18px; }
 .gd-exp-nota { position: relative; min-width: 0; min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 13px 14px;
@@ -1279,12 +1390,67 @@ input.gd-edit { box-sizing: border-box; width: 100%; min-width: 0; max-width: 10
 .vs-menos { background: var(--f-rojo); color: var(--tenue); text-decoration: line-through; }
 .vs-menos::before { content: '−'; color: var(--t-rojo); text-decoration: none; }
 
+/* ---------- el historial de Claude (1.1.50, js/claquedraw/historial.js) ----------
+   Leo, 25-09-2026: «necesito que exista una especie de historial para ver los cambios que ha hecho la IA». Una capa como la de
+   comparar versiones: los cambios por día, cada uno con su hora, su título, de dónde vino (Cowork, Claude Code) y si fue en vivo
+   o sobre el archivo, el detalle de lo que hizo (tres líneas; «N más…» despliega el resto) y sus acciones: Ir, Ver cambios
+   (la comparación de siempre: antes y ahora) y Revertir. Lo revertido se queda, apagado y con su marca. */
+.hc-capa { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center;
+        padding: 40px; background: rgba(12, 12, 16, .45); }
+body:has(.hc-capa) #aviso { z-index: 100; }                    /* lo revertido se avisa encima del panel */
+.hc-caja { display: flex; flex-direction: column; width: min(760px, 100%); max-height: 100%; overflow: hidden;
+        background: var(--papel); border: 1px solid var(--borde); border-radius: 8px; box-shadow: var(--sombra-modal); }
+.hc-cab { flex: none; display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--regla); background: var(--panel); }
+.hc-ic { display: flex; color: var(--foco); }
+.hc-cab-tit { font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); }
+.hc-proyecto { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 5px; background: var(--foco-suave); color: var(--foco);
+        font: 500 12px var(--sans); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-cab .spacer { flex: 1; }
+.hc-cuenta { font: 400 11.5px var(--mono); color: var(--tenue); white-space: nowrap; }
+.hc-cuerpo { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 18px 18px; }
+.hc-dia { position: sticky; top: 0; z-index: 1; padding: 12px 0 6px; background: var(--papel);
+        font: 400 10px var(--mono); letter-spacing: .11em; text-transform: uppercase; color: var(--palido); }
+.hc-entrada { padding: 11px 12px 10px; margin: 0 0 8px; border: 1px solid var(--regla); border-radius: 6px; background: var(--papel); }
+.hc-entrada:hover { border-color: var(--borde); box-shadow: var(--sombra); }
+.hc-fila { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.hc-hora { flex: none; font: 400 12px var(--mono); color: var(--palido); }
+.hc-tit { flex: 1; min-width: 0; font: 500 13.5px var(--sans); color: var(--tinta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hc-chip { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: var(--f-gris); color: var(--tenue);
+        font: 400 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.hc-chip--modo { background: none; border: 1px solid var(--regla); }
+.hc-revertido { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: var(--peligro-bg); color: var(--peligro);
+        font: 500 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.hc-detalle { margin: 7px 0 0 45px; padding: 0; list-style: none; }
+.hc-detalle li { position: relative; padding: 1px 0 1px 12px; font: 400 12.5px var(--sans); line-height: 1.45; color: var(--tenue); }
+.hc-detalle li::before { content: ''; position: absolute; left: 1px; top: .72em; width: 4px; height: 4px; border-radius: 50%; background: var(--borde-fuerte); }
+.hc-mas { margin: 2px 0 0 45px; padding: 0; border: 0; background: none; color: var(--foco); font: 400 12px var(--sans); cursor: pointer; }
+.hc-mas:hover { text-decoration: underline; }
+.hc-acc { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 8px; }
+.hc-boton { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 4px;
+        background: none; color: var(--tenue); font: 400 12.5px var(--sans); cursor: pointer; }
+.hc-boton:hover { background: var(--hover); color: var(--tinta); }
+.hc-boton:disabled { opacity: .5; cursor: default; }
+.hc-boton--revertir { border-color: var(--borde); color: var(--tinta); background: var(--papel); }
+.hc-boton--revertir:hover { border-color: var(--peligro); color: var(--peligro); background: var(--peligro-bg); }
+.hc-nota { font: 400 11.5px var(--mono); color: var(--palido); }
+.hc-entrada.revertida { background: var(--lienzo); }
+.hc-entrada.revertida .hc-tit { color: var(--tenue); text-decoration: line-through; text-decoration-color: var(--borde-fuerte); }
+.hc-entrada.revertida .hc-detalle li { color: var(--palido); }
+.hc-vacio { display: flex; flex-direction: column; gap: 6px; padding: 42px 20px; text-align: center; color: var(--tenue); font: 400 13px var(--sans); }
+.hc-vacio b { font-weight: 500; color: var(--tinta); }
+.hc-pie { flex: none; padding: 10px 18px; border-top: 1px solid var(--regla); background: var(--panel); font: 400 11.5px var(--sans); color: var(--palido); }
+
 /* el rótulo de un nodo, **también quieto**, del color del nodo (el suyo o el de su trama): antes solo lo tomaba al pasar el
    ratón y al cambiar el color del nodo el rótulo seguía igual (Leo, 18-09-2026). Al pasar el ratón, algo más intenso. Lo mismo
    en la tira del editor. Gana a las reglas de la piel de arriba. */
 #board .pt.con-rotulo .cap { background: color-mix(in oklab, var(--c) 7%, var(--papel)); border-color: color-mix(in oklab, var(--c) 32%, var(--borde)); }
 #board .pt.con-rotulo:hover .cap { background: color-mix(in oklab, var(--c) 11%, var(--papel)); border-color: color-mix(in oklab, var(--c) 45%, var(--borde)); }
 #board .pt.con-rotulo.sel .cap { background: color-mix(in oklab, var(--c) 11%, var(--papel)); border-color: color-mix(in oklab, var(--c) 60%, var(--borde)); }
+/* escribiendo el nombre de un nodo (al crearlo o con doble clic), el campo ya lleva el color del nodo, como su rótulo, y no el
+   morado del acento (Leo, 18-09-2026: «se ve en morado y hasta que doy Enter toma el color de la trama») */
+#board .pt .cap-edit { background: color-mix(in oklab, var(--c, var(--foco)) 11%, var(--papel)); border-color: color-mix(in oklab, var(--c, var(--foco)) 60%, var(--borde));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, var(--foco)) 22%, transparent); }
+#board .pt .cap-edit::selection { background: color-mix(in srgb, var(--c, var(--foco)) 32%, transparent); color: var(--tinta); }
 .hilo-nodo.con-rotulo .hilo-tit { background: color-mix(in oklab, var(--c, var(--t-azul)) 7%, var(--papel)); border-color: color-mix(in oklab, var(--c, var(--t-azul)) 32%, var(--borde)); }
 .hilo-nodo.con-rotulo:hover .hilo-tit { background: color-mix(in oklab, var(--c, var(--t-azul)) 11%, var(--papel)); border-color: color-mix(in oklab, var(--c, var(--t-azul)) 45%, var(--borde)); }
 #board .nota:hover:not(.arrastrando) { height: auto; min-height: 24px; }
@@ -1302,6 +1468,79 @@ input.gd-edit { box-sizing: border-box; width: 100%; min-width: 0; max-width: 10
 .hilo-notas-enlace { z-index: 2; pointer-events: auto; padding: 5px 6px; margin-top: -5px; border-radius: 8px; cursor: default; }
 .hilo-notas-enlace:hover { background: color-mix(in srgb, var(--hover) 60%, transparent); }
 .hilo-notas-enlace:hover .hilo-np { transform: scale(1.25); }
+/* editar la tira desde el editor (1.1.36): los «+» sobre la raya (al pasar el ratón), lo que tiene el panel abierto y el panel
+   flotante, que baja sobre la hoja sin quitarle sitio */
+.hilo-mas { position: absolute; bottom: 37px; z-index: 3; width: 19px; height: 19px; margin-left: -9.5px; padding: 0; display: inline-flex;
+  align-items: center; justify-content: center; border: 1px solid var(--borde-fuerte); border-radius: 50%; background: var(--papel); color: var(--tenue);
+  opacity: 0; transition: opacity .12s, transform .12s; cursor: pointer; }
+.hilo-pista:hover .hilo-mas { opacity: .75; }
+.hilo-mas:hover, .hilo-mas.editando { opacity: 1; color: var(--foco); border-color: var(--foco); transform: scale(1.12); }
+.hilo-nodo.editando .hilo-punto { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent); }
+.hilo-nodo.editando .hilo-tit-txt { font-weight: 600; color: var(--tinta); }
+.hilo-flot { position: fixed; z-index: 70; width: 340px; display: flex; flex-direction: column; gap: 9px; padding: 10px 12px 12px; overflow-y: auto; overflow-x: hidden;
+  background: var(--papel); border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra-alta); color: var(--tinta); }
+.hilo-flot[hidden] { display: none; }
+.hilo-flot-cab { display: flex; align-items: center; gap: 4px; min-height: 26px; }
+.hilo-flot-rot, .hilo-flot-sub { font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.hilo-flot .icono { width: 26px; height: 26px; }
+.hilo-flot .icono.peligro:hover { color: var(--peligro); background: var(--peligro-bg); }
+.hilo-flot-tit { height: 32px; padding: 0 9px; border: 1px solid var(--borde); border-radius: 5px; background: var(--lienzo); color: var(--tinta); font: 500 14px var(--sans); }
+.hilo-flot-desc { min-height: 84px; max-height: 220px; overflow-y: auto; padding: 8px 10px; border: 1px solid var(--borde); border-radius: 5px; background: var(--lienzo);
+  font: 400 13px/1.5 var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; position: relative; }
+.hilo-flot-tit:focus, .hilo-flot-desc:focus, .hilo-flot-nota textarea:focus { outline: none; border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.hilo-flot-nodo { align-self: flex-start; }
+.hilo-flot-notas { display: flex; flex-direction: column; gap: 6px; padding-top: 7px; border-top: 1px solid var(--regla); }
+.hilo-flot-nota { display: flex; align-items: flex-start; gap: 7px; }
+.hilo-flot-nota .hilo-np { margin-top: 11px; }
+.hilo-flot-nota textarea { flex: 1; min-width: 0; min-height: 30px; resize: none; padding: 5px 8px; border: 1px solid var(--borde); border-radius: 5px;
+  background: var(--nota); color: var(--tinta); font: 400 12.5px/1.45 var(--sans); overflow-y: auto; }
+.hilo-flot-nota .icono { flex: none; width: 24px; height: 24px; margin-top: 3px; color: var(--palido); }
+.hilo-flot-nota .icono:hover { color: var(--peligro); background: var(--peligro-bg); }
+/* el enlace de cada nota del panel (1.1.52), en gris como su ×; en el color del acento al pasar */
+.hilo-flot-nota .icono.hilo-flot-nota-enlace { margin-right: -5px; }
+.hilo-flot-nota .icono.hilo-flot-nota-enlace:hover { color: var(--foco); background: var(--foco-suave); }
+.hilo-flot-cab [data-flot-enlace] { color: var(--palido); }
+.hilo-flot-cab [data-flot-enlace]:hover { color: var(--foco); background: var(--foco-suave); }
+.hilo-flot-mas { align-self: flex-start; border: 0; background: none; padding: 3px 4px; font: 500 12.5px var(--sans); color: var(--foco); cursor: pointer; border-radius: 4px; }
+.hilo-flot-mas:hover { background: var(--foco-suave); }
+/* el color, solo en lo recién creado (1.1.37): «trama» (o «papel» en una nota) y los 24 tonos, en dos filas */
+.hilo-flot-colores { display: grid; grid-template-columns: repeat(13, 1fr); gap: 5px 3px; justify-items: center; padding: 2px 0; }
+.hilo-flot-colores .sw { width: 17px; height: 17px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; }
+.hilo-flot-colores .sw.on { border-color: var(--tinta); box-shadow: inset 0 0 0 2px var(--papel); }
+.hilo-flot-colores .sw.papel { background: var(--nota); border-color: var(--nota-borde); }
+.hilo-flot-colores .sw.papel.on, .hilo-flot-colores .sw.trama.on { border-color: var(--tinta); }
+.hilo-flot-nota + .hilo-flot-colores { padding-left: 13px; }
+/* el punto de color abre el menú de colores (1.1.39, Leo: «es difícil cambiar el color de las notas y nodos una vez creados; cuando
+   le dé clic al punto de color, que se abra un menú para seleccionar el color») */
+.hilo-flot-fila { display: flex; align-items: center; gap: 8px; }
+.hilo-flot-fila .hilo-flot-tit { flex: 1; min-width: 0; }
+.hilo-flot-punto { flex: none; width: 15px; height: 15px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 2.5px solid var(--nc, var(--foco)); background: var(--papel); }
+.hilo-flot-punto:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc, var(--foco)) 28%, transparent); }
+.hilo-flot-nota .hilo-np { flex: none; margin-top: 11px; padding: 0; cursor: pointer; }
+.hilo-flot-nota .hilo-np:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc, var(--nota-borde)) 30%, transparent); }
+.hilo-flot-menu { position: absolute; z-index: 3; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 10px; width: 300px;
+  background: var(--papel); border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra-alta); }
+/* sin nombre o sin texto, Tab no crea nada: el campo tiembla (1.1.39) */
+@keyframes flot-tiembla { 0%, 100% { transform: translateX(0) } 20% { transform: translateX(-4px) } 40% { transform: translateX(4px) } 60% { transform: translateX(-3px) } 80% { transform: translateX(3px) } }
+.hilo-flot .tiembla { animation: flot-tiembla .28s; border-color: var(--peligro); }
+/* la nota elegida en el tablero, señalada en el panel de su sitio (1.1.38) */
+.hilo-flot-nota.on textarea { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo); }
+/* una trama o un acto (1.1.38): tipo, color, ancho y fondo */
+.hilo-flot-chips { display: flex; gap: 4px; }
+.hilo-flot-chips .btn { flex: 1; height: 28px; padding: 0 6px; font-size: 12px; justify-content: center; }
+.hilo-flot-chips .btn.on { background: var(--foco-suave); border-color: var(--foco); color: var(--foco); }
+.hilo-flot-pie { display: flex; align-items: center; gap: 6px; padding-top: 7px; border-top: 1px solid var(--regla); font: 400 12px var(--sans); color: var(--tenue); }
+.hilo-flot-pie .btn { height: 28px; font-size: 12px; }
+.hilo-flot-pie .btn.on { color: var(--peligro); border-color: var(--peligro); }
+.hilo-flot-rango { width: 100%; margin: 0; accent-color: var(--foco); }
+.hilo-flot-fondos { display: flex; gap: 6px; flex-wrap: wrap; }
+.hilo-flot-fondos .sw { width: 26px; height: 20px; border-radius: 4px; border: 1px solid var(--borde); padding: 0; cursor: pointer; }
+.hilo-flot-fondos .sw.ninguno { border-style: dashed; background: transparent; }
+.hilo-flot-fondos .sw.on { outline: 2px solid var(--tinta); outline-offset: 1px; }
+/* sin panel de abajo: lo elegido en el esquema se edita en el flotante (1.1.38) */
+body.panel-flotante #panel, body.panel-flotante #panelAsa { display: none !important; }
 /* un rótulo que va debajo del eje baja un poco más si el nodo lleva puntos */
 .hilo-nodo.con-rotulo.rotulo-abajo.con-notas::before { top: 64px; height: 4px; }
 .hilo-nodo.con-rotulo.rotulo-abajo.con-notas .hilo-tit { top: 68px; }
@@ -1314,38 +1553,82 @@ input.gd-edit { box-sizing: border-box; width: 100%; min-width: 0; max-width: 10
 #tip .tip-nota span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
 
 
-/* el panel lateral de una nota en el segmento expandido y en la biblioteca (Leo, 18-09-2026): su nombre y la descripción,
-   que es el documento en texto plano (las tablas, como tablas) y ocupa todo lo demás. El color se cambia en el «⋯» de la nota
-   (1.1.17, Leo: «que se siga haciendo desde los tres puntos, para no afectar al campo descripción, que es el importante»). */
+/* el segmento expandido y la biblioteca: su cuerpo a todo lo ancho (hasta la 1.1.53 llevaban a la derecha el panel de la nota) */
 .gd-exp-medio { flex: 1; min-height: 0; display: flex; }
 .gd-exp-medio > .gd-exp-cuerpo { flex: 1; min-width: 0; }
-.gd-bib-medio > .gd-cuerpo { min-width: 0; }                /* la biblioteca, con el panel de la nota a su derecha */
-.gd-exp-lado { position: relative; flex: 0 0 var(--lado-nota, 360px); max-width: max(280px, calc(100% - 320px)); min-height: 0; display: flex;
-  flex-direction: column; gap: 14px; padding: 14px 16px 16px; border-top: 1px solid var(--regla); border-left: 1px solid var(--borde); background: var(--papel);
-  overflow: hidden; }                                          /* `aside` de tramas.css le daba `overflow: auto` y recortaba medio borde */
-/* su borde izquierdo se arrastra para ensancharlo (gestor.js, `--lado-nota`): una franja de 8 px por dentro, que al pasar el
-   ratón se marca en acento */
-.gd-lado-asa { position: absolute; left: 0; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 3; touch-action: none; }
-.gd-lado-asa::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; transition: background .12s; }
-.gd-lado-asa:hover::after, .gd-lado-asa.activa::after { background: var(--foco); }
-body.redimensionando-lado, body.redimensionando-lado * { cursor: ew-resize !important; user-select: none !important; }
-.gd-exp-lado[hidden] { display: none; }
-.gd-lado-cab { display: flex; align-items: center; gap: 4px; }
-.gd-lado-rot, .gd-lado-campo > span { font: 400 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido); }
-.gd-lado-campo { display: flex; flex-direction: column; gap: 6px; }
-.gd-lado-titulo { height: 32px; padding: 0 9px; border: 1px solid var(--borde); border-radius: 5px; background: var(--lienzo); color: var(--tinta); font: 500 14px var(--sans); }
-.gd-lado-titulo:focus, .gd-lado-texto:focus { outline: none; border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
-.gd-lado-crece { flex: 1; min-height: 0; }
-.gd-lado-texto { flex: 1; min-height: 120px; overflow: auto; padding: 10px 11px; border: 1px solid var(--borde); border-radius: 5px; background: var(--lienzo);
-  color: var(--tinta); font: 400 13px/1.5 var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+.gd-bib-medio > .gd-cuerpo { min-width: 0; }
+
+/* ---------- la ventana de una nota (1.1.54, como en ClapBook) ----------
+   Un clic en una nota de una biblioteca o de un segmento expandido la abre encima de todo (gestor.js, `capaNota`): la capa va en
+   el `body`, con el fondo de los diálogos; la ventana es una hoja de papel con su cabecera (⤢, la ruta con los chips de las
+   cabeceras, ‹ n/N › o ＋, el color, el enlace, ⋯, la papelera y ×), el nombre grande y el documento con su formato. Los menús
+   que se abren desde ella (color, ⋯, formato, enlace) y el aviso van por encima. */
+.gd-modal-capa { position: fixed; inset: 0; z-index: 70; display: flex; align-items: flex-start; justify-content: center; padding: 5vh 24px 4vh;
+  background: var(--backdrop); animation: gd-modal-capa .14s ease-out; }
+.gd-modal-capa[hidden] { display: none; }
+.gd-modal { width: min(920px, 100%); height: 100%; max-height: 900px; display: flex; flex-direction: column; background: var(--papel); color: var(--tinta);
+  border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra-modal); overflow: hidden; outline: none; animation: gd-modal .16s cubic-bezier(.2, .8, .3, 1); }
+.gd-modal.con-color { border-top: 3px solid var(--tc); }                /* el color de la nota, como en su tarjeta */
+@keyframes gd-modal-capa { from { opacity: 0; } }
+@keyframes gd-modal { from { opacity: 0; transform: translateY(8px) scale(.985); } }
+.gd-modal-cab { flex: none; display: flex; align-items: center; gap: 4px; height: 46px; padding: 0 10px; border-bottom: 1px solid var(--regla); font-family: var(--sans); }
+.gd-modal-cab .spacer { flex: 1; }
+.gd-modal-ruta { display: flex; align-items: center; gap: 7px; min-width: 0; margin-left: 4px; overflow: hidden; }
+.gd-modal-cont { flex: 0 1 auto; min-width: 0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--tenue); }
+.gd-modal-ruta .gd-chip-nom { flex: 0 1 auto; min-width: 0; max-width: 200px; height: 24px; padding: 0 9px; gap: 7px; font-size: 11.5px; border-radius: 5px; justify-content: flex-start; }
+.gd-ruta-sep { flex: none; color: var(--palido); }
+.gd-modal-nav:empty { display: none; }
+.gd-nav-notas { display: inline-flex; align-items: center; gap: 1px; margin-right: 6px; }
+.gd-nav-notas .icono { width: 26px; height: 26px; color: var(--tenue); }
+.gd-nav-notas .icono:disabled { opacity: .35; cursor: default; background: none; }
+.gd-nav-pos { min-width: 34px; text-align: center; font: 400 10.5px var(--mono); color: var(--palido); }
+.gd-nav-notas .gd-nav-nueva { color: var(--foco); }
+.gd-nav-notas .gd-nav-nueva:hover { background: var(--foco-suave); }
+.gd-modal-color i { width: 12px; height: 12px; border-radius: 50%; border: 1px dashed var(--borde-fuerte); background: transparent; box-sizing: border-box; }
+.gd-modal-color.con-color i { border: 0; background: var(--tc); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+.gd-modal-tirar, .gd-miga-tirar { color: var(--tenue); }
+.gd-modal-tirar:hover, .gd-miga-tirar:hover { color: var(--peligro); background: var(--peligro-bg); }
+.gd-modal-hoja { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.gd-modal-papel { max-width: 760px; min-height: 100%; box-sizing: border-box; margin: 0 auto; padding: 30px 56px 0; display: flex; flex-direction: column; }
+.gd-modal-titulo { flex: none; width: 100%; margin: 0 0 14px; padding: 0; border: 0; background: none; color: var(--tinta); font: 600 24px/1.25 var(--sans); outline: none; }
+.gd-modal-titulo::placeholder { color: var(--palido); }
+.gd-modal-cola { flex: 1; min-height: 24vh; cursor: text; }
+@media (max-width: 700px) { .gd-modal-capa { padding: 12px; } .gd-modal-papel { padding: 20px 20px 0; } }
+/* lo que se abre desde la ventana va encima de ella: los menús y el aviso (con «Deshacer») */
+.gd-pop { z-index: 80; }
+body.con-ventana #aviso { z-index: 95; }
+body.con-ventana .gd-globo { z-index: 75; }
+/* el campo: el documento con su formato, como una hoja (el nombre, arriba) */
+.gd-lado-texto { position: relative; min-height: 120px; padding: 0; color: var(--tinta); font: 400 15px/1.6 var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; outline: none; }
 .gd-lado-texto:has(> p:only-child > br:only-child)::before { content: attr(data-vacio); position: absolute; color: var(--palido); pointer-events: none; }
-.gd-lado-texto { position: relative; }
-.gd-lado-texto p { margin: 0 0 4px; }
-.gd-lado-texto table { border-collapse: collapse; margin: 6px 0 10px; width: 100%; font-size: 12px; white-space: normal; }
+.gd-lado-texto p { margin: 0 0 6px; }
+.gd-lado-texto a[href] { color: var(--foco); text-decoration: underline; text-underline-offset: 2px; }
+.gd-lado-texto code { font: 400 .9em var(--mono); background: var(--panel); border-radius: 3px; padding: 0 3px; }
+.gd-lado-texto table { border-collapse: collapse; margin: 6px 0 10px; width: 100%; font-size: 13px; white-space: normal; }
 .gd-lado-texto td, .gd-lado-texto th { border: 1px solid var(--borde-fuerte); padding: 3px 6px; vertical-align: top; min-width: 2em; }
 .gd-lado-texto th { background: var(--panel); font-weight: 600; }
 .gd-lado-fijo { display: inline-block; margin: 4px 0 8px; padding: 2px 8px; border: 1px dashed var(--borde-fuerte); border-radius: 4px;
   font: 400 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--palido); user-select: none; }
+span.gd-lado-fijo { margin: 0 2px; vertical-align: 1px; }
+span.gd-lado-fijo.gd-lado-img { display: block; margin: 6px 0 10px; padding: 0; border: 0; }   /* una imagen se ve (1.1.54) */
+.gd-lado-img img { display: block; max-width: 100%; height: auto; border-radius: 4px; pointer-events: none; }
+/* el documento con su formato (1.1.32): los elementos de guion llevan una pista de lo que son, sin las sangrías del editor
+   (mayúsculas, el paréntesis y los corchetes que el editor pinta con CSS y el nombre del personaje en su color) */
+.gd-lado-texto :is(.sp-scene, .sp-subscene, .sp-act, .sp-character, .sp-transition, .sp-shot) { text-transform: uppercase; }
+.gd-lado-texto :is(.sp-scene, .sp-act) { font-weight: 600; }
+.gd-lado-texto .sp-act { text-align: center; text-decoration: underline; }
+.gd-lado-texto .sp-character { padding-left: 26%; }
+.gd-lado-texto .sp-paren { padding-left: 18%; }
+.gd-lado-texto .sp-paren::before { content: '('; }
+.gd-lado-texto .sp-paren::after { content: ')'; }
+.gd-lado-texto .sp-dialogue { padding: 0 9%; }
+.gd-lado-texto .sp-transition:not([data-izq]) { text-align: right; }
+.gd-lado-texto .sp-note { color: var(--tenue); }
+.gd-lado-texto .sp-note::before { content: '['; }
+.gd-lado-texto .sp-note::after { content: ']'; }
+.gd-lado-texto .sp-character[data-ch] .ch-nom { background: var(--chl); color: var(--chd); border-radius: 3px; padding: 0 3px; }
+html[data-theme="dark"] .gd-lado-texto .sp-character[data-ch] .ch-nom { background: var(--chd); color: var(--chl); }
 /* la papelera (18-09-2026): lo tirado entero —esquemas, bibliotecas y personajes— arriba, con su etiqueta de tipo */
 .gd-pieza { display: flex; align-items: center; gap: 8px; }
 .gd-nota.gd-pieza > .gd-chip { flex: none; min-width: 22px; width: 22px; padding: 0; font-weight: 600; }   /* no es el título: no crece */

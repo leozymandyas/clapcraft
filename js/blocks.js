@@ -4,6 +4,9 @@
   'use strict';
   const B = {};
   Ed.blocks = B;
+  /* Lo que añade quien use el editor al menú del asa (ClapCraft, 1.1.52: «Copiar enlace para Claude»):
+     { etiqueta, ejecutar(bloques), visible() }. index.html a solas no pone nada. */
+  B.extras = [];
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const editor = () => Ed.editor;
@@ -108,6 +111,7 @@
       else if (op === 'down') moveGroup(targets, 1);
       else if (op === 'del') removeAll(targets);
       else if (op === 'separar' && Ed.doble) targets.filter(t => t.matches('.sp-doble')).forEach(t => Ed.doble.separar(t));
+      else if (op === 'extra') { const x = B.extras[+arg]; if (x) x.ejecutar(targets); }
     });
     document.addEventListener('mousedown', e => {
       if (!menu.hidden && !(e.target.closest && e.target.closest('.blk-menu, .blk-grip'))) closeMenu(true);
@@ -269,8 +273,10 @@
     if (dobles) html += '<button type="button" data-op="separar"><span>Separar el diálogo doble</span></button><hr>';
     html += `<button type="button" data-op="dup"><span>Duplicar</span><kbd>Ctrl+D</kbd></button>
       <button type="button" data-op="up"><span>Mover arriba</span><kbd>Ctrl+Shift+↑</kbd></button>
-      <button type="button" data-op="down"><span>Mover abajo</span><kbd>Ctrl+Shift+↓</kbd></button><hr>
-      <button type="button" data-op="del" class="danger"><span>Eliminar</span><kbd>Supr</kbd></button>`;
+      <button type="button" data-op="down"><span>Mover abajo</span><kbd>Ctrl+Shift+↓</kbd></button><hr>`;
+    const extras = B.extras.map((x, i) => (!x.visible || x.visible() ? `<button type="button" data-op="extra" data-arg="${i}"><span>${Ed.escapeHtml(x.etiqueta)}</span></button>` : '')).join('');
+    if (extras) html += extras + '<hr>';
+    html += `<button type="button" data-op="del" class="danger"><span>Eliminar</span><kbd>Supr</kbd></button>`;
     menu.innerHTML = html;
     menu.hidden = false;
     const r = anchor.getBoundingClientRect();

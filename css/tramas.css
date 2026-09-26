@@ -71,7 +71,8 @@ button { font-family: inherit; font-size: inherit; color: inherit; cursor: point
 
 main { flex: 1; display: flex; min-height: 0; }
 #board { flex: 1; overflow: auto; background: var(--papel); }
-#canvas { position: relative; min-height: 100%; padding-bottom: 30px; }
+/* el zoom de la vista (1.1.40): lo escribe tablero.js en el <html> y lo lleva el lienzo, así que crece todo lo del esquema */
+#canvas { position: relative; min-height: 100%; padding-bottom: 30px; zoom: var(--zoom-esq, 1); }
 
 /* ---------- actos ---------- */
 .axis { position: sticky; top: 0; z-index: 6; height: var(--eje); display: flex; background: var(--panel);
@@ -84,6 +85,10 @@ main { flex: 1; display: flex; min-height: 0; }
         padding: 0 8px 0 12px; border-left: 1px solid var(--regla); }
 .acto:first-child { border-left: 0; }
 .acto.sel { background: var(--foco-suave); box-shadow: inset 0 -2px 0 var(--foco); }
+/* un acto es un tramo de las columnas y se mueve arrastrándolo, sin mover nada más (Leo, 18-09-2026) */
+.acto { cursor: grab; }
+.acto .aname[readonly] { cursor: inherit; }
+body.moviendo-acto, body.moviendo-acto * { cursor: grabbing !important; user-select: none !important; }
 .aname { flex: 1; min-width: 0; background: none; border: 0; font-family: var(--mono); font-size: 12.5px;
          font-weight: 700; letter-spacing: .02em; color: var(--tinta); padding: 2px 0; }
 .aname:focus { outline: none; border-bottom: 1px solid var(--foco); }
@@ -117,6 +122,25 @@ main { flex: 1; display: flex; min-height: 0; }
         padding: 3px 5px; border-radius: 5px; }
 .mini:hover { color: var(--tinta); background: var(--hover-fuerte); }
 
+/* asas para el tamaño propio de una fila y de una columna (1.1.41), como en una hoja de cálculo. Van **por dentro** de su caja:
+   la etiqueta de la trama es `sticky` y la cabecera de la columna recorta lo que se sale (`overflow: hidden`). */
+.fila-asa { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; z-index: 9; }
+.col-asa { position: absolute; top: 0; bottom: 0; right: 0; width: 6px; cursor: ew-resize; z-index: 9; }
+.fila-asa:hover, .col-asa:hover { background: color-mix(in srgb, var(--foco) 55%, transparent); }
+body.midiendo-fila, body.midiendo-col { user-select: none; }
+body.midiendo-fila, body.midiendo-fila * { cursor: ns-resize !important; }
+body.midiendo-col, body.midiendo-col * { cursor: ew-resize !important; }
+.col.propia span { color: var(--foco); }
+
+/* las tramas ocultas, como las filas escondidas de Excel: una franja con su cuenta que las devuelve (1.1.40) */
+.row.ocultas { height: 26px; display: flex; align-items: center; }
+.row.ocultas .label { display: flex; align-items: center; justify-content: center; border-right: 1.5px solid var(--tinta); background: var(--panel); }
+.row.ocultas .label button { width: 22px; height: 18px; border: 1px solid var(--borde-fuerte); border-radius: 4px; cursor: pointer;
+  background: repeating-linear-gradient(180deg, var(--panel) 0 3px, var(--regla) 3px 4px); color: var(--tenue); font: 600 10px var(--mono); }
+.row.ocultas .label button:hover { color: var(--foco); border-color: var(--foco); }
+.row.ocultas .ocultas-track { flex: 1; display: flex; align-items: center; padding-left: 10px; font: 500 10px var(--mono);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--palido);
+  background: repeating-linear-gradient(90deg, transparent 0 6px, var(--regla) 6px 7px) center / 100% 3px no-repeat; }
 .add-linea { height: 52px; display: flex; align-items: center; }
 .add-linea .label { border-right: 1.5px solid var(--tinta); background: var(--panel); }
 .add-linea button { background: none; border: 0; color: var(--tenue); font-size: 14px; display: flex;
@@ -213,6 +237,11 @@ body.con-ruta .pt:hover > *, body.con-ruta .pt:focus-within > *, body.con-ruta .
 .notas-capa { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .notas-capa:has(> .nota:hover, > .nota.sel, > .nota.arrastrando) { z-index: 2; }
 .notas-capa > .nota { pointer-events: auto; }
+/* `--guia` se registra para que se pueda **animar**: al reordenar, la nota viaja con una animación y su guía tiene que acortarse
+   o alargarse con ella; si no, durante esos milisegundos asomaba por encima del carril (1.1.46, Leo) */
+/* **hereda**: la guía se pinta en `.nota::before`, y un pseudo-elemento hereda de su elemento; con `inherits: false` se quedaba
+   con el valor inicial y la línea salía convertida en un muñón (1.1.46) */
+@property --guia { syntax: '<length>'; inherits: true; initial-value: 13px; }
 /* la guía que la une a su sitio: continua y del color de su trama, para que se vea de quién es */
 .nota::before { content: ''; position: absolute; left: calc(var(--gx, 50%) - 1px); width: 2px;   /* --gx: dónde está su sitio (tablero.js) */
         top: calc(-1 * var(--guia, 13px)); height: var(--guia, 13px);
@@ -230,7 +259,7 @@ body.con-ruta .pt:hover > *, body.con-ruta .pt:focus-within > *, body.con-ruta .
 .nota.sel span { color: var(--foco); }
 .cap-edit { position: absolute; left: 50%; bottom: 13px; transform: translateX(-50%); pointer-events: auto;
         width: 170px; font-family: var(--sans); font-size: 13.5px; text-align: center;
-        color: var(--tinta); background: var(--papel); border: 1.5px solid var(--foco);
+        color: var(--tinta); background: var(--papel); border: 1.5px solid var(--c, var(--foco));   /* del color del nodo, como su rótulo */
         border-radius: 5px; padding: 2px 6px; z-index: 9; }
 .pt.alto .cap-edit { bottom: 26px; }
 .nota-edit { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 9; width: 230px;
@@ -296,6 +325,35 @@ aside h2 { font: 9.5px var(--mono); letter-spacing: .08em; text-transform: upper
         font-family: inherit; font-size: 15px; padding: 7px 10px; resize: vertical; }
 .field textarea { font-family: var(--mono); font-size: 12px; line-height: 1.55; min-height: 60px; }
 .field input:focus, .field textarea:focus { outline: none; border-color: var(--tinta); }
+/* la descripción de un nodo, con formato (1.1.32, js/mdvivo.js): un campo editable que se ve como el textarea de antes y enseña el
+   Markdown formateado; `.md-texto` es el formato, que también usa el panel lateral de las notas (clapcraft.css) */
+.field .md-campo { width: 100%; background: var(--papel); border: 1.5px solid var(--regla-fuerte); border-radius: 6px; color: var(--tinta);
+        font-family: var(--mono); font-size: 12px; line-height: 1.55; min-height: 60px; padding: 7px 10px; position: relative;
+        white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; cursor: text; }
+.field.field-crece .md-campo { min-height: 340px; }
+.field .md-campo:focus { outline: none; border-color: var(--tinta); }
+.md-campo:is(:empty, :has(> p:only-child > br:only-child))::before { content: attr(data-vacio); position: absolute; color: var(--palido); pointer-events: none; }
+.md-texto p { margin: 0; }
+.md-texto :is(h1, h2, h3, h4, h5, h6) { margin: .45em 0 .15em; font-family: inherit; font-weight: 700; font-style: normal; line-height: 1.3;
+        letter-spacing: normal; text-transform: none; color: inherit; }   /* sin lo de `aside h2` (el rótulo del panel) */
+.md-texto > :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
+.md-texto h1 { font-size: 1.5em; }
+.md-texto h2 { font-size: 1.3em; }
+.md-texto h3 { font-size: 1.15em; }
+.md-texto h4 { font-size: 1em; }
+.md-texto h5 { font-size: 1em; font-style: italic; }
+.md-texto h6 { font-size: .9em; text-transform: uppercase; letter-spacing: .04em; }
+.md-texto :is(ul, ol) { margin: .15em 0; padding-left: 1.6em; }
+.md-texto blockquote { margin: .25em 0; padding: 1px 0 1px .8em; border-left: 3px solid var(--regla-fuerte); color: var(--tenue); }
+.md-texto code { font-family: var(--mono); font-size: .92em; background: color-mix(in srgb, var(--tinta) 8%, transparent); padding: 0 3px; border-radius: 3px; }
+.md-texto mark { background: #ffeb3b; color: #000; padding: 0 1px; border-radius: 2px; }
+html[data-theme="dark"] .md-texto mark { background: #6b5d16; color: #fff; }
+.md-texto a { color: var(--foco); text-decoration: underline; }
+/* mientras se unen dos bloques (js/mdvivo.js), los estilos calculados son iguales y Chrome no mete <span style>; los bloques, con
+   más especificidad que sus reglas (un título unido a un párrafo se llevaba su tamaño y su peso de `.md-texto h2`) */
+.md-fusion, .md-fusion *, .md-texto.md-fusion :is(h1, h2, h3, h4, h5, h6, p, div, li, blockquote), .md-texto.md-fusion :is(h1, h2, h3, h4, h5, h6, blockquote) * {
+        background-color: transparent !important; color: #000 !important; font-size: 13px !important; font-weight: 400 !important; font-style: normal !important;
+        font-family: sans-serif !important; text-transform: none !important; text-decoration: none !important; letter-spacing: normal !important; }
 .field input[type=range] { width: 100%; accent-color: var(--foco); }
 .swatches { display: flex; flex-wrap: wrap; gap: 7px; }
 .sw { width: 25px; height: 25px; border-radius: 50%; border: 2px solid transparent; padding: 0; }
@@ -343,6 +401,12 @@ aside h2 { font: 9.5px var(--mono); letter-spacing: .08em; text-transform: upper
         color: var(--inverso); border-radius: 20px; padding: 7px 16px; font-size: 14px; opacity: 0;
         transition: opacity .2s; z-index: 30; pointer-events: none; }
 #aviso.show { opacity: 1; }
+/* con «Deshacer» el aviso recibe clics (1.1.40). Su botón se tiñe del **color del propio aviso** (`currentColor`), no de un token
+   del tema: con `--inverso` salía oscuro sobre fondo oscuro en modo oscuro (Leo, 1.1.43). */
+#aviso.con-accion { pointer-events: auto; display: inline-flex; align-items: center; gap: 10px; }
+#aviso .aviso-accion { border: 0; border-radius: 12px; padding: 3px 10px; cursor: pointer; font: 600 13px inherit;
+  background: color-mix(in srgb, currentColor 18%, transparent); color: inherit; }
+#aviso .aviso-accion:hover { background: color-mix(in srgb, currentColor 30%, transparent); }
 /* ---------- diálogo de confirmación ---------- */
 #dlg { background: var(--papel); color: var(--tinta); border: 1.5px solid var(--tinta); border-radius: 8px;
        box-shadow: var(--sombra); padding: 18px 20px 16px; width: min(380px, calc(100vw - 40px));
@@ -355,6 +419,23 @@ html[data-theme="dark"] #dlg::backdrop { background: rgba(0, 0, 0, .55); }
 #dlg .btn.danger:hover { background: var(--peligro-bg); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 /* el nodo que se cambiará de lugar con el arrastrado: se aparta a su sitio (Leo, 15-09-2026) */
+/* arrastrando un nodo, se desliza a donde caería —de celda en celda y a otra trama—, y lo que lleva consigo (sus notas, la pareja
+   de un salto) lo sigue; el trazo del salto, que ya no vale, se apaga hasta soltar (Leo, 18-09-2026) */
+.pt.arrastrando { transition: left .12s ease, transform .15s ease; }
+.pt.con-nodo, .nota.con-nodo { transition: transform .15s ease; }
+/* lo que viaja en la vista previa de un arrastre no se interpone al puntero: debajo tiene que quedar la trama de verdad (las notas
+   del nodo arrastrado, encima del destino, hacían creer que el puntero seguía en su trama de origen y todo parpadeaba; Leo, 18-09-2026) */
+.pt.con-nodo, .nota.con-nodo, .pt.intercambio, .nota.intercambio, .salto-nombre.intercambio { pointer-events: none; }
+/* …ni lo de dentro: el rótulo de un nodo lleva `pointer-events: auto` (para pasar el ratón por él) y, el del nodo arrastrado, al
+   caer bajo el puntero hacía creer que seguía en su trama de origen (Leo, 18-09-2026, «Se ve a Jim y Dwight» a la trama de arriba) */
+.pt.arrastrando *, .pt.con-nodo *, .pt.intercambio * { pointer-events: none !important; }
+/* el trazo y el nombre de un salto se apartan con sus extremos en la vista previa de un intercambio */
+#cables g.intercambio, .salto-nombre.intercambio { transition: transform .16s ease; }
+/* lo que se arrastra va por encima de los trazos y los nombres de los saltos: al cruzarlos se escondía debajo y parecía que
+   parpadeaba (Leo, 18-09-2026) */
+.pt.arrastrando { z-index: 7; }
+.notas-capa:has(> .nota.con-nodo) { z-index: 6; }
+.en-vilo { opacity: .25; transition: opacity .15s; }
 .pt.intercambio { transition: transform .16s ease; z-index: 4; }
 .nota.intercambio { transition: transform .16s ease; }
 .pt.intercambio .dot { box-shadow: 0 0 0 3px var(--foco-halo); }

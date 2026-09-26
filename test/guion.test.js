@@ -12,10 +12,10 @@ function montaje() {
   const cap = d.crearContenedor('Capítulo', { vacio: true }).contenedor;
   const tm = new T.Modelo(T.inicial());
   const pr = tm.datos.lineas[0], sec = tm.nuevaLinea('secundaria').linea, [a1, a2] = tm.datos.actos;
-  const inicio = tm.nuevoPunto(pr.id, a1.id, 2, { titulo: 'Inicio' }).punto;
-  const duda = tm.nuevoPunto(sec.id, a1.id, 1, { titulo: 'Duda' }).punto;      // antes que «Inicio» (celda 2)
-  const enc = tm.nuevoPunto(pr.id, a1.id, 6, { titulo: 'Encuentro' }).punto;
-  const salto = tm.nuevoPunto(pr.id, a2.id, 3, { titulo: 'Cambio' }).punto; tm.crearSalto(salto.id, sec.id, 'cuadro');
+  const inicio = tm.nuevoPunto(pr.id, a1.desde + 2, { titulo: 'Inicio' }).punto;
+  const duda = tm.nuevoPunto(sec.id, a1.desde + 1, { titulo: 'Duda' }).punto;      // antes que «Inicio» (celda 2)
+  const enc = tm.nuevoPunto(pr.id, a1.desde + 6, { titulo: 'Encuentro' }).punto;
+  const salto = tm.nuevoPunto(pr.id, a2.desde + 3, { titulo: 'Cambio' }).punto; tm.crearSalto(salto.id, sec.id, 'cuadro');
   const e = d.crearEsquema(cap.id, tm.toJSON(), 'Escaleta').esquema;
   d.guardarNotaEsquema(e.id, inicio.id, { title: 'Inicio', html: '<p class="sp-scene">EXT. FERRY - AMANECER</p><p>Ana baja del ferry.</p>', characters: {} });
   d.guardarNotaEsquema(e.id, duda.id, { title: 'Duda', html: '<p>No sabe si volver.</p>', characters: {} });

@@ -5,7 +5,7 @@ nodos), escribes el texto de cada paso en un **editor de guion** y organizas el 
 **bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
 navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-**Versión 1.1.22**
+**Versión 1.1.54**
 
 ## Instalar
 
@@ -49,23 +49,31 @@ vez, clic derecho → Abrir. Los archivos `.clapcraft` quedan asociados: un dobl
 
 El tablero donde se estructura la historia.
 
-- **Actos**: columnas con su color de fondo (automático o elegido). Clic en el encabezado abre su panel
-  (nombre, ancho, fondo); el «+» del final añade uno. Un acto puede quedarse en **una sola columna**, con la barra del
-  panel o arrastrando su divisor.
-- **Tramas**: carriles. Una **principal**, las **secundarias** que hagan falta y las **alternativas**
-  (exploraciones, punteadas). Se **reordenan arrastrando su etiqueta**; las flechas de los saltos se ajustan al nuevo orden.
-- **Nodos**: pasa el cursor por una celda y pulsa el «+». Clic selecciona e ilumina el camino que siguió la
-  historia hasta ahí (lo que queda fuera se apaga, pero **los nombres y las notas siguen legibles**); arrastrar cambia de celda o de trama, y **soltarlo sobre otro nodo los intercambia** (también en
+- **Columnas y actos**: las columnas (las líneas verticales) existen por sí mismas, y un **acto es solo un tramo de ellas**
+  con su color de fondo (automático o elegido). Arrastra su encabezado para **moverlo** y su borde para **cambiar dónde acaba**
+  (entre dos actos pegados, el borde es de los dos); nada de eso mueve columnas ni nodos. Puede haber huecos sin acto, varios
+  actos o ninguno; quitar un acto deja sus columnas y lo que hay en ellas. Clic en el encabezado abre su panel (nombre, ancho,
+  fondo); el «+» de detrás del último añade uno.
+- **Tramas**: carriles. Las **principales**, las **secundarias** y las **alternativas** (exploraciones, punteadas) que hagan
+  falta; siempre queda al menos una principal, y la historia sale de la primera. El tipo se cambia en el panel de la trama. Se **reordenan arrastrando su etiqueta**; las flechas de los saltos se ajustan al nuevo orden.
+- **Escala y zoom**: abajo, la escala horizontal, el alto de los carriles y el **zoom** («− 100 % +», Cmd + − 0), que acerca
+  o aleja el esquema entero. **Pellizcar con el trackpad** (o Ctrl + rueda) mueve ese zoom, alrededor del puntero: lo que
+  tienes debajo se queda ahí. Arrastrando un nodo, una nota o un salto **cerca de un borde, el tablero se desplaza solo**.
+- **Nodos**: pasa el cursor por una celda y pulsa el «+». Clic lo selecciona (el resto del tablero se ve igual); arrastrar cambia de celda o de trama —mientras se arrastra, el nodo y sus notas se ven ya donde caerían—, y **soltarlo sobre otro nodo los intercambia** (también en
   Personajes). En el panel de abajo se escriben su título y su descripción (el panel se agranda arrastrando su borde y
-  se contrae con el chevrón). El texto del guion no va por nodo: está en el documento del esquema («Abrir documento»).
+  se contrae con el chevrón). **La descripción lleva formato**: se escribe en Markdown y se convierte al vuelo
+  (`**negrita**`, `*cursiva*`, `~~tachado~~`, `==resaltado==`, `` `código` ``, `[enlace](url)`, `# título`, `- lista`,
+  `1. lista`, `> cita`; también Cmd+B, I y U); los rótulos y los globos del esquema la enseñan sin formato. El texto del
+  guion no va por nodo: está en el documento del esquema («Abrir documento»).
 - **Varios a la vez**: arrastra desde un hueco del tablero para dibujar un rectángulo y elegir los nodos, cuadros y rombos que
   quedan dentro (con Mayús se suman). Arrastrando uno de ellos se mueve el bloque entero: si hacen falta tramas se añaden
   secundarias y, si cae sobre otros nodos, lo que había se corre a la derecha. Con la barra que aparece abajo (o Supr) se
   eliminan todos a la vez. Esc suelta la selección. Todos los borrados piden confirmación.
 - **Saltos**: el cambio de escena (cuadro) y el salto a una alternativa (rombo) unen dos tramas en la misma
-  celda; su nombre va sobre su línea vertical (doble clic lo cambia) y se mueven arrastrándola. **Al elegir su línea se
-  abre su panel**, con su título y su descripción, como si eligieras uno de sus nodos. Lo que queda fuera del
-  hilo de la historia se ve apagado.
+  celda. Se crean **arrastrando el «+» a otra trama**: la vista previa pinta el cuadro o, si una de las dos es alternativa, el
+  rombo, y luego se convierte desde su menú; su nombre va sobre su línea vertical (doble clic lo cambia) y se mueven arrastrándola. **Al elegir su línea se
+  abre su panel**, con su título y su descripción, como si eligieras uno de sus nodos. Nada se apaga solo: lo único que
+  se ve atenuado es lo que descartas tú.
 - El **rótulo** de un nodo funciona como el nodo: al pulsarlo queda elegido y desde ahí también se arrastra. Lleva el color
   del nodo (el suyo o el de su trama).
 - **Copiar y pegar**: lo copiado se lleva las notas de sus enlaces y de las rayas de alrededor, y al pegarlo no se mete
@@ -73,9 +81,16 @@ El tablero donde se estructura la historia.
 - **Notas** en post-it: colgadas de un nodo («Agregar nota», en su menú o en su panel) o **de la mitad del tramo entre dos
   nodos**, con una guía de su color hasta la línea de la trama; caben varias en el mismo sitio. Se arrastran de tramo en tramo y **se ordenan arrastrándolas encima o debajo de las otras** —también
   una de enlace sobre las de un nodo, y al revés—, que se apartan con animación. **Arriba, a la altura de la línea de
-  la trama, la nota se cuelga del nodo; más abajo, entre las notas, solo cambia de orden.** La guía que une una nota con su nodo va siempre del color de la nota y, apiladas, pasa por detrás de las notas de arriba: ninguna raya tapa el texto de otra nota. Con clic
+  la trama, la nota se cuelga del nodo; más abajo, entre las notas, solo cambia de orden.** Y si la arrastras **por debajo de
+  todas las de su sitio** se queda en su propio escalón, sin dejar de colgar de su nodo (es solo organización visual);
+  subiéndola otra vez vuelve a la pila. La guía que une una nota con su nodo va siempre del color de la nota y, apiladas, pasa por detrás de las notas de arriba: ninguna raya tapa el texto de otra nota. Con clic
   derecho se les da uno de los 24 colores de la paleta; su texto va en **itálica**, para no confundirlas con los
   nombres de los nodos.
+- **Cada trama crece lo que haga falta y su línea se queda en el centro**: los títulos de los nodos se apilan por encima
+  de la línea y las notas por debajo, y la fila se agranda para que quepa todo, así que ninguna nota se sale a la trama
+  de al lado. Arrastrando el borde de abajo de la etiqueta de una trama (o el borde derecho de la cabecera de una
+  columna) se le da más sitio y sus notas se separan más; un doble clic en ese borde devuelve el tamaño normal y el
+  botón de restablecer de la barra de abajo deja todas las filas y columnas como estaban.
 - **Los nombres se guardan al salir del campo**: al renombrar un nodo, una nota, una trama, un acto o algo del árbol
   basta con pulsar fuera; `Esc` es lo que lo deja como estaba.
 - **Cuanto más abres la escala horizontal, más texto se lee**: los nombres de los nodos y las notas de nodo usan el
@@ -94,15 +109,29 @@ El tablero donde se estructura la historia.
 - **Segmento expandido**: el icono de expandir de cualquier segmento (bandeja, segmentos, actos, momentos y
   Apariciones) lo abre a todo el lienzo, con sus notas en rejilla, sus primeras líneas y su fecha; se ordenan
   arrastrando y «Contraer» (o Esc) vuelve.
-- **Panel de la nota**: un clic en una nota (en la biblioteca o en un segmento expandido) abre a la derecha su panel, con su
-  nombre y un campo de descripción amplio de texto plano (las tablas se ven como tablas). Lo que escribes ahí es el texto del
-  documento: se ve igual al abrirlo en el editor. El botón de **expandir** lo abre en el editor, el panel se **ensancha
-  arrastrando su borde izquierdo** (doble clic en el borde vuelve al ancho de partida) y el color se cambia en el `⋯` de la
-  nota. Un clic fuera o Esc lo cierra.
-- Doble clic en una nota la abre en el editor, con las migas encima (contenedor › biblioteca › segmento). La
-  etiqueta del segmento abre ese segmento expandido, con la nota marcada.
-- **Papelera**: guarda lo que tiras con su origen; una nota se restaura arrastrándola a una biblioteca, y un esquema, una
-  biblioteca o un personaje, con doble clic o su `⋯`. Se vacía sola a los 30 días.
+- **La ventana de una nota** (como en Notion): un clic en una nota (en la biblioteca o en un segmento expandido) la abre
+  en una ventana encima de todo, con su nombre y **el documento con su formato**: negritas, colores, títulos, listas,
+  citas, tablas, imágenes y los elementos de guion se ven como en el editor, y se escribe con los mismos atajos. Lo que
+  cambias ahí se ve al abrirlo en el editor y al revés. Arriba, dónde está (biblioteca › segmento: cada una lleva a su
+  sitio), **‹ › por las notas del segmento** en el orden en que se ven (en la última, **＋** crea otra en ese segmento), su
+  color, el enlace para Claude, su `⋯` y la papelera. Cada nota vuelve a su ventana con el desplazamiento y el cursor donde
+  los dejaste. Se cierra con un clic fuera, Esc o ×; **⤢** o el doble clic en la nota la abren en el editor, y
+  **«Contraer»** en la cabecera del editor la devuelve a su ventana. Una nota nueva se abre ahí con el nombre listo para
+  escribirlo.
+- **Formato en la ventana**: con texto elegido, el **clic derecho** da negrita, cursiva, subrayado, tachado, código,
+  enlace, **resaltar** y **color de letra** con los 16 tonos del editor, quitar el formato, cortar, copiar y pegar. Atajos:
+  Cmd+B/I/U, Cmd+Mayús+X (tachado), Cmd+Mayús+H (el último resaltado del editor), Cmd+E (código), Cmd+K (enlace) y
+  Cmd+Alt+0…6 (títulos); Cmd+clic abre un enlace. Pegar una dirección sobre lo elegido lo vuelve enlace.
+- **Buscar, filtrar y ordenar**: la cabecera de la biblioteca tiene una **caja de buscar** (Cmd+F; Enter abre la primera
+  que casa, Esc la vacía) y un **filtro por color** y un **orden** (modificadas, creadas, antiguas, por título, por color)
+  para todos sus segmentos; el segmento expandido tiene los suyos. En la biblioteca manda el general; en el segmento
+  expandido, el del segmento (lo que viene de la biblioteca se ve en cursiva). Se recuerdan entre sesiones. Con un orden
+  que no es el manual, las notas no se ordenan arrastrando.
+- Doble clic en una nota la abre en el editor, con las migas encima (contenedor › biblioteca › segmento), sus ‹ ›, la
+  papelera y «Contraer». La etiqueta del segmento abre ese segmento expandido, con la nota marcada.
+- **Papelera**: guarda lo que tiras con su origen; una nota se restaura arrastrándola a una biblioteca (o con el «Deshacer»
+  del aviso: vuelve a su segmento y a su sitio), y un esquema, una biblioteca o un personaje, con doble clic o su `⋯`. Se
+  vacía sola a los 30 días.
 
 ### Texto: el editor
 
@@ -113,6 +142,15 @@ El tablero donde se estructura la historia.
   nombre y, al pulsar un salto, pasa a la trama del otro extremo. **Las notas del esquema** se marcan con puntos de su color:
   bajo el nodo (al pasar el ratón por el nodo se leen, con su descripción) o bajo la mitad del enlace (al pasar por esos puntos
   se leen las del enlace). Las **flechas** de encima y de debajo del círculo de la trama pasan a la trama de arriba o de abajo.
+  **Se edita sin salir del editor**, con un panel flotante que baja sobre la hoja: un clic en un nodo abre su título, su
+  descripción (con formato) y sus notas, con la papelera para borrarlo; al pasar el ratón por la raya salen unos **«+»** (entre
+  dos nodos, delante del primero y detrás del último) que añaden un nodo ahí o notas a ese enlace o raya, y un clic en los puntos
+  de unas notas abre las de ese sitio. Caben varias notas en cada sitio, cada una con su ×. Aquí no se crean cuadros ni rombos;
+  los que ya haya se editan con el clic derecho. Esc o un clic fuera cierran el panel. Lo que creas lleva además un selector de
+  color (el nodo, o la nota).
+- **En el esquema, lo nuevo se escribe en ese mismo panel flotante**: el «+» de una celda crea el nodo con un clic y el panel
+  sale junto a él, con su título, su color, su descripción y sus notas; «Agregar nota» y «＋ Nota» lo abren con la nota nueva lista
+  para escribir y su color. El panel de abajo sigue a lo elegido como siempre; lo que ya existía se edita ahí.
 - **Versiones**: el botón con el nombre de la versión (barra inferior) abre la lista, con su fecha y sus palabras y
   la **Actual** marcada. **«Guardar versión…»** pide un nombre; pulsar una la carga (avisa si lo de ahora no está
   guardado), el doble clic la renombra y la «×» la borra. **«Comparar con la actual…»** enfrenta las dos por
@@ -195,21 +233,29 @@ Se entra desde el pie del menú lateral.
   se quitan, un esquema entra en cuanto le das carril). Debajo, la **bandeja** y sus **segmentos**, que empiezan con
   **«Hoja de personaje»**; segmentos y notas se ordenan y se mueven arrastrando.
 
-### Proyectos, archivos y pestañas
+### Proyectos, ventanas y pestañas
 
-- Al abrir el programa vuelves a **la última pantalla de cada proyecto**: la vista en la que estabas, el esquema
-  montado, la biblioteca abierta y hasta la nota que tenías delante.
-
-- Cada **proyecto** abierto es una **pestaña**; `Ctrl+Tab` pasa de una a otra. **Doble clic en la pestaña** (o Archivo ›
-  Renombrar proyecto…) le cambia el nombre; su archivo se sigue llamando igual, y al abrirlo otra vez el proyecto conserva
-  su nombre. «Guardar como…» propone el nombre del proyecto como nombre de archivo (`anio-nuevo.clapcraft`). Si un contenedor se llama como el proyecto o como su archivo
+- **Cada proyecto se abre en su ventana** y puedes tener varios abiertos a la vez. Abrir o crear un proyecto desde una
+  ventana que ya tiene uno abre otra ventana; si ese archivo ya está abierto, te lleva a su ventana. Al salir de la app se
+  recuerdan las ventanas y la próxima vez vuelven igual. Cerrar una ventana cierra su proyecto (si no tiene archivo, pregunta).
+- Arriba, a la izquierda, el **nombre del proyecto** (doble clic, o Archivo › Renombrar proyecto…, le cambia el nombre; su
+  archivo se sigue llamando igual) y detrás sus **pestañas**: lo que tienes abierto del proyecto —esquemas, el documento de un
+  esquema, bibliotecas, personajes, segmentos, notas, la papelera—, cada uno con la inicial de su clase como en el árbol. Lo
+  que eliges en el árbol se abre en la pestaña de delante; **«Abrir en pestaña»**, en los `⋯` del árbol, de las notas y de los
+  segmentos (en un esquema, también «Abrir el documento en pestaña»), lo abre en otra o, si ya lo tienes abierto, te lleva a
+  esa pestaña. Se ordenan arrastrándolas, `Ctrl+Tab` pasa de una a otra y `Cmd/Ctrl+W` cierra la de delante (con la última,
+  el proyecto). Vuelven al abrir el proyecto. Cada pestaña recuerda también la nota que tenías elegida, con su panel. El **«+»**
+  detrás de la última (o `Cmd/Ctrl+T`) abre una pestaña nueva en el primer elemento de Contenedores.
+- **‹ ›** a la izquierda del contenedor, en la cabecera de cada pantalla, vuelven a la pantalla anterior o a la siguiente de esa
+  pestaña (también `Cmd/Ctrl+[` y `]`). «Contenedores» y «Personajes», abajo en el menú, solo cambian el árbol: la pantalla sigue
+  hasta que pulses algo de él.
+- **El editor no pierde la línea**: al cambiar de pestaña o de pantalla y volver, el cursor y la hoja están donde los dejaste. «Guardar como…» propone el nombre del proyecto como nombre de archivo (`anio-nuevo.clapcraft`). Si un contenedor se llama como el proyecto o como su archivo
   (el nombre que sale en la cabecera; dan igual las mayúsculas, los acentos y los guiones), cambia con él.
-- **Nuevo proyecto** (`Cmd/Ctrl+N`, el «+» de las pestañas): se abre en una pestaña propia, que se puede dejar a medias
-  e ir a otra. A la izquierda, el nombre; a la derecha, seis **plantillas** (En blanco, Largometraje, Serie de TV, Novela,
+- **Nuevo proyecto** (`Cmd/Ctrl+N`): en una ventana nueva si esta ya tiene proyecto. A la izquierda, el nombre; a la derecha, seis **plantillas** (En blanco, Largometraje, Serie de TV, Novela,
   Cortometraje y Teatro) con el árbol y las tramas exactas que crean. **«Crear proyecto»** (o Enter) abre el diálogo de
   guardar del sistema para elegir el nombre del archivo y la carpeta: propone el nombre del proyecto sin espacios, con
   guiones, sin acentos y con la ñ como «ni» (`Año nuevo` → `anio-nuevo.clapcraft`), en la carpeta del último proyecto creado.
-  Si se cancela, no se crea nada. La pestaña lleva el nombre del proyecto, no el del archivo. Esc cancela.
+  Si se cancela, no se crea nada. La ventana lleva el nombre del proyecto, no el del archivo. Esc cancela.
 - **Sin proyectos abiertos**: «Nuevo proyecto», «Abrir un proyecto» y los **recientes** (los proyectos con archivo que se
   han abierto, con su estructura y cuándo). Un `.clapcraft` soltado en la ventana también se abre.
 - El trabajo se guarda siempre en el navegador o en la app. **«Guardar como…»** (`Cmd/Ctrl+Shift+S`) lo
@@ -220,7 +266,49 @@ Se entra desde el pie del menú lateral.
 - En el navegador, Chrome y Edge escriben en el archivo (pueden pedir permiso al volver); en los demás solo
   se descarga una copia.
 - En la app, las órdenes están en el menú: **Archivo** (Nuevo proyecto…, Abrir proyecto…, Guardar, Guardar como…,
-  Renombrar proyecto…, Cerrar proyecto), **Edición** y **Ver** (modo oscuro).
+  Renombrar proyecto…, Cerrar pestaña `Cmd+W`, Cerrar proyecto `Cmd+Shift+W`), **Edición**, **Ver** (modo oscuro) y
+  **Claude** (ver abajo).
+- Si el archivo de un proyecto cambia fuera de ClapCraft (Claude con el proyecto cerrado, iCloud, Dropbox u otra máquina),
+  ClapCraft lo relee: al instante si el proyecto está abierto y al abrirlo si no. Si además había cambios tuyos sin escribir,
+  pregunta cuál quedarse.
+
+### Claude
+
+Claude (en **Cowork** y en **Claude Code**) puede leer y cambiar tus proyectos: sobre todo los **esquemas** —tramas, actos,
+columnas, nodos, saltos y notas, con las mismas reglas que el tablero—, pero también el **guion** de cada esquema, las
+**bibliotecas** y los **personajes**, y puede buscar en todo el proyecto.
+
+- **Conectarlo**: menú **Claude › Conectar con Claude…** deja `clapcraft.plugin` en Descargas; en Claude (la app de escritorio),
+  **Cowork › Personalizar › Plugins › Subir** y elígelo. Para Claude Code, el mismo diálogo copia el comando `claude mcp add …`.
+  El plugin usa el servidor que viene dentro de ClapCraft: al actualizar la app no hace falta instalarlo otra vez.
+- **En vivo**: con el proyecto abierto y **Claude › Permitir que Claude acceda** encendido (lo está de partida), lo que hace
+  Claude se ve al momento; el aviso de abajo dice qué cambió y trae **Deshacer**, y en el esquema también vale `Cmd+Z`. Antes de
+  reescribir un documento, lo que había queda como versión **«Antes de Claude»**. Claude puede llevarte a lo que cambió
+  (el esquema con el nodo elegido, el documento o la nota).
+- **Con el proyecto cerrado**, Claude trabaja sobre su archivo `.clapcraft`, y ClapCraft lo verá al abrirlo.
+- **Apagado** (desmarcando la casilla), Claude no puede cambiar los proyectos que tengas abiertos, solo leerlos de su archivo.
+- Claude escribe el guion al estilo **Fountain** (escenas con INT./EXT., personajes en mayúsculas con su diálogo debajo,
+  `> CORTE A:`…) y las notas en Markdown; los personajes nuevos entran solos en el elenco con su color.
+- **Historial de cambios** (menú **Claude › Historial de cambios…**, o «Historial» en el aviso de cada cambio): todo lo que ha
+  hecho Claude en el proyecto, por días, con su hora, desde dónde (Cowork o Claude Code), si fue en vivo o sobre el archivo y el
+  detalle de lo que hizo. Cada cambio tiene **Ir** (te lleva al esquema, la nota o la biblioteca), **Ver cambios** (cómo estaba y
+  cómo está, como la comparación de versiones) y **Revertir**, que deshace **solo ese cambio**: lo que hiciste después se queda.
+  Si después se tocaron las mismas cosas, te dice cuáles y pregunta antes de revertir de todos modos. El historial va dentro del
+  proyecto, así que también salen los cambios que Claude hizo con el proyecto cerrado (al abrirlo, un aviso te lo dice).
+- **Enlaces para decirle a Claude de qué hablas**: cada cosa tiene su enlace —esquemas, nodos, saltos, tramas, actos, notas del
+  esquema, el enlace entre dos nodos, una raya, unas columnas, el guion o un trozo de él, bibliotecas, secciones, segmentos, notas,
+  personajes, contenedores, carpetas y grupos—. **«Copiar enlace para Claude»** está en los ⋯ del menú lateral y de las
+  bibliotecas, en el clic derecho del esquema (también con varios elegidos o unas columnas) y del editor (el párrafo o lo que hayas
+  seleccionado), en el menú del asa de bloques, en el panel flotante (lo suyo y cada nota) y en el botón de enlace de cada cabecera
+  (lo que estás viendo). **`Cmd+Shift+C`** copia lo elegido, o lo que se ve si no hay nada. Se copia en Markdown con su nombre,
+  por ejemplo `[Nodo «La tormenta» · esquema «Piloto»](clapcraft://el-faro/esquema/…/nodo/p6)`: pégalo en Claude y sabrá
+  exactamente a qué te refieres. Y al revés: si Claude te da un enlace, **Claude › Ir al enlace copiado** te lleva ahí (abre el
+  proyecto si hace falta), y los enlaces `clapcraft://` que abre el sistema también llegan a ClapCraft. Dentro de una nota o del
+  guion, `Cmd+clic` en uno lleva a su sitio.
+- **Si cambias el nombre del archivo** (en el Finder, con el proyecto abierto o cerrado), ClapCraft se da cuenta: sigue con el
+  archivo nuevo, corrige los enlaces que haya dentro del proyecto y recuerda el nombre de antes, así que los enlaces que ya pegaste
+  en Claude siguen llevando ahí. Una copia del archivo no se toma por un renombrado: toma su propio nombre y sus enlaces siguen
+  apuntando al original.
 
 ## Atajos de teclado
 
@@ -231,6 +319,7 @@ Se entra desde el pie del menú lateral.
 | `Cmd+Shift+G` | Esquema ↔ Texto |
 | `Cmd+Shift+F` | Biblioteca |
 | `Cmd+Shift+B` | Plegar o desplegar el menú |
+| `Cmd+Shift+C` | Copiar enlace para Claude (lo elegido, o lo que se ve) |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Pestaña siguiente / anterior |
 | `Cmd+Alt+↑` / `Cmd+Alt+↓` | Nota anterior / siguiente de la trama |
 | `Cmd+Z` / `Cmd+Shift+Z` | Deshacer / Rehacer |
@@ -268,8 +357,17 @@ Se convierten al escribir.
 ```bash
 node serve.js 5173     # y abrir http://localhost:5173/claquedraw.html
 npm test               # pruebas de los modelos (node:test), también el archivo .clapcraft (JSON + gzip)
+                       # e incluye un fuzz del esquema: miles de operaciones al azar con las invariantes revisadas
 npm run test:archivos  # guardar, autoguardar, abrir y volver a arrancar con la app de verdad (Electron y disco)
+npm run test:esquema   # «mono»: clics, arrastres y teclas al azar sobre el esquema, comprobando que nada se rompe
+npm run test:claude    # Claude con la app de verdad: el servidor MCP le habla en vivo, deshacer, conexión apagada, archivos
+npm run test:enlaces   # los enlaces para Claude: copiarlos desde cada sitio, abrirlos y seguir al archivo renombrado
+npm run test:segmentos # la ventana de una nota, buscar, filtrar y ordenar, y el formato, con el ratón de verdad
+npm run plugin         # dist/clapcraft.plugin, el plugin para Claude (también se arma solo antes de npm run dist)
 ```
+
+El servidor MCP (`claude/servidor.js`) se prueba también sin la app: `node claude/servidor.js` habla MCP por stdio y, si
+ClapCraft no está abierto, trabaja sobre los archivos.
 
 App de escritorio con Electron:
 
@@ -288,20 +386,22 @@ espacio global `window.Claquedraw`. Las decisiones de diseño y las reglas que c
 
 | Archivo | Qué hace |
 |---|---|
-| `claquedraw.html` | La app: pestañas, menú lateral, vistas Esquema, Biblioteca, Texto y Personajes |
-| `js/claquedraw/app.js` | Arranque, pestañas, archivos `.clapcraft`, vistas, Personajes, ganchos con el tablero |
+| `claquedraw.html` | La app (una ventana por proyecto): pestañas del proyecto, menú lateral, vistas Esquema, Biblioteca, Texto y Personajes |
+| `js/claquedraw/app.js` | Arranque, el proyecto de la ventana y sus pestañas, archivos `.clapcraft`, vistas, Personajes, ganchos con el tablero |
 | `js/claquedraw/documentos.js` | Modelo puro de un guion: contenedores, esquemas, bibliotecas, segmentos, notas, papelera y elenco |
 | `js/claquedraw/gestor.js` | Menú lateral, Biblioteca, carrusel de Personajes, menús y arrastres |
 | `js/claquedraw/texto.js` | Vista Texto: el editor en un marco, cabecera y línea de tiempo |
-| `js/claquedraw/biblioteca.js` | Modelo de las pestañas (proyectos abiertos) |
+| `js/claquedraw/biblioteca.js` | Modelo de los proyectos (en cada ventana, el suyo) |
 | `js/claquedraw/relaciones.js` | Refleja las relaciones entre personajes en el tablero de cada uno |
 | `js/claquedraw/plantillas.js`, `js/claquedraw/proyectos.js` | Plantillas de proyecto; pantallas «Nuevo proyecto» y «Sin proyectos» |
 | `js/claquedraw/maquetar.js`, `js/claquedraw/exportar.js` | Reparto en páginas de un guion impreso (lo usan el PDF y el contador del editor); exportar a PDF, Word y texto |
 | `js/tramas/modelo.js`, `js/tramas/tablero.js` | Esquema de pasos: modelo puro y tablero |
 | `index.html`, `js/*.js` | El editor: formato, guion (y diálogo doble, `doble.js`), personajes, portada, páginas, bloques, tablas, bases de datos, corrector |
 | `css/clapcraft.css`, `css/clapcraft-editor.css` | La piel de ClapCraft sobre las hojas base (`claquedraw.css`, `tramas.css`, `editor.css`): grises neutros, acento violeta (#6141C9 / #B3A6F7) y los 24 tonos de tramas, nodos y notas |
-| `electron/` | Proceso principal (menú, diálogos, lectura y escritura de archivos) y preload |
-| `test/` | Pruebas de `documentos.js`, `modelo.js` y `biblioteca.js` |
+| `electron/` | Proceso principal (menú, diálogos, lectura y escritura de archivos), preload y el puente con Claude (`claude.js`) |
+| `js/claquedraw/herramientas.js`, `js/claquedraw/conversor.js` | Las herramientas de Claude (esquemas, documentos, bibliotecas, proyecto, búsqueda) y el paso del HTML del editor a texto (Fountain y Markdown) y de vuelta |
+| `claude/` | El servidor MCP (`servidor.js`) y el plugin para Cowork y Claude Code (`plugin/`, que empaqueta `empaquetar.js`) |
+| `test/` | Pruebas de los modelos (`documentos.js`, `modelo.js`, `biblioteca.js`…), de las herramientas de Claude y del servidor MCP |
 | `docs/` | Especificación del tablero de tramas y diseños de la interfaz |
 
 El editor (`index.html`) y el tablero (`tramas.html`) también funcionan solos. Cada uno expone una API de

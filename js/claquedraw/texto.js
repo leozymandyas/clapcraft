@@ -25,6 +25,7 @@
   let posicion = null;                           // nodo resaltado en la tira (el extremo al que se saltó)
   let documento = null;                          // { guardar(doc), alCambiar(), titulo } del documento abierto
   let conTira = false;                           // el documento es de un esquema: encima va su tira, de referencia
+  let claveDoc = null;                           // qué documento hay en el editor (su nota), para recordar dónde se quedó
 
   const modelo = () => o.modelo();
   const guion = () => o.guion();
@@ -54,6 +55,9 @@
         tema(document.documentElement.dataset.theme === 'dark');
 
         w.document.addEventListener('keydown', onKey, true);
+        w.document.addEventListener('selectionchange', () => apuntar(false));
+        const ws = w.document.getElementById('workspace');
+        if (ws) ws.addEventListener('scroll', () => apuntar(true), { passive: true });
         adaptarMarco(w);
         aplicarCabecera();
         /* El editor tiene su propio botón de modo oscuro: si lo cambia desde dentro, la página (y la
@@ -74,6 +78,8 @@
     const cmd = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
     if (cmd && e.shiftKey && k === 'g') { e.preventDefault(); e.stopPropagation(); if (o.alternar) o.alternar(); return; }
     if (cmd && e.shiftKey && k === 'b') { e.preventDefault(); e.stopPropagation(); if (o.alternarLado) o.alternarLado(); return; }
+    if (cmd && e.shiftKey && k === 'f') { e.preventDefault(); e.stopPropagation(); if (o.documentos) o.documentos(); return; }   // la vista Documentos, también con el foco en el editor (1.1.54)
+    if (cmd && e.shiftKey && k === 'c' && !(window.editorAPI && window.editorAPI.isElectron)) { e.preventDefault(); e.stopPropagation(); if (o.copiarEnlace) o.copiarEnlace(); return; }   // en Electron lo lleva el menú Claude
   }
 
   function tema(oscuro) {
@@ -96,21 +102,172 @@
     posicion = null;
     documento = ganchos;
     conTira = !!(op && op.tira);
+    claveDoc = (op && op.clave) || null;
     if (E.characters && E.characters.setGlobal && o.elenco) E.characters.setGlobal(o.elenco());   // los personajes de todo el guion
+    reponiendo = Date.now();
     E.document.set({ title: doc.titulo || '', html: doc.html || '', characters: doc.characters || {} });
-    alPrincipio();
+    const pos = claveDoc && posiciones.get(claveDoc);
+    if (pos) reponer(pos); else alPrincipio();
     aplicarCabecera();
     render();
     if (E.focusEditor) E.focusEditor();
+  }
+  /* ---------- dónde se quedó cada documento (1.1.33) ----------
+     Leo: «no se debe perder la línea en que estaba posicionado en el editor al hacer cambios de pestaña» (y cambiando de
+     pantalla en el árbol pasaba lo mismo: al volver, el documento se cargaba otra vez desde arriba). Mientras se escribe se
+     apunta, por documento, el bloque y el carácter del cursor y el desplazamiento de la hoja (`selectionchange` y `scroll` del
+     marco, solo con el editor a la vista: escondido, la hoja dice 0); al volver a abrirlo, `reponer` los deja como estaban. El
+     medio segundo después de abrir no se apunta el desplazamiento: el cálculo de páginas mueve la hoja y lo pisaría. */
+  const posiciones = new Map();                  // clave del documento → { bloque, car, top }
+  let reponiendo = 0;
+  const editorDoc = () => marco && marco.contentDocument;
+  function apuntar(desplazamiento) {
+    const dd = editorDoc(); if (!claveDoc || !dd || !marco.offsetParent) return;
+    const ws = dd.getElementById('workspace'), ed = dd.getElementById('editor'); if (!ws || !ed || !ws.clientHeight) return;
+    const p = posiciones.get(claveDoc) || {};
+    if (desplazamiento) { if (Date.now() - reponiendo < 600) return; p.top = ws.scrollTop; }
+    else {
+      const s = dd.getSelection(); if (!s || !s.rangeCount) return;
+      const r = s.getRangeAt(0); if (!ed.contains(r.startContainer)) return;
+      if (r.startContainer === ed) { p.bloque = r.startOffset; p.car = 0; }
+      else {
+        let b = r.startContainer; while (b.parentNode !== ed) b = b.parentNode;
+        const x = dd.createRange(); x.setStart(b, 0); x.setEnd(r.startContainer, r.startOffset);
+        p.bloque = Array.prototype.indexOf.call(ed.childNodes, b); p.car = x.toString().length;
+      }
+    }
+    posiciones.set(claveDoc, p);
+  }
+  function reponer(p) {
+    const dd = editorDoc(), ed = dd && dd.getElementById('editor'), ws = dd && dd.getElementById('workspace'); if (!ed) return;
+    if (p.bloque !== undefined && ed.childNodes.length) {
+      const b = ed.childNodes[Math.min(p.bloque, ed.childNodes.length - 1)];
+      const r = dd.createRange();
+      let destino = null;
+      if (b.nodeType === 3) destino = [b, Math.min(p.car || 0, b.nodeValue.length)];
+      else {
+        const tw = dd.createTreeWalker(b, NodeFilter.SHOW_TEXT); let n, resto = p.car || 0;
+        while ((n = tw.nextNode())) { if (resto <= n.nodeValue.length) { destino = [n, resto]; break; } resto -= n.nodeValue.length; }
+      }
+      if (destino) r.setStart(destino[0], destino[1]); else r.setStart(b, 0);
+      r.collapse(true);
+      const s = dd.getSelection(); s.removeAllRanges(); s.addRange(r);
+    }
+    if (ws && p.top !== undefined) {
+      const top = p.top;
+      [0, 150, 450].forEach(ms => setTimeout(() => { if (claveDoc && posiciones.get(claveDoc) === p) ws.scrollTop = top; }, ms));
+      ws.scrollTop = top;
+    } else alPrincipio();
+  }
+  /* ---------- enlaces a un tramo del texto (1.1.52) ----------
+     Leo: «Pon unos "puntos" o "links"… para facilitar el decirle a Claude a qué puntos me refiero». Un tramo es un rango de bloques,
+     numerados como los numera Claude (js/claquedraw/conversor.js, `bloques`: cada elemento de primer nivel del editor es uno, y el
+     texto suelto que va seguido, otro), más la huella del primero para encontrarlo si se mueve (js/claquedraw/enlaces.js). */
+  const EN_LINEA = () => (C.conversor && C.conversor.EN_LINEA) || new Set(['a', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'span', 'mark', 'code', 'sup', 'sub', 'br', 'font', 'small', 'big', 'label']);
+  /* nodo de primer nivel → su número de bloque (desde 0), como `bloques` del conversor */
+  function mapaBloques(ed) {
+    const inl = EN_LINEA(), mapa = new Map(); let i = -1, suelto = false;
+    ed.childNodes.forEach(n => {
+      const txt = n.nodeType === 3;
+      if (txt || (n.nodeType === 1 && inl.has(n.nodeName.toLowerCase()))) {
+        if (txt && !n.nodeValue.replace(/[\s\u200B]/g, '') && !suelto) return;
+        if (!suelto) { i++; suelto = true; }
+        mapa.set(n, i); return;
+      }
+      if (n.nodeType !== 1) return;
+      suelto = false; i++; mapa.set(n, i);
+    });
+    return mapa;
+  }
+  const escHtml = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const nodosDelBloque = (mapa, k) => [...mapa].filter(([, i]) => i === k).map(([n]) => n);
+  const htmlDe = nodos => nodos.map(n => (n.nodeType === 3 ? escHtml(n.nodeValue) : n.outerHTML)).join('').replace(/\u200B/g, '');
+  const textoDe = nodos => nodos.map(n => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
+  /* el número de bloque (desde 0) de un nodo de primer nivel; uno que no cuenta (espacio suelto), el del siguiente o el anterior */
+  function indiceDe(mapa, n, haciaAtras) {
+    for (let x = n; x; x = haciaAtras ? x.previousSibling : x.nextSibling) if (mapa.has(x)) return mapa.get(x);
+    return null;
+  }
+  /* El tramo de lo elegido en el editor: { bloques: [desde, hasta] (desde 1), huella, extracto }. Con `op.nodos`, esos nodos de
+     primer nivel (el asa de bloques); sin selección, null salvo con `op.bloque` (el del cursor). */
+  function tramo(op) {
+    op = op || {};
+    const w = marco && marco.contentWindow, d = w && w.document, ed = d && d.getElementById('editor');
+    if (!ed || !documento) return null;
+    const mapa = mapaBloques(ed); if (!mapa.size) return null;
+    let ia, ib, extracto = '';
+    if (op.nodos && op.nodos.length) {
+      const is = op.nodos.map(n => indiceDe(mapa, n)).filter(i => i !== null);
+      if (!is.length) return null;
+      ia = Math.min(...is); ib = Math.max(...is);
+    } else {
+      const s = w.getSelection(); if (!s || !s.rangeCount) return null;
+      const r = s.getRangeAt(0);
+      if (!ed.contains(r.startContainer) && r.startContainer !== ed) return null;
+      if (r.collapsed && !op.bloque) return null;
+      const arriba = (n, off) => { if (n === ed) return ed.childNodes[Math.min(off, ed.childNodes.length - 1)] || ed.lastChild; while (n && n.parentNode !== ed) n = n.parentNode; return n; };
+      const a = arriba(r.startContainer, r.startOffset), b = arriba(r.endContainer, r.endOffset);
+      ia = indiceDe(mapa, a); ib = indiceDe(mapa, b, true);
+      if (ia === null) ia = indiceDe(mapa, a, true);
+      if (ib === null) ib = ia;
+      /* una selección que acaba al principio de un bloque (triple clic) no se lleva ese bloque */
+      if (!r.collapsed && b && ib > ia) { const x = d.createRange(); x.setStart(b, 0); x.setEnd(r.endContainer, r.endOffset); if (!x.toString().trim()) ib--; }
+      if (!r.collapsed) extracto = s.toString().replace(/\s+/g, ' ').trim();
+    }
+    if (ia === null || ib === null) return null;
+    if (ib < ia) ib = ia;
+    const primero = nodosDelBloque(mapa, ia);
+    if (!extracto) extracto = textoDe(primero);
+    const t = C.conversor ? C.conversor.textoPlano(htmlDe(primero)) : textoDe(primero);
+    const esDb = primero.some(n => n.nodeType === 1 && n.matches && n.matches('.db'));
+    return Object.assign({ bloques: [ia + 1, ib + 1], extracto }, t && !esDb && C.enlaces ? { huella: C.enlaces.huella(t) } : {});
+  }
+  /* Elige los bloques desde…hasta (desde 1) del documento `clave` y los trae a la vista; espera a que el editor lo tenga abierto. */
+  function irATramo(clave, desde, hasta) {
+    return new Promise(listo => {
+      const t0 = Date.now();
+      const intento = () => {
+        const w = marco && marco.contentWindow, d = w && w.document, ed = d && d.getElementById('editor'), ws = d && d.getElementById('workspace');
+        if (!ed || !documento || claveDoc !== clave || !ws || !ws.clientHeight) { if (Date.now() - t0 < 4000) setTimeout(intento, 80); else listo(false); return; }
+        const mapa = mapaBloques(ed), nodos = [...mapa].filter(([, i]) => i >= desde - 1 && i <= hasta - 1).map(([n]) => n);
+        if (!nodos.length) { listo(false); return; }
+        const a = nodos[0], b = nodos[nodos.length - 1], r = d.createRange();
+        if (a.nodeType === 3) r.setStart(a, 0); else r.setStart(a, 0);
+        if (b.nodeType === 3) r.setEnd(b, b.nodeValue.length); else r.setEnd(b, b.childNodes.length);
+        if (E && E.focusEditor) E.focusEditor();
+        const sel = w.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        const centrar = () => { const el = a.nodeType === 1 ? a : a.parentElement; const rr = el.getBoundingClientRect(), rw = ws.getBoundingClientRect(); ws.scrollTop += (rr.top + rr.bottom) / 2 - (rw.top + rw.bottom) / 2; };
+        centrar(); setTimeout(centrar, 350);                    // el cálculo de páginas mueve la hoja un momento después
+        reponiendo = Date.now();
+        posiciones.set(claveDoc, { bloque: Array.prototype.indexOf.call(ed.childNodes, a), car: 0, top: ws.scrollTop });   // otro objeto: `reponer` ya no la pisa
+        listo(true);
+      };
+      intento();
+    });
   }
   /* otro documento empieza arriba (Leo): el cursor ya va al principio, pero la hoja conservaba el desplazamiento del anterior */
   function alPrincipio() {
     const ws = marco && marco.contentDocument && marco.contentDocument.getElementById('workspace');
     if (ws) { ws.scrollTop = 0; ws.scrollLeft = 0; }
   }
+  /* Vuelve a cargar el documento abierto con lo que ahora tiene su nota (1.1.38, Leo: «cuando está abierto un editor y le
+     cambio el nombre a un personaje desde Personajes, no se cambia al instante»): renombrar o recolorear un personaje reescribe
+     las notas por debajo, así que el editor las relee sin cerrarse, con el elenco nuevo y el cursor donde estaba. */
+  function recargar(doc) {
+    if (!E || !documento || !doc) return;
+    apuntar(false);
+    if (E.characters && E.characters.setGlobal && o.elenco) E.characters.setGlobal(o.elenco());
+    reponiendo = Date.now();
+    E.document.set({ title: doc.titulo || '', html: doc.html || '', characters: doc.characters || {} });
+    const pos = claveDoc && posiciones.get(claveDoc);
+    if (pos) reponer(pos);
+    aplicarCabecera();
+    render();
+  }
   function cerrarDocumento() {
     if (!documento) return;
-    volcar(); documento = null; conTira = false;
+    cerrarFlot();
+    volcar(); documento = null; conTira = false; claveDoc = null;
     aplicarCabecera();
   }
   function alCambiarEditor(doc) {
@@ -124,6 +281,8 @@
   function saltar(id) {
     const m = modelo(), pareja = m.parejaDe(id);
     if (!pareja) return;
+    const otra = m.linea(pareja.lineaId);
+    if (otra && otra.oculta) { if (o.avisar) o.avisar('«' + otra.nombre + '» está oculta: muéstrala en el esquema'); return; }   // 1.1.40
     lineaId = pareja.lineaId; posicion = pareja.id;
     render();
     const l = m.linea(lineaId);
@@ -133,7 +292,7 @@
 
   /* las flechas de la tira: la trama de arriba o la de abajo, en el orden del esquema */
   function cambiarTrama(d) {
-    const m = modelo(), L = m ? m.datos.lineas : [], i = L.findIndex(x => x.id === lineaId), l = L[i + d];
+    const m = modelo(), L = m ? m.datos.lineas.filter(x => !x.oculta) : [], i = L.findIndex(x => x.id === lineaId), l = L[i + d];
     if (!l) return;
     lineaId = l.id; posicion = null;
     render();
@@ -169,13 +328,17 @@
     if (!tira) return;
     const g = guion(), m = modelo();
     if (!g) { tira.innerHTML = ''; return; }
-    if (!lineaId || !m.linea(lineaId)) lineaId = (m.lineaPrincipal() || m.datos.lineas[0] || {}).id || null;
+    /* las tramas ocultas no salen en la tira, y desde aquí no se devuelven (1.1.40, Leo: «solo se puede desocultar desde el esquema») */
+    const visibles = m.datos.lineas.filter(x => !x.oculta);
+    if (!lineaId || !m.linea(lineaId) || m.linea(lineaId).oculta) {
+      const pr = m.lineaPrincipal();
+      lineaId = ((pr && !pr.oculta ? pr : visibles[0]) || {}).id || null;
+    }
     const l = lineaId && m.linea(lineaId);
     if (!l) { tira.innerHTML = '<span class="hilo-vacio">Este guion no tiene tramas.</span>'; return; }
-    const T = window.Tramas;                               // en Personajes no hay fuera de escena
-    const pres = T && T.tablero && T.tablero.simple() ? { fuera: () => false } : m.presencia();
+    const pres = { fuera: () => false };                    // nada se apaga, como en el tablero (Leo, 18-09-2026: «que no se apague en ningún momento»)
     const tono = c => `var(--t-${c || 'azul'})`;
-    const fila = lid => m.datos.lineas.findIndex(x => x.id === lid);
+    const fila = lid => visibles.findIndex(x => x.id === lid);
     const puntos = m.puntosDe(l.id).map(p => {
       const s = m.saltoDe(p.id), pareja = s && m.parejaDe(p.id), destino = pareja && m.linea(pareja.lineaId);
       const clases = ['hilo-nodo'];
@@ -184,21 +347,21 @@
       const sube = !!(s && pareja && fila(pareja.lineaId) < fila(l.id));
       if (p.id === posicion) clases.push(s ? 'pos' : 'actual');
       if (p.cortado) clases.push('cortado');
-      if (!s && !p.cortado) clases.push('con-rotulo');       // el nombre en un rótulo de papel, como en el tablero
+      if (!s && !p.cortado && String(p.titulo || '').trim()) clases.push('con-rotulo');   // el nombre en un rótulo de papel; sin nombre, sin rótulo (1.1.42)
       if (pres.fuera(p)) clases.push('fuera');
-      /* el globo (al pasar el ratón) enseña la descripción del esquema; los saltos, adónde llevan */
+      /* el globo (al pasar el ratón) enseña la descripción del esquema, sin las marcas de Markdown (1.1.32); los saltos, adónde llevan */
       const pista = s
         ? `${FORMA[s.tipo] || 'Salto'}${destino ? ' → ' + destino.nombre : ''} · pulsa para ver esa trama`
-        : p.descripcion;
+        : (window.MdVivo ? MdVivo.plano(p.descripcion) : p.descripcion);
       return `<button type="button" class="${clases.join(' ')}" data-punto="${esc(p.id)}"${s ? ` data-salto="${esc(p.id)}"` : ''}
         style="--c:${tono(p.color || l.color)}" data-pista="${esc(pista)}">
-        <span class="hilo-tit"><span class="hilo-tit-txt">${esc(p.titulo) || 'Sin título'}</span></span><i class="hilo-punto"></i>${s ? `<i class="hilo-trazo ${sube ? 'sube' : 'baja'}" title="${sube ? 'Sube' : 'Baja'} a ${esc(destino ? destino.nombre : 'otra trama')}"></i>` : ''}</button>`;
+        <span class="hilo-tit"><span class="hilo-tit-txt">${esc(p.titulo)}</span></span><i class="hilo-punto"></i>${s ? `<i class="hilo-trazo ${sube ? 'sube' : 'baja'}" title="${sube ? 'Sube' : 'Baja'} a ${esc(destino ? destino.nombre : 'otra trama')}"></i>` : ''}</button>`;
     }).join('');
     /* la trama: el círculo con su inicial, como en el carril del tablero, y encima y debajo las flechas que pasan a la trama de
        arriba o de abajo del esquema (Leo, 18-09-2026: «la opción de poder moverme de tramas, quizás con unas flechas»). Salen
        siempre, con borde, para que se vean (1.1.17, Leo: «tampoco veo las flechas»: con una sola trama no salían y, con más,
        eran dos trazos grises); sin trama a ese lado, apagadas. */
-    const n = m.puntosDe(l.id).length, L = m.datos.lineas, i = fila(l.id);
+    const n = m.puntosDe(l.id).length, L = visibles, i = fila(l.id);
     const flecha = (d, trazo) => {
       const otra = L[i + d];
       const nada = L.length === 1 ? 'Es la única trama del esquema' : d < 0 ? 'Es la primera trama' : 'Es la última trama';
@@ -213,6 +376,7 @@
     tira.innerHTML = `${chip}<div class="hilo-pista${l.tipo === 'alterna' ? ' alterna' : ''}${l.cortada ? ' cortada' : ''}${puntos ? '' : ' vacia'}" style="--c:${tono(l.color)}">${puntos}${vacio}</div>`;
     colocarRotulos();
     pintarNotas(m, l);
+    pintarLugares(m, l);
     /* Centrar el nodo resaltado desplazando solo la tira (scrollIntoView movería también la página). */
     const act = tira.querySelector('.hilo-nodo.actual, .hilo-nodo.pos');
     if (act) tira.scrollLeft = act.offsetLeft + act.offsetWidth / 2 - tira.clientWidth / 2;
@@ -265,6 +429,61 @@
       pista.insertAdjacentHTML('beforeend', `<span class="hilo-notas hilo-notas-enlace" data-grupo="${k}" style="left:${Math.round(g.x)}px">${puntosDe(g.notas)}</span>`);
     });
   }
+  /* ---------- editar la tira desde el editor (1.1.36) ----------
+     Leo: «quiero poder agregar, editar, eliminar nodos y notas desde la línea del tiempo del editor… quizás un panel flotante»; y
+     «en esta vista no dejes hacer relaciones (rombos o cuadros)». Sobre la raya van unos «+» (`.hilo-mas`, al pasar el ratón): uno
+     por **lugar** (`lugares`, en píxeles de la pista, donde `pintarNotas` pone los puntos de sus notas): delante del primer nodo,
+     entre cada dos (el enlace) y detrás del último, o uno solo si la trama no tiene nodos. El clic en un nodo, en los puntos de las
+     notas o en un «+» abre el panel flotante (js/claquedraw/flotante.js, `C.flotante`, que desde la 1.1.37 comparte con el tablero);
+     un cuadro o un rombo sigue pasando la tira a la otra trama con un clic y su panel sale con el clic derecho. */
+  let lugares = [];
+  function pintarLugares(m, l) {
+    lugares = [];
+    const pista = tira.querySelector('.hilo-pista'); if (!pista) return;
+    const ps = m.puntosDe(l.id);
+    const centro = p => { const el = pista.querySelector(`:scope > .hilo-nodo[data-punto="${CSS.escape(p.id)}"]`); return el ? el.offsetLeft + el.offsetWidth / 2 : 0; };
+    if (!ps.length) lugares.push({ lineaId: l.id, lado: 'vacia', x: 60 });
+    else {
+      lugares.push({ lineaId: l.id, lado: 'inicio', primero: ps[0].id, x: Math.max(40, centro(ps[0]) - 70) });
+      for (let i = 0; i + 1 < ps.length; i++) lugares.push({ lineaId: l.id, a: ps[i].id, b: ps[i + 1].id, x: (centro(ps[i]) + centro(ps[i + 1])) / 2 });
+      lugares.push({ lineaId: l.id, lado: 'fin', ultimo: ps[ps.length - 1].id, x: centro(ps[ps.length - 1]) + 70 });
+    }
+    pista.insertAdjacentHTML('beforeend', lugares.map((L, k) => `<button type="button" class="hilo-mas" data-lugar="${k}" style="left:${Math.round(L.x)}px" title="${L.a ? 'Añadir un nodo o una nota entre estos dos nodos' : 'Añadir un nodo o una nota aquí'}" aria-label="Añadir aquí">`
+      + '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>').join(''));
+    marcarFlot(flotAbierto());
+  }
+  /* el panel es de la tira si lo abrió ella (el tablero tiene su propio contexto) */
+  const flotAbierto = () => (C.flotante && C.flotante.contexto() === ctxTira && C.flotante.abierto()) || null;
+  const cerrarFlot = () => { if (flotAbierto()) C.flotante.cerrar(); };
+  /* lo que tiene el panel abierto, marcado en la tira */
+  function marcarFlot(q) {
+    if (!tira) return;
+    tira.querySelectorAll('.editando').forEach(x => x.classList.remove('editando'));
+    if (!q) return;
+    if (q.tipo === 'nodo') { const n = tira.querySelector(`.hilo-nodo[data-punto="${CSS.escape(q.id)}"]`); if (n) n.classList.add('editando'); }
+    else { const k = lugares.findIndex(L => C.flotante.mismoLugar(L, q.lugar)); const b = k >= 0 && tira.querySelector(`.hilo-mas[data-lugar="${k}"]`); if (b) b.classList.add('editando'); }
+  }
+  /* dónde va el panel: el nodo, o el «+» de su lugar (tras repintar la tira, los elementos son otros) */
+  function anclaDe(q) {
+    if (!q || !tira) return null;
+    if (q.tipo === 'nodo') {
+      const n = tira.querySelector(`.hilo-nodo[data-punto="${CSS.escape(q.id)}"]`);
+      if (n) { const x = n.offsetLeft + n.offsetWidth / 2; if (x < tira.scrollLeft || x > tira.scrollLeft + tira.clientWidth) tira.scrollLeft = Math.max(0, x - tira.clientWidth / 2); }
+      return n;
+    }
+    const k = lugares.findIndex(L => C.flotante.mismoLugar(L, q.lugar));
+    return k >= 0 ? tira.querySelector(`.hilo-mas[data-lugar="${k}"]`) : null;
+  }
+  const ctxTira = {
+    modelo: () => modelo(),
+    alCambiar: () => { render(); if (o.alCambiarTablero) o.alCambiarTablero(); },
+    anclaDe, marcar: q => marcarFlot(q), conNodo: true,
+    avisar: (t, accion) => { if (o.avisar) o.avisar(t, accion); },
+    copiarEnlace: q => { if (o.copiarEnlaceFlot) o.copiarEnlaceFlot(q); },   // «Copiar enlace para Claude» del panel (1.1.52)
+    dentro: el => !!(el.closest && el.closest('#hilo .hilo-nodo, #hilo .hilo-mas, #hilo .hilo-notas-enlace'))
+  };
+  const abrirFlot = (q, ancla) => { if (o.tip) o.tip.classList.remove('show'); C.flotante.abrir(q, ancla, ctxTira); };
+
   /* las notas en el globo: un renglón por nota, con su punto de color */
   function notasEnGlobo(tip, ns, titulo) {
     const caja = document.createElement('div'); caja.className = 'tip-notas';
@@ -327,6 +546,7 @@
     if (!d.documentElement.dataset.cdPop) {
       d.documentElement.dataset.cdPop = '1';
       d.addEventListener('mousedown', e => {
+        cerrarFlot();                                            // el panel flotante de la tira, también con un clic en la hoja
         const abierto = C.gestor.hayPop && C.gestor.hayPop();
         reabrir = !(abierto && e.target.closest && e.target.closest('#cdExportar, #cdVersiones'));
         if (abierto) C.gestor.cerrarPop();
@@ -357,6 +577,23 @@
       });
       modo.parentElement.before(x);
     }
+    /* «Copiar enlace para Claude» en el clic derecho (el párrafo del cursor o lo seleccionado) y en el menú del asa de bloques
+       (los bloques elegidos), 1.1.52 */
+    const ctxMenu = d.getElementById('ctxMenu');
+    if (ctxMenu && !d.getElementById('cdEnlace')) {
+      ctxMenu.insertAdjacentHTML('afterbegin', '<button type="button" id="cdEnlace"><span>Copiar enlace para Claude</span><kbd>Cmd+Shift+C</kbd></button><hr id="cdEnlaceSep">');
+      const b = d.getElementById('cdEnlace');
+      b.addEventListener('click', () => { const t = tramo({ bloque: true }); if (t && o.copiarTramo) o.copiarTramo(t); });
+      d.addEventListener('contextmenu', () => {                 // antes de que el editor enseñe el menú: solo con un documento abierto
+        const hay = !!documento && !!o.copiarTramo;
+        b.hidden = !hay; d.getElementById('cdEnlaceSep').hidden = !hay;
+        const s = w.getSelection();
+        b.title = s && !s.isCollapsed ? 'El enlace de lo seleccionado (sus párrafos), para pegarlo en Claude' : 'El enlace de este párrafo, para pegarlo en Claude';
+      }, true);
+    }
+    if (w.Ed && w.Ed.blocks && !w.Ed.blocks.extras.some(x => x.id === 'enlace')) {
+      w.Ed.blocks.extras.push({ id: 'enlace', etiqueta: 'Copiar enlace para Claude', ejecutar: nodos => { const t = tramo({ nodos }); if (t && o.copiarTramo) o.copiarTramo(t); }, visible: () => !!documento && !!o.copiarTramo });
+    }
     if (barra && !d.getElementById('cdLado')) {
       const b = d.createElement('div');
       b.className = 'fb-item row cd-lado';
@@ -375,9 +612,22 @@
     tira.addEventListener('click', e => {
       const paso = e.target.closest('[data-trama-paso]');
       if (paso) { cambiarTrama(+paso.dataset.tramaPaso); return; }
+      /* editar desde la tira (1.1.36): un «+», los puntos de las notas de un enlace o una raya, o un nodo */
+      const mas = e.target.closest('.hilo-mas');
+      if (mas) { const L = lugares[+mas.dataset.lugar]; if (L) abrirFlot({ tipo: 'lugar', lugar: L }, mas); return; }
+      const g = e.target.closest('.hilo-notas-enlace');
+      if (g) { const x = parseFloat(g.style.left), L = lugares.find(q => Math.abs(q.x - x) < 10); if (L) abrirFlot({ tipo: 'lugar', lugar: L }, g); return; }
       const s = e.target.closest('[data-salto]');
-      if (s) saltar(s.dataset.salto);
+      if (s) { cerrarFlot(); saltar(s.dataset.salto); return; }
+      const n = e.target.closest('.hilo-nodo[data-punto]');
+      if (n) abrirFlot({ tipo: 'nodo', id: n.dataset.punto }, n);
     });
+    /* el clic derecho abre el panel de cualquier nodo, también de un cuadro o un rombo (su clic enseña la otra trama) */
+    tira.addEventListener('contextmenu', e => {
+      const n = e.target.closest('.hilo-nodo[data-punto]'); if (!n) return;
+      e.preventDefault(); abrirFlot({ tipo: 'nodo', id: n.dataset.punto }, n);
+    });
+
     /* Globo bajo el nodo, con el mismo #tip del tablero: título y descripción del esquema. */
     const tip = o.tip;
     if (tip) {
@@ -389,6 +639,7 @@
         tip.style.top = (r.bottom + 6) + 'px';
       };
       tira.addEventListener('mouseover', e => {
+        if (flotAbierto()) return;                                   // con el panel abierto, sin globos
         /* los puntos de un enlace o de una raya: sus notas */
         const g = e.target.closest('.hilo-notas-enlace');
         if (g) {
@@ -501,9 +752,12 @@
   }
   C.texto = { iniciar, saltar, volcar, render, tema, precargar: cargarEditor, fijarTitulo, versionEnBoton, enfocar: () => { if (E && E.focusEditor) E.focusEditor(); },
     editor: () => E,
-    abrirDocumento, cerrarDocumento, enDocumento: () => !!documento, conTira: () => conTira,
+    abrirDocumento, cerrarDocumento, recargar, clave: () => (documento ? claveDoc : null), enDocumento: () => !!documento, conTira: () => conTira,
+    /* enlaces (1.1.52): el tramo elegido en el editor y llevar el editor a uno */
+    tramo, irATramo,
     /* suelta el documento **sin guardarlo**: lo que hay en el editor ya no debe volver a su nota (al cargar una versión) */
-    soltar: () => { documento = null; },
+    soltar: () => { documento = null; if (claveDoc) posiciones.delete(claveDoc); },
     linea: () => lineaId, posicion: () => posicion,
-    cerrar: () => { volcar(); documento = null; conTira = false; posicion = null; lineaId = null; aplicarCabecera(); } };
+    cerrar: () => { cerrarFlot(); volcar(); documento = null; conTira = false; posicion = null; lineaId = null; claveDoc = null; aplicarCabecera(); },
+    cerrarPanel: () => cerrarFlot() };
 })(window.Claquedraw);

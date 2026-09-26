@@ -1,6 +1,6 @@
 {
   "name": "claquedraw",
-  "version": "1.1.22",
+  "version": "1.1.54",
   "description": "Guiones: editor de texto tipo hoja de Word con atajos Markdown, tablero de tramas y ClapCraft (esquema de pasos con una nota de texto por nodo), listo para empaquetar con Electron",
   "main": "electron/main.js",
   "private": true,
@@ -10,7 +10,13 @@
     "dist": "electron-builder",
     "test": "node --test",
     "test:archivos": "electron pruebas/archivos-electron.js",
-    "tramas": "node serve.js 5173"
+    "test:esquema": "electron pruebas/mono-esquema.js",
+    "tramas": "node serve.js 5173",
+    "plugin": "node claude/empaquetar.js",
+    "predist": "node claude/empaquetar.js",
+    "test:claude": "electron pruebas/claude-electron.js",
+    "test:enlaces": "electron pruebas/enlaces-electron.js",
+    "test:segmentos": "electron pruebas/segmentos-electron.js"
   },
   "devDependencies": {
     "electron": "^36.0.0",
@@ -27,7 +33,8 @@
       "js/**",
       "fonts/**",
       "img/**",
-      "electron/**"
+      "electron/**",
+      "claude/**"
     ],
     "mac": {
       "target": [
@@ -52,6 +59,14 @@
         "ext": "clapcraft",
         "name": "Guion de ClapCraft",
         "role": "Editor"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Enlace de ClapCraft",
+        "schemes": [
+          "clapcraft"
+        ]
       }
     ],
     "directories": {

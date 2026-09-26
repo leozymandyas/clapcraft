@@ -51,13 +51,15 @@
 <symbol id="ic-reset" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.3 8a4.7 4.7 0 1 0 1.4-3.3"/><path d="M4.4 2.4v2.6H7"/></symbol>
 <symbol id="ic-board" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 5h11.2M2.4 11h11.2"/><circle cx="5.4" cy="5" r="1.3"/><circle cx="10.2" cy="11" r="1.3"/><path d="M8 5v6"/></symbol>
 <symbol id="ic-person" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.4"/><path d="M3.4 13.6c0-2.5 2.1-4 4.6-4s4.6 1.5 4.6 4"/></symbol>
+<symbol id="ic-link" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.7 9.3a3.2 3.2 0 0 0 4.6.2l2-2a3.2 3.2 0 0 0-4.5-4.5l-1.1 1.1"/><path d="M9.3 6.7a3.2 3.2 0 0 0-4.6-.2l-2 2a3.2 3.2 0 0 0 4.5 4.5l1.1-1.1"/></symbol>
 <symbol id="ic-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></symbol>
 </defs></svg>
 
-<!-- franja de pestañas (38 px): un guion abierto por pestaña, cada uno con su archivo; a la derecha, en el
-     navegador, lo que en la app de escritorio va en el menú Archivo / Ver -->
+<!-- franja de pestañas (38 px): el nombre del proyecto de la ventana y sus pestañas (lo abierto del proyecto: esquemas,
+     documentos, bibliotecas, segmentos, notas; 1.1.33); a la derecha, en el navegador, lo que en la app de escritorio va en el
+     menú Archivo / Ver -->
 <div class="franja">
-  <nav class="pestanas" id="pestanas" aria-label="Proyectos abiertos"></nav>
+  <nav class="pestanas" id="pestanas" aria-label="Pestañas del proyecto"></nav>
   <div class="franja-acc">
     <!-- indicador: dónde está el guion y si hay cambios sin escribir en su archivo (clic = Guardar) -->
     <button type="button" class="estado" id="estadoGuardado" title="Dónde está guardado el guion"></button>
@@ -127,7 +129,13 @@
       <div class="tool escalas"><span>Escala</span>
         <label class="escala" title="Escala horizontal: ancho de las celdas"><svg width="14" height="14" aria-hidden="true"><use href="#ic-ancho"></use></svg><input type="range" id="zoom" min="0.7" max="18" step="0.05" value="1.7" aria-label="Escala horizontal"></label>
         <label class="escala" title="Escala vertical: alto de las tramas"><svg width="14" height="14" aria-hidden="true"><use href="#ic-alto"></use></svg><input type="range" id="altoFila" min="48" max="200" step="2" value="80" aria-label="Escala vertical"></label>
-        <button type="button" class="icono" id="escalaReset" title="Restablecer las dos escalas" aria-label="Restablecer las escalas"><svg width="15" height="15"><use href="#ic-reset"></use></svg></button>
+        <button type="button" class="icono" id="escalaReset" title="Restablecer las escalas y los tamaños propios de filas y columnas" aria-label="Restablecer las escalas"><svg width="15" height="15"><use href="#ic-reset"></use></svg></button>
+        <!-- zoom de la vista: acerca o aleja el esquema entero (1.1.40) -->
+        <span class="zoom-vista">
+          <button type="button" class="icono" data-zoom="-1" title="Alejar (Cmd −)" aria-label="Alejar">−</button>
+          <button type="button" class="zoom-pct" data-zoom="0" title="Zoom: pulsa para volver al 100 % (Cmd 0)">100 %</button>
+          <button type="button" class="icono" data-zoom="1" title="Acercar (Cmd +)" aria-label="Acercar">+</button>
+        </span>
       </div>
       <div class="historia">
         <button class="icono" id="undoBtn" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><svg width="16" height="16"><use href="#ic-undo"></use></svg></button>
@@ -199,13 +207,20 @@
 <div id="aviso"></div>
 
 <script src="js/tramas/modelo.js"></script>
+<script src="js/mdvivo.js"></script>
 <script src="js/tramas/tablero.js"></script>
 <script src="js/claquedraw/biblioteca.js"></script>
 <script src="js/claquedraw/documentos.js"></script>
 <script src="js/claquedraw/plantillas.js"></script>
 <script src="js/claquedraw/relaciones.js"></script>
 <script src="js/claquedraw/guion.js"></script>
+<script src="js/claquedraw/conversor.js"></script>
+<script src="js/claquedraw/busqueda.js"></script>
+<script src="js/claquedraw/historial.js"></script>
+<script src="js/claquedraw/enlaces.js"></script>
+<script src="js/claquedraw/herramientas.js"></script>
 <script src="js/claquedraw/versiones.js"></script>
+<script src="js/claquedraw/flotante.js"></script>
 <script src="js/claquedraw/texto.js"></script>
 <script src="js/claquedraw/maquetar.js"></script>
 <script src="js/claquedraw/exportar.js"></script>

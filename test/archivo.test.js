@@ -17,10 +17,10 @@ async function desempaquetar(bytes) { return new Response(new Blob([bytes]).stre
 function tablero() {
   const m = new T.Modelo(T.inicial());
   const pr = m.datos.lineas[0], sec = m.nuevaLinea('secundaria').linea;   // `inicial()` ya solo trae la principal
-  const a = m.nuevoPunto(pr.id, m.datos.actos[0].id, 5).punto, b = m.nuevoPunto(pr.id, m.datos.actos[0].id, 8).punto;
-  m.nuevoPunto(pr.id, m.datos.actos[0].id, 11, { titulo: 'El aviso' });         // dos nodos sueltos en el primer acto (b es extremo de salto)
+  const a = m.nuevoPunto(pr.id, 5).punto, b = m.nuevoPunto(pr.id, 8).punto;
+  m.nuevoPunto(pr.id, 11, { titulo: 'El aviso' });         // dos nodos sueltos en el primer acto (b es extremo de salto)
   m.editarPunto(a.id, { titulo: 'La llegada', descripcion: 'Llueve en el puerto' });
-  m.nuevoPunto(sec.id, m.datos.actos[1].id, 4);
+  m.nuevoPunto(sec.id, m.datos.actos[1].desde + 4);
   m.crearSalto(b.id, sec.id, 'cuadro');
   /* notas del tablero (Leo, 16-09-2026): varias en el mismo sitio, de nodo y de enlace, con su orden y su color */
   const na = m.crearNota(a.id, null, 'Del nodo, primera').nota;
@@ -29,6 +29,25 @@ function tablero() {
   m.colorearNota(nb.id, 'cobre');
   m.colocarNota(ne.id, na.id);                                            // la de enlace, encima de las del nodo
   m.fijarAncho(m.datos.actos[2].id, 1);                                   // un acto de una sola columna (mínimo 1)
+  /* y lo de las últimas versiones, que también tiene que viajar en el archivo: una nota de raya (1.1.7), el escalón
+     propio de una nota (1.1.46), el color de un enlace, un nodo y una trama descartados, una trama oculta (1.1.40),
+     el alto de una trama y el ancho de una columna (1.1.41), un rombo a una alternativa y un acto con fondo */
+  const alt = m.nuevaLinea('alterna').linea;
+  const nr = m.crearNotaAbierta(sec.id, 3, 'En la raya, antes del primer nodo').nota;
+  m.colorearNota(nr.id, 'teal');
+  m.fijarNivelNota(nb.id, 3);
+  m.colorearEnlace(a.id, 'ciruela');
+  m.descartarPunto(m.datos.puntos.find(p => p.titulo === 'El aviso').id, true);
+  m.descartarLinea(alt.id, true);
+  const oculta = m.nuevaLinea('secundaria').linea;
+  m.nuevoPunto(oculta.id, 2, { titulo: 'Escondido', color: 'oro' });
+  m.ocultarLinea(oculta.id, true);
+  m.fijarAltoLinea(sec.id, 2.5);
+  m.fijarAnchoCol(4, 1.75);
+  const r = m.nuevoPunto(sec.id, 14, { titulo: 'Se abre' }).punto;
+  m.crearSalto(r.id, alt.id, 'rombo');
+  m.editarActo(m.datos.actos[0].id, { fondo: 'verde' });
+  m.asegurarCeldas(m.totalCeldas() + 3);                                  // columnas fuera de todo acto
   return m;
 }
 
@@ -41,7 +60,7 @@ function guionCompleto() {
   const esquema = d.crearEsquema(cap.id, tm.toJSON(), 'Esquema de pasos').esquema;
   const sub = d.crearSub(cap.id, 'Esquema de pasos').sub;                 // su biblioteca, agrupada a mano (Leo, 16-09-2026)
   d.crearGrupo(cap.id, [esquema.id, sub.id], esquema.nombre);
-  const [a1, a2] = tm.datos.actos, nodos = tm.datos.puntos.filter(p => p.actoId === a1.id && !tm.saltoDe(p.id)).map(p => p.id);
+  const [a1, a2] = tm.datos.actos, nodos = tm.datos.puntos.filter(p => tm.actoEn(tm.cg(p)) === a1 && !tm.saltoDe(p.id)).map(p => p.id);
   d.guardarNotaEsquema(esquema.id, nodos[0], { title: 'La llegada', html: '<p class="sp-scene">EXT. PUERTO – NOCHE</p><p class="sp-character" data-ch="0">LESTAT</p><p class="sp-dialogue">Otra vez aquí.</p>', characters: { LESTAT: { name: 'LESTAT', color: 4 } } });
   /* revisar guión: una sección fuera, orden propio, una plegada y un guion generado en «Guiones» */
   d.sacarDelGuion(esquema.id, [nodos[1]]); d.ordenarGuion(esquema.id, [nodos[1], nodos[0]]); d.plegarSeccion(esquema.id, nodos[1], true);
@@ -69,7 +88,9 @@ function guionCompleto() {
   /* otra biblioteca suelta y un contenedor fijado y plegado */
   const { contenedor: inv, sub: sInv } = d.crearContenedor('Investigación');
   d.fijarContenedor(inv.id, true); d.plegarContenedor(inv.id, true);
-  const tirada = d.crearNota(sInv.id, null, 'Borrador viejo').nota; d.tirarNota(tirada.id);
+  const borradores = d.crearEtiqueta(sInv.id, 'Borradores').etiqueta;        // la tirada recuerda su segmento y su vecina
+  const tirada = d.crearNota(sInv.id, borradores.id, 'Borrador viejo').nota; d.crearNota(sInv.id, borradores.id, 'Borrador nuevo');
+  d.tirarNota(tirada.id);
   /* personajes: elenco, tablero propio con carriles de otros personajes y relación, biblioteca con orden mixto */
   /* LESTAT llegó al elenco desde la nota del nodo (`auto`); se renombra (reescribe la nota) y se crea otro a mano */
   const lestat = d.elenco().find(p => p.nombre === 'LESTAT');
@@ -80,7 +101,7 @@ function guionCompleto() {
   pm.editarLinea(pm.datos.lineas[0].id, { personaje: lestat.id, nombre: 'Lestat' });
   const carril2 = pm.nuevaLinea('secundaria').linea;
   pm.editarLinea(carril2.id, { personaje: louis.id, nombre: 'Louis' });
-  const ev = pm.nuevoPunto(pm.datos.lineas[0].id, pm.datos.actos[0].id, 2).punto;
+  const ev = pm.nuevoPunto(pm.datos.lineas[0].id, 2).punto;
   pm.crearSalto(ev.id, carril2.id, 'cuadro');
   const ep = d.crearEsquemaPersonaje(pm.toJSON(), 'Lestat').esquema;
   const sp = d.bibliotecaPersonaje(lestat.id, 'Lestat');
@@ -127,8 +148,8 @@ test('archivo: se conserva lo nuevo (orden de segmentos, actos y documentos, per
   assert.deepEqual(d2.ordenSegmentos(sub.id, ['bandeja', ...etqs.map(x => 'etq:' + x.id)]), [...etqs.map(x => 'etq:' + x.id), 'bandeja']);
   const tm = new T.Modelo(e.datos), [a1, a2] = tm.datos.actos;
   assert.deepEqual(d2.ordenActos(sub.id, tm.datos.actos.map(a => a.id)).slice(0, 2), [a2.id, a1.id]);
-  const nodos = tm.datos.puntos.filter(p => p.actoId === a1.id && !tm.saltoDe(p.id)).map(p => p.id);
-  assert.deepEqual(d2.ordenNodos(sub.id, a1.id, nodos), [nodos[1], nodos[0]]);
+  const nodos = tm.datos.puntos.filter(p => tm.actoEn(tm.cg(p)) === a1 && !tm.saltoDe(p.id)).map(p => p.id);
+  assert.deepEqual(d2.ordenNodos(sub.id, a1.id, nodos).slice(0, 2), [nodos[1], nodos[0]]);
   const secc = d2.seccionesDe(sub.id);
   assert.deepEqual(secc.map(k => k.nombre), ['Investigación']);
   assert.deepEqual(d2.etiquetasDe(sub.id, secc[0].id).map(x => x.nombre), ['Fichas']);
@@ -137,7 +158,22 @@ test('archivo: se conserva lo nuevo (orden de segmentos, actos y documentos, per
   assert.deepEqual(d2.notasDe(sub.id, etqs[0].id).map(n => n.titulo), ['La cacería', 'Casa del padre']);
   assert.match(d2.notasDe(sub.id, etqs[0].id)[1].html, /¿Ñandú\? «comillas» — raya · 日本/);
   assert.match(e.notas[nodos[0]].html, /<p class="sp-character"[^>]*>Lestat<\/p>/i);                 // el renombrado reescribió la nota y viajó
-  assert.ok(tm.datos.saltos.length === 1 && tm.datos.puntos.find(p => p.titulo === 'La llegada').descripcion === 'Llueve en el puerto');
+  assert.ok(tm.datos.saltos.length === 2 && tm.datos.puntos.find(p => p.titulo === 'La llegada').descripcion === 'Llueve en el puerto');
+  /* lo del esquema de las últimas versiones sigue ahí (si algo de esto se pierde, se pierde en el archivo de Leo) */
+  const raya = tm.datos.notas.find(n => n.abierta);
+  assert.ok(raya && raya.lineaId && raya.col === 3 && raya.color === 'teal', 'la nota de raya, con su trama, su columna y su color');
+  assert.equal(tm.datos.notas.find(n => n.texto === 'Del nodo, segunda').nivel, 3, 'el escalón propio de una nota');
+  assert.equal(tm.datos.puntos.find(p => p.titulo === 'La llegada').colorEnlace, 'ciruela');
+  assert.equal(tm.datos.puntos.find(p => p.titulo === 'El aviso').cortado, true);
+  const escondida = tm.datos.lineas.find(l => l.oculta);
+  assert.ok(escondida && tm.datos.puntos.some(p => p.lineaId === escondida.id && p.titulo === 'Escondido' && p.color === 'oro'),
+    'la trama oculta vuelve con sus nodos');
+  assert.ok(tm.datos.lineas.some(l => Math.abs((l.alto || 1) - 2.5) < 0.01), 'el alto propio de una trama');
+  assert.ok(Math.abs(tm.anchoCol(4) - 1.75) < 0.01, 'el ancho propio de una columna');
+  assert.ok(tm.datos.lineas.some(l => l.cortada), 'la trama descartada');
+  assert.ok(tm.datos.saltos.some(s => s.tipo === 'rombo'), 'el rombo a la alternativa');
+  assert.equal(tm.datos.actos[0].fondo, 'verde');
+  assert.ok(tm.totalCeldas() > tm.finActo(tm.datos.actos[tm.datos.actos.length - 1]), 'las columnas de detrás del último acto');
   const inv = d2.datos.contenedores.find(c => c.nombre === 'Investigación');
   assert.equal(inv.fijado, true); assert.equal(inv.plegado, true);
   const temp = cap.carpetas.find(k => k.nombre === 'Temporada 1'), epi = cap.carpetas.find(k => k.nombre === 'Episodio');
@@ -147,6 +183,11 @@ test('archivo: se conserva lo nuevo (orden de segmentos, actos y documentos, per
   const vamp = d2.carpetasDe(C.ELENCO_CARPETAS).find(k => k.nombre === 'Vampiros');   // en Personajes hay carpetas y grupos
   assert.ok(vamp && vg.carpetaId === vamp.id, 'la carpeta de Personajes y el grupo que vive en ella')
   assert.equal(d2.papelera().length, 1); assert.equal(d2.papelera()[0].nota.titulo, 'Borrador viejo');
+  const tirada = d2.papelera()[0], sInv = d2.subsDe(inv.id)[0];
+  assert.equal(d2.etiqueta(tirada.etiquetaId).nombre, 'Borradores', 'la papelera guarda el segmento de la nota');
+  assert.equal(d2.nota(tirada.antesDe).titulo, 'Borrador nuevo', 'y la nota que la seguía');
+  d2.restaurarNota(tirada.nota.id);
+  assert.deepEqual(d2.notasDe(sInv.id, tirada.etiquetaId).map(n => n.titulo), ['Borrador viejo', 'Borrador nuevo']);
   /* personajes */
   assert.deepEqual(d2.elenco().map(p => [p.nombre, p.color]), [['Lestat', 4], ['Louis', 1]]);
   const lestat = d2.elenco()[0], louis = d2.elenco()[1];
@@ -173,7 +214,7 @@ test('archivo: lo de esta tanda (notas apiladas, versiones, grupos vacíos, acto
   const tm = new T.Modelo(e.datos);
 
   /* notas del tablero: el orden en que se apilan es el de la lista y tiene que volver igual */
-  assert.deepEqual(tm.datos.notas.map(n => n.texto), ['Del enlace', 'Del nodo, primera', 'Del nodo, segunda']);
+  assert.deepEqual(tm.datos.notas.filter(n => !n.abierta).map(n => n.texto), ['Del enlace', 'Del nodo, primera', 'Del nodo, segunda']);
   const nodoA = tm.datos.puntos.find(p => p.titulo === 'La llegada');
   assert.deepEqual(tm.notasDe(nodoA.id, null).map(n => n.texto), ['Del nodo, primera', 'Del nodo, segunda']);
   const enlace = tm.datos.notas.find(n => n.texto === 'Del enlace');

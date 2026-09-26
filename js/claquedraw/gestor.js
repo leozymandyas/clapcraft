@@ -17,9 +17,10 @@
    [Documentos] Nombre», con «Ver esquema» si está enlazada).
 
    En el árbol, un clic en un subcontenedor abre su tablero (y con texto en «Buscar» aparecen debajo
-   las notas que casan: un clic las abre en el editor); en el tablero un clic en una nota la selecciona
-   y el doble clic la abre (js/claquedraw/texto.js, modo documento): el tablero cede su sitio al
-   editor, la barra se queda y encima van las migas. El arrastre (clic sostenido) va con eventos de
+   las notas que casan: un clic las abre en el editor); en el tablero un clic en una nota la abre en su
+   ventana, encima de todo (1.1.54, como en ClapBook), y el doble clic en el editor (js/claquedraw/texto.js,
+   modo documento): el tablero cede su sitio al editor, la barra se queda y encima van las migas. La
+   biblioteca y el segmento expandido se buscan, se filtran por color y se ordenan (js/claquedraw/busqueda.js). El arrastre (clic sostenido) va con eventos de
    puntero y un fantasma: notas entre segmentos, dentro de un segmento para ordenarlas, a un
    subcontenedor o contenedor de la barra (a su bandeja) o a la papelera; los segmentos por su
    cabecera, para ordenarlos; contenedores, esquemas y subcontenedores por su fila. Toda regla vive en
@@ -41,6 +42,7 @@
   let d = null, guionId = null;  // C.Documentos del guion abierto
   let actual = null;             // lo abierto en el tablero: { tipo: 'sub' | 'cont' (sin subcontenedores) | 'papelera', cid, id }
   let notaAbierta = null;        // nota en el editor
+  let notaAntes = null;          // la que estaba en el editor al irse a otra vista: al volver se abre otra vez
   let notaSel = null;            // nota seleccionada con un clic (doble clic la abre)
   let clicArbol = null;          // temporizador del clic en el árbol (el doble clic lo cancela)
   let editando = false;          // hay un campo de renombrar abierto: no se redibuja hasta cerrarlo
@@ -62,11 +64,22 @@
     if (s.tipo === 'sub') return c.subs.some(x => x.id === s.id);
     return s.tipo === 'cont';
   }
-  /* El tablero por defecto de un contenedor: su primer subcontenedor (o él mismo, vacío). */
-  const entradaDe = c => c.subs.length ? ref('sub', c.id, c.subs[0].id) : ref('cont', c.id);
+  /* El tablero por defecto de un contenedor: su primera biblioteca en el orden del árbol (o él mismo, vacío). Nunca la oculta
+     de guiones de un esquema: `c.subs[0]` podía serlo, y se abría una biblioteca que no sale en el árbol (1.1.54, de ClapBook). */
+  const entradaDe = c => {
+    const b = d && d.primeraBiblioteca ? d.primeraBiblioteca(c.id) : c.subs.find(s => !s.guionEid);
+    return b ? ref('sub', c.id, b.id) : ref('cont', c.id);
+  };
   /* Cambiar de tablero. */
-  /* `alNavegar`: app.js apunta la pantalla para volver a ella al abrir el proyecto (Leo, 16-09-2026) */
-  function navegar(s) { actual = s; if (expandido && !(s && s.tipo === 'sub' && s.id === expandido.subId)) expandido = null; if (o.alNavegar) o.alNavegar(); }
+  /* `alNavegar`: app.js apunta la pantalla para volver a ella al abrir el proyecto (Leo, 16-09-2026). La ventana de una nota se
+     cierra al salir de su biblioteca. */
+  function navegar(s) {
+    if (ladoId) { const n = d && d.nota(ladoId); if (!(s && s.tipo === 'sub' && n && n.subId === s.id)) cerrarLado(); }
+    /* la nota elegida en otra biblioteca ya no es lo elegido (Cmd+Shift+C copiaba una nota que no estaba a la vista) */
+    const ns = notaSel && d && d.nota(notaSel);
+    if (ns && !(s && s.tipo === 'sub' && ns.subId === s.id)) soltarSeleccion();
+    actual = s; if (expandido && !(s && s.tipo === 'sub' && s.id === expandido.subId)) expandido = null; if (o.alNavegar) o.alNavegar();
+  }
 
   /* El modelo del guion abierto. Se rehace si cambia el guion o si la biblioteca sustituyó sus datos.
      La papelera se purga una vez por sesión. */
@@ -237,7 +250,7 @@
       const sub = d.contenedor(C.ID_PERSONAJES) && (d.contenedor(C.ID_PERSONAJES).subs.find(s => s.lineaId === l.id) || null);
       const abierto = actual && actual.tipo === 'sub' && sub && actual.id === sub.id && !notaAbierta && (!o.modo || o.modo() === 'documentos');
       f.className = 'gd-per' + (abierto ? ' activo' : ''); f.dataset.personaje = l.id;
-      f.innerHTML = `<span class="gd-chip per-chip" style="--chl:${(PAL[l.color] || PAL[0])[1]};--chd:${(PAL[l.color] || PAL[0])[2]}" title="Personaje">P</span><span class="gd-per-nom"></span>
+      f.innerHTML = `<span class="gd-chip per-chip" style="--chl:${(PAL[l.color] || PAL[0])[1]};--chd:${(PAL[l.color] || PAL[0])[2]}" title="Personaje">${esc(C.iniciales(l.nombre))}</span><span class="gd-per-nom"></span>
         <span class="gd-cont-acc siempre"><button type="button" data-gd-menu="personaje" title="Opciones del personaje">${ic('more')}</button></span>`;
       $('.gd-per-nom', f).textContent = l.nombre;
       return conSangria(f, nivel);
@@ -302,25 +315,32 @@
   /* ---------- tablero del subcontenedor abierto ---------- */
   /* el color de una nota (Leo, 15-09-2026): fondo pálido, borde y punto de su tono; sin color, papel */
   const colorNota = n => n && n.color ? { clase: ' con-color', estilo: ` style="--tc:var(--t-${esc(n.color)});--tf:var(--f-${esc(n.color)})"` } : { clase: '', estilo: '' };
+  /* sin `title`: el nombre entero de una nota cortada sale en el globo al pasar el ratón (1.1.54, Leo en ClapBook: «un tooltip que
+     cuando le haga hover se vea el nombre completo de la nota») */
   function notaHtml(n, meta, fijo) {
     const cn = colorNota(n);
-    return `<div class="gd-nota${cn.clase}${n.id === notaAbierta ? ' activa' : ''}${n.id === notaSel ? ' sel' : ''}"${cn.estilo} role="button" tabindex="0" data-nota="${esc(n.id)}" title="${fijo ? 'Doble clic: abrir documento' : 'Doble clic: abrir documento · arrastra para moverla u ordenarla'}">
+    return `<div class="gd-nota${cn.clase}${n.id === notaAbierta ? ' activa' : ''}${n.id === notaSel ? ' sel' : ''}"${cn.estilo} role="button" tabindex="0" data-nota="${esc(n.id)}" aria-label="${esc(n.titulo || 'Sin título')}">
             <span></span><span class="gd-nota-meta">${esc(meta)}</span>
             <button type="button" class="gd-nota-acc" data-gd-menu="nota" title="Opciones de la nota">${ic('more', 13)}</button></div>`;
   }
-  /* Una tarjeta: un segmento (o la bandeja, e = null) con sus notas. */
-  /* Una tarjeta: un segmento (o la bandeja, e = null) con sus notas. Con `guiones`, de la sección «Guiones generados»:
-     cabecera negra sin color propio, «＋ documento» y sus documentos marcan si salieron de Revisar guión. */
-  function tarjeta(e, notas, guiones) {
-    const cuerpo = notas.map(n => notaHtml(n, fecha(n.modificado), false)).join('');
-    const cabecera = `<span class="gd-etq-nom" data-globo="${e ? 'Segmento' : 'Bandeja'}"><span class="gd-asa" title="Arrastra para cambiar su posición">${ic('drag', 13)}</span>${guiones && !e ? `<span class="gd-guion-ico">${ic('script', 13)}</span>` : ''}<span ${e ? 'data-gd-etq-nombre' : ''}></span></span>
-         <span class="gd-etq-acc"><span class="gd-cuenta">${notas.length}</span>${BOTON_EXPANDIR}${e
+  /* Una tarjeta: un segmento (o la bandeja, e = null) con sus notas, ya filtradas y ordenadas (`info` = { total, filtro, propio }):
+     con un filtro de color, la cuenta dice «vistas/total»; si el segmento lleva su propio filtro (y la biblioteca no pone el
+     suyo), una marca lo dice; y con un orden que no es el manual, el cuerpo no se ordena a mano (`.ordenada`). */
+  function tarjeta(e, notas, info) {
+    info = info || { total: notas.length, filtro: { color: null, orden: 'manual' } };
+    const f = info.filtro, cuerpo = notas.map(n => notaHtml(n, fechaSegun(n, f.orden), false)).join('');
+    /* la marca dice lo que pone el segmento, no lo que viene de la biblioteca */
+    const pc = f.propioColor !== undefined ? f.propioColor : !!f.color, po = f.propioOrden !== undefined ? f.propioOrden : f.orden !== 'manual';
+    const partes = [pc ? nombreColor(f.color) : '', po ? rotuloOrden(f.orden).toLowerCase() : ''].filter(Boolean);
+    const marcaFiltro = info.propio ? `<span class="gd-etq-filtro" title="${esc('Este segmento tiene su filtro' + (partes.length ? ': ' + partes.join(' · ') : ''))}">${ic(pc ? 'filter' : 'sort', 12)}</span>` : '';
+    const cabecera = `<span class="gd-etq-nom" data-globo="${e ? 'Segmento' : 'Bandeja'}"><span class="gd-asa" title="Arrastra para cambiar su posición">${ic('drag', 13)}</span><span ${e ? 'data-gd-etq-nombre' : ''}></span></span>
+         <span class="gd-etq-acc">${marcaFiltro}<span class="gd-cuenta"${f.color ? ` title="${notas.length} de ${info.total}"` : ''}>${f.color ? notas.length + '/' + info.total : notas.length}</span>${BOTON_EXPANDIR}${e
            ? `<button type="button" data-gd-menu="etiqueta" title="Editar el segmento">${ic('edit', 13)}</button><button type="button" data-gd-eliminar-etq title="Eliminar el segmento">${ic('close', 13)}</button>` : ''}</span>`;
-    const pie = `<button type="button" class="gd-nota-add" data-gd-crear-nota="${e ? esc(e.id) : ''}"${guiones ? ' data-gd-doc' : ''}>${ic('plus', 13)}${guiones ? 'documento' : 'nota'}</button>`;
+    const pie = `<button type="button" class="gd-nota-add" data-gd-crear-nota="${e ? esc(e.id) : ''}">${ic('plus', 13)}nota</button>`;
     const sec = document.createElement('section');
-    sec.className = 'gd-etq' + (e ? '' : ' gd-etq--bandeja') + (guiones ? ' gd-etq--guion' : '') + (notas.length ? '' : ' vacia');
-    if (e) { sec.dataset.etq = e.id; if (!guiones) sec.setAttribute('style', estiloTag(e)); }
-    sec.innerHTML = `<header class="gd-etq-head">${cabecera}</header><div class="gd-etq-body" data-gd-drop="${e ? esc(e.id) : ''}">${pie}${cuerpo}</div>`;
+    sec.className = 'gd-etq' + (e ? '' : ' gd-etq--bandeja') + (notas.length ? '' : ' vacia');
+    if (e) { sec.dataset.etq = e.id; sec.setAttribute('style', estiloTag(e)); }
+    sec.innerHTML = `<header class="gd-etq-head">${cabecera}</header><div class="gd-etq-body${f.orden !== 'manual' ? ' ordenada' : ''}" data-gd-drop="${e ? esc(e.id) : ''}">${pie}${cuerpo}</div>`;
     $('.gd-etq-nom > span:last-child', sec).textContent = e ? e.nombre : 'Bandeja';
     $$('.gd-nota', sec).forEach(b => {
       const n = notas.find(x => x.id === b.dataset.nota); if (!n) return;
@@ -343,8 +363,9 @@
      sin orden guardado, el del tiempo. */
   function nodosDeActo(m, tm, a, conSaltos, subId) {
     const fila = l => tm.datos.lineas.findIndex(y => y.id === l);
-    let nodos = tm.datos.puntos.filter(p => { if (p.actoId !== a.id) return false; const s = tm.saltoDe(p.id); return !s || (conSaltos && s.deId === p.id); })
-      .sort((p, q) => p.celda - q.celda || fila(p.lineaId) - fila(q.lineaId));
+    const col = p => tm.cg(p);                                // los nodos van en columnas; el acto es el tramo que las cubre
+    let nodos = tm.datos.puntos.filter(p => { if (col(p) < a.desde || col(p) >= a.desde + a.celdas) return false; const s = tm.saltoDe(p.id); return !s || (conSaltos && s.deId === p.id); })
+      .sort((p, q) => col(p) - col(q) || fila(p.lineaId) - fila(q.lineaId));
     if (subId) { const orden = m.ordenNodos(subId, a.id, nodos.map(p => p.id)); nodos = orden.map(id => nodos.find(p => p.id === id)); }
     return nodos;
   }
@@ -405,15 +426,24 @@
     const el = document.createElement('div');
     el.className = 'gd-exp' + (x.apariciones ? ' gd-exp--apariciones' : '');
     const subId = x.r.sub.id;
-    let n = 0, tarjetas = '', rejilla = '';
+    let n = 0, tarjetas = '', rejilla = '', visibles = null, f = null, filtros = '';
     const pie = (meta, ruta) => `<div class="gd-exp-pie">${ruta ? '<span class="gd-exp-ruta"></span>' : `<span class="gd-nota-meta">${esc(meta)}</span>`}</div>`;
     if (x.notas) {
       n = x.notas.length;
-      tarjetas = x.notas.map(nt => `<div class="gd-exp-nota${colorNota(nt).clase}${nt.id === notaSel ? ' sel' : ''}"${colorNota(nt).estilo} role="button" tabindex="0" data-nota="${esc(nt.id)}" title="Doble clic: abrir documento · arrastra para ordenarla">
+      /* buscar, filtrar y ordenar (1.1.54, de ClapBook): aquí manda el filtro del segmento; lo que no pone, lo pone el de la
+         biblioteca (se ve en cursiva) */
+      f = x.guiones ? { color: null, orden: 'manual', heredado: {} } : filtroPara(subId, claveDe(x), true);
+      visibles = filtrarNotas(x.notas, f);
+      tarjetas = visibles.map(nt => `<div class="gd-exp-nota${colorNota(nt).clase}${nt.id === notaSel ? ' sel' : ''}"${colorNota(nt).estilo} role="button" tabindex="0" data-nota="${esc(nt.id)}" aria-label="${esc(nt.titulo || 'Sin título')}">
           <div class="gd-exp-nota-cab"><span class="gd-exp-tit"></span><span class="gd-asa" aria-hidden="true">${ic('drag', 13)}</span><button type="button" class="gd-nota-acc" data-gd-menu="nota" title="Opciones de la nota">${ic('more', 13)}</button></div>
-          <div class="gd-exp-texto"></div>${pie(fecha(nt.modificado))}</div>`).join('')
+          <div class="gd-exp-texto"></div>${pie(fechaSegun(nt, f.orden))}</div>`).join('')
         + `<button type="button" class="gd-exp-add" data-gd-crear-nota="${esc(x.etq)}"${x.guiones ? ' data-gd-doc' : ''}>${ic('plus', 14)}${x.guiones ? 'documento' : 'nota'}</button>`;
-      rejilla = `<div class="gd-exp-grid" data-gd-drop="${esc(x.etq)}">${tarjetas}</div>`;
+      rejilla = (f.color && !visibles.length ? `<div class="gd-filtro-vacio">${esc(f.color === 'sin' ? 'Todas las notas del segmento tienen color.' : 'Ninguna nota del segmento es de color ' + nombreColor(f.color).toLowerCase() + '.')}</div>` : '')
+        + `<div class="gd-exp-grid${f.orden !== 'manual' ? ' ordenada' : ''}" data-gd-drop="${esc(x.etq)}">${tarjetas}</div>`;
+      if (!x.guiones) filtros = cajaBuscar('Buscar en el segmento', 'Buscar en las notas del segmento (Cmd+F)')
+        + botonColor('colorSeg', f.color, f.heredado.color, f.heredado.color ? 'El filtro de la biblioteca (aquí manda el del segmento: cámbialo para este)' : 'Solo las notas de un color')
+        + (f.color && !f.heredado.color ? `<button type="button" class="gd-filtro-quitar" data-gd-quitar-color-seg title="Quitar el filtro" aria-label="Quitar el filtro">${ic('close', 12)}</button>` : '')
+        + `<button type="button" class="gd-filtro${f.heredado.orden ? ' heredado' : ''}" data-gd-menu="ordenSeg" title="${f.heredado.orden ? 'El orden de la biblioteca (aquí manda el del segmento: cámbialo para este)' : 'El orden de las notas'}">${ic('sort', 14)}<span>${esc(f.orden === 'manual' ? 'Orden manual' : rotuloOrden(f.orden))}</span>${ic('chev-d', 12)}</button>`;
     } else if (x.nodos) {
       n = x.nodos.length;
       tarjetas = x.nodos.map(p => `<div class="gd-exp-nota gd-nodo${p.cortado ? ' cortado' : ''}${p.id === notaSel ? ' sel' : ''}" role="button" tabindex="0" data-nodo="${esc(p.id)}" data-eid="${esc(x.eid)}" title="Doble clic: ir a su sección del documento · arrastra para ordenarlo">
@@ -442,191 +472,566 @@
           <span class="spacer"></span>
           <button type="button" class="btn" data-gd-contraer title="Volver (Esc)">${ic('collapse', 15)}Contraer</button>
         </div>
-        <div class="gd-exp-rot"><span>${x.nodos ? 'Documentos del ' + esc(x.rotulo.toLowerCase()) : 'Notas del segmento'}</span><i></i>${x.apariciones ? '' : `<span>Orden manual</span>${ic('sort', 14)}`}</div>
+        <div class="gd-exp-rot"><span>${x.nodos ? 'Documentos del ' + esc(x.rotulo.toLowerCase()) : 'Notas del segmento'}</span><i></i>${x.nodos && !x.apariciones ? `<span>Orden manual</span>${ic('sort', 14)}` : filtros}</div>
         ${rejilla}
-      </div>${x.notas ? '<aside class="gd-exp-lado" hidden></aside>' : ''}</div>`;
+      </div></div>`;
     $('.esq-cont', el).textContent = cab.cont;
     $('.gd-exp-banda-nom > span', el).textContent = x.nombre;
     /* títulos y primeras líneas */
     const cards = $$('.gd-exp-nota', el);
-    if (x.notas) cards.forEach((c, i) => { const nt = x.notas[i]; $('.gd-exp-tit', c).textContent = nt.titulo || 'Sin título'; $('.gd-exp-texto', c).textContent = textoDe(nt.html); });
-    else if (x.nodos) cards.forEach((c, i) => { const p = x.nodos[i]; $('.gd-exp-tit', c).textContent = p.titulo || 'Sin título'; $('.gd-exp-texto', c).textContent = textoDe((m.notaEsquema(x.eid, p.id) || {}).html) || p.descripcion || ''; });
+    if (x.notas) cards.forEach((c, i) => { const nt = visibles[i]; $('.gd-exp-tit', c).textContent = nt.titulo || 'Sin título'; $('.gd-exp-texto', c).textContent = textoDe(nt.html); });
+    else if (x.nodos) cards.forEach((c, i) => { const p = x.nodos[i]; $('.gd-exp-tit', c).textContent = p.titulo || 'Sin título'; $('.gd-exp-texto', c).textContent = textoDe((m.notaEsquema(x.eid, p.id) || {}).html) || (window.MdVivo ? MdVivo.plano(p.descripcion) : p.descripcion) || ''; });
     else cards.forEach((c, i) => {
       const ap = x.apariciones[i], doc = ap.tipo === 'nota' ? m.nota(ap.id) : m.notaEsquema(ap.eid, ap.id);
       $('.gd-exp-tit', c).textContent = ap.titulo; $('.gd-exp-texto', c).textContent = textoDe(doc && doc.html); $('.gd-exp-ruta', c).textContent = 'en «' + ap.ruta + '»';
     });
     $$('.gd-exp-texto', el).forEach(t => { if (!t.textContent) { t.textContent = 'Sin texto'; t.classList.add('vacio'); } });
-    if (x.notas && notaSel && x.notas.some(nt => nt.id === notaSel)) setTimeout(() => mostrarLado(notaSel), 0);   // la nota que ya estaba elegida
     return el;
   }
+  /* la clave de un segmento en `ordenSegmentos` y en los filtros: 'bandeja' o 'etq:<id>' */
+  const claveDe = x => x.e ? 'etq:' + x.e.id : 'bandeja';
 
-  /* ---------- el panel lateral de una nota, en el segmento expandido (Leo, 18-09-2026) ----------
-     «Al hacer clic en una nota, que aparezca un panel lateral con el nombre del documento, opciones para cambiar color y un
-     campo de descripción amplio (parecido al del esquema); el texto que escriba ahí debe verse si abro el documento normal.
-     No necesito los comandos del editor, es solo un campo de texto plano» (y después: «que las tablas sí se vean
-     formateadas»). El campo **es el documento**: cada párrafo, un renglón de texto plano (sin comandos ni estilos: pegar pega
-     texto, Cmd+B no hace nada), y las tablas, tablas con sus celdas editables; lo demás (imágenes, bases de datos, portada) va
-     como una marca que no se toca. Al guardar, los párrafos que no se tocaron conservan su formato (un personaje sigue siendo
-     personaje), los que cambian se quedan con el tipo del que había en su sitio y los nuevos son párrafos normales. */
-  function lineasDeHtml(html) {
-    const t = document.createElement('template'); t.innerHTML = html || '';
-    const lineas = [];
-    const bloque = el => {
-      let txt = ''; const partes = [];
-      const ir = n => n.childNodes.forEach(x => { if (x.nodeType === 3) txt += x.nodeValue; else if (x.nodeName === 'BR') { partes.push(txt); txt = ''; } else if (x.nodeType === 1) ir(x); });
-      ir(el); partes.push(txt);
-      const limpio = partes.map(p => p.replace(/\u200B/g, '').replace(/\u00A0/g, ' '));
-      if (limpio.length > 1 && limpio[limpio.length - 1] === '') limpio.pop();   // el <br> del final de un párrafo vacío
-      limpio.forEach(txt2 => lineas.push({ txt: txt2, el, sola: limpio.length === 1 }));
-    };
-    Array.from(t.content.childNodes).forEach(n => {
-      if (n.nodeType === 3) { if (n.nodeValue.trim()) lineas.push({ txt: n.nodeValue, el: null, sola: true }); return; }
-      if (n.nodeType !== 1) return;
-      if (n.matches('ul, ol')) { Array.from(n.children).forEach(bloque); return; }
-      if (n.matches('table, .db, .portada, img, hr, figure, .sp-doble')) { lineas.push({ fijo: true, el: n }); return; }   // no es texto: tal cual
-      bloque(n);
-    });
-    return lineas;
-  }
-  /* lo que se ve en el campo: los párrafos en texto plano, las tablas como tablas y lo demás como una marca */
+  /* ---------- el campo de una nota: el documento, con su formato ----------
+     «Al hacer clic en una nota, que aparezca un panel lateral con el nombre del documento… y un campo de descripción amplio; el
+     texto que escriba ahí debe verse si abro el documento normal» (Leo, 18-09-2026). El campo **es el documento**, y desde la
+     1.1.32 **con su formato y en los dos sentidos** (Leo: «quiero que mis campos de descripción acepten formato markdown,
+     formateado y todo quiero verlo en ese campo… para el de segmentos, que sea bidireccional con el editor»): se ve con negritas,
+     cursivas, subrayados, tachados, colores, resaltados, código, enlaces, títulos, listas y citas, y al escribir convierte el
+     Markdown como el editor (`MdVivo.vivo`; un elemento de guion no se vuelve lista ni título). Las tablas se editan en su sitio,
+     las imágenes se ven (1.1.54) y lo demás que no es texto (bases de datos, portada, diálogo doble, vídeo) va como una marca que no
+     se toca. Cada bloque del campo lleva en `data-l` el del documento del que sale (`ladoOrig`, apuntados al pintarlo): al guardar,
+     el que no cambió vuelve tal cual (un personaje sigue siendo personaje, con su chip) y el que cambió conserva los atributos del
+     suyo (su clase de guion, su alineación) con lo que haya ahora dentro. Desde la 1.1.54 vive en la ventana de la nota (abajo). */
+  const LADO_FIJO = '.db, .portada, .ed-fijo, img, hr, figure, .sp-doble, video, iframe, object, embed, svg, canvas';
+  const LADO_BLOQUE = /^(P|DIV|H[1-6]|UL|OL|LI|BLOCKQUOTE|PRE|SECTION|ARTICLE|HEADER|FOOTER|TABLE)$/;
+  const LADO_CAJA = /^(UL|OL|BLOCKQUOTE|SECTION|ARTICLE|HEADER|FOOTER)$/;          // entre sus hijos, un salto de línea no es texto
+  let ladoOrig = [], ladoVista = [];
+  const sinMarcasLado = el => { const c = el.cloneNode(true); c.removeAttribute('data-l'); c.querySelectorAll('[data-l]').forEach(x => x.removeAttribute('data-l')); return c.outerHTML; };
+  /* lo que se ve en el campo: una copia del documento con cada bloque señalado y lo que no es texto como una marca */
   function htmlDeLado(html) {
-    const partes = lineasDeHtml(html).map((x, k) => {
-      if (!x.fijo) return `<p>${x.txt ? esc(x.txt) : '<br>'}</p>`;
-      if (x.el.matches('table')) { const tb = x.el.cloneNode(true); tb.setAttribute('data-f', k); return tb.outerHTML; }
-      const nombres = x.el.matches('.sp-doble') ? Array.from(x.el.querySelectorAll('.sp-character')).map(p => p.textContent.replace(/\s+/g, ' ').trim().toUpperCase()).filter(Boolean).join(' / ') : '';
-      const que = x.el.matches('.db') ? 'Base de datos' : x.el.matches('.portada') ? 'Portada' : x.el.matches('hr') ? 'Línea'
-        : x.el.matches('.sp-doble') ? 'Diálogo doble' + (nombres ? ' · ' + esc(nombres) : '') : 'Imagen';
-      return `<div class="gd-lado-fijo" contenteditable="false" data-f="${k}">${que}</div>`;
-    });
-    return partes.join('') || '<p><br></p>';
-  }
-  /* del campo al documento, conservando el formato de lo que no cambió */
-  function htmlDeLadoEditado(campo, htmlViejo) {
-    const viejas = lineasDeHtml(htmlViejo), viejosTxt = viejas.filter(x => !x.fijo);
-    const items = [];
-    Array.from(campo.childNodes).forEach(n => {
-      if (n.nodeType === 3) { if (n.nodeValue.trim()) items.push({ txt: n.nodeValue }); return; }
-      if (n.nodeType !== 1) return;
-      if (n.hasAttribute('data-f')) { items.push({ fijo: viejas[+n.dataset.f], tabla: n.matches('table') ? n : null }); return; }
-      if (n.matches('table')) { items.push({ tabla: n }); return; }
-      /* un párrafo (o un div de Chrome): sus renglones */
-      let txt = ''; const ls = [];
-      const ir = x => x.childNodes.forEach(y => { if (y.nodeType === 3) txt += y.nodeValue; else if (y.nodeName === 'BR') { ls.push(txt); txt = ''; } else if (y.nodeType === 1 && !y.matches('table')) ir(y); });
-      ir(n); ls.push(txt);
-      if (ls.length > 1 && ls[ls.length - 1] === '') ls.pop();
-      ls.forEach(t => items.push({ txt: t.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') }));
-    });
-    const nuevas = items.filter(x => x.txt !== undefined).map(x => x.txt);
-    /* subsecuencia común más larga entre los renglones de antes y los de ahora */
-    const n = viejosTxt.length, k = nuevas.length, L = Array.from({ length: n + 1 }, () => new Array(k + 1).fill(0));
-    for (let i = n - 1; i >= 0; i--) for (let j = k - 1; j >= 0; j--) L[i][j] = viejosTxt[i].txt === nuevas[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
-    const clase = el => el && el.className ? ` class="${esc(el.className)}"` : '';
-    const nuevo = (txt, ref) => { const tag = ref && /^(P|H[1-6]|BLOCKQUOTE)$/.test(ref.tagName) ? ref.tagName.toLowerCase() : 'p';
-      return `<${tag}${clase(ref)}>${txt ? esc(txt) : '<br>'}</${tag}>`; };
-    /* qué renglón de antes es cada uno de ahora (-1: ninguno) */
-    const par = new Array(k).fill(-1);
-    for (let a = 0, b = 0; a < n && b < k;) {
-      if (viejosTxt[a].txt === nuevas[b] && L[a][b] === L[a + 1][b + 1] + 1) { par[b] = a; a++; b++; }
-      else if (L[a + 1][b] >= L[a][b + 1]) a++; else b++;
-    }
-    /* un renglón cambiado se queda con el tipo del renglón de antes al que más se parece, dentro de su tramo de cambios
-       (entre dos renglones iguales): lo que empieza o termina igual. Uno nuevo sin parecido es un párrafo normal. */
-    const parecido = (x, y) => {
-      if (!x || !y) return 0;
-      let pre = 0; while (pre < x.length && pre < y.length && x[pre] === y[pre]) pre++;
-      let suf = 0; while (suf < x.length - pre && suf < y.length - pre && x[x.length - 1 - suf] === y[y.length - 1 - suf]) suf++;
-      return (pre + suf) / Math.max(x.length, y.length);
+    const t = document.createElement('template'); t.innerHTML = html || '';
+    ladoOrig = []; ladoVista = [];
+    const marca = (n, k) => {
+      if (n.matches('img')) {                                  // una imagen se ve tal cual (no se edita: al guardar vuelve la suya)
+        const el = document.createElement('span');
+        el.className = 'gd-lado-fijo gd-lado-img'; el.contentEditable = 'false'; el.dataset.f = k;
+        const img = n.cloneNode(false); img.draggable = false; el.appendChild(img);
+        return el;
+      }
+      const nombres = n.matches('.sp-doble') ? Array.from(n.querySelectorAll('.sp-character')).map(p => p.textContent.replace(/\s+/g, ' ').trim().toUpperCase()).filter(Boolean).join(' / ') : '';
+      const que = n.matches('.db') ? 'Base de datos' : n.matches('.portada') ? 'Portada' : n.matches('hr') ? 'Línea'
+        : n.matches('.sp-doble') ? 'Diálogo doble' + (nombres ? ' · ' + nombres : '') : n.matches('video, iframe, object, embed') ? 'Vídeo' : 'Imagen';
+      const el = document.createElement(n.matches('svg, canvas') ? 'span' : 'div');
+      el.className = 'gd-lado-fijo'; el.contentEditable = 'false'; el.dataset.f = k; el.textContent = que;
+      return el;
     };
-    const refDe = new Array(k).fill(null);
-    for (let b = 0; b < k;) {
-      if (par[b] >= 0) { b++; continue; }
-      let fin = b; while (fin < k && par[fin] < 0) fin++;                        // renglones nuevos b..fin-1
-      const antes = b > 0 ? par[b - 1] : -1, despues = fin < k ? par[fin] : n;
-      const idos = []; for (let a = antes + 1; a < despues; a++) idos.push(a);   // los de antes que se fueron
-      const usados = new Set();
-      for (let c = b; c < fin; c++) {
-        let mejor = -1, puntos = .3;
-        idos.forEach(a => { if (usados.has(a)) return; const p2 = parecido(viejosTxt[a].txt, nuevas[c]); if (p2 > puntos) { puntos = p2; mejor = a; } });
-        if (mejor >= 0) { usados.add(mejor); refDe[c] = viejosTxt[mejor].el; }
-      }
-      b = fin;
-    }
-    const hechos = new Set(), salida = [];
-    for (let b = 0; b < k; b++) {
-      if (par[b] >= 0) {
-        const v = viejosTxt[par[b]];
-        if (v.sola && v.el && v.el.tagName !== 'LI' && !hechos.has(v.el)) { salida.push(v.el.outerHTML); hechos.add(v.el); }
-        else salida.push(nuevo(v.txt, v.el && v.el.tagName !== 'LI' ? v.el : null));
-        continue;
-      }
-      const ref = refDe[b];
-      salida.push(nuevo(nuevas[b], ref && ref.tagName !== 'LI' ? ref : null));
-    }
-    /* y todo junto en el orden del campo */
-    let t2 = 0;
-    const out = items.map(x => {
-      if (x.txt !== undefined) return salida[t2++];
-      if (x.tabla) { const tb = x.tabla.cloneNode(true); tb.removeAttribute('data-f'); return tb.outerHTML; }
-      return x.fijo && x.fijo.el ? x.fijo.el.outerHTML : '';
+    const vista = (n, caja) => {
+      if (n.nodeType === 3) return caja && !n.nodeValue.trim() ? null : document.createTextNode(n.nodeValue);
+      if (n.nodeType !== 1) return null;
+      if (n.matches('table')) { const tb = n.cloneNode(true); tb.dataset.f = ladoOrig.push(n) - 1; return tb; }
+      if (n.matches(LADO_FIJO)) return marca(n, ladoOrig.push(n) - 1);
+      const c = n.cloneNode(false);
+      c.removeAttribute('contenteditable');
+      if (LADO_BLOQUE.test(n.tagName)) c.dataset.l = ladoOrig.push(n) - 1;
+      const esCaja = LADO_CAJA.test(n.tagName) || Array.from(n.children).some(h => LADO_BLOQUE.test(h.tagName));
+      n.childNodes.forEach(h => { const x = vista(h, esCaja); if (x) c.appendChild(x); });
+      return c;
+    };
+    const caja = document.createElement('div');
+    t.content.childNodes.forEach(n => {
+      if (n.nodeType === 3) { if (n.nodeValue.trim()) { const p = document.createElement('p'); p.textContent = n.nodeValue; caja.appendChild(p); } return; }
+      const x = vista(n, true); if (x) caja.appendChild(x);
     });
-    return out.join('') || '<p><br></p>';
+    caja.querySelectorAll('[data-l]').forEach(el => { ladoVista[+el.dataset.l] = sinMarcasLado(el); });
+    return caja.innerHTML || '<p><br></p>';
   }
-  let ladoId = null, ladoT = null;
-  function mostrarLado(id) {
-    const m = modelo(), nt = m && m.nota(id);
-    const lado = $$('.gd-exp-lado').find(x => x.offsetParent !== null || x.isConnected);
-    if (!lado || !nt) return;
-    ladoId = id;
-    lado.hidden = false;
-    lado.innerHTML = `<div class="gd-lado-asa" data-gd-lado-asa title="Arrastra para ensanchar el panel · doble clic: ancho de partida"></div>
-      <header class="gd-lado-cab"><span class="gd-lado-rot">Nota</span><span class="spacer"></span>
-        <button type="button" class="icono" data-gd-lado-abrir title="Expandir: abrir el documento en el editor">${ic('expand', 15)}</button>
-        <button type="button" class="icono" data-gd-lado-cerrar title="Cerrar (Esc)">${ic('close', 15)}</button></header>
-      <label class="gd-lado-campo"><span>Nombre</span><input type="text" class="gd-lado-titulo" data-gd-lado-titulo></label>
-      <div class="gd-lado-campo gd-lado-crece"><span>Descripción</span><div class="gd-lado-texto" data-gd-lado-texto contenteditable="true" spellcheck="true" data-vacio="Escribe aquí; se ve igual al abrir el documento"></div></div>`;
-    $('.gd-lado-titulo', lado).value = nt.titulo || '';
-    const campo = $('.gd-lado-texto', lado);
+  /* del campo al documento: lo que no cambió, tal cual; lo que cambió, con los atributos de su bloque; las marcas, lo que eran.
+     Los espacios de anchura cero que deja un atajo (MdVivo) no pasan al documento, y un bloque que se queda vacío lleva su <br>. */
+  function htmlDeLadoEditado(campo) {
+    const usados = new Set();
+    const salida = n => {
+      if (n.nodeType === 3) return document.createTextNode(n.nodeValue.replace(/\u200B/g, ''));
+      if (n.nodeType !== 1) return null;
+      if (n.hasAttribute('data-f')) {
+        if (n.matches('table')) {
+          const tb = n.cloneNode(true); tb.removeAttribute('data-f'); tb.querySelectorAll('[data-l]').forEach(x => x.removeAttribute('data-l'));
+          const tw = document.createTreeWalker(tb, NodeFilter.SHOW_TEXT); let x;   // sin los espacios de anchura cero de los atajos
+          while ((x = tw.nextNode())) x.nodeValue = x.nodeValue.replace(/\u200B/g, '');
+          return tb;
+        }
+        const o = ladoOrig[+n.dataset.f]; return o ? o.cloneNode(true) : null;
+      }
+      const k = n.hasAttribute('data-l') ? +n.dataset.l : -1, o = k >= 0 ? ladoOrig[k] : null;
+      if (o && !usados.has(k) && o.tagName === n.tagName && sinMarcasLado(n) === ladoVista[k]) { usados.add(k); return o.cloneNode(true); }
+      const c = n.cloneNode(false); c.removeAttribute('data-l');
+      n.childNodes.forEach(h => { const x = salida(h); if (x) c.appendChild(x); });
+      if (!c.textContent && !c.querySelector('br, img, table') && /^(P|DIV|H[1-6]|LI)$/.test(c.tagName)) c.appendChild(document.createElement('br'));
+      return c;
+    };
+    const out = document.createElement('div');
+    let suelto = null;                                         // texto o formato sin párrafo (Chrome, con el campo vacío): a un párrafo
+    campo.childNodes.forEach(n => {
+      const bloque = n.nodeType === 1 && (LADO_BLOQUE.test(n.tagName) || n.hasAttribute('data-f'));
+      if (bloque) { suelto = null; const x = salida(n); if (x) out.appendChild(x); return; }
+      if (n.nodeType === 3 && !n.nodeValue.replace(/\u200B/g, '').trim() && !suelto) return;
+      if (!suelto) { suelto = document.createElement('p'); out.appendChild(suelto); }
+      const x = salida(n); if (x) suelto.appendChild(x);
+    });
+    return out.innerHTML || '<p><br></p>';
+  }
+
+  /* ---------- la ventana de una nota (1.1.54, como en ClapBook) ----------
+     Leo, en ClapBook: «En lugar del sidepanel que usamos como vista previa en los segmentos y bibliotecas, que sea mejor un modal
+     como en notion, que puede expandirse y se cierra si se presiona fuera del modal», «En el modal de notas, se extrañan las
+     flechas de < > para navegar por las otras notas del segmento… Se debe conservar donde dejo el scroll», y «que al llegar al
+     límite, la > … cámbiala por un + para permitirme agregar otra nota en el mismo segmento». Un clic en una nota de una biblioteca
+     o de un segmento expandido la abre en una ventana encima de todo: la ruta (biblioteca › segmento; cada una lleva a su sitio),
+     ‹ n/N › por las notas del segmento en el orden en que se ven (con sus filtros y lo que se busque; en la última, «＋» crea otra
+     ahí), el color, el enlace para Claude, el ⋯ de la nota, la papelera y ×; debajo, su nombre y el documento con su formato (el
+     campo de arriba). Se cierra con un clic fuera (el botón pulsado también fuera y pasados 350 ms: el segundo clic de un doble
+     clic en la tarjeta cae ya aquí), con Esc o con ×; ⤢ o el doble clic en la tarjeta (< 700 ms) la abren en el editor, y
+     «Contraer» en la cabecera del editor la devuelve aquí. Cada nota vuelve a su ventana con el desplazamiento y el cursor donde
+     se dejaron (`posLado`, mientras dura la sesión). La capa vive en el `body`, fuera de `main`: redibujar la biblioteca no la
+     toca (el panel lateral se rehacía en cada render: parpadeaba, perdía lo último escrito y se cerraba al crear una nota o al
+     plegar el menú, lo mismo que Leo vio en ClapBook). Se reabre sola solo al volver a una pestaña o a la vista que la tenía
+     (`reabrir`). Corta los clics y las teclas de borrar, flechas y deshacer, que el tablero de tramas oye en `document` (fuera de
+     un campo borrarían o desharían en el esquema escondido): por eso nada de dentro lleva `data-nota` ni `.esq-titulo`. */
+  let ladoId = null, ladoT = null, capa = null, abiertaEn = 0, ladoCargado = '';
+  let tituloCargado = '';                                      // el nombre que la ventana conoce: lo demás en el campo es de Leo
+  let porTarjeta = 0;                                          // abierta con un clic en su tarjeta (para el doble clic: al editor)
+  let reabrir = false;
+  const posLado = new Map();                                   // id de la nota → { scroll, bloque, car }
+  const campoLado = () => capa && $('[data-gd-lado-texto]', capa);
+  const tituloLado = () => capa && $('[data-gd-lado-titulo]', capa);
+  const hojaLado = () => capa && $('.gd-modal-hoja', capa);
+  const ventanaAbierta = () => !!(ladoId && capa && !capa.hidden);
+  const sinGuion = el => !Array.from(el.classList).some(c => /^sp-/.test(c));   // un elemento de guion no se vuelve lista ni título
+  function capaNota() {
+    if (capa) return capa;
+    capa = document.createElement('div');
+    capa.className = 'gd-modal-capa'; capa.hidden = true;
+    capa.innerHTML = `<div class="gd-modal" role="dialog" aria-modal="true" aria-label="Nota" tabindex="-1">
+        <header class="gd-modal-cab">
+          <button type="button" class="icono" data-gd-lado-abrir title="Abrir en el editor (doble clic en la nota)" aria-label="Abrir en el editor">${ic('expand', 15)}</button>
+          <nav class="gd-modal-ruta" aria-label="Dónde está la nota"></nav><span class="spacer"></span>
+          <span class="gd-modal-nav" data-gd-nav-lado></span>
+          <button type="button" class="icono gd-modal-color" data-gd-lado-color aria-label="Color de la nota"><i></i></button>
+          ${o.copiarEnlace ? `<button type="button" class="icono" data-gd-lado-enlace title="Copiar enlace para Claude (Cmd+Shift+C)" aria-label="Copiar enlace para Claude">${ic('link', 15)}</button>` : ''}
+          <button type="button" class="icono" data-gd-menu="nota" title="Opciones de la nota" aria-label="Opciones de la nota">${ic('more', 15)}</button>
+          <button type="button" class="icono gd-modal-tirar" data-gd-lado-tirar title="Mover la nota a la papelera" aria-label="Mover la nota a la papelera">${ic('trash', 15)}</button>
+          <button type="button" class="icono" data-gd-lado-cerrar title="Cerrar (Esc)" aria-label="Cerrar">${ic('close', 15)}</button>
+        </header>
+        <div class="gd-modal-hoja"><div class="gd-modal-papel">
+          <input type="text" class="gd-modal-titulo" data-gd-lado-titulo spellcheck="false" autocomplete="off" placeholder="Sin título" aria-label="Nombre de la nota">
+          <div class="gd-lado-texto md-texto" data-gd-lado-texto contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="La nota" data-vacio="Escribe aquí; se ve igual al abrir el documento"></div>
+          <div class="gd-modal-cola" data-gd-modal-cola></div>
+        </div></div>
+      </div>`;
+    document.body.appendChild(capa);
+    const tit = tituloLado(), campo = campoLado();
+    /* el campo: Markdown al escribir, los atajos del editor (MdVivo) y, al pegar, una dirección sobre lo elegido es un enlace y
+       lo que parece Markdown entra con su formato (como en el editor) */
+    if (window.MdVivo) MdVivo.vivo(campo, { bloques: sinGuion, markdown: true, resaltado: () => colorResaltado(), pedirEnlace: () => cuadroEnlace(campo) });
+    capa.addEventListener('mousedown', e => { capa._fuera = e.target === capa; });
+    capa.addEventListener('click', e => {
+      e.stopPropagation();                                     // ni el tablero de tramas ni el «clic fuera» del gestor
+      const t = e.target.closest('[data-gd-menu]');
+      if (t) { e.preventDefault(); const nodo = MENUS[t.dataset.gdMenu] && MENUS[t.dataset.gdMenu](t); if (nodo) abrirPop(t, nodo); return; }
+      if (!(disparador && disparador.contains && disparador.contains(e.target))) cerrarPop();
+      if (e.target === capa) { if (capa._fuera && Date.now() - abiertaEn > 350) { cerrarLado(); soltarSeleccion(); } return; }
+      const a = e.target.closest('a[href]');                   // Cmd+clic en un enlace del documento: lo abre (1.1.53: también los clapcraft://)
+      if (a && campo.contains(a) && (e.metaKey || e.ctrlKey)) { e.preventDefault(); abrirDireccion(a.getAttribute('href')); return; }
+      const b = e.target.closest('button, [data-gd-modal-cola]'); if (!b) return;
+      const nt = ladoId && d && d.nota(ladoId);
+      if (b.matches('[data-gd-lado-cerrar]')) { cerrarLado(); soltarSeleccion(); return; }
+      if (b.matches('[data-gd-lado-abrir]')) { expandirLado(); return; }
+      if (b.matches('[data-gd-nota-mover]')) { moverLado(+b.dataset.gdNotaMover); return; }
+      if (b.matches('[data-gd-nota-nueva]')) { if (nt) { guardarLadoYa(); nuevaNota(nt.subId, nt.etiquetaId || null, { alFinal: true }); } return; }
+      if (b.matches('[data-gd-ruta]')) { if (nt) irARuta(nt.id, b.dataset.gdRuta); return; }
+      if (b.matches('[data-gd-lado-color]')) { if (nt) abrirPop(b, paletaNota(nt.id)); return; }
+      if (b.matches('[data-gd-lado-enlace]')) { if (nt && o.copiarEnlace) o.copiarEnlace({ tipo: 'nota', id: nt.id }); return; }
+      if (b.matches('[data-gd-lado-tirar]')) { if (nt) { guardarLadoYa(); tirarNota(nt.id); } return; }
+      if (b.matches('[data-gd-modal-cola]')) alFinalDelCampo();
+    });
+    /* el segundo clic de un doble clic en la tarjeta ya cae en la ventana (recién abierta): el doble clic la lleva al editor */
+    capa.addEventListener('dblclick', e => { e.stopPropagation(); if (ladoId && porTarjeta && Date.now() - porTarjeta < 700 && !e.target.closest('button')) expandirLado(); });   // no tras ‹ › ni «＋»
+    capa.addEventListener('contextmenu', e => { e.stopPropagation(); if (e.target.closest('[data-gd-lado-texto]')) menuFormato(e, campo); });
+    capa.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {                                // un menú abierto lo cierra antes el oyente en captura
+        if (e.defaultPrevented || abierto) return;
+        e.preventDefault(); e.stopPropagation();
+        if (e.target === tit) aplicarTituloLado();
+        cerrarLado(); soltarSeleccion(); return;
+      }
+      if (e.target === tit && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); aplicarTituloLado(); alPrincipioDelCampo(); return; }
+      const mod = e.metaKey || e.ctrlKey;
+      if (['Delete', 'Backspace', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', ' '].includes(e.key) || (mod && /^[zyd]$/i.test(e.key))) e.stopPropagation();
+    });
+    /* el nombre, al momento (vacío no: se queda el que había); el documento, poco después y siempre al salir */
+    tit.addEventListener('input', () => {
+      const m = modelo(), nt = ladoId && m && m.nota(ladoId); if (!nt) return;
+      const v = tit.value.trim(); if (!v || v === nt.titulo) return;
+      if (m.renombrarNota(nt.id, v).ok) { tituloCargado = nt.titulo; if (o.guardar) o.guardar(); pintarTituloTarjetas(nt); }
+    });
+    tit.addEventListener('focusout', () => aplicarTituloLado());
+    campo.addEventListener('input', () => { clearTimeout(ladoT); ladoT = setTimeout(guardarLadoYa, 400); });
+    campo.addEventListener('focusin', () => { try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (_) {} });
+    campo.addEventListener('focusout', () => guardarLadoYa());
+    return capa;
+  }
+  /* `op`: { enfocarTitulo } (una nota nueva: el nombre elegido, para escribir encima), { porTarjeta } (un clic en su tarjeta) */
+  function mostrarLado(id, op) {
+    op = op || {};
+    const m = modelo(), nt = m && m.nota(id); if (!nt || m.enPapelera(id)) return;
+    const c = capaNota();
+    if (ladoId === id && !c.hidden) { refrescarVentana(); if (op.enfocarTitulo) setTimeout(() => { const t = tituloLado(); t.focus(); t.select(); }, 0); return; }   // ya está
+    guardarLadoYa(); apuntarLado();
+    ladoId = id; abiertaEn = Date.now(); porTarjeta = op.porTarjeta ? abiertaEn : 0;
+    c.hidden = false; document.body.classList.add('con-ventana');
+    if (o.alNavegar) setTimeout(() => o.alNavegar(), 0);         // la pestaña de delante apunta la nota elegida
+    pintarCabeceraLado(m, nt);
+    tituloLado().value = tituloCargado = nt.titulo || '';
+    pintarCampo(nt);
+    const hoja = hojaLado(); hoja.scrollTop = 0;
+    const antes = posLado.get(id);
+    setTimeout(() => {
+      if (ladoId !== id) return;
+      if (op.enfocarTitulo) { const t = tituloLado(); t.focus(); t.select(); return; }
+      if (!(antes && reponerLado(antes))) $('.gd-modal', c).focus({ preventScroll: true });
+      if (antes) { hoja.scrollTop = antes.scroll; setTimeout(() => { if (ladoId === id) hoja.scrollTop = antes.scroll; }, 80); }   // otra vez, con las imágenes ya medidas
+    }, 0);
+  }
+  function pintarCampo(nt) {
+    const campo = campoLado();
     campo.innerHTML = htmlDeLado(nt.html);
-    campo.dataset.base = campo.innerHTML;                          // lo que había, para saber si se tocó
+    campo.dataset.base = campo.innerHTML;                      // lo que había, para saber si se tocó
+    ladoCargado = nt.html || '';
   }
-  /* **El ancho del panel se arrastra** por su borde izquierdo (Leo, 18-09-2026: «quiero poder hacer más ancho el sidepane… el
-     de los segmentos»): de 280 a 900 px, sin dejar el tablero por debajo de 320; se recuerda en la vista (`vista.ladoNota`) y
-     el doble clic en el borde vuelve al de partida. Vale también en la biblioteca, que usa el mismo panel. */
-  const LADO_NOTA = { partida: 360, min: 280, max: 900 };
-  function anchoLadoNota(px) {
-    const w = Math.round(Math.max(LADO_NOTA.min, Math.min(LADO_NOTA.max, px || LADO_NOTA.partida)));
-    document.documentElement.style.setProperty('--lado-nota', w + 'px');
-    return w;
+  /* la ruta, la navegación, el color y el ⋯ de la cabecera */
+  function pintarCabeceraLado(m, nt) {
+    $('.gd-modal-ruta', capa).innerHTML = rutaLadoHtml(m, nt);
+    const cont = $('.gd-modal-cont', capa), r = m.sub(nt.subId);
+    if (cont && r) cont.textContent = r.contenedor.id === C.ID_PERSONAJES ? 'Personajes' : r.contenedor.nombre;
+    $('[data-gd-nav-lado]', capa).innerHTML = navHtml(m, nt);
+    const col = $('[data-gd-lado-color]', capa), modal = $('.gd-modal', capa);
+    [col, modal].forEach(x => { x.classList.toggle('con-color', !!nt.color); if (nt.color) x.style.setProperty('--tc', `var(--t-${nt.color})`); else x.style.removeProperty('--tc'); });
+    col.title = nt.color ? 'Color: ' + nombreColor(nt.color).toLowerCase() + ' (cambiarlo)' : 'Sin color (ponerle uno)';
+    $('[data-gd-menu="nota"]', capa).dataset.notaId = nt.id;
   }
-  function arrastrarLadoNota(e, asa) {
-    const panel = asa.parentNode, medio = panel.parentNode;
-    const x0 = e.clientX, w0 = panel.getBoundingClientRect().width;
-    const tope = () => Math.max(LADO_NOTA.min, Math.min(LADO_NOTA.max, medio.clientWidth - 320));
-    asa.classList.add('activa'); document.body.classList.add('redimensionando-lado');
-    const mover = ev => anchoLadoNota(Math.min(tope(), w0 + (x0 - ev.clientX)));   // hacia la izquierda, más ancho
-    const soltar = () => {
-      window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); window.removeEventListener('pointercancel', soltar);
-      asa.classList.remove('activa'); document.body.classList.remove('redimensionando-lado');
-      suprimirClic = Date.now();                                 // el clic que cierra el arrastre (cae en el tablero) no cierra el panel
-      if (o.vista && panel.isConnected) { o.vista.ladoNota = Math.round(panel.getBoundingClientRect().width); guardarVista(); }
-    };
-    window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar); window.addEventListener('pointercancel', soltar);
+  /* «CONTENEDOR [biblioteca] › [segmento]», con los chips de las cabeceras: la biblioteca lleva a su tablero y el segmento, a su
+     vista expandida (en Personajes, el personaje con su color) */
+  function rutaLadoHtml(m, n) {
+    const r = m.sub(n.subId); if (!r) return '';
+    const e = n.etiquetaId ? m.etiqueta(n.etiquetaId) : null, per = r.contenedor.id === C.ID_PERSONAJES;
+    const pj = per && m.personaje(r.sub.lineaId), pt = pj && PAL[pj.color], nomSub = pj ? pj.nombre : r.sub.nombre;
+    const chipSub = per
+      ? chipNombre(nomSub, 'per-chip', { boton: true, attrs: ` data-gd-ruta="bib" title="${esc('Ir a «' + nomSub + '»')}"`, estilo: pt ? `--chl:${pt[1]};--chd:${pt[2]}` : '' })
+      : chipNombre(nomSub, estiloHijo(r.sub.id, 'gd-chip--sub').clase, { boton: true, estilo: estiloHijo(r.sub.id).estilo, attrs: ` data-gd-ruta="bib" title="${esc('La biblioteca «' + nomSub + '»')}"` });
+    const nomSeg = e ? e.nombre : 'Bandeja';
+    const chipSeg = chipNombre(nomSeg, 'gd-seg-chip' + (e ? '' : ' gd-seg-chip--bandeja'), { boton: true, estilo: e ? estiloTag(e) : '',
+      attrs: ` data-gd-ruta="seg" title="${esc((e ? 'El segmento «' + nomSeg + '»' : 'La bandeja') + ', expandido')}"` });
+    return `<span class="gd-modal-cont"></span>${chipSub}<span class="gd-ruta-sep" aria-hidden="true">›</span>${chipSeg}`;
+  }
+  /* lo que cambió por fuera con la ventana abierta (Claude, una versión, un personaje renombrado, un render cualquiera): la
+     cabecera al día y, si el documento cambió y aquí no se ha tocado, el campo otra vez; la nota que ya no está, fuera */
+  function refrescarVentana() {
+    if (!ventanaAbierta()) return;
+    const m = modelo(), nt = m && m.nota(ladoId);
+    if (!nt || m.enPapelera(ladoId)) { cerrarLado(); return; }
+    pintarCabeceraLado(m, nt);
+    /* el nombre, también con el foco en él si Leo no lo ha cambiado (Claude lo renombró con la ventana de la app sin el foco: si no,
+       al salir del campo se volvía a poner el de antes) */
+    const tit = tituloLado(), nuevo = nt.titulo || '';
+    if (document.activeElement !== tit) tit.value = tituloCargado = nuevo;
+    else if (tit.value.trim() === tituloCargado && nuevo !== tituloCargado) {
+      const todo = tit.selectionStart === 0 && tit.selectionEnd === tit.value.length;
+      tit.value = tituloCargado = nuevo; if (todo) tit.select();
+    }
+    const campo = campoLado();
+    if ((nt.html || '') !== ladoCargado && campo.innerHTML === campo.dataset.base) {
+      const hoja = hojaLado(), y = hoja.scrollTop, conFoco = document.activeElement === campo || campo.contains(document.activeElement);
+      if (conFoco) apuntarLado();                              // el cursor, donde estaba (si no, lo siguiente iría al principio)
+      pintarCampo(nt);
+      if (conFoco) { const p = posLado.get(ladoId); if (!(p && reponerLado(p))) campo.focus({ preventScroll: true }); }
+      hoja.scrollTop = y;
+    }
+  }
+  /* dónde se dejó: el desplazamiento y, si el cursor estaba en el campo, su bloque y su carácter (como el editor, texto.js) */
+  function apuntarLado() {
+    if (!ladoId || !capa) return;
+    const campo = campoLado(), p = { scroll: hojaLado().scrollTop };
+    const s = getSelection(), r = s && s.rangeCount ? s.getRangeAt(0) : null;
+    if (r && campo.contains(r.startContainer)) {
+      if (r.startContainer === campo) { p.bloque = r.startOffset; p.car = 0; }
+      else {
+        let b = r.startContainer; while (b.parentNode !== campo) b = b.parentNode;
+        const x = document.createRange(); x.setStart(b, 0); x.setEnd(r.startContainer, r.startOffset);
+        p.bloque = Array.prototype.indexOf.call(campo.childNodes, b); p.car = x.toString().length;
+      }
+    }
+    posLado.set(ladoId, p);
+  }
+  function reponerLado(p) {
+    const campo = campoLado(); if (p.bloque === undefined || !campo.childNodes.length) return false;
+    const b = campo.childNodes[Math.min(p.bloque, campo.childNodes.length - 1)];
+    let destino = null;
+    if (b.nodeType === 3) destino = [b, Math.min(p.car || 0, b.nodeValue.length)];
+    else if (!b.matches('[data-f]')) {
+      const tw = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); let n, resto = p.car || 0;
+      while ((n = tw.nextNode())) { if (resto <= n.nodeValue.length) { destino = [n, resto]; break; } resto -= n.nodeValue.length; }
+    }
+    campo.focus({ preventScroll: true });
+    const r = document.createRange();
+    if (destino) r.setStart(destino[0], destino[1]); else r.setStart(campo, Math.min(p.bloque, campo.childNodes.length));
+    r.collapse(true);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    return true;
+  }
+  const ponerCursor = (nodo, i) => { const r = document.createRange(); r.setStart(nodo, i); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+  function alPrincipioDelCampo() { const c = campoLado(); c.focus({ preventScroll: true }); ponerCursor(c.firstChild && c.firstChild.nodeType === 1 && !c.firstChild.matches('[data-f]') ? c.firstChild : c, 0); }
+  /* un clic debajo de todo: el cursor al final (detrás de una tabla o de una marca, en un párrafo nuevo) */
+  function alFinalDelCampo() {
+    const c = campoLado(); if (!c) return;
+    const ult = c.lastElementChild;
+    if (!ult || ult.matches('table, [data-f]')) { const p = document.createElement('p'); p.appendChild(document.createElement('br')); c.appendChild(p); }
+    c.focus({ preventScroll: true });
+    const r = document.createRange(); r.selectNodeContents(c.lastElementChild); r.collapse(false);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
   }
   function cerrarLado() {
-    guardarLadoYa();
-    ladoId = null;
-    $$('.gd-exp-lado').forEach(x => { x.hidden = true; x.innerHTML = ''; });
+    guardarLadoYa(); apuntarLado();
+    const habia = !!ladoId; ladoId = null;
+    if (!navSigue) ordenNav = null;
+    clearTimeout(ladoT); ladoT = null;
+    if (capa) { if (capa.contains(document.activeElement)) document.activeElement.blur(); capa.hidden = true; }
+    document.body.classList.remove('con-ventana');
+    if (habia && o.alNavegar) setTimeout(() => o.alNavegar(), 0);
   }
-  /* lo escrito en el panel, a la nota (y a su tarjeta, sin redibujar la rejilla) */
+  /* lo escrito en la ventana, a la nota (y a su tarjeta, sin redibujar la biblioteca) */
   function guardarLadoYa() {
     clearTimeout(ladoT); ladoT = null;
-    const m = modelo(), nt = ladoId && m && m.nota(ladoId); if (!nt) return;
-    const campo = $$('.gd-lado-texto').find(x => x.isConnected); if (!campo) return;
+    const m = modelo(), nt = ladoId && m && m.nota(ladoId), campo = campoLado(); if (!nt || !campo) return;
     if (campo.innerHTML === campo.dataset.base) return;            // sin tocar: el documento no se reescribe
-    const r = m.guardarNota(nt.id, { title: nt.titulo, html: htmlDeLadoEditado(campo, nt.html), characters: nt.characters || {} });
-    campo.dataset.base = campo.innerHTML;
+    const r = m.guardarNota(nt.id, { title: nt.titulo, html: htmlDeLadoEditado(campo), characters: nt.characters || {} });
+    campo.dataset.base = campo.innerHTML; ladoCargado = nt.html || '';
     if (r.ok && r.cambio && o.guardar) o.guardar();
-    $$(`.gd-exp-nota[data-nota="${CSS.escape(nt.id)}"] .gd-exp-texto`).forEach(t => { t.textContent = textoDe(nt.html) || 'Sin texto'; t.classList.toggle('vacio', !textoDe(nt.html)); });
+    if (capa) $('[data-gd-nav-lado]', capa).innerHTML = navHtml(m, nt);   // (el orden va congelado: no salta)
+    const t = textoDe(nt.html);
+    $$(`.gd-exp-nota[data-nota="${CSS.escape(nt.id)}"] .gd-exp-texto`).forEach(x => { x.textContent = t || 'Sin texto'; x.classList.toggle('vacio', !t); });
+    $$(`.gd-nota[data-nota="${CSS.escape(nt.id)}"] .gd-nota-meta, .gd-exp-nota[data-nota="${CSS.escape(nt.id)}"] .gd-nota-meta`).forEach(x => { if (!/^creada/.test(x.textContent)) x.textContent = fecha(nt.modificado); });
+  }
+  function pintarTituloTarjetas(nt) {
+    $$(`.gd-exp-nota[data-nota="${CSS.escape(nt.id)}"] .gd-exp-tit, .gd-nota[data-nota="${CSS.escape(nt.id)}"] > span:first-child`).forEach(x => { x.textContent = nt.titulo; });
+    $$(`.gd-nota[data-nota="${CSS.escape(nt.id)}"], .gd-exp-nota[data-nota="${CSS.escape(nt.id)}"]`).forEach(x => x.setAttribute('aria-label', nt.titulo));
+  }
+  function aplicarTituloLado() {
+    const m = modelo(), nt = ladoId && m && m.nota(ladoId), tit = tituloLado(); if (!nt || !tit) return;
+    const v = tit.value.trim();
+    if (!v || v === nt.titulo || v === tituloCargado) { tit.value = tituloCargado = nt.titulo; return; }   // lo que no escribió Leo no renombra
+    const r = m.renombrarNota(nt.id, v);
+    if (!r.ok) { if (o.avisar) o.avisar(r.aviso); tit.value = tituloCargado = nt.titulo; return; }
+    tit.value = tituloCargado = nt.titulo;
+    if (o.guardar) o.guardar();
+    pintarTituloTarjetas(nt);
+  }
+  /* ‹ ›: las notas del segmento de una nota en el orden en que se ven (con sus filtros, lo que se esté buscando en esa vista y, si
+     sus tarjetas están pintadas, su orden); si ella no está entre las que se ven, todas. **El orden se congela mientras se va de
+     una a otra** (`ordenNav`): con «Modificadas recientemente», escribir en una la subía y › volvía a la de antes. Se olvida al
+     cerrar la ventana o el editor (no al pasar de una al otro) y cambia solo si cambian el filtro, el orden o lo que se busca. */
+  let ordenNav = null, navSigue = false;                       // { clave, ids }; navSigue: de la ventana al editor o al revés
+  function ordenVisto(n, k) {                                  // las tarjetas de ese segmento, tal como se ven
+    if (notaAbierta || !main) return null;
+    const enExp = !!expandido && expandido.subId === n.subId && expandido.clave === k;
+    const caja = enExp ? $('.gd-exp-grid', main) : $(`.gd-tablero[data-sub="${CSS.escape(n.subId)}"] > [data-clave="${CSS.escape(k)}"] > .gd-etq-body`, main);
+    return caja ? $$(':scope > [data-nota]', caja).map(x => x.dataset.nota) : null;
+  }
+  function vecinasDe(m, n) {
+    const k = n.etiquetaId ? 'etq:' + n.etiquetaId : 'bandeja', todas = m.notasDe(n.subId, n.etiquetaId || null);
+    const enExp = !!expandido && expandido.subId === n.subId && expandido.clave === k;
+    const f = m.esGuiones(n.subId) ? null : filtroPara(n.subId, k, enExp), c = busquedaEn(n.subId);
+    let xs = f ? filtrarNotas(todas, f) : todas;
+    if (c) xs = xs.filter(x => C.busqueda.puntuar(x, c) > 0);
+    const clave = n.subId + '|' + k + '|' + (f ? f.color + '|' + f.orden : '') + '|' + (c ? busquedaVista.texto.trim() : '');
+    const previo = ordenNav && ordenNav.clave === clave && ordenNav.ids.includes(n.id) ? ordenNav.ids : ordenVisto(n, k);
+    if (previo) { const pos = new Map(previo.map((id, i) => [id, i])), en = x => (pos.has(x.id) ? pos.get(x.id) : 1e9); xs = xs.slice().sort((a, b) => en(a) - en(b)); }   // lo nuevo, al final
+    if (!xs.some(x => x.id === n.id)) return todas;
+    ordenNav = { clave, ids: xs.map(x => x.id) };
+    return xs;
+  }
+  /* ‹ 2/5 ›; en la última, «＋» en lugar de ›: otra nota en el mismo segmento */
+  function navHtml(m, n) {
+    const xs = vecinasDe(m, n), i = xs.findIndex(x => x.id === n.id);
+    if (i < 0) return '';
+    const ultima = i >= xs.length - 1;
+    return `<span class="gd-nav-notas" role="group" aria-label="Las notas del segmento"><button type="button" class="icono" data-gd-nota-mover="-1" ${i > 0 ? '' : 'disabled'} title="Nota anterior del segmento" aria-label="Nota anterior">${ic('arr-l', 14)}</button>`
+      + `<span class="gd-nav-pos">${i + 1}/${xs.length}</span>`
+      + (ultima ? `<button type="button" class="icono gd-nav-nueva" data-gd-nota-nueva title="Otra nota en este segmento" aria-label="Otra nota en este segmento">${ic('plus', 14)}</button>`
+        : `<button type="button" class="icono" data-gd-nota-mover="1" title="Nota siguiente del segmento" aria-label="Nota siguiente">${ic('arr-r', 14)}</button>`) + '</span>';
+  }
+  /* marca una nota como elegida en las tarjetas (y, con `llevar`, la trae a la vista) */
+  function marcarElegida(id, llevar) {
+    $$('[data-nota].sel').forEach(x => x.classList.remove('sel'));
+    $$(`[data-nota="${CSS.escape(id)}"]`).forEach(x => { x.classList.add('sel'); if (llevar && !x.classList.contains('gd-nota-fila')) x.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+  }
+  function moverLado(delta) {
+    const m = modelo(), n = ladoId && m && m.nota(ladoId); if (!n) return;
+    const xs = vecinasDe(m, n), sig = xs[xs.findIndex(x => x.id === n.id) + delta]; if (!sig) return;
+    notaSel = sig.id; marcarElegida(sig.id, true);
+    mostrarLado(sig.id);
+  }
+  /* ⤢ (o el doble clic en la tarjeta): la nota, en el editor */
+  function expandirLado() { const id = ladoId; if (!id) return; navSigue = true; try { cerrarLado(); abrirNota(id); } finally { navSigue = false; } }
+  /* la ruta de la ventana: «bib», su biblioteca; «seg», su segmento expandido (con la nota marcada) */
+  function irARuta(id, k) {
+    const m = modelo(), n = m && m.nota(id), r = n && m.sub(n.subId); if (!r) return;
+    cerrarLado();
+    if (k === 'seg') { expandir(n.subId, n.etiquetaId ? 'etq:' + n.etiquetaId : 'bandeja', n.id); return; }
+    expandido = null; notaSel = n.id;
+    navegar(ref('sub', r.contenedor.id, n.subId));
+    if (notaAbierta) cerrarNota(); else render();
+    irAlTablero();
+  }
+  /* «Contraer» en la cabecera del editor: la nota vuelve a su ventana, encima de su biblioteca (o de su segmento expandido) */
+  function contraerNota() {
+    const id = notaAbierta; if (!id) return;
+    if (o.texto.volcar) o.texto.volcar();
+    navSigue = true; try { cerrarNota(); } finally { navSigue = false; }
+    notaSel = id; marcarElegida(id, true);
+    mostrarLado(id);
+  }
+  /* Cmd+clic en un enlace del documento: los de ClapCraft, a su sitio; los demás, al navegador */
+  function abrirDireccion(u) {
+    const s = String(u || '').trim(); if (!s) return;
+    let url; try { url = new URL(s, location.href); } catch (_) { return; }   // como la leerá el navegador (sin tabuladores ni saltos)
+    if (url.protocol === 'clapcraft:') { if (o.irAEnlace) { cerrarLado(); o.irAEnlace(s); } return; }
+    if (!/^(https?|mailto):$/.test(url.protocol)) return;       // solo la web y el correo: nunca javascript:, data:, file:…
+    window.open(url.href, '_blank', 'noopener');
+  }
+
+  /* ---------- el formato en la ventana de una nota (1.1.54, de ClapBook) ----------
+     Leo, en ClapBook: «Cuando seleccione un texto y le haga clic derecho, debo tener opciones de subrayado… varios colores». Aquí el
+     campo es el documento del editor, así que el clic derecho da lo de su cinta, con el mismo HTML: negrita, cursiva, subrayado,
+     tachado, código y enlace; resaltar y color de letra con los 16 tonos de su paleta en el par del tema (`colores(i)`, como la
+     cinta), quitar el formato, cortar, copiar, pegar y el enlace para Claude. Los atajos del editor (Cmd+Mayús+X, Cmd+Mayús+H con
+     el último resaltado, Cmd+K, Cmd+Alt+0…6) y Cmd+E (código) los pone MdVivo. El subrayado de colores de ClapBook no se porta: en
+     el editor el resaltado ya es el «marcador» y el subrayado va en el color del texto. */
+  const MAC = /Mac|iP(hone|ad)/.test(navigator.platform || '');
+  const tecla = k => MAC ? k.replace(/Mod\+/g, '⌘').replace(/Shift\+/g, '⇧').replace(/Alt\+/g, '⌥') : k.replace(/Mod\+/g, 'Ctrl+').replace(/Shift\+/g, 'Mayús+');
+  const HILITE = 'guiones.editor.hilite';                      // el último resaltado de la cinta del editor: el mismo aquí
+  function colorResaltado() {
+    let c = null; try { c = localStorage.getItem(HILITE); } catch (_) {}
+    const k = String(c || '').toUpperCase(), i = PAL.findIndex(t => String(t[1]).toUpperCase() === k || String(t[2]).toUpperCase() === k);
+    if (i >= 0) return colores(i)[0];                          // un tono de la paleta, en el par del tema de ahora
+    if (!c || k === '#FBF0D2' || k === '#7A5410') return oscuro() ? '#7A5410' : '#FBF0D2';   // el de partida del editor
+    return c;
+  }
+  const recordarResaltado = c => { try { localStorage.setItem(HILITE, c); } catch (_) {} };
+  /* tras cerrar un menú con Esc, el foco vuelve a quien lo abrió; si se abrió sobre el campo de la ventana, al campo con lo elegido */
+  function devolverFoco(t) { if (t && t._volver) { const v = t._volver; t._volver = null; v(); } else if (t && t.focus) t.focus(); }
+  /* un punto fijo donde se abre un menú (el del ratón) */
+  let anclaF = null;
+  function anclaEn(x, y) {
+    if (!anclaF) { anclaF = document.createElement('div'); anclaF.className = 'gd-ancla'; anclaF.setAttribute('aria-hidden', 'true'); document.body.appendChild(anclaF); }
+    Object.assign(anclaF.style, { position: 'fixed', left: x + 'px', top: y + 'px', width: '1px', height: '1px', pointerEvents: 'none' });
+    return anclaF;
+  }
+  /* lo elegido en el campo (un rango dentro de él), para devolverlo tras el menú, que se lleva el foco */
+  function rangoEn(campo) { const s = getSelection(); if (!s || !s.rangeCount) return null; const r = s.getRangeAt(0); return campo.contains(r.commonAncestorContainer) ? r.cloneRange() : null; }
+  function volverA(campo, r0) { campo.focus({ preventScroll: true }); if (r0) { const s = getSelection(); s.removeAllRanges(); s.addRange(r0); } }
+  function menuFormato(e, campo) {
+    if (!window.MdVivo || !MdVivo.formato || e.target.closest('.gd-lado-fijo')) return;
+    e.preventDefault();
+    const r0 = rangoEn(campo), hay = !!r0 && !r0.collapsed;
+    const estado = k => { try { return document.queryCommandState(k); } catch (_) { return false; } };
+    const nodo = r0 && (r0.startContainer.nodeType === 1 ? r0.startContainer : r0.startContainer.parentElement);
+    const enCodigo = !!(nodo && nodo.closest('code') && campo.contains(nodo.closest('code')));
+    const a = MdVivo.enlaceEn ? MdVivo.enlaceEn(campo) : null;
+    const aplicar = (accion, valor) => () => { volverA(campo, r0); MdVivo.formato(campo, accion, valor, { bloques: sinGuion }); };
+    const f = document.createDocumentFragment();
+    if (hay) {
+      const barra = document.createElement('div'); barra.className = 'gd-fmt-barra';
+      [['negrita', '<b>B</b>', 'Negrita', 'Mod+B', estado('bold')], ['cursiva', '<i>I</i>', 'Cursiva', 'Mod+I', estado('italic')],
+       ['subrayado', '<u>U</u>', 'Subrayado', 'Mod+U', estado('underline')], ['tachado', '<s>S</s>', 'Tachado', 'Mod+Shift+X', estado('strikeThrough')],
+       ['codigo', '<code>&lt;/&gt;</code>', 'Código', 'Mod+E', enCodigo]].forEach(([acc, html, nombre, k, on]) => {
+        const b = document.createElement('button'); b.type = 'button'; b.innerHTML = html; b.title = nombre + ' (' + tecla(k) + ')'; b.setAttribute('aria-label', nombre);
+        if (on) b.classList.add('activo');
+        b.addEventListener('click', () => { cerrarPop(); aplicar(acc)(); });
+        barra.appendChild(b);
+      });
+      const ln = document.createElement('button'); ln.type = 'button'; ln.innerHTML = ic('link', 14); ln.title = 'Enlace… (' + tecla('Mod+K') + ')'; ln.setAttribute('aria-label', 'Enlace');
+      if (a) ln.classList.add('activo');
+      ln.addEventListener('click', () => { cerrarPop(); volverA(campo, r0); cuadroEnlace(campo); });
+      barra.appendChild(ln);
+      f.appendChild(barra);
+      const tonos = (rot, fondo) => {
+        f.appendChild(titulo(rot));
+        const grid = document.createElement('div'); grid.className = 'gd-fmt-tonos';
+        PAL.forEach((t, i) => {
+          const b = document.createElement('button'); b.type = 'button'; b.title = t[0]; b.setAttribute('aria-label', t[0]);
+          if (fondo) b.style.background = colores(i)[0]; else { b.textContent = 'A'; b.style.color = colores(i)[1]; b.classList.add('letra'); }
+          b.addEventListener('click', () => { cerrarPop(); if (fondo) recordarResaltado(colores(i)[0]); aplicar(fondo ? 'resaltar' : 'letra', colores(i)[fondo ? 0 : 1])(); });
+          grid.appendChild(b);
+        });
+        f.appendChild(grid);
+        f.appendChild(opcion(fondo ? 'Quitar el resaltado' : 'Automático', aplicar(fondo ? 'resaltar' : 'letra', null)));
+      };
+      tonos('Resaltar', true);
+      tonos('Color de letra', false);
+    }
+    if (a) {
+      const u = a.getAttribute('href') || '';
+      if (hay) f.appendChild(separador());
+      f.appendChild(opcion('Abrir el enlace', () => { volverA(campo, r0); abrirDireccion(u); }, { atajo: tecla('Mod+') + 'clic' }));
+      f.appendChild(opcion('Editar el enlace…', () => { volverA(campo, r0); cuadroEnlace(campo); }));
+      f.appendChild(opcion('Quitar el enlace', aplicar('enlace', null)));
+      f.appendChild(opcion('Copiar la dirección', () => { volverA(campo, r0); copiarTexto(u); }));
+    } else if (!hay) f.appendChild(opcion('Enlace…', () => { volverA(campo, r0); cuadroEnlace(campo); }, { atajo: tecla('Mod+K') }));
+    if (hay) f.appendChild(opcion('Quitar el formato', aplicar('quitar')));
+    f.appendChild(separador());
+    if (hay) {
+      f.appendChild(opcion('Cortar', () => { volverA(campo, r0); document.execCommand('cut'); }, { atajo: tecla('Mod+X') }));
+      f.appendChild(opcion('Copiar', () => { volverA(campo, r0); document.execCommand('copy'); }, { atajo: tecla('Mod+C') }));
+    }
+    f.appendChild(opcion('Pegar', async () => {
+      let t = '';
+      try { t = window.editorAPI && window.editorAPI.leerPortapapeles ? await window.editorAPI.leerPortapapeles() : await navigator.clipboard.readText(); } catch (_) {}
+      if (!t) { if (o.avisar) o.avisar('No se pudo leer el portapapeles: pega con ' + tecla('Mod+V')); return; }
+      volverA(campo, r0);
+      if (MdVivo.pegar) MdVivo.pegar(campo, t, { markdown: true, bloques: sinGuion }); else document.execCommand('insertText', false, t);
+    }, { atajo: tecla('Mod+V') }));
+    if (o.copiarEnlace && ladoId) { f.appendChild(separador()); const id = ladoId; f.appendChild(opcion('Copiar enlace para Claude', () => { volverA(campo, r0); o.copiarEnlace({ tipo: 'nota', id }); }, { atajo: tecla('Mod+Shift+C') })); }
+    cerrarPop();
+    const ancla = anclaEn(e.clientX, e.clientY); ancla._volver = () => volverA(campo, r0);   // Esc: el foco y lo elegido, al campo
+    abrirPop(ancla, f);
+  }
+  function copiarTexto(t) {
+    const hecho = () => { if (o.avisar) o.avisar('Dirección copiada'); };
+    if (window.editorAPI && window.editorAPI.copiarTexto) window.editorAPI.copiarTexto(t).then(hecho, () => {});
+    else if (navigator.clipboard) navigator.clipboard.writeText(t).then(hecho, () => {});
+  }
+  /* el cuadro de un enlace (Cmd+K, o el menú): el texto y la dirección; si ya lo había, «Guardar» y «Quitar el enlace» */
+  function cuadroEnlace(campo) {
+    if (!window.MdVivo || !MdVivo.formato) return;
+    const r0 = rangoEn(campo), a = MdVivo.enlaceEn ? MdVivo.enlaceEn(campo) : null;
+    let url = a ? a.getAttribute('href') || '' : '', txt = a ? a.textContent.replace(/\u200B/g, '') : (r0 ? r0.toString() : '');
+    if (!a && MdVivo.esUrl && MdVivo.esUrl(txt.trim())) { url = txt.trim(); txt = ''; }   // lo elegido ya es una dirección
+    const form = document.createElement('form'); form.className = 'gd-enlace-cuadro';
+    form.innerHTML = `<div class="gd-pop-tit">${a ? 'Editar el enlace' : 'Enlace'}</div>
+      <label><span>Texto</span><input type="text" name="texto" spellcheck="false" autocomplete="off"></label>
+      <label><span>Dirección</span><input type="text" name="url" spellcheck="false" autocomplete="off" placeholder="https://… o clapcraft://…"></label>
+      <div class="gd-enlace-pie">${a ? '<button type="button" class="gd-enlace-quitar" data-quitar>Quitar el enlace</button>' : ''}<span class="spacer"></span><button type="submit" class="gd-enlace-ok">${a ? 'Guardar' : 'Añadir'}</button></div>`;
+    const campos = form.elements; campos.texto.value = txt; campos.url.value = url;
+    form.addEventListener('submit', ev => {
+      ev.preventDefault();
+      const u = campos.url.value.trim(); cerrarPop(); volverA(campo, r0);
+      if (u) MdVivo.formato(campo, 'enlace', { url: u, texto: campos.texto.value });
+    });
+    form.addEventListener('click', ev => { if (ev.target.closest('[data-quitar]')) { cerrarPop(); volverA(campo, r0); MdVivo.formato(campo, 'enlace', null); } });
+    const rr = r0 && r0.getBoundingClientRect(), base = rr && (rr.width || rr.height) ? rr : (a || campo).getBoundingClientRect();
+    cerrarPop();
+    const ancla = anclaEn(base.left, base.bottom); ancla._volver = () => volverA(campo, r0);
+    abrirPop(ancla, form);
+    setTimeout(() => { const i = campos.url.value ? campos.texto : campos.url; i.focus(); i.select(); }, 0);
   }
   /* Expandir un segmento (con `sel`, la nota que queda marcada). En Personajes se abre en su pantalla. */
   function expandir(subId, claveSeg, sel) {
@@ -642,9 +1047,108 @@
     if (!expandido) return;
     expandido = null;
     render();
+    if (o.alNavegar) o.alNavegar();                                // la pestaña vuelve a ser la de la biblioteca (de ClapBook)
     const v = main.querySelector('.gd-etq-body [data-nota].sel, .gd-etq-body [data-nodo].sel');
     if (v) v.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+  /* ---------- buscar, filtrar y ordenar (1.1.54, de ClapBook) ----------
+     Leo, en ClapBook: «En las bibliotecas, se necesita unos filtros y ordenamientos generales (como los que se tienen en los
+     segmentos expandidos) para que se ordenen y filtren el contenido de los segmentos contraídos, los filtros se deben guardar
+     entre sesiones. El filtro general es más fuerte que el filtro por segmento en las bibliotecas, pero en los segmentos
+     expandidos es más fuerte el filtro del segmento. Cuando digo filtro, también incluyo el ordenamiento», y un buscador en las
+     bibliotecas. En ClapCraft no hay etiquetas: se filtra por **el color de la nota** (los 24 tonos, o «Sin color»), que es lo
+     que Leo les pone a mano. Cada biblioteca tiene su filtro general (en su cabecera: manda sobre las tarjetas) y cada segmento el
+     suyo (en su vista expandida: ahí manda él, y lo que no pone lo pone el general, en cursiva); las reglas son
+     `C.busqueda.efectivo` (js/claquedraw/busqueda.js, probado en Node). En un segmento, «Todas las notas» (`color: ''`) y «Orden
+     manual» se guardan para mandar sobre el general. Se recuerdan en la vista de esta máquina (`vista.filtros`: 'bib:<biblioteca>'
+     y 'seg:<biblioteca>|<segmento>'; app.js los mezcla clave a clave con lo que guardan las otras ventanas). Con un orden que no
+     es el manual, las notas no se ordenan arrastrando (el cuerpo lleva `.ordenada`). Lo que se busca esconde las notas que no
+     casan, sin redibujar, mientras se sigue en esa vista. */
+  const claveFiltroBib = subId => 'bib:' + subId;
+  const claveFiltroSeg = (subId, k) => 'seg:' + subId + '|' + k;
+  const filtroDe = k => (o.filtro ? o.filtro(k) : ((o.vista && o.vista.filtros) || {})[k]) || {};
+  function ponerFiltro(k, cambios) {
+    const f = Object.assign({}, filtroDe(k));
+    Object.keys(cambios).forEach(c => { if (cambios[c] === undefined) delete f[c]; else f[c] = cambios[c]; });
+    const v = Object.keys(f).length ? f : null;
+    if (o.ponerFiltro) o.ponerFiltro(k, v);
+    else if (o.vista) { const fs = o.vista.filtros = o.vista.filtros || {}; if (v) fs[k] = v; else delete fs[k]; guardarVista(); }
+    render();
+  }
+  /* el filtro que se aplica a un segmento (`k`: 'bandeja' o 'etq:<id>'): { color, orden, heredado, propio } */
+  const filtroPara = (subId, k, enExpandido) => C.busqueda.efectivo(filtroDe(claveFiltroBib(subId)), k ? filtroDe(claveFiltroSeg(subId, k)) : {}, !!enExpandido);
+  const filtrarNotas = (notas, f) => C.busqueda.filtrar(notas, f, C.TONOS_NOTA);
+  const rotuloOrden = k => (C.busqueda.ORDENES_SEG.find(x => x[0] === k) || [k, k])[1];
+  const fechaSegun = (n, orden) => C.busqueda.fechaSegun(n, orden, fecha);
+  const nombreColor = t => t === 'sin' ? 'Sin color' : ((window.Tramas && Tramas.PALETA && Tramas.PALETA.find(p => p.id === t)) || {}).label || (t.charAt(0).toUpperCase() + t.slice(1));
+  /* el botón de un filtro de color: el punto del tono (o «Color»), encendido si hay filtro y en cursiva si viene de la biblioteca */
+  function botonColor(menu, color, heredado, pista) {
+    const punto = color ? `<i class="gd-filtro-punto${color === 'sin' ? ' sin' : ''}"${color !== 'sin' ? ` style="background: var(--t-${esc(color)})"` : ''}></i>` : ic('filter', 14);
+    return `<button type="button" class="gd-filtro${color ? ' on' : ''}${heredado ? ' heredado' : ''}" data-gd-menu="${menu}" title="${esc(pista)}">${punto}<span>${esc(color ? nombreColor(color) : 'Color')}</span>${ic('chev-d', 12)}</button>`;
+  }
+  /* el menú de colores de unas notas (con cuántas lo llevan); `heredar`: «Como la biblioteca» en un segmento */
+  function menuColores(rot, notas, actualC, poner, heredar) {
+    const cuenta = new Map(); let sin = 0;
+    notas.forEach(n => { if (n.color) cuenta.set(n.color, (cuenta.get(n.color) || 0) + 1); else sin++; });
+    const f = frag(titulo(rot)), hereda = !!(heredar && heredar.on);
+    if (heredar) f.appendChild(opcion(heredar.texto, heredar.fn, { clase: hereda ? 'on' : '' }));
+    f.appendChild(opcion('Todas las notas', () => poner(null), { clase: !actualC && !hereda ? 'on' : '' }));
+    if (!cuenta.size) { f.appendChild(Object.assign(document.createElement('div'), { className: 'gd-pop-vacio', textContent: 'Estas notas no tienen color: se les pone en su ⋯ o en su ventana.' })); return f; }
+    C.TONOS_NOTA.filter(t => cuenta.has(t)).forEach(t => f.appendChild(opcion(nombreColor(t), () => poner(t), { punto: `var(--t-${t})`, clase: actualC === t && !hereda ? 'on' : '', atajo: String(cuenta.get(t)) })));
+    if (sin) f.appendChild(opcion('Sin color', () => poner('sin'), { punto: 'var(--papel)', clase: actualC === 'sin' && !hereda ? 'on' : '', atajo: String(sin) }));
+    return f;
+  }
+  function menuOrden(rot, lista, actualK, fn) {
+    const f = frag(titulo(rot));
+    lista.forEach(([k, t]) => f.appendChild(opcion(t, () => fn(k), { clase: k === actualK ? 'on' : '' })));
+    return f;
+  }
+  /* buscar en la vista (la biblioteca o el segmento expandido): esconde las notas que no casan, sin redibujar */
+  let busquedaVista = { donde: null, texto: '' };
+  const dondeVista = () => (!actual || actual.tipo !== 'sub' ? null : expandido && expandido.subId === actual.id ? 'seg:' + actual.id + '|' + expandido.clave : 'sub:' + actual.id);
+  /* lo que se busca en la vista donde se ven las notas de esa biblioteca (para ‹ ›): el análisis, o null */
+  function busquedaEn(subId) {
+    if (!busquedaVista.texto || !actual || actual.tipo !== 'sub' || actual.id !== subId || busquedaVista.donde !== dondeVista()) return null;
+    const c = C.busqueda.analizar(busquedaVista.texto.trim());
+    return c && !c.vacia ? c : null;
+  }
+  function aplicarBusqueda() {
+    const inp = $('[data-gd-buscar-vista]', main), m = modelo(); if (!inp || !m) return;
+    const q = inp.value.trim(), c = q ? C.busqueda.analizar(q) : null, activa = !!c && !c.vacia;
+    busquedaVista = { donde: dondeVista(), texto: inp.value };
+    let total = 0, vistas = 0;
+    $$('[data-nota]', main).forEach(el => {
+      const n = m.nota(el.dataset.nota); if (!n) return;
+      const ok = !activa || C.busqueda.puntuar(n, c) > 0;
+      el.hidden = !ok; total++; if (ok && !seccionOculta(el)) vistas++;
+    });
+    $$('.gd-bloque', main).forEach(b => b.classList.toggle('con-coincidencias', activa && b.classList.contains('plegada') && $$('[data-nota]', b).some(x => !x.hidden)));   // contraída, pero con algo
+    $$('.gd-etq[data-clave]', main).forEach(sec => sec.classList.toggle('sin-coincidencias', activa && !$$('[data-nota]', sec).some(x => !x.hidden)));
+    main.classList.toggle('buscando', activa);
+    const cuenta = $('.gd-buscar-cuenta', main); if (cuenta) cuenta.textContent = activa ? vistas + ' de ' + total : '';
+    if (ladoId) { const mm = modelo(), n = mm && mm.nota(ladoId); if (n && capa) $('[data-gd-nav-lado]', capa).innerHTML = navHtml(mm, n); }
+  }
+  /* una nota de una sección contraída, o escondida porque otra se ve sola en toda la pantalla */
+  const seccionOculta = el => !!(el.closest('.gd-bloque.plegada') || (el.closest('.gd-cuerpo.con-grande') && !el.closest('.gd-bloque.grande')));
+  /* la caja de buscar de una vista */
+  const cajaBuscar = (ph, pista) => `<label class="gd-buscar-vista" title="${esc(pista)}">${ic('search', 14)}<input type="search" data-gd-buscar-vista placeholder="${esc(ph)}" spellcheck="false" autocomplete="off" aria-label="${esc(ph)}"><span class="gd-buscar-cuenta"></span></label>`;
+  /* tras redibujar la misma vista, lo que se buscaba (y el foco, si lo tenía: un render de fondo no lo quita); en otra, nada */
+  function reponerBusqueda(foco) {
+    const inp = $('[data-gd-buscar-vista]', main), aqui = dondeVista();
+    if (busquedaVista.donde !== aqui) busquedaVista = { donde: aqui, texto: '' };
+    if (!inp) { main.classList.remove('buscando'); return; }
+    if (busquedaVista.texto) { inp.value = busquedaVista.texto; aplicarBusqueda(); } else main.classList.remove('buscando');
+    if (foco && foco.donde === aqui) { inp.focus({ preventScroll: true }); try { inp.setSelectionRange(foco.a, foco.b); } catch (_) {} }
+  }
+  /* la caja con el foco antes de redibujar (dónde y qué tenía elegido) */
+  function focoBusqueda() {
+    const b = document.activeElement;
+    return b && b.matches && b.matches('[data-gd-buscar-vista]') && main.contains(b) ? { donde: busquedaVista.donde, a: b.selectionStart, b: b.selectionEnd } : null;
+  }
+  function enfocarBusqueda() { const inp = $('[data-gd-buscar-vista]', main); if (!inp || !inp.offsetParent) return false; inp.focus(); inp.select(); return true; }
+  /* Cmd+F en la vista de una biblioteca (sin una nota abierta ni su ventana): su caja de buscar */
+  const buscarEnVista = () => !notaAbierta && !ladoId && enfocarBusqueda();
+  const olvidarBusqueda = () => { busquedaVista = { donde: null, texto: '' }; };
   /* ---------- las secciones de la biblioteca: contraer y expandir (Leo, 16-09-2026) ----------
      Cada sección (Segmentos y Guiones generados) se contrae con el chevrón de su título, como los segmentos de
      Personajes, y se expande con el botón de la derecha: expandida ocupa el lienzo ella sola (la otra no se ve) y
@@ -680,9 +1184,9 @@
     });
   }
   function renderMain() {
-    const m = modelo();
-    if (!m) { main.innerHTML = '<div class="gd-nada"><b>No hay ningún guion abierto</b></div>'; return; }
-    if (!actual) { main.innerHTML = '<div class="gd-nada"><b>No hay contenedores</b><br>Crea uno con «＋ Nuevo contenedor» en el menú.</div>'; return; }
+    const m = modelo(), foco = focoBusqueda();
+    if (!m) { if (ladoId) cerrarLado(); main.innerHTML = '<div class="gd-nada"><b>No hay ningún guion abierto</b></div>'; return; }
+    if (!actual) { if (ladoId) cerrarLado(); main.innerHTML = '<div class="gd-nada"><b>No hay contenedores</b><br>Crea uno con «＋ Nuevo contenedor» en el menú.</div>'; return; }
     const seccion = t => `<div class="gd-seccion"><span class="gd-seccion-tit">${t}</span></div>`;
     if (esPapelera()) {
       const todo = m.papelera(), lista = todo.filter(x => x.nota), piezas = todo.filter(x => !x.nota);
@@ -694,11 +1198,12 @@
         + `${seccion(`Notas tiradas · ${lista.length} · se eliminan solas a los ${C.DIAS_PAPELERA} días`)}
         <section class="gd-etq gd-etq--bandeja gd-papelera gd-papelera--notas"><div class="gd-etq-body" data-gd-drop-cont="${PAPELERA}">${todo.length ? (lista.length ? '' : '<div class="gd-etq-vacia">No hay notas sueltas</div>') : '<div class="gd-etq-vacia">La papelera está vacía</div>'}</div></section></div>`;
       ponerCabecera('', 'Papelera');
+      if (ladoId) cerrarLado(); olvidarBusqueda();
       const cajaP = $('.gd-papelera--piezas .gd-etq-body', main);
       piezas.forEach(x => {
         const id = x.tipo === 'esquema' ? x.esquema.id : x.tipo === 'sub' ? x.sub.id : x.personaje.id;
         const par = x.tipo === 'personaje' ? (PAL[x.personaje.color] || PAL[0]) : null;
-        const chip = x.tipo === 'esquema' ? CHIPS.esquema : x.tipo === 'sub' ? CHIPS.sub : `<span class="gd-chip per-chip" style="--chl:${par[1]};--chd:${par[2]}" title="Personaje">P</span>`;
+        const chip = x.tipo === 'esquema' ? CHIPS.esquema : x.tipo === 'sub' ? CHIPS.sub : `<span class="gd-chip per-chip" style="--chl:${par[1]};--chd:${par[2]}" title="Personaje">${esc(C.iniciales(x.nombre || (x.personaje && x.personaje.nombre) || ''))}</span>`;
         const n = x.tipo === 'esquema' ? (x.esquema.datos.puntos || []).length : (x.notas || []).length;
         const cuanto = x.tipo === 'esquema' ? n + (n === 1 ? ' nodo' : ' nodos') : n + (n === 1 ? ' nota' : ' notas');
         const donde = x.tipo === 'personaje' ? 'de Personajes' : 'de «' + (x.origenNombre || '?') + '»';
@@ -717,18 +1222,29 @@
       const c = m.contenedor(actual.cid);
       main.innerHTML = cabeceraHtml(null, '', c.nombre) + '<div class="gd-cuerpo"><div class="gd-nada"><b>Este contenedor no tiene bibliotecas</b><br>Crea una con el «＋» del contenedor en el menú.</div></div>';
       ponerCabecera('', c.nombre);
+      if (ladoId) cerrarLado(); olvidarBusqueda();
     } else {
       const r = m.sub(actual.id), c = r.contenedor, s = r.sub;
       const x = expandido && expandido.subId === s.id && datosSegmento(m, s.id, expandido.clave);
-      if (x) { const e0 = estiloHijo(s.id, 'gd-chip--sub'); main.replaceChildren(vistaExpandida(m, x, { cont: c.nombre, chip: chipNombre(s.nombre, e0.clase, { boton: true, estilo: e0.estilo, attrs: ' data-gd-contraer', title: 'Volver a la biblioteca «' + s.nombre + '»' }) })); return; }
+      if (x) {
+        const e0 = estiloHijo(s.id, 'gd-chip--sub');
+        main.replaceChildren(vistaExpandida(m, x, { cont: c.nombre, chip: chipNombre(s.nombre, e0.clase, { boton: true, estilo: e0.estilo, attrs: ' data-gd-contraer', title: 'Volver a la biblioteca «' + s.nombre + '»' }) }));
+        reponerBusqueda(foco);
+        ventanaTrasPintar(m, s.id);
+        return;
+      }
       if (expandido && expandido.subId === s.id) expandido = null;   // el segmento ya no existe
       const enl = m.enlace(s.id);
       const eid = enl && enl.esquema ? enl.esquema.id : null;
       const verEsq = eid ? `<button type="button" class="btn" data-gd-ver-esquema="${esc(eid)}" title="Abrir el esquema enlazado a esta biblioteca">${ic('board', 15)}Ver esquema</button>` : '';
       const chipSub = chipNombre(s.nombre, estiloHijo(s.id, 'gd-chip--sub').clase, { estilo: estiloHijo(s.id).estilo, title: 'Biblioteca «' + s.nombre + '»' });
-      /* a la derecha, el panel de la nota elegida, como en un segmento expandido (Leo, 18-09-2026: «pon el mismo panel en las
-         bibliotecas») */
-      main.innerHTML = cabeceraHtml(c.nombre, chipSub, null, verEsq) + '<div class="gd-exp-medio gd-bib-medio"><div class="gd-cuerpo"></div><aside class="gd-exp-lado" hidden></aside></div>';
+      /* buscar y el filtro general de la biblioteca (1.1.54): manda sobre el de cada segmento en sus tarjetas */
+      const fb = filtroDe(claveFiltroBib(s.id)), colB = fb.color || null, ordB = fb.orden || 'manual';
+      const filtrosBib = cajaBuscar('Buscar en la biblioteca', 'Buscar en las notas de la biblioteca (Cmd+F)')
+        + botonColor('colorBib', colB, false, (colB ? 'Solo las notas ' + (colB === 'sin' ? 'sin color' : 'de color ' + nombreColor(colB).toLowerCase()) + ', en todos los segmentos' : 'Solo las notas de un color, en todos los segmentos') + ' (aquí manda sobre el filtro de cada segmento)')
+        + (colB ? `<button type="button" class="gd-filtro-quitar" data-gd-quitar-color-bib title="Quitar el filtro" aria-label="Quitar el filtro">${ic('close', 12)}</button>` : '')
+        + `<button type="button" class="gd-filtro${ordB !== 'manual' ? ' on' : ''}" data-gd-menu="ordenBib" title="${esc((ordB === 'manual' ? 'El orden de las notas de todos los segmentos' : 'Orden: ' + rotuloOrden(ordB).toLowerCase() + ', en todos los segmentos') + ' (aquí manda sobre el de cada segmento)')}">${ic('sort', 14)}<span>${esc(ordB === 'manual' ? 'Orden' : rotuloOrden(ordB))}</span>${ic('chev-d', 12)}</button>`;
+      main.innerHTML = cabeceraHtml(c.nombre, chipSub, null, filtrosBib + verEsq) + '<div class="gd-exp-medio gd-bib-medio"><div class="gd-cuerpo"></div></div>';
       const cuerpo = $('.gd-cuerpo', main);
       {
         /* la biblioteca de un personaje estrena la sección «Apariciones» (Leo, 16-09-2026: los personajes son
@@ -746,10 +1262,22 @@
       }
       aplicarSecciones();                                      // lo contraído y lo expandido de la vista
       ponerCabecera(c.nombre, null);
-      const elegida = notaSel && m.nota(notaSel);
-      if (elegida && elegida.subId === s.id && !m.enPapelera(elegida.id)) setTimeout(() => { if (notaSel === elegida.id) mostrarLado(notaSel); }, 0);
-      else if (ladoId) ladoId = null;
+      reponerBusqueda(foco);
+      ventanaTrasPintar(m, s.id);
     }
+  }
+  /* la ventana de una nota tras pintar una biblioteca: se reabre sola una vez (al volver a una pestaña o a la vista que la tenía),
+     se pone al día si sigue abierta y se cierra si su nota ya no es de aquí */
+  function ventanaTrasPintar(m, subId) {
+    const aLaVista = () => !o.modo || o.modo() === 'documentos';   // el menú se pinta también desde las otras vistas: ahí no se abre
+    const elegida = notaSel && m.nota(notaSel);
+    if (reabrir && aLaVista()) {
+      reabrir = false;
+      if (elegida && elegida.subId === subId && !m.enPapelera(elegida.id)) { const id = elegida.id; setTimeout(() => { if (notaSel === id && !notaAbierta && aLaVista()) mostrarLado(id); }, 0); return; }
+    }
+    if (!ladoId) return;
+    const n = m.nota(ladoId);
+    if (n && n.subId === subId && aLaVista()) refrescarVentana(); else cerrarLado();
   }
   /* Una sección de la biblioteca: su título, sus segmentos (y la bandeja, en la de partida) y «＋ nuevo segmento».
      `k` null = la sección de partida, «Segmentos» (Leo, 16-09-2026: en lugar de «Guiones generados», las que quiera). */
@@ -765,8 +1293,13 @@
     tablero.className = 'gd-tablero'; tablero.dataset.orden = ''; tablero.dataset.sub = s.id;
     if (k) tablero.dataset.seccionId = k.id;
     sec.appendChild(tablero);
-    const piezas = new Map(k ? [] : [['bandeja', tarjeta(null, m.notasDe(s.id, null))]]);
-    etqs.forEach(e => piezas.set('etq:' + e.id, tarjeta(e, m.notasDe(s.id, e.id))));
+    /* cada segmento con el filtro que le toca en la biblioteca: el general manda; lo que no pone, lo pone el suyo */
+    const conFiltro = (e, kk) => {
+      const todas = m.notasDe(s.id, e ? e.id : null), f = filtroPara(s.id, kk, false);
+      return tarjeta(e, filtrarNotas(todas, f), { total: todas.length, filtro: f, propio: f.propio });
+    };
+    const piezas = new Map(k ? [] : [['bandeja', conFiltro(null, 'bandeja')]]);
+    etqs.forEach(e => piezas.set('etq:' + e.id, conFiltro(e, 'etq:' + e.id)));
     const orden = k ? Array.from(piezas.keys()) : m.ordenSegmentos(s.id, Array.from(piezas.keys()));
     orden.forEach(x => { const card = piezas.get(x); if (!card) return; card.dataset.clave = x; tablero.appendChild(card); });
     const nueva = document.createElement('button');
@@ -779,12 +1312,14 @@
   /* La cabecera de una nota de biblioteca abierta en el editor: la misma que la de un documento de esquema
      (Leo): «CONTENEDOR [Biblioteca] [segmento] título», con el título editable (renombra la nota), «Ver
      biblioteca» y ‹ › para la nota anterior o siguiente de su segmento. En Personajes: «PERSONAJES [nombre]». */
-  const hermanasDe = (m, n) => m.notasDe(n.subId, n.etiquetaId || null);
+  /* (1.1.54) ‹ › van por las notas del segmento en el orden en que se ven (`vecinasDe`: sus filtros y lo que se busque), y junto a
+     la papelera, «Contraer» devuelve la nota a su ventana, encima de la biblioteca (Leo en ClapBook: «Pon junto al bote de basura
+     un botón para contraer la nota y se vea de nuevo el modal») */
   function renderMigas() {
     if (!migas) return;
     const m = modelo(); if (!m || !notaAbierta) { migas.innerHTML = ''; delete migas.dataset.migaNota; return; }
     const n = m.nota(notaAbierta), r = n && m.sub(n.subId); if (!r) { migas.innerHTML = ''; delete migas.dataset.migaNota; return; }
-    const hermanas = hermanasDe(m, n), i = hermanas.findIndex(x => x.id === n.id);
+    const hermanas = vecinasDe(m, n), i = hermanas.findIndex(x => x.id === n.id);
     const nom = $('[data-gd-miga-nom]', migas);
     if (nom && !nom.readOnly && migas.dataset.migaNota === n.id) return;   // renombrando: no se redibuja
     const s = ref('sub', r.contenedor.id, r.sub.id);
@@ -807,7 +1342,9 @@
       </div>
       <span class="spacer"></span>
       <button type="button" class="btn" data-gd-volver title="${per ? 'Volver al personaje' : 'Volver a la biblioteca'}">${ic(per ? 'person' : 'docs', 15)}${per ? 'Ver personaje' : 'Ver biblioteca'}</button>
-      <span class="par-nav"><button type="button" data-gd-miga-mover="-1" ${i > 0 ? '' : 'disabled'} title="Nota anterior del segmento" aria-label="Nota anterior">${ic('arr-l', 13)}</button><button type="button" data-gd-miga-mover="1" ${i >= 0 && i < hermanas.length - 1 ? '' : 'disabled'} title="Nota siguiente del segmento" aria-label="Nota siguiente">${ic('arr-r', 13)}</button></span>`;
+      <span class="par-nav"><button type="button" data-gd-miga-mover="-1" ${i > 0 ? '' : 'disabled'} title="Nota anterior del segmento" aria-label="Nota anterior">${ic('arr-l', 13)}</button><button type="button" data-gd-miga-mover="1" ${i >= 0 && i < hermanas.length - 1 ? '' : 'disabled'} title="Nota siguiente del segmento" aria-label="Nota siguiente">${ic('arr-r', 13)}</button></span>
+      <button type="button" class="icono gd-miga-tirar" data-gd-miga-tirar title="Mover la nota a la papelera" aria-label="Mover la nota a la papelera">${ic('trash', 15)}</button>
+      <button type="button" class="icono" data-gd-contraer-nota title="Contraer: verla en su ventana, encima de la biblioteca" aria-label="Contraer la nota">${ic('collapse', 15)}</button>`;
     $('[data-gd-miga-cont]', migas).textContent = per ? 'Personajes' : r.contenedor.nombre;
     $('[data-gd-miga-nom]', migas).value = n.titulo;
   }
@@ -819,9 +1356,11 @@
     return fecha(t) + ' ' + hh;
   }
   let renderPendiente = false;
+  /* con una nota en el editor, el tablero de detrás no se pinta (no se ve, y así la ventana de otra nota no se reabre detrás);
+     cerrarla lo redibuja */
   function render() {
     if (pd && pd.activo) { renderPendiente = true; return; }   // durante un arrastre no se redibuja: se perdería lo que se arrastra
-    if (editando) return; renderLado(); renderMain(); renderMigas(); }
+    if (editando) return; renderLado(); if (!notaAbierta) renderMain(); renderMigas(); }
   /* abrir una aparición: una nota de biblioteca en el editor, o el documento de un nodo */
   function abrirAparicion(el) {
     const tipo = el.dataset.apTipo, id = el.dataset.apId;
@@ -832,9 +1371,11 @@
   /* la barra está en todas las vistas: lo elegido en ella se enseña en la vista Biblioteca */
   const irAlTablero = () => { if (o.mostrarTablero) o.mostrarTablero(); };
   function abrirNota(id) {
+    notaAntes = null;
     const m = modelo(); if (!m) return;
     if (m.enPapelera(id)) { if (o.avisar) o.avisar('Está en la papelera: restáurala para abrirla'); return; }
     const n = m.nota(id), r = n && m.sub(n.subId); if (!r) return;
+    if (ladoId) cerrarLado();                                    // la ventana de una nota se va: esta ocupa el editor
     /* los documentos de un esquema (los guiones) se abren en la vista Texto, con su tira de referencia (Leo, 16-09-2026) */
     if (r.sub.guionEid && o.abrirTexto) { if (notaAbierta) cerrarNota(); o.abrirTexto(id); return; }
     irAlTablero(true);
@@ -845,11 +1386,12 @@
     o.texto.abrirDocumento({ titulo: n.titulo, html: n.html, characters: n.characters }, {
       guardar: doc => { const x = m.guardarNota(id, doc); if (x.ok && x.cambio && o.guardar) o.guardar(); },
       alCambiar: () => { renderMigas(); renderLado(); }
-    });
+    }, { clave: id });
     render();
   }
   function cerrarNota() {
     if (!notaAbierta) return;
+    if (!navSigue) ordenNav = null;                            // el orden de ‹ › se congela mientras se navega (vecinasDe)
     o.texto.cerrarDocumento();
     notaAbierta = null;
     document.body.classList.remove('nota-abierta');
@@ -1040,7 +1582,7 @@
   function cerrarPop() {
     if (!abierto) return;
     abierto.remove(); abierto = null;
-    if (disparador) { disparador.classList.remove('is-active'); disparador = null; }
+    if (disparador) { if (disparador.classList) disparador.classList.remove('is-active'); disparador = null; }
   }
   function abrirPop(trigger, nodo) {
     const igual = disparador === trigger;
@@ -1055,7 +1597,7 @@
     if (x + el.offsetWidth > W - 8) x = W - 8 - el.offsetWidth;
     if (y + el.offsetHeight > H - 8) y = Math.max(8, t.top - el.offsetHeight - 5);
     el.style.left = Math.max(8, x) + 'px'; el.style.top = y + 'px';
-    trigger.classList.add('is-active');
+    if (trigger.classList) trigger.classList.add('is-active');
     abierto = el; disparador = trigger;
     const primero = el.querySelector('button'); if (primero) primero.focus({ preventScroll: true });
   }
@@ -1064,6 +1606,7 @@
     b.type = 'button'; b.className = (extra && extra.clase) || ''; b.setAttribute('role', 'menuitem');
     if (extra && extra.punto) { const p = document.createElement('span'); p.className = 'gd-pop-punto'; p.style.background = extra.punto; b.appendChild(p); }
     b.appendChild(document.createTextNode(texto));
+    if (extra && extra.atajo) { const k = document.createElement('kbd'); k.className = 'gd-pop-atajo'; k.textContent = extra.atajo; b.appendChild(k); }   // un atajo, o una cuenta
     b.addEventListener('click', () => { cerrarPop(); accion(); });
     return b;
   };
@@ -1176,7 +1719,7 @@
   }
   function renombrarGrupo(gid) {
     const r = d.grupo(gid); if (!r) return;
-    const el = $(`.gd-arb-grupo[data-grupo="${gid}"] .gd-arb-nom`, lado); if (!el) return;
+    const el = $(`.gd-arb-grupo[data-grupo="${CSS.escape(gid)}"] .gd-arb-nom`, lado); if (!el) return;
     editarEnSitio(el, r.grupo.nombre, v => { if (v !== null && v.trim()) tras(d.renombrarGrupo(gid, v)); else render(); });
   }
   /* Las opciones de un hijo (esquema o subcontenedor), en su fila del árbol. */
@@ -1193,6 +1736,11 @@
     nivel(null, 0);
     return f;
   }
+  /* «Abrir en pestaña» (1.1.33, Leo): lo abre en una pestaña del proyecto, o va a la que ya lo tenga (app.js, `abrirEnPestana`) */
+  const enPestana = (destino, texto) => o.abrirEnPestana ? [opcion(texto || 'Abrir en pestaña', () => o.abrirEnPestana(destino))] : [];
+  /* «Copiar enlace para Claude» (1.1.52, Leo: «pon unos "puntos" o "links" a bibliotecas, segmentos, notas, personajes,
+     esquemas… para facilitar el decirle a Claude a qué puntos me refiero»): su enlace en Markdown, al portapapeles (app.js) */
+  const conEnlace = ref => (o.copiarEnlace ? [opcion('Copiar enlace para Claude', () => o.copiarEnlace(ref))] : []);
   function menuHijo(t, s) {
     const actualCarpeta = ((s.tipo === 'esquema' ? (d.esquema(s.id) || {}).esquema : (d.sub(s.id) || {}).sub) || {}).carpetaId || null;
     const mover = opcion('Mover a carpeta…', () => abrirPop(t, menuMoverCarpeta(s.tipo === 'esquema' ? 'esquema' : 'sub', s.id, s.cid, actualCarpeta)));
@@ -1202,11 +1750,18 @@
     const duplicar = opcion('Duplicar', () => duplicarHijo(s));
     if (s.tipo === 'esquema') return frag(
       opcion('Abrir esquema', () => abrirEsquema(s.id)),
+      ...enPestana({ tipo: 'esquema', id: s.id }),
+      ...(d.esEsquemaPersonaje(s.id) ? [] : enPestana({ tipo: 'documento', id: s.id }, 'Abrir el documento en pestaña')),
+      ...conEnlace({ tipo: 'esquema', id: s.id }),
+      separador(),
       opcion('Renombrar', () => renombrarHijo(s, t)),
       duplicar, mover,
       separador(), ...enlace,
       opcion('Mover a la papelera', () => eliminarEsquema(s.id), { clase: 'peligro' }));
     return frag(
+      ...enPestana({ tipo: 'sub', id: s.id }),
+      ...conEnlace({ tipo: 'biblioteca', id: s.id }),
+      separador(),
       opcion('Nueva nota', () => nuevaNota(s.id, null)),
       opcion('Nuevo segmento', () => abrirPop(t, paleta(null, s.id))),
       separador(),
@@ -1221,7 +1776,36 @@
     if (o.volcar) o.volcar();
     tras(s.tipo === 'esquema' ? d.duplicarEsquema(s.id) : d.duplicarSub(s.id));
   }
+  /* la nota de un botón: su tarjeta, o la ventana de la nota (que no lleva `data-nota`: el tablero de tramas lo oye) */
+  const notaDeBoton = t => t.dataset.notaId || ((t.closest('[data-nota]') || {}).dataset || {}).nota;
   const MENUS = {
+    /* el filtro general de la biblioteca: el color y el orden de las notas de todos sus segmentos (1.1.54) */
+    colorBib: () => {
+      if (!actual || actual.tipo !== 'sub') return null;
+      const k = claveFiltroBib(actual.id);
+      return menuColores('Solo las notas de color', d.notasDe(actual.id), filtroDe(k).color || null, t => ponerFiltro(k, { color: t || undefined }));
+    },
+    ordenBib: () => {
+      if (!actual || actual.tipo !== 'sub') return null;
+      const k = claveFiltroBib(actual.id), g = filtroDe(k);
+      return menuOrden('Ordenar las notas de todos los segmentos', [['manual', 'Cada segmento, el suyo (manual o el que tenga)'], ...C.busqueda.ORDENES], g.orden || 'manual', o2 => ponerFiltro(k, { orden: o2 === 'manual' ? undefined : o2 }));
+    },
+    /* el de un segmento expandido (se guarda en él; «Como la biblioteca», lo del filtro general) */
+    colorSeg: () => {
+      const x = expandido && datosSegmento(d, expandido.subId, expandido.clave); if (!x || !x.notas) return null;
+      const k = claveFiltroSeg(expandido.subId, expandido.clave), propio = filtroDe(k), g = filtroDe(claveFiltroBib(expandido.subId));
+      return menuColores('Solo las notas del segmento de color', x.notas, filtroPara(expandido.subId, expandido.clave, true).color, t => ponerFiltro(k, { color: t || (g.color ? '' : undefined) }),
+        g.color ? { texto: 'Como la biblioteca: ' + nombreColor(g.color).toLowerCase(), on: propio.color === undefined, fn: () => ponerFiltro(k, { color: undefined }) } : null);
+    },
+    ordenSeg: () => {
+      if (!expandido) return null;
+      const x = expandido, k = claveFiltroSeg(x.subId, x.clave), propio = filtroDe(k), g = filtroDe(claveFiltroBib(x.subId)), f = filtroPara(x.subId, x.clave, true);
+      const fr = frag(titulo('Ordenar las notas del segmento'));
+      if (g.orden && g.orden !== 'manual') fr.appendChild(opcion('Como la biblioteca: ' + rotuloOrden(g.orden).toLowerCase(), () => ponerFiltro(k, { orden: undefined }), { clase: propio.orden === undefined ? 'on' : '' }));
+      C.busqueda.ORDENES_SEG.forEach(([o2, t]) => fr.appendChild(opcion(t, () => ponerFiltro(k, { orden: o2 === 'manual' && !(g.orden && g.orden !== 'manual') ? undefined : o2 }),
+        { clase: propio.orden !== undefined || !(g.orden && g.orden !== 'manual') ? (f.orden === o2 ? 'on' : '') : '' })));
+      return fr;
+    },
     grupo: t => {
       const gid = t.dataset.grupoId, r = d.grupo(gid); if (!r) return null;
       const n = r.grupo.items.length;
@@ -1239,6 +1823,7 @@
         separador(),
         opcion('Renombrar', () => renombrarGrupo(gid)),
         opcion('Cambiar color', () => abrirPop(t, paletaGrupo(gid))),
+        ...conEnlace({ tipo: 'grupo', id: gid }),
         separador(),
         opcion('Deshacer el grupo', () => tras(d.deshacerGrupo(gid)), { clase: 'peligro' }));
     },
@@ -1264,6 +1849,7 @@
         separador(),
         opcion('Renombrar', () => renombrarContenedor(c.id)),
         opcion(c.fijado ? 'Quitar de fijados' : 'Fijar', () => tras(d.fijarContenedor(c.id, !c.fijado))),
+        ...conEnlace({ tipo: 'contenedor', id: c.id }),
         separador(),
         opcion('Eliminar contenedor', async () => {
           const ne = c.esquemas.length, nb = d.subsDe(c.id).length;
@@ -1288,14 +1874,18 @@
         opcion('Renombrar', () => renombrarCarpeta(id)),
         opcion('Cambiar color', () => abrirPop(t, paletaCarpeta(id))),
         opcion('Mover a…', () => abrirPop(t, menuMoverCarpetaDe(id))),
+        ...conEnlace({ tipo: 'carpeta', id }),
         separador(),
         opcion('Eliminar carpeta', () => eliminarCarpeta(id), { clase: 'peligro' }));
     },
-    papelera: () => frag(opcion('Vaciar papelera', vaciarPapelera, { clase: 'peligro' })),
+    papelera: () => frag(...enPestana({ tipo: 'papelera' }), separador(), opcion('Vaciar papelera', vaciarPapelera, { clase: 'peligro' })),
     personaje: t => {
       const id = t.closest('[data-personaje]').dataset.personaje;
       return frag(
         opcion('Abrir', () => o.abrirPersonaje && o.abrirPersonaje(id)),
+        ...enPestana({ tipo: 'personaje', id }),
+        ...conEnlace({ tipo: 'personaje', id }),
+        separador(),
         opcion('Renombrar', () => renombrarPersonaje(id)),
         opcion('Cambiar color', () => abrirPop(t, paletaPersonaje(id))),
         opcion('Mover a carpeta…', () => abrirPop(t, menuMoverCarpeta('personaje', id, C.ELENCO_CARPETAS, (d.personaje(id) || {}).carpetaId || null))),
@@ -1310,12 +1900,16 @@
       return frag(
         opcion('Renombrar', () => renombrarSeccion(id)),
         opcion('Nuevo segmento', () => abrirPop(t, paleta(null, k.sub.id, id))),
+        ...conEnlace({ tipo: 'seccion', biblioteca: k.sub.id, id }),
         separador(),
         opcion('Eliminar sección', () => eliminarSeccion(id), { clase: 'peligro' }));
     },
     etiqueta: t => {
       const e = d.etiqueta(t.closest('[data-etq]').dataset.etq); if (!e) return null;
       return frag(
+        ...enPestana({ tipo: 'segmento', id: e.subId, clave: 'etq:' + e.id }),
+        ...conEnlace({ tipo: 'segmento', biblioteca: e.subId, id: e.id }),
+        separador(),
         opcion('Renombrar', () => renombrarEtiqueta(e.id)),
         opcion('Cambiar color', () => abrirPop(t, paleta(e.id))),
         opcion('Mover a la izquierda', () => tras(d.moverEtiqueta(e.id, -1))),
@@ -1331,10 +1925,11 @@
         opcion('Ir a su sección', () => o.abrirNodo(eid, id)),
         opcion('Renombrar', () => renombrarNodo(el)),
         opcion('Ver esquema', () => o.irAlNodo(id, eid)),
+        ...conEnlace({ tipo: 'nodo', esquema: eid, id }),
         separador(),
         opcion('Eliminar nodo…', () => eliminarNodo(eid, id), { clase: 'peligro' }));
     },
-    mover: t => { const id = t.closest('[data-nota]').dataset.nota, n = d.nota(id); if (!n) return null; return menuDestinos('Mover a…', eid => tras(d.moverNota(id, eid)), n.etiquetaId, n.subId); },
+    mover: t => { const id = notaDeBoton(t), n = id && d.nota(id); if (!n) return null; return menuDestinos('Mover a…', eid => tras(d.moverNota(id, eid)), n.etiquetaId, n.subId); },
     pieza: t => {
       const id = t.closest('[data-pieza]').dataset.pieza, x = d.piezaEnPapelera(id); if (!x) return null;
       const nombre = C.nombreEnPapelera(x);
@@ -1344,7 +1939,8 @@
         opcion('Eliminar del todo', async () => { if (await o.confirmar('¿Eliminar «' + nombre + '» del todo, con todo lo que tiene dentro? No se puede deshacer.', 'Eliminar')) tras(d.eliminarDefinitivo(id)); }, { clase: 'peligro' }));
     },
     nota: t => {
-      const id = t.closest('[data-nota]').dataset.nota;
+      const id = notaDeBoton(t); if (!id) return null;
+      const enVentana = !!(capa && capa.contains(t));             // el ⋯ de la ventana: renombrar es su nombre, arriba
       if (d.enPapelera(id)) {
         const x = d.enPapelera(id);
         return frag(
@@ -1355,6 +1951,8 @@
       const n = d.nota(id); if (!n) return null;
       if (n.guion) return frag(
         opcion('Abrir guion', () => abrirNota(id)),
+        ...enPestana({ tipo: 'nota', id }),
+        ...conEnlace({ tipo: 'nota', id }),
         opcion('Renombrar', () => renombrarNota(id, t.closest('[data-nota]'))),
         opcion('Exportar…', () => { if (C.exportar) C.exportar.menu(t, () => ({ titulo: n.titulo, html: (d.nota(id) || n).html }), o.avisar); }),
         opcion('Color…', () => abrirPop(t, paletaNota(id))),
@@ -1362,7 +1960,10 @@
         opcion('Mover a la papelera', () => tirarNota(id), { clase: 'peligro' }));
       return frag(
         opcion('Abrir documento', () => abrirNota(id)),
-        opcion('Renombrar', () => renombrarNota(id, t.closest('[data-nota]'))),
+        ...enPestana({ tipo: 'nota', id }),
+        ...conEnlace({ tipo: 'nota', id }),
+        opcion('Renombrar', () => { if (enVentana) { const x = tituloLado(); x.focus(); x.select(); } else renombrarNota(id, t.closest('[data-nota]')); }),
+        opcion('Exportar…', () => { if (enVentana) guardarLadoYa(); if (C.exportar) C.exportar.menu(t, () => ({ titulo: (d.nota(id) || n).titulo, html: (d.nota(id) || n).html }), o.avisar); }),
         opcion('Color…', () => abrirPop(t, paletaNota(id))),
         opcion('Mover a…', () => abrirPop(t, MENUS.mover(t))),
         separador(),
@@ -1384,31 +1985,58 @@
   function eliminarEsquema(eid) {
     if (!d.esquema(eid)) return;
     if (o.volcar) o.volcar();
-    if (tras(d.eliminarEsquema(eid)) && o.esquemaEliminado) o.esquemaEliminado(eid);
+    if (conDeshacer(d.eliminarEsquema(eid), () => restaurarPieza(eid)) && o.esquemaEliminado) o.esquemaEliminado(eid);
   }
   function eliminarSub(id) {
     const r = d.sub(id); if (!r) return;
     if (d.notasDe(id).some(x => x.id === notaAbierta)) cerrarNota();
     if (actual && actual.id === id) actual = null;
-    tras(d.eliminarSub(id));
+    conDeshacer(d.eliminarSub(id), () => restaurarPieza(id));
   }
-  /* Crear una nota no la abre: queda en su tarjeta hasta que se pulse. */
-  function nuevaNota(subId, eid) {
+  /* Una nota nueva se abre en su ventana con el nombre propuesto elegido, para escribir encima (1.1.54, de ClapBook: «agregué
+     una nota cuando estaba abierto el panel lateral y se cerró»); en blanco se queda «Sin título». Va arriba de su segmento,
+     bajo «＋ nota», o al final con `op.alFinal` (el «＋» de la ventana, en la última nota). Con un filtro de color en ese segmento,
+     nace de ese color (si no, no se vería), y lo que se estuviera buscando se olvida. Con una nota en el editor, el editor se
+     cierra: la nueva se crearía detrás de él. */
+  function nuevaNota(subId, eid, op) {
+    op = op || {};
+    const x = d.sub(subId); if (!x) return;
     const primera = d.notasDe(subId, eid || null)[0];
     const r = d.crearNota(subId, eid);
-    if (r.ok && primera) d.moverNota(r.nota.id, eid || null, subId, primera.id);   // la nueva va arriba, bajo «＋ nota»
-    if (!tras(r)) return;
-    const x = d.sub(subId), s = ref('sub', x.contenedor.id, subId);
-    if (!mismo(actual, s)) { navegar(s); render(); }
+    if (r.ok && primera && !op.alFinal) d.moverNota(r.nota.id, eid || null, subId, primera.id);   // la nueva va arriba, bajo «＋ nota»
+    if (r.ok && !d.esGuiones(subId)) {
+      const k = eid ? 'etq:' + eid : 'bandeja', enExp = !!expandido && expandido.subId === subId && expandido.clave === k;
+      const f = filtroPara(subId, k, enExp);
+      if (f.color && f.color !== 'sin') d.colorearNota(r.nota.id, f.color);
+      olvidarBusqueda();
+    }
+    if (!r.ok) { tras(r); return; }
+    const s = ref('sub', x.contenedor.id, subId);
+    if (!mismo(actual, s) || notaAbierta) navegar(s);
+    if (notaAbierta) cerrarNota();                                 // ya redibuja
+    tras(r);
     irAlTablero();
-    /* como al crear un segmento: el nombre propuesto seleccionado para escribir encima; en blanco se queda «Sin título» */
-    const fila = main.querySelector(`[data-gd-drop] > [data-nota="${CSS.escape(r.nota.id)}"]`);
-    if (fila) { fila.scrollIntoView({ block: 'nearest', inline: 'nearest' }); renombrarNota(r.nota.id, fila); }
+    notaSel = r.nota.id; marcarElegida(r.nota.id, true);
+    mostrarLado(r.nota.id, { enfocarTitulo: true });
   }
-  function tirarNota(id) {
+  /* **Mover una nota a la papelera pregunta antes** (1.1.40, Leo: «cuando se elimine una nota de segmentos, que aparezca dialog
+     modal de confirmación»); arrastrarla a la papelera no pregunta (es un gesto deliberado) y, como todo lo que se va a la
+     papelera, el aviso lleva «Deshacer». */
+  async function tirarNota(id, op) {
+    const n = d.nota(id); if (!n) return;
+    if (!(op && op.sinPreguntar) && !await o.confirmar('¿Mover «' + (n.titulo || 'Sin título') + '» a la papelera?', 'Mover')) return;
+    if (ladoId === id) cerrarLado();
     if (notaAbierta === id) cerrarNota();
     if (notaSel === id) notaSel = null;
-    tras(d.tirarNota(id));
+    conDeshacer(d.tirarNota(id), () => tras(d.restaurarNota(id)));
+  }
+  /* Lo que se va a la papelera se avisa con su «Deshacer» (1.1.40). */
+  function conDeshacer(r, deshacer) {
+    if (!r || !r.ok) return tras(r);
+    if (o.guardar) o.guardar();
+    render();
+    if (o.avisar) o.avisar(r.aviso, { texto: 'Deshacer', fn: deshacer });
+    return true;
   }
   async function vaciarPapelera() {
     const n = d.papelera().length; if (!n) { tras(d.vaciarPapelera()); return; }
@@ -1449,7 +2077,7 @@
   }
   function renombrarContenedor(id) {
     const c = d.contenedor(id); if (!c) return;
-    const el = $(`.gd-cont[data-id="${id}"] [data-gd-nombre]`, lado); if (!el) return;
+    const el = $(`.gd-cont[data-id="${CSS.escape(id)}"] [data-gd-nombre]`, lado); if (!el) return;
     editarEnSitio(el, c.nombre, v => { if (v !== null && v.trim()) tras(d.renombrarContenedor(id, v)); else render(); });
   }
   /* Renombrar un documento de la cronología cambia el título de su nodo. */
@@ -1506,7 +2134,7 @@
   }
   function renombrarSeccion(id) {
     const k = d.seccion(id); if (!k) return;
-    const el = $(`.gd-bloque[data-seccion-id="${id}"] [data-gd-seccion-nombre]`, main); if (!el) return;
+    const el = $(`.gd-bloque[data-seccion-id="${CSS.escape(id)}"] [data-gd-seccion-nombre]`, main); if (!el) return;
     editarEnSitio(el, k.seccion.nombre, v => { if (v !== null && v.trim()) tras(d.renombrarSeccion(id, v)); else render(); });
   }
   async function eliminarSeccion(id) {
@@ -1526,7 +2154,7 @@
   }
   function renombrarEtiqueta(id) {
     const e = d.etiqueta(id); if (!e) return;
-    const el = $(`[data-etq="${id}"] [data-gd-etq-nombre]`, main); if (!el) return;
+    const el = $(`[data-etq="${CSS.escape(id)}"] [data-gd-etq-nombre]`, main); if (!el) return;
     editarEnSitio(el, e.nombre, v => { if (v !== null && v.trim()) tras(d.renombrarEtiqueta(id, v)); else render(); });
   }
   function renombrarNota(id, fila) {
@@ -1552,16 +2180,27 @@
   /* Los segmentos que no se ven se alcanzan acercando el puntero a un borde del tablero: se desplaza solo
      mientras el arrastre siga ahí. */
   const BORDE_AUTO = 70;
+  /* (1.1.54, de ClapBook) no solo el tablero: también el cuerpo de una tarjeta (con más de cinco notas se desplaza él) y el lienzo de
+     la biblioteca (las secciones de más abajo); vale el primer antepasado de lo arrastrado que se desplace hacia ese lado */
   function autodesplazar() {
     if (!pd || !pd.activo || pd.px === undefined) return;
-    const car = pd.el && pd.el.closest('.gd-tablero, .gd-exp-grid'); if (!car || car.scrollHeight <= car.clientHeight + 2) return;
-    const r = car.getBoundingClientRect();
-    const a = pd.py - r.top, b = r.bottom - pd.py;
-    const v = a < BORDE_AUTO ? -Math.ceil((BORDE_AUTO - Math.max(a, 0)) / 5) : b < BORDE_AUTO ? Math.ceil((BORDE_AUTO - Math.max(b, 0)) / 5) : 0;
-    if (!v) return;
-    const antes = car.scrollTop;
-    car.scrollTop += v;
-    if (car.scrollTop !== antes) moverArrastre({ clientX: pd.px, clientY: pd.py });   // lo que queda bajo el puntero cambió
+    for (let car = pd.el && pd.el.parentElement; car && car !== document.body; car = car.parentElement) {
+      if (!car.matches('.gd-etq-body, .gd-exp-grid, .gd-tablero, .gd-cuerpo') || car.scrollHeight <= car.clientHeight + 2) continue;
+      const r = car.getBoundingClientRect();
+      if (pd.px < r.left - 8 || pd.px > r.right + 8) continue;  // el puntero va por otra columna: no es este
+      if (car.classList.contains('gd-etq-body')) {             // el cuerpo de una tarjeta, solo con el puntero en ella (su cabecera cuenta)
+        const rc = (car.closest('.gd-etq') || car.parentElement).getBoundingClientRect();
+        if (pd.py < rc.top || pd.py > rc.bottom || pd.px < rc.left || pd.px > rc.right) continue;
+      }
+      const borde = Math.min(BORDE_AUTO, r.height / 4);
+      const a = pd.py - r.top, b = r.bottom - pd.py;
+      if (a < -BORDE_AUTO || b < -BORDE_AUTO) continue;          // el puntero anda lejos de este: el de fuera
+      const v = a < borde ? -Math.ceil((borde - Math.max(a, 0)) / 5) : b < borde ? Math.ceil((borde - Math.max(b, 0)) / 5) : 0;
+      if (!v) continue;
+      const antes = car.scrollTop;
+      car.scrollTop += v;
+      if (car.scrollTop !== antes) { moverArrastre({ clientX: pd.px, clientY: pd.py }); return; }   // lo que queda bajo el puntero cambió
+    }
   }
   /* al pulsar lo que se puede arrastrar se nota enseguida («agarrado»: se levanta un poco); al moverse, lo
      arrastrado queda en hueco punteado y lo sigue un fantasma */
@@ -1711,6 +2350,20 @@
     pd.px = e.clientX; pd.py = e.clientY;
     pd.fantasma.style.left = (e.clientX + 12) + 'px'; pd.fantasma.style.top = (e.clientY + 8) + 'px';
     const el = bajo(e.clientX, e.clientY); if (!el || !el.closest) { marcar(null, null); return; }
+    if (pd.tipo === 'orden') {                               // un segmento: entre los de su sección o a otra de la biblioteca (también vacía)
+      const o0 = pd.origen.padre, card = el.closest('[data-clave]');
+      if (!card) {
+        const t = el.closest('[data-orden]');
+        if (t && t !== o0 && pd.id !== 'bandeja' && t.dataset.sub === o0.dataset.sub) colocarVivo(t, $(':scope > .gd-etq-nueva', t));
+        return;
+      }
+      const padre = card.parentElement;
+      if (card === pd.el || !padre || !padre.matches('[data-orden]') || padre.dataset.sub !== o0.dataset.sub) return;
+      if (padre !== o0 && pd.id === 'bandeja') return;         // la bandeja no sale de «Segmentos»
+      const r = card.getBoundingClientRect(), izquierda = e.clientX < r.left + r.width / 2;
+      colocarVivo(padre, izquierda ? card : card.nextSibling);
+      return;
+    }
     if (VIVOS[pd.tipo]) {                                    // una tarjeta: delante o detrás de la que está bajo el puntero
       const padre = pd.origen.padre, card = el.closest('[data-clave], [data-acto]');
       if (!card || card === pd.el || card.parentElement !== padre || !card.matches(VIVOS[pd.tipo].replace(':scope > ', ''))) return;
@@ -1738,7 +2391,12 @@
     if (pd.tipo === 'nota' && pd.enTablero) {
       const cuerpo = el.closest('[data-gd-drop]');
       const grupo = x => ((x && x.closest('[data-grupo]')) || { dataset: {} }).dataset.grupo || '';   // guiones generados y notas, cada uno en su sección
-      if (cuerpo && cuerpo.closest(TABLEROS) === pd.enTablero && grupo(cuerpo) === grupo(pd.origen.padre)) { marcar(null, null); colocarEnCuerpo(cuerpo, ':scope > [data-nota]'); return; }
+      if (cuerpo && cuerpo.closest(TABLEROS) === pd.enTablero && grupo(cuerpo) === grupo(pd.origen.padre)) {
+        marcar(null, null);
+        /* con un orden que no es el manual, el sitio no cuenta: en su cuerpo se queda donde estaba; en otro, al final */
+        if (cuerpo.classList.contains('ordenada')) { if (cuerpo === pd.origen.padre) devolverAlOrigen(); else colocarVivo(cuerpo, cuerpo.classList.contains('gd-exp-grid') ? $(':scope > .gd-exp-add', cuerpo) : null); return; }
+        colocarEnCuerpo(cuerpo, ':scope > [data-nota]'); return;
+      }
       if (cuerpo && cuerpo.closest(TABLEROS) === pd.enTablero) { devolverAlOrigen(); return; }
       if (el.closest('[data-gd-drop-sub], [data-gd-drop-cont]')) devolverAlOrigen();   // hacia la barra o la papelera: vuelve a su sitio y se marca el destino
       else return;                                           // por fuera de todo: se queda donde iba
@@ -1822,9 +2480,9 @@
     if (tipo === 'nota' && enTablero && !zona) {             // soltada en un cuerpo del tablero: donde se ve
       const cuerpo = el.parentElement; if (!cuerpo || cuerpo.dataset.gdDrop === undefined) { render(); return; }
       const n = d.nota(id); if (!n) return;
-      const sig = siguiente('[data-nota]');
-      if (origen && origen.padre === cuerpo && origen.siguiente === el.nextSibling) { render(); return; }
-      tras(d.moverNota(id, cuerpo.dataset.gdDrop || null, (actual && actual.tipo === 'sub' && actual.id) || n.subId, sig ? sig.dataset.nota : null)); return;
+      const sig = siguiente('[data-nota]'), ordenada = cuerpo.classList.contains('ordenada');
+      if (origen && origen.padre === cuerpo && (ordenada || origen.siguiente === el.nextSibling)) { render(); return; }   // no se movió (o el orden no es el manual)
+      tras(d.moverNota(id, cuerpo.dataset.gdDrop || null, (actual && actual.tipo === 'sub' && actual.id) || n.subId, sig && !ordenada ? sig.dataset.nota : null)); return;
     }
     if (!zona) { render(); return; }
     if (tipo === 'seccion') {                                // delante o detrás de otra sección de la biblioteca
@@ -1885,16 +2543,17 @@
       const aSub = zona.dataset.gdDropSub !== undefined ? desclave(zona.dataset.gdDropSub) : null;
       if (aSub) {
         if (d.enPapelera(id)) { tras(d.restaurarNota(id, aSub.id)); return; }
-        const r = d.sub(aSub.id); tras(d.moverNota(id, null, aSub.id)); if (r && o.avisar) o.avisar('Movida a «' + r.contenedor.nombre + ' › ' + r.sub.nombre + '» (bandeja)'); return;
+        const r = d.sub(aSub.id); if (tras(d.moverNota(id, null, aSub.id)) && r && o.avisar) o.avisar('Movida a «' + r.contenedor.nombre + ' › ' + r.sub.nombre + '» (bandeja)'); return;
       }
       if (zona.closest('.gd-sub--esquema')) { if (o.avisar) o.avisar('Un esquema de pasos no recibe notas: suéltala en una biblioteca'); return; }
       const aCont = zona.dataset.gdDropCont;
-      if (aCont === PAPELERA) { if (!d.enPapelera(id)) tirarNota(id); return; }
+      if (aCont === PAPELERA) { if (!d.enPapelera(id)) tirarNota(id, { sinPreguntar: true }); return; }
       if (d.enPapelera(id)) { if (aCont !== undefined) tras(d.restaurarNota(id, aCont)); else if (o.avisar) o.avisar('Suéltala sobre una biblioteca del menú para restaurarla'); return; }
       if (aCont !== undefined) {
         const c = d.contenedor(aCont); if (!c) return;
-        if (!c.subs.length) { if (o.avisar) o.avisar('«' + c.nombre + '» no tiene bibliotecas: crea una con su «＋»'); return; }
-        tras(d.moverNota(id, null, c.subs[0].id)); if (o.avisar) o.avisar('Movida a «' + c.nombre + ' › ' + c.subs[0].nombre + '» (bandeja)'); return;
+        const b = d.primeraBiblioteca ? d.primeraBiblioteca(c.id) : c.subs.find(x => !x.guionEid);   // nunca la oculta de guiones
+        if (!b) { if (o.avisar) o.avisar('«' + c.nombre + '» no tiene bibliotecas: crea una con su «＋»'); return; }
+        if (tras(d.moverNota(id, null, b.id)) && o.avisar) o.avisar('Movida a «' + c.nombre + ' › ' + b.nombre + '» (bandeja)'); return;
       }
       const n = d.nota(id); if (!n) return;
       tras(d.moverNota(id, zona.dataset.gdDrop || null, (actual && actual.tipo === 'sub' && actual.id) || n.subId, antes ? antes.dataset.nota : null));
@@ -1908,19 +2567,8 @@
     seccion.style.position = 'relative';
     const zonas = [seccion, lado];                              // la barra vive fuera de la sección: mismos oyentes
     const oir = (tipo, fn) => zonas.forEach(z => z.addEventListener(tipo, fn));
-    /* el borde del panel de la nota: arrastrar lo ensancha, doble clic lo devuelve (en captura, antes que los arrastres del tablero) */
-    anchoLadoNota(o.vista && o.vista.ladoNota);
-    seccion.addEventListener('pointerdown', e => {
-      const asa = e.button === 0 && e.target.closest && e.target.closest('[data-gd-lado-asa]'); if (!asa) return;
-      e.preventDefault(); e.stopPropagation();
-      arrastrarLadoNota(e, asa);
-    }, true);
-    seccion.addEventListener('dblclick', e => {
-      if (!(e.target.closest && e.target.closest('[data-gd-lado-asa]'))) return;
-      e.stopPropagation();
-      anchoLadoNota(LADO_NOTA.partida);
-      if (o.vista) { delete o.vista.ladoNota; guardarVista(); }
-    }, true);
+    /* el ancho del panel lateral de la nota (hasta la 1.1.53): ya no hay panel, la nota se abre en su ventana */
+    if (o.vista && 'ladoNota' in o.vista) { delete o.vista.ladoNota; guardarVista(); }
 
     oir('click', e => {
       const t = e.target.closest('[data-gd-menu]');
@@ -1932,17 +2580,22 @@
         if (nodo) abrirPop(t, nodo);
         return;
       }
-      cerrarPop();                                           // un clic en cualquier otro sitio cierra el menú
+      if (!(disparador && disparador.contains && disparador.contains(e.target))) cerrarPop();   // un clic en otro sitio cierra el menú
       e.stopPropagation();                                   // y no llega al tablero (lo tomaría por un clic en blanco)
       if (Date.now() - suprimirClic < 400) return;           // el clic que cierra un arrastre no es un clic
-      /* un clic fuera de las notas quita la marca (Leo) y cierra el panel de la nota (salvo en el propio panel) */
-      if (!e.target.closest('[data-nota]:not(.gd-nota-fila), [data-nodo], .gd-exp-lado')) { if (ladoId) cerrarLado(); soltarSeleccion(); }
+      /* un clic fuera de las notas quita la marca (Leo); en el menú lateral no (1.1.54, de ClapBook: plegarlo la quitaba), ni en la
+         caja de buscar o los filtros */
+      if (!e.target.closest('[data-nota]:not(.gd-nota-fila), [data-nodo], .gd-buscar-vista, .gd-filtro, .gd-filtro-quitar') && !lado.contains(e.target)) soltarSeleccion();
+      if (e.target.closest('[data-gd-quitar-color-seg]')) { if (expandido) ponerFiltro(claveFiltroSeg(expandido.subId, expandido.clave), { color: filtroDe(claveFiltroBib(expandido.subId)).color ? '' : undefined }); return; }
+      if (e.target.closest('[data-gd-quitar-color-bib]')) { if (actual && actual.tipo === 'sub') ponerFiltro(claveFiltroBib(actual.id), { color: undefined }); return; }
+      if (e.target.closest('.gd-buscar-vista')) return;
       if (e.target.closest('[data-gd-nueva-seccion]')) { if (actual && actual.tipo === 'sub') nuevaSeccion(actual.id); return; }
       const ps = e.target.closest('[data-gd-plegar-seccion]'); // biblioteca: contraer una sección
       if (ps) {
         const k = ps.dataset.gdPlegarSeccion;
         if (o.vista) { const p = o.vista.secPlegadas = o.vista.secPlegadas || {}; p[k] = !p[k]; if (p[k] && grandeSec() === k) o.vista.secGrande = null; guardarVista(); }
         aplicarSecciones();
+        if (busquedaVista.texto) aplicarBusqueda();             // lo que se ve cambió: la cuenta también
         return;
       }
       const gs = e.target.closest('[data-gd-grande-seccion]'); // biblioteca: una sección sola, en toda la pantalla
@@ -1950,6 +2603,7 @@
         const k = gs.dataset.gdGrandeSeccion, v = grandeSec() === k ? null : k;
         if (o.vista) { o.vista.secGrande = v; if (v && o.vista.secPlegadas) o.vista.secPlegadas[v] = false; guardarVista(); }
         aplicarSecciones();
+        if (busquedaVista.texto) aplicarBusqueda();             // lo que se ve cambió: la cuenta también
         return;
       }
       const ex = e.target.closest('[data-gd-expandir]');
@@ -1963,8 +2617,10 @@
       if (e.target.closest('[data-gd-renombrar-etq]')) { const b = e.target.closest('[data-etq]'); if (b) renombrarEtiqueta(b.dataset.etq); return; }
       if (e.target.closest('[data-gd-nuevo]')) { if (enPersonajes()) { if (o.nuevoPersonaje) o.nuevoPersonaje(); } else nuevoContenedor(); return; }
       if (e.target.closest('[data-gd-nuevo-personaje]')) { if (o.nuevoPersonaje) o.nuevoPersonaje(); return; }
-      if (e.target.closest('[data-gd-ir-personajes]')) { if (o.verPersonajes) o.verPersonajes(); return; }
-      if (e.target.closest('[data-gd-ir-contenedores]')) { if (o.verContenedores) o.verContenedores(); return; }
+      /* «Contenedores» y «Personajes» solo cambian el árbol del menú; la pantalla sigue hasta que se pulse algo de él (1.1.35, Leo:
+         «no me debe cambiar de pantalla hasta que presione algún elemento del árbol… afecta la navegación entre pestañas») */
+      if (e.target.closest('[data-gd-ir-personajes]')) { if (o.verArbol) o.verArbol('personajes'); renderLado(); return; }
+      if (e.target.closest('[data-gd-ir-contenedores]')) { if (o.verArbol) o.verArbol('contenedores'); renderLado(); return; }
       const per = e.target.closest('[data-personaje]'); if (per) { if (o.abrirPersonaje) o.abrirPersonaje(per.dataset.personaje); return; }
       const nh = e.target.closest('[data-gd-nuevo-hijo]');
       if (nh) {
@@ -1981,7 +2637,7 @@
         return;
       }
       const ir = e.target.closest('[data-gd-ir]');
-      if (ir) { const s = desclave(ir.dataset.gdIr); if (valido(s)) { navegar(s); if (notaAbierta) cerrarNota(); else render(); irAlTablero(); } return; }
+      if (ir) { const s = desclave(ir.dataset.gdIr); if (valido(s)) { notaAntes = null; navegar(s); if (notaAbierta) cerrarNota(); else render(); irAlTablero(); } return; }
       if (e.target.closest('[data-gd-eliminar-etq]')) { eliminarEtiqueta(e.target.closest('.gd-etq').dataset.etq); return; }
       const crear = e.target.closest('[data-gd-crear-nota]'); if (crear) { if (actual && actual.tipo === 'sub') nuevaNota(actual.id, crear.dataset.gdCrearNota || null); return; }
       const plegar = e.target.closest('[data-gd-plegar]');
@@ -1997,17 +2653,12 @@
         clicArbol = setTimeout(() => { clicArbol = null; abrirNota(id); }, 260);
         return;
       }
-      if (nota) {                                            // en el tablero, un clic selecciona (sin redibujar: el doble clic debe caer en el mismo elemento); doble clic abre
+      if (nota) {                                            // en el tablero, un clic la elige y abre su ventana (el doble clic, el editor)
         notaSel = nota.dataset.nota;
-        $$('[data-nota].sel').forEach(x => x.classList.remove('sel'));
-        $$(`[data-nota="${notaSel}"]`).forEach(x => x.classList.add('sel'));
-        if ((nota.classList.contains('gd-exp-nota') || nota.classList.contains('gd-nota')) && ladoId !== notaSel) { guardarLadoYa(); mostrarLado(notaSel); }   // en el segmento expandido y en la biblioteca, su panel
+        marcarElegida(notaSel);
+        if ((nota.classList.contains('gd-exp-nota') || nota.classList.contains('gd-nota')) && actual && actual.tipo === 'sub' && !d.enPapelera(notaSel) && ladoId !== notaSel) mostrarLado(notaSel, { porTarjeta: true });
         return;
       }
-      /* el panel lateral de la nota (segmento expandido) */
-      if (e.target.closest('[data-gd-lado-cerrar]')) { cerrarLado(); soltarSeleccion(); return; }
-      if (e.target.closest('[data-gd-lado-abrir]')) { const id = ladoId; cerrarLado(); if (id) abrirNota(id); return; }
-      if (e.target.closest('.gd-exp-lado')) return;
       const carp = e.target.closest('.gd-carpeta');
       if (carp) {                                            // pulsar la carpeta la despliega o la pliega (con espera: el doble clic la renombra)
         clearTimeout(clicArbol); const id = carp.dataset.carpeta;
@@ -2018,12 +2669,13 @@
       if (subEl) {
         const s = desclave(subEl.dataset.sub); if (!s) return;
         if (s.tipo === 'esquema') { abrirEsquema(s.id); return; }
+        if (s.tipo === 'sub' && volverANota(s.id)) return;     // su nota seguía en el editor antes de irse: se vuelve a ella
         navegar(s); if (notaAbierta) cerrarNota(); else render(); irAlTablero(); return;
       }
       if (e.target.closest('[data-gd-lado]')) { if (o.alternarLado) o.alternarLado(); return; }
       /* la papelera (al pie o en el riel) abre su tablero; un contenedor no hace nada (Leo): se abre lo de dentro */
       if (e.target.closest('.gd-cont.papelera, [data-gd-papelera]')) {
-        navegar(ref(PAPELERA, null)); if (notaAbierta) cerrarNota(); else render(); irAlTablero(); return;
+        notaAntes = null; navegar(ref(PAPELERA, null)); if (notaAbierta) cerrarNota(); else render(); irAlTablero(); return;
       }
     });
     const sinClicPendiente = () => { clearTimeout(clicArbol); clicArbol = null; };
@@ -2057,7 +2709,7 @@
       if (mv) {
         e.stopPropagation();
         const m = modelo(), n = m && notaAbierta && m.nota(notaAbierta); if (!n) return;
-        const hs = hermanasDe(m, n), sig = hs[hs.findIndex(x => x.id === n.id) + (+mv.dataset.gdMigaMover)];
+        const hs = vecinasDe(m, n), sig = hs[hs.findIndex(x => x.id === n.id) + (+mv.dataset.gdMigaMover)];
         if (sig) { if (o.texto.volcar) o.texto.volcar(); abrirNota(sig.id); }
         return;
       }
@@ -2067,30 +2719,33 @@
         expandir(n.subId, n.etiquetaId ? 'etq:' + n.etiquetaId : 'bandeja', n.id);
         return;
       }
+      if (e.target.closest('[data-gd-contraer-nota]')) { e.stopPropagation(); contraerNota(); return; }   // «Contraer»: a su ventana
+      if (e.target.closest('[data-gd-miga-tirar]')) { e.stopPropagation(); if (notaAbierta) { if (o.texto.volcar) o.texto.volcar(); tirarNota(notaAbierta); } return; }
       if (e.target.closest('[data-gd-volver]')) { e.stopPropagation(); expandido = null; cerrarNota(); return; }
       const ir = e.target.closest('[data-gd-ir]');
       if (ir) { e.stopPropagation(); const s = desclave(ir.dataset.gdIr); if (valido(s)) { navegar(s); cerrarNota(); irAlTablero(); } }
     });
-    document.addEventListener('click', e => { if (!e.target.closest('.gd-pop,[data-gd-menu]')) { cerrarPop(); if (!e.target.closest('.gd-exp-lado, .gd-exp-nota, .gd-bib-medio .gd-nota')) { if (ladoId) cerrarLado(); soltarSeleccion(); } } });
-    /* lo que se escribe en el panel de la nota: el nombre al momento, la descripción poco después (y siempre al salir) */
+    /* un clic fuera de las notas suelta la elegida; en las pestañas no: cambiar de pestaña guarda la nota elegida con la que se
+       deja y repone la de la otra (1.1.34, Leo: «el sidepanel de los segmentos se cierra cuando cambio de pestaña»). La pestaña
+       pulsada ya no está en la página cuando el clic llega aquí (la franja se redibuja al cambiar): se mira la ruta del evento,
+       que se guarda tal cual empezó. Como en ClapBook: el clic en el botón que abrió un menú es suyo (lo alterna), el de un botón
+       que un redibujo ya quitó no es un «clic fuera», y con la ventana de una nota abierta nada de esto la toca (lo que se abre
+       encima de ella —confirmar, un menú— no la cierra; ella se cierra con su fondo, Esc o ×). */
+    const enPestanas = e => e.composedPath().some(n => n && n.id === 'pestanas');
+    document.addEventListener('click', e => {
+      if (e.target.closest('.gd-pop,[data-gd-menu]')) return;
+      if (disparador && disparador.contains && disparador.contains(e.target)) return;
+      cerrarPop();
+      if (!e.target.isConnected || ladoId) return;
+      if (!e.target.closest('.gd-exp-nota, .gd-bib-medio .gd-nota, .gd-buscar-vista, .gd-filtro, .gd-filtro-quitar') && !enPestanas(e)) soltarSeleccion();
+    });
+    /* lo que se busca en la vista: al momento en lo que se recuerda, y se aplica poco después */
+    let buscarT = null;
     oir('input', e => {
       const t = e.target;
-      if (t.matches && t.matches('[data-gd-lado-titulo]')) {
-        const m = modelo(), nt = ladoId && m && m.nota(ladoId); if (!nt) return;
-        const v = t.value.trim(); if (!v) return;                 // vacío no: se queda el que había
-        const r = m.renombrarNota(nt.id, v);
-        if (r.ok) { if (o.guardar) o.guardar(); $$(`.gd-exp-nota[data-nota="${CSS.escape(nt.id)}"] .gd-exp-tit, .gd-nota[data-nota="${CSS.escape(nt.id)}"] > span:first-child`).forEach(x => { x.textContent = nt.titulo; }); }
-        return;
-      }
-      if (t.closest && t.closest('[data-gd-lado-texto]')) { clearTimeout(ladoT); ladoT = setTimeout(guardarLadoYa, 400); }
+      if (t.matches && t.matches('[data-gd-buscar-vista]')) { busquedaVista = { donde: dondeVista(), texto: t.value }; clearTimeout(buscarT); buscarT = setTimeout(aplicarBusqueda, 90); }
     });
-    /* el campo de descripción es texto plano: pegar pega texto, soltar no suelta nada y los atajos de formato no hacen nada */
-    oir('paste', e => { const c = e.target.closest && e.target.closest('[data-gd-lado-texto]'); if (!c) return; e.preventDefault(); const t = (e.clipboardData && e.clipboardData.getData('text/plain')) || ''; document.execCommand('insertText', false, t); });
-    oir('drop', e => { if (e.target.closest && e.target.closest('[data-gd-lado-texto]')) e.preventDefault(); });
-    oir('keydown', e => { if ((e.metaKey || e.ctrlKey) && /^[biu]$/i.test(e.key) && e.target.closest && e.target.closest('[data-gd-lado-texto]')) e.preventDefault(); });
-    oir('focusin', e => { if (e.target.closest && e.target.closest('[data-gd-lado-texto]')) document.execCommand('defaultParagraphSeparator', false, 'p'); });
-    oir('focusout', e => { if (e.target.closest && e.target.closest('[data-gd-lado-texto]')) guardarLadoYa(); if (e.target.matches && e.target.matches('[data-gd-lado-titulo]')) { const m = modelo(), nt = ladoId && m && m.nota(ladoId); if (nt && !e.target.value.trim()) e.target.value = nt.titulo; } });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && abierto) { e.preventDefault(); e.stopPropagation(); const t = disparador; cerrarPop(); if (t && t.focus) t.focus(); } }, true);   // Esc cierra cualquier menú, también los que van fuera del gestor (Exportar)   // fuera del gestor (cabecera, tablero, editor)
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && abierto) { e.preventDefault(); e.stopPropagation(); const t = disparador; cerrarPop(); devolverFoco(t); } }, true);   // Esc cierra cualquier menú, también los que van fuera del gestor (Exportar)   // fuera del gestor (cabecera, tablero, editor)
     /* Esc con el segmento expandido a la vista (y sin menú, campo ni diálogo): contraer */
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && notaSel && !abierto && !pd && !editando && !e.defaultPrevented && !(e.target.closest && e.target.closest('input, textarea, [contenteditable], dialog'))) { if (ladoId) cerrarLado(); soltarSeleccion(); return; }   // Esc quita primero la marca de la nota (y su panel)
@@ -2101,11 +2756,21 @@
 
     /* Teclado: Esc cierra menús o limpia campos; Supr no llega al tablero */
     oir('keydown', e => {
+      /* la caja de buscar: Esc la vacía (y, vacía, la deja); Enter abre la primera nota que casa en su ventana */
+      if (e.target.matches && e.target.matches('[data-gd-buscar-vista]')) {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (e.target.value) { e.target.value = ''; busquedaVista.texto = ''; clearTimeout(buscarT); aplicarBusqueda(); } else e.target.blur(); return; }
+        if (e.key === 'Enter') {
+          e.preventDefault(); e.stopPropagation(); clearTimeout(buscarT); aplicarBusqueda();
+          const n = $$('[data-nota]', main).find(x => !x.hidden && !seccionOculta(x)); if (n) { notaSel = n.dataset.nota; marcarElegida(notaSel); mostrarLado(notaSel); }
+          return;
+        }
+        if (['Delete', 'Backspace', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.stopPropagation();
+        return;
+      }
       if (e.key === 'Escape') {
         e.stopPropagation();
         if (pd) { terminarArrastre(false); return; }
-        if (abierto) { const t = disparador; cerrarPop(); if (t) t.focus(); return; }
-        if (ladoId && e.target.closest && e.target.closest('.gd-exp-lado')) { cerrarLado(); soltarSeleccion(); return; }   // Esc en el panel: lo cierra
+        if (abierto) { const t = disparador; cerrarPop(); devolverFoco(t); return; }
         if (notaSel && !editando) { if (ladoId) cerrarLado(); soltarSeleccion(); return; }
         if (expandido && !editando && e.target.closest && e.target.closest('.gd-exp')) contraer();
         return;
@@ -2140,6 +2805,27 @@
     /* y sobre el nombre de un segmento (o de un acto, un momento, la bandeja): su nombre completo, debajo */
     [seccion].forEach(z => {
       z.addEventListener('mouseover', e => {
+        /* una nota de un segmento (o de uno expandido): su nombre entero, si no cabe en la tarjeta (1.1.54, Leo en ClapBook:
+           «implementa un tooltip que cuando le haga hover se vea el nombre completo de la nota») */
+        const nt = !pd && d && e.target.closest('.gd-nota[data-nota], .gd-exp-nota[data-nota]');
+        if (nt && !e.target.closest('button, .gd-edit')) {
+          const t = nt.querySelector('.gd-exp-tit') || nt.querySelector(':scope > span:first-child');
+          const x = d.nota(nt.dataset.nota) || (d.enPapelera(nt.dataset.nota) || {}).nota;
+          const corto = t && (t.scrollWidth > t.clientWidth + 1 || t.scrollHeight > t.clientHeight + 1);
+          if (!x || !corto) { esconderGlobo(); return; }
+          const k = 'nota:' + nt.dataset.nota; if (globo.dataset.para === k && !globo.hidden) return;
+          esconderGlobo();
+          globoT = setTimeout(() => {
+            if (!nt.isConnected) return;
+            globo.dataset.para = k;
+            globo.replaceChildren(Object.assign(document.createElement('span'), { className: 'gd-globo-rot', textContent: d.enPapelera(nt.dataset.nota) ? 'En la papelera' : 'Nota' }), document.createTextNode(x.titulo || 'Sin título'));
+            globo.hidden = false;
+            const r = nt.getBoundingClientRect();
+            globo.style.left = Math.max(8, Math.min(r.left, innerWidth - globo.offsetWidth - 8)) + 'px';
+            globo.style.top = (r.bottom + 6) + 'px';
+          }, 250);
+          return;
+        }
         /* cualquier cosa con `data-globo` enseña su globo: los nombres de segmento y también las filas que llevan su
            propio texto en `data-globo-txt` (Leo, 16-09-2026: «necesito un tooltip al hacer hover en este y en todos») */
         const n = e.target.closest('[data-globo]'); if (!n || pd || e.target.closest('.gd-edit')) { if (!n) esconderGlobo(); return; }
@@ -2213,15 +2899,64 @@
   }
 
   /* Entrar y salir de la vista. Al salir, la nota abierta vuelve al gestor (se guarda antes). */
-  function mostrar() { modelo(); render(); }
-  function salir() { cerrarPop(); if (notaAbierta) cerrarNota(); }
+  function mostrar() { modelo(); if (!volverANota()) render(); }
+  /* al irse a otra vista, la ventana de una nota se cierra y vuelve sola al volver (como el editor, `notaAntes`) */
+  function salir() { cerrarPop(); if (ladoId) { reabrir = true; cerrarLado(); } if (notaAbierta) { notaAntes = notaAbierta; cerrarNota(); } }
+  /* **Se vuelve al editor que se dejó** (Leo, 18-09-2026: «si está abierto el editor de una nota de segmento, me paso a un
+     esquema y luego quiero regresar al editor, me saca del editor y me regresa a la vista expandida del segmento»): la nota que
+     estaba abierta al irse a otra vista se abre otra vez al volver —con Ver › Documentos o pulsando su biblioteca en el árbol—,
+     si sigue existiendo. Ir a otra biblioteca, a la papelera o a «Ver biblioteca» la olvida. */
+  function volverANota(subId) {
+    const id = notaAntes; notaAntes = null;
+    const m = modelo(), n = id && m && !m.enPapelera(id) && m.nota(id);
+    if (!n || notaAbierta) return false;
+    if (subId ? n.subId !== subId : !(actual && actual.tipo === 'sub' && actual.id === n.subId)) return false;
+    abrirNota(id); return true;
+  }
   /* Al cambiar de guion (pestaña): nada abierto, y el modelo se rehace solo. */
-  function reiniciar() { cerrarPop(); if (notaAbierta) { o.texto.cerrarDocumento(); notaAbierta = null; document.body.classList.remove('nota-abierta'); } d = null; guionId = null; actual = null; notaSel = null; expandido = null; render(); }
+  function reiniciar() { cerrarPop(); if (ladoId) cerrarLado(); reabrir = false; olvidarBusqueda(); notaAntes = null; if (notaAbierta) { o.texto.cerrarDocumento(); notaAbierta = null; document.body.classList.remove('nota-abierta'); } d = null; guionId = null; actual = null; notaSel = null; expandido = null; render(); }
 
   /* Abre el tablero de unos documentos desde fuera («Ver documentos» del esquema, en app.js). */
+  /* la papelera, desde fuera (una pestaña que la enseña) */
+  function abrirPapelera() {
+    if (!modelo()) return;
+    expandido = null; notaAntes = null;
+    navegar(ref(PAPELERA, null));
+    if (notaAbierta) cerrarNota(); else render();
+    irAlTablero();
+  }
+  /* **Llevar el árbol a una pieza** (1.1.52, abrir el enlace de un contenedor, una carpeta o un grupo): despliega lo que la tapa
+     —su contenedor y sus carpetas—, la trae a la vista y la marca un instante. */
+  function revelar(tipo, id) {
+    const m = modelo(); if (!m) return false;
+    let ambito = null, carpetaId = null;
+    if (tipo === 'contenedor') ambito = id;
+    else if (tipo === 'carpeta') { const r = m.carpeta(id); if (!r) return false; ambito = r.ambito; carpetaId = r.carpeta.padreId || null; m.plegarCarpeta(id, false); }
+    else if (tipo === 'grupo') { const r = m.grupo(id); if (!r) return false; ambito = r.ambito; let g = r.grupo; while (g.padreId) { const p = m.grupo(g.padreId); if (!p) break; g = p.grupo; } carpetaId = g.carpetaId || null; }
+    else return false;
+    for (let k = carpetaId && m.carpeta(carpetaId); k; k = k.carpeta.padreId && m.carpeta(k.carpeta.padreId)) m.plegarCarpeta(k.carpeta.id, false);
+    const personajes = ambito === C.ELENCO_CARPETAS || ambito === C.ID_PERSONAJES || ambito === C.ID_ESQUEMAS_PERSONAJE;
+    const cont = ambito === C.ELENCO_CARPETAS ? m.contenedor(C.ID_PERSONAJES) : m.contenedor(ambito);
+    if (cont && cont.plegado) m.plegarContenedor(cont.id, false);
+    if (o.verArbol) o.verArbol(personajes ? 'personajes' : 'contenedores');
+    if (lado && lado.classList && document.body.classList.contains('lado-plegado') && o.alternarLado) o.alternarLado();
+    renderLado();
+    const sel = tipo === 'contenedor' ? `.gd-cont[data-id="${CSS.escape(id)}"]` : tipo === 'carpeta' ? `.gd-carpeta[data-carpeta="${CSS.escape(id)}"]` : `.gd-arb-grupo[data-grupo="${CSS.escape(id)}"] > .gd-arb-marca`;
+    const el = lado && lado.querySelector(sel);
+    if (el) { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); el.classList.remove('gd-aterriza'); void el.offsetWidth; el.classList.add('gd-aterriza'); setTimeout(() => el.classList.remove('gd-aterriza'), 700); }
+    return !!el;
+  }
+  /* una sección de la biblioteca abierta, a la vista (desplegada) y marcada un instante */
+  function verSeccion(id) {
+    const b = main && main.querySelector(`.gd-bloque[data-seccion-id="${CSS.escape(id)}"]`); if (!b) return false;
+    if (o.vista && o.vista.secPlegadas && o.vista.secPlegadas[b.dataset.seccion]) { delete o.vista.secPlegadas[b.dataset.seccion]; if (o.guardarVista) o.guardarVista(); aplicarSecciones(); }
+    b.scrollIntoView({ block: 'start', inline: 'nearest' });
+    b.classList.remove('gd-aterriza'); void b.offsetWidth; b.classList.add('gd-aterriza'); setTimeout(() => b.classList.remove('gd-aterriza'), 700);
+    return true;
+  }
   function abrirSub(id) {
     const m = modelo(), r = m && m.sub(id); if (!r) return;
-    expandido = null;                                        // «Ver biblioteca»: su tablero, no un segmento expandido
+    expandido = null; notaAntes = null;                      // «Ver biblioteca»: su tablero, no un segmento expandido ni la nota de antes
     navegar(ref('sub', r.contenedor.id, id));
     if (notaAbierta) cerrarNota(); else render();
     irAlTablero();
@@ -2273,5 +3008,13 @@
     return sec;
   }
 
-  C.gestor = { iniciar, pop: (t, nodo) => abrirPop(t, nodo), cerrarPop: () => cerrarPop(), hayPop: () => !!abierto, expandir, contraer: () => { if (expandido) expandido = null; }, pedirPersonaje, pedirNombre, menuLista, renombrarPersonaje, menuCarril, paletaTrama, mostrar, salir, reiniciar, render, abrirNota, cerrarNota, abrirSub, estiloHijo, nuevoContenedor, notaAbierta: () => notaAbierta, subActual: () => actual, documentos: () => (o.guion ? modelo() : null), PAPELERA };
+  C.gestor = { iniciar, pop: (t, nodo) => abrirPop(t, nodo), cerrarPop: () => cerrarPop(), hayPop: () => !!abierto, expandir, contraer: () => { if (expandido) expandido = null; }, pedirPersonaje, pedirNombre, menuLista, renombrarPersonaje, menuCarril, paletaTrama, mostrar, salir, reiniciar, render, abrirNota, cerrarNota, abrirSub, estiloHijo, nuevoContenedor, notaAbierta: () => notaAbierta, subActual: () => actual,
+    expandidoActual: () => expandido && Object.assign({}, expandido), abrirPapelera, sinVolver: () => { notaAntes = null; },
+    /* la nota elegida con su panel abierto, y elegir una (sin pintar: lo hace lo que se abra después) — las pestañas */
+    notaElegida: () => (ladoId && notaSel === ladoId ? notaSel : null), elegirNota: id => { if (ladoId && ladoId !== id) cerrarLado(); notaSel = id || null; reabrir = !!id; }, documentos: () => (o.guion ? modelo() : null), PAPELERA,
+    /* la ventana de una nota (1.1.54): lo escrito en ella, a la nota (antes de guardar, de Claude, de cambiar de pestaña…); ponerla
+       al día con lo de fuera; si está abierta, y cerrarla. Cmd+F en la biblioteca. */
+    guardarPanel: () => guardarLadoYa(), refrescarVentana, ventanaAbierta, cerrarVentana: () => { if (ladoId) { cerrarLado(); soltarSeleccion(); } }, buscarEnVista,
+    /* enlaces (1.1.52): la nota marcada con un clic (lo elegido, para Cmd+Shift+C), llevar el árbol a una pieza y una sección a la vista */
+    notaMarcada: () => notaSel, revelar, verSeccion };
 })(window.Claquedraw);
