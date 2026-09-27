@@ -1,0 +1,56 @@
+/* La ventana de una nota: el menú «/», el zoom del texto, la longitud de línea y typewriter (1.1.60, js/claquedraw/ventana.js).
+   Va detrás de clapcraft.css (la ventana es suya: .gd-modal-capa) y solo usa sus tokens, así vale en los cuatro temas. El zoom
+   llega en `--zoom-nota` (1 = 100 %) y el ancho de lectura en `--ancho-nota`, los dos sobre la capa (como en ClapBook). */
+
+/* ---------- el zoom y el ancho de lectura ---------- */
+.gd-modal-capa { --zoom-nota: 1; --ancho-nota: 648px; }
+/* con el texto más grande la ventana se ensancha lo mismo (las líneas siguen teniendo las letras de siempre); sin línea legible,
+   ocupa todo el sitio y el papel no tiene tope */
+.gd-modal-capa .gd-modal { width: min(max(920px, calc(var(--ancho-nota) + 272px)), 100%); }
+.gd-modal-capa.nota-ancha .gd-modal { width: 100%; max-width: none; }
+.gd-modal-capa .gd-modal-papel { max-width: calc(var(--ancho-nota) + 112px); }
+.gd-modal-capa.nota-ancha .gd-modal-papel { max-width: none; }
+.gd-modal-capa .gd-modal-titulo { font-size: calc(24px * var(--zoom-nota)); }
+.gd-modal-capa .gd-lado-texto { font-size: calc(15px * var(--zoom-nota)); }
+.gd-modal-capa .gd-lado-texto table { font-size: .87em; }
+.gd-modal-capa .gd-lado-texto p { margin-bottom: .4em; }
+
+/* ---------- typewriter: la cola del papel, media hoja (la última línea también llega al centro) ---------- */
+.gd-modal-capa.typewriter .gd-modal-cola { min-height: max(24vh, var(--vt-media-hoja, 40vh)); }
+
+/* ---------- el pie: typewriter, línea legible y zoom ---------- */
+.vt-pie { flex: none; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border-top: 1px solid var(--regla);
+  background: var(--papel); font-family: var(--sans); }
+.vt-pie .spacer { flex: 1; }
+.vt-rot { font: 400 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido); }
+.vt-pill { height: 24px; padding: 0 10px; border: 1px solid var(--borde); border-radius: 999px; background: transparent; color: var(--tenue);
+  font: 400 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.vt-pill:hover { background: var(--hover, var(--foco-suave)); color: var(--tinta); }
+.vt-pill.on { border-color: var(--foco-linea); background: var(--foco-suave); color: var(--foco); }
+.vt-pill:focus-visible, .vt-zoom button:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+/* «Versiones» (1.1.60): con el nombre de la versión que coincide con lo de ahora, sin mayúsculas forzadas y cortado */
+.vt-versiones { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 220px; }
+.vt-versiones svg { flex: none; }
+.vt-versiones span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vt-versiones.con-version { color: var(--tinta); }
+.vt-versiones.con-version span { text-transform: none; letter-spacing: 0; font-family: var(--sans); font-size: 11.5px; }
+.vt-zoom { display: inline-flex; align-items: center; height: 24px; border: 1px solid var(--borde); border-radius: 4px; overflow: hidden; }
+.vt-zoom button { height: 100%; min-width: 26px; padding: 0 6px; border: 0; border-radius: 0; background: transparent; color: var(--tenue);
+  font: 500 13px var(--sans); cursor: pointer; }
+.vt-zoom button:hover:not(:disabled) { background: var(--hover, var(--foco-suave)); color: var(--tinta); }
+.vt-zoom button:disabled { opacity: .35; cursor: default; }
+.vt-zoom .vt-zoom-valor { min-width: 52px; border-left: 1px solid var(--regla); border-right: 1px solid var(--regla); font: 400 10.5px var(--mono); color: var(--tinta); }
+
+/* ---------- el menú «/» (encima de la ventana y de sus menús) ---------- */
+.vt-slash { position: fixed; z-index: 90; width: 260px; max-height: min(340px, 60vh); overflow-y: auto; padding: 5px; box-sizing: border-box;
+  border: 1px solid var(--borde); border-radius: 6px; background: var(--papel); color: var(--tinta); box-shadow: var(--sombra-alta);
+  font: 400 12.5px var(--sans); }
+.vt-slash[hidden] { display: none; }
+.vt-slash-tit { padding: 6px 8px 3px; font: 400 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido); }
+.vt-slash button { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 4px;
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.vt-slash button > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vt-slash button kbd { flex: none; font: 400 10.5px var(--mono); color: var(--palido); background: none; border: 0; padding: 0; }
+.vt-slash button:hover { background: var(--hover, var(--foco-suave)); }
+.vt-slash button.on { background: var(--foco-suave); color: var(--foco); }
+.vt-slash button.on kbd { color: var(--foco); }

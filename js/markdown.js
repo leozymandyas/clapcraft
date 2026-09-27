@@ -252,14 +252,48 @@
 
   const isBlockStart = l => /^(#{1,6}\s|\s*([-*+]|\d+[.)])\s+|\s*>|```|\s*([-*_])(\s*\3){2,}\s*$|\s*\|)/.test(l);
 
-  function parseBlocks(lines) {
+  /* ---------- los recuadros (js/recuadros.js, 1.1.57): ```prompt Título {.color} y ```aviso:tipo Título {.color} ----------
+     Como en ClapBook: un bloque cercado cuya valla dice qué es (el tipo de un aviso, `note` si no se dice), su título y su color;
+     dentro, Markdown. La valla de cierre, de tantos acentos graves como la de apertura o más. */
+  function infoRecuadro(info) {
+    let s = String(info || '').trim(), color = null;
+    /* «{.azul}» al final es el color solo si es uno de la paleta (su nombre, su índice o un alias: `Ed.recuadros.color`); si no, es
+       parte del título. «{.}» es «sin color» (lo escribe `recuadroMd` cuando el título acaba en algo que se leería como color) */
+    const c = /(?:^|[ \t])\{\.([^}\s]*)\}$/.exec(s);
+    const R = Ed.recuadros;
+    if (c && (!c[1] || !(R && R.color) || R.color(c[1]))) { color = c[1] || null; s = s.slice(0, c.index).trim(); }
+    const m = /^(prompt|aviso)(?::([\p{L}\p{N}_-]+))?(?:[ \t]+(.*))?$/iu.exec(s);
+    if (!m) return null;
+    return { rc: m[1].toLowerCase(), tipo: m[2] || 'note', titulo: (m[3] || '').trim(), color };
+  }
+  md.infoRecuadro = infoRecuadro;
+  function htmlRecuadro(o, cuerpo) {
+    const R = Ed.recuadros;
+    if (R && R.html) return R.html(o, cuerpo);
+    const esc = Ed.escapeHtml;
+    return '<div class="rc rc-' + o.rc + '" data-rc="' + o.rc + '"' + (o.rc === 'aviso' ? ' data-tipo="' + esc(String(o.tipo || 'note').toLowerCase()) + '"' : '')
+      + (o.titulo ? ' data-titulo="' + esc(o.titulo) + '"' : '') + (o.color ? ' data-color="' + esc(o.color) + '"' : '') + '>' + (cuerpo || '<p><br></p>') + '</div>';
+  }
+
+  /* `duro`: cada salto de renglón de un párrafo es un <br> (dentro de un recuadro: un prompt se escribe por renglones).
+     `dentroRc`: el cuerpo de un recuadro (o una cita o una lista suya), donde no cabe otro: un renglón «```prompt» ahí es texto */
+  function parseBlocks(lines, duro, dentroRc) {
     let out = '';
     let i = 0;
     while (i < lines.length) {
       const line = lines[i];
       let m;
       if (!line.trim()) { i++; continue; }
-      if ((m = line.match(/^```(\w*)\s*$/))) {
+      const vallaRc = (m = line.match(/^(`{3,})[ \t]*(.*)$/)) && infoRecuadro(m[2]) ? m : null;
+      if (vallaRc && !dentroRc) {
+        const valla = vallaRc[1], o = infoRecuadro(vallaRc[2]), buf = [];
+        i++;
+        while (i < lines.length && !new RegExp('^`{' + valla.length + ',}\\s*$').test(lines[i])) buf.push(lines[i++]);
+        i++;
+        out += htmlRecuadro(o, parseBlocks(buf, true, true));
+        continue;
+      }
+      if (!vallaRc && (m = line.match(/^```(\w*)\s*$/))) {
         const buf = [];
         i++;
         while (i < lines.length && !/^```\s*$/.test(lines[i])) buf.push(lines[i++]);
@@ -276,11 +310,11 @@
       if (/^\s*>/.test(line)) {
         const buf = [];
         while (i < lines.length && /^\s*>/.test(lines[i])) buf.push(lines[i++].replace(/^\s*> ?/, ''));
-        out += '<blockquote>' + parseBlocks(buf) + '</blockquote>';
+        out += '<blockquote>' + parseBlocks(buf, false, dentroRc) + '</blockquote>';
         continue;
       }
       if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
-        const res = parseList(lines, i);
+        const res = parseList(lines, i, dentroRc);
         out += res.html;
         i = res.next;
         continue;
@@ -298,15 +332,15 @@
       const buf = [];
       while (i < lines.length && lines[i].trim() && !(buf.length && isBlockStart(lines[i]))) buf.push(lines[i++]);
       const html = buf.map(l => {
-        const hard = /( {2,}|\\)$/.test(l);
+        const hard = duro || /( {2,}|\\)$/.test(l);
         return inline(l.replace(/( {2,}|\\)$/, '')) + (hard ? '<br>' : ' ');
-      }).join('').replace(/ $/, '');
+      }).join('').replace(duro ? /(<br>| )$/ : / $/, '');
       out += '<p>' + html + '</p>';
     }
     return out;
   }
 
-  function parseList(lines, i) {
+  function parseList(lines, i, dentroRc) {
     const first = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+/);
     const indent = first[1].length;
     const tag = /\d/.test(first[2]) ? 'ol' : 'ul';
@@ -320,7 +354,7 @@
         sub.push(lines[i].replace(new RegExp('^\\s{1,' + (indent + 2) + '}'), ''));
         i++;
       }
-      let subHtml = sub.length ? parseBlocks(sub) : '';
+      let subHtml = sub.length ? parseBlocks(sub, false, dentroRc) : '';
       subHtml = subHtml.replace(/^<p>([\s\S]*?)<\/p>(?=<[uo]l>|$)/, ' $1');
       html += '<li>' + inline(m[3]) + subHtml + '</li>';
     }
@@ -423,8 +457,21 @@
     return out;
   }
 
+  /* un recuadro: su valla (con el tipo, el título y el color) y su texto en Markdown; la valla, más larga que cualquier ``` de dentro */
+  function recuadroMd(el) {
+    const R = Ed.recuadros, d = R ? R.datos(el) : { rc: el.getAttribute('data-rc') === 'prompt' ? 'prompt' : 'aviso', tipo: el.getAttribute('data-tipo') || 'note', titulo: el.getAttribute('data-titulo') || '', color: el.getAttribute('data-color') };
+    const cuerpo = blocksToMd(el).replace(/\n{3,}/g, '\n\n').trim();
+    let n = 3; (cuerpo.match(/^[ \t]*`{3,}/gm) || []).forEach(x => { n = Math.max(n, x.trim().length + 1); });
+    const valla = '`'.repeat(n);
+    const titulo = String(d.titulo || '').replace(/[\r\n]+/g, ' ').trim();
+    const cola = d.color ? ' {.' + d.color + '}' : /\{\.[^}\s]*\}$/.test(titulo) ? ' {.}' : '';   // un título que acaba en «{.x}» no se lee como color
+    return valla + d.rc + (d.rc === 'aviso' && d.tipo && d.tipo !== 'note' ? ':' + d.tipo : '') + (titulo ? ' ' + titulo : '') + cola
+      + '\n' + (cuerpo ? cuerpo + '\n' : '') + valla + '\n\n';
+  }
+
   function blockToMd(el) {
     const tag = el.tagName;
+    if (el.hasAttribute && el.hasAttribute('data-rc') && tag === 'DIV') return recuadroMd(el);
     if (el.classList && el.classList.contains('db')) return Ed.db ? Ed.db.toMarkdown(el) : '';
     if (/^H[1-6]$/.test(tag)) return '#'.repeat(+tag[1]) + ' ' + inlineChildren(el) + '\n\n';
     switch (tag) {

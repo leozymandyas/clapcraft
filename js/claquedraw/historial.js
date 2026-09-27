@@ -38,7 +38,7 @@
   function claveDe(x) {
     if (!esObj(x)) return null;
     if (typeof x.id === 'string' || typeof x.id === 'number') return 'i:' + x.id;
-    for (const [k, p] of [['nota', 'n'], ['esquema', 'e'], ['sub', 's'], ['personaje', 'p']]) if (esObj(x[k]) && x[k].id) return p + ':' + x[k].id;
+    for (const [k, p] of [['nota', 'n'], ['esquema', 'e'], ['sub', 's'], ['personaje', 'p'], ['lienzo', 'l']]) if (esObj(x[k]) && x[k].id) return p + ':' + x[k].id;
     return null;
   }
   const claves = l => { const ks = l.map(claveDe); return ks.every(k => k !== null) && new Set(ks).size === ks.length ? ks : null; };
@@ -251,16 +251,17 @@
   /* ---------- una ruta del parche, en palabras ---------- */
   const COLECCION = { contenedores: 'contenedor', esquemas: 'esquema', subs: 'biblioteca', etiquetas: 'segmento', lineas: 'trama', actos: 'acto',
     puntos: 'nodo', saltos: 'salto', elenco: 'personaje', carpetas: 'carpeta', carpetasElenco: 'carpeta', grupos: 'grupo', gruposElenco: 'grupo',
-    versiones: 'versión', secciones: 'sección', papelera: 'papelera' };
+    versiones: 'versión', secciones: 'sección', papelera: 'papelera', lienzos: 'lienzo', nodos: 'nodo del lienzo', cables: 'cable' };
   const CAMPO = { titulo: 'título', descripcion: 'descripción', html: 'texto', texto: 'texto', nombre: 'nombre', color: 'color', col: 'columna', lineaId: 'trama',
     tipo: 'tipo', etiquetaId: 'segmento', subId: 'biblioteca', characters: 'personajes', desde: 'inicio', celdas: 'largo', fondo: 'fondo', ordenArbol: 'orden',
-    items: 'lo de dentro', cortado: 'descartado', oculta: 'oculta', '(orden)': 'orden', deId: 'sitio', aId: 'sitio', nivel: 'escalón' };
+    items: 'lo de dentro', cortado: 'descartado', oculta: 'oculta', '(orden)': 'orden', deId: 'sitio', aId: 'sitio', nivel: 'escalón',
+    x: 'posición', y: 'posición', estado: 'estado', salida: 'salida', instruccion: 'instrucción', md: 'texto', puerto: 'puerto' };
   const corto = s => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > 40 ? t.slice(0, 39) + '…' : t; };
   function describir(docs, ruta) {
     const partes = []; let x = docs.datos;
     for (let i = 0; i < ruta.length; i++) {
       const seg = ruta[i], previo = ruta[i - 1];
-      if (/^[inesp]:/.test(seg) && Array.isArray(x)) {
+      if (/^[inespl]:/.test(seg) && Array.isArray(x)) {
         const item = x.find(y => claveDe(y) === seg), id = seg.slice(2);
         const nombre = item ? item.nombre || item.titulo || (item.texto && corto(item.texto)) || (item.nota && item.nota.titulo) || id : id;
         const tipo = previo === 'notas' ? (item && item.titulo !== undefined ? 'nota' : 'nota del esquema') : COLECCION[previo] || previo;

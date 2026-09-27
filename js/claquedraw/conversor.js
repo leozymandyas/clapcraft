@@ -79,6 +79,71 @@
     nota: 'nota', montaje: 'montaje', parrafo: 'parrafo', texto: 'parrafo', cita: 'cita',
     titulo: 'titulo1', titulo1: 'titulo1', titulo2: 'titulo2', titulo3: 'titulo3', titulo4: 'titulo4', titulo5: 'titulo5', titulo6: 'titulo6' };
 
+  /* ---------- los recuadros (js/recuadros.js, 1.1.57): el prompt y los avisos ----------
+     En el documento, `<div class="rc rc-prompt" data-rc="prompt" data-titulo data-color>` y `<div class="rc rc-aviso" data-rc="aviso"
+     data-tipo data-titulo data-color>` con párrafos y listas dentro; en el texto, como en ClapBook, un bloque cercado:
+     ```prompt Título {.color} … ``` y ```aviso:tipo Título {.color} … ``` (sin «:tipo», una nota), con Markdown dentro (cada
+     salto de renglón, un <br>). Una copia de TIPOS y COLORES de js/recuadros.js (test/recuadros.test.js las compara). */
+  const RC_TIPOS = [
+    ['note', 'Nota', '◆', 'azul'], ['info', 'Info', 'i', 'cielo'], ['tip', 'Consejo', '✧', 'teal'], ['success', 'Hecho', '✓', 'verde'],
+    ['question', 'Pregunta', '?', 'ambar'], ['warning', 'Advertencia', '!', 'oxido'], ['failure', 'Fallo', '✕', 'terracota'],
+    ['danger', 'Peligro', '!!', 'coral'], ['bug', 'Error', '✱', 'ciruela'], ['example', 'Ejemplo', '◇', 'violeta'],
+    ['quote', 'Cita', '❝', 'grafito'], ['abstract', 'Resumen', '≡', 'indigo'], ['todo', 'Pendiente', '☐', 'arena']
+  ];
+  const RC_ALIAS_TIPO = {
+    nota: 'note', consejo: 'tip', hint: 'tip', important: 'tip', importante: 'tip', hecho: 'success', check: 'success', done: 'success',
+    pregunta: 'question', help: 'question', ayuda: 'question', faq: 'question', aviso: 'warning', advertencia: 'warning', caution: 'warning',
+    cuidado: 'warning', attention: 'warning', atencion: 'warning', fallo: 'failure', fail: 'failure', missing: 'failure', falta: 'failure',
+    peligro: 'danger', error: 'bug', ejemplo: 'example', cita: 'quote', cite: 'quote', summary: 'abstract', tldr: 'abstract',
+    resumen: 'abstract', pendiente: 'todo', tarea: 'todo'
+  };
+  const RC_COLORES = [
+    ['azul', 'Azul', '#DBE8FF', '#1A4A86'], ['verde', 'Verde', '#D8F2DF', '#11643D'], ['terracota', 'Terracota', '#FFE3D5', '#9C3F14'],
+    ['violeta', 'Violeta', '#EAE0FF', '#5326AB'], ['ambar', 'Ámbar', '#FFEEC9', '#875408'], ['rosa', 'Rosa', '#FFE0EA', '#A51A5A'],
+    ['teal', 'Teal', '#D2F0ED', '#0A6663'], ['oliva', 'Oliva', '#E8F4CD', '#4C6B0F'], ['indigo', 'Índigo', '#E2E2FF', '#33359C'],
+    ['coral', 'Coral', '#FFE3DD', '#A83A26'], ['ciruela', 'Ciruela', '#F9DCF6', '#8B2280'], ['arena', 'Arena', '#F4E8CF', '#6F5722'],
+    ['cielo', 'Cielo', '#D6EEFF', '#05618F'], ['lima', 'Lima', '#E9F8C8', '#4F7205'], ['oxido', 'Óxido', '#FFE0C4', '#94480A'],
+    ['grafito', 'Grafito', '#E6E2EE', '#3C3648']
+  ];
+  const RC_ALIAS_COLOR = { gris: 'grafito', marron: 'arena', naranja: 'oxido', amarillo: 'ambar', cian: 'cielo', turquesa: 'teal', morado: 'violeta',
+    purpura: 'violeta', rojo: 'coral', magenta: 'ciruela', cobre: 'oxido', blue: 'azul', green: 'verde', red: 'coral', yellow: 'ambar',
+    orange: 'oxido', purple: 'violeta', pink: 'rosa', gray: 'grafito', grey: 'grafito', brown: 'arena' };
+  const rcTipo = t => { const k = plano(t); return RC_TIPOS.some(x => x[0] === k) ? k : (RC_ALIAS_TIPO[k] || 'note'); };
+  const rcColor = c => {
+    if (c === null || c === undefined || c === '') return null;
+    const k = plano(c);
+    if (/^\d+$/.test(k)) { const x = RC_COLORES[+k]; return x ? x[0] : null; }
+    if (RC_COLORES.some(x => x[0] === k)) return k;
+    const e = RC_COLORES.find(x => plano(x[1]) === k); if (e) return e[0];
+    return RC_ALIAS_COLOR[k] || null;
+  };
+  /* lo que dice la cabecera: el título o el nombre de su tipo */
+  const rcNombre = o => (o && String(o.titulo || '').trim()) || (o && o.rc === 'prompt' ? 'Prompt' : (RC_TIPOS.find(x => x[0] === rcTipo(o && o.tipo)) || RC_TIPOS[0])[1]);
+  /* la valla de un recuadro sin los acentos graves: «prompt Título {.azul}» → { rc, tipo, titulo, color }, o null */
+  function infoRecuadro(info) {
+    let t = String(info || '').trim(), color = null;
+    /* «{.azul}» al final es el color solo si es uno de la paleta (o su índice o un alias); si no, es parte del título. «{.}» es
+       «sin color» (lo pone `vallaRecuadro` cuando el título acaba en algo que se leería como color) */
+    const c = /(?:^|[ \t])\{\.([^}\s]*)\}$/.exec(t);
+    if (c && (!c[1] || rcColor(c[1]))) { color = c[1] ? rcColor(c[1]) : null; t = t.slice(0, c.index).trim(); }
+    const m = /^(prompt|aviso)(?::([\p{L}\p{N}_-]+))?(?:[ \t]+(.*))?$/iu.exec(t);
+    if (!m) return null;
+    const rc = m[1].toLowerCase();
+    return { rc, tipo: rc === 'aviso' ? rcTipo(m[2] || 'note') : null, titulo: (m[3] || '').trim(), color };
+  }
+  function recuadroHtml(o, cuerpo) {
+    const rc = o && o.rc === 'prompt' ? 'prompt' : 'aviso', tit = String((o && o.titulo) || '').replace(/[\r\n]+/g, ' ').trim(), col = rcColor(o && o.color);
+    return '<div class="rc rc-' + rc + '" data-rc="' + rc + '"' + (rc === 'aviso' ? ' data-tipo="' + rcTipo(o && o.tipo) + '"' : '')
+      + (tit ? ' data-titulo="' + esc(tit) + '"' : '') + (col ? ' data-color="' + col + '"' : '') + '>' + (cuerpo || '<p><br></p>') + '</div>';
+  }
+  /* la valla de apertura de un recuadro (y su largo: más que cualquier ``` de dentro) */
+  function vallaRecuadro(o, cuerpo) {
+    let n = 3; (String(cuerpo || '').match(/^[ \t]*`{3,}/gm) || []).forEach(x => { n = Math.max(n, x.trim().length + 1); });
+    const v = '`'.repeat(n), tit = String(o.titulo || '').replace(/[\r\n]+/g, ' ').trim();
+    const cola = o.color ? ' {.' + o.color + '}' : /\{\.[^}\s]*\}$/.test(tit) ? ' {.}' : '';    // un título que acaba en «{.x}» no se lee como color
+    return { valla: v, apertura: v + (o.rc === 'prompt' ? 'prompt' : 'aviso' + (o.tipo && o.tipo !== 'note' ? ':' + o.tipo : '')) + (tit ? ' ' + tit : '') + cola };
+  }
+
   /* ---------- personajes: la misma clave que js/characters.js («MARA (V.O.)» es Mara; un doble espacio suelta la anotación) ---------- */
   const DOBLE = /[ \u00a0\u2007\u202f\t]{2,}/;
   const limpio = s => String(s || '').replace(/\u200B/g, '').replace(/\s+/g, ' ').trim();
@@ -165,6 +230,13 @@
       recorrer(n);
       return { tipo: 'tabla', filas };
     }
+    if (tag === 'div' && n.at['data-rc'] !== undefined) {
+      const rc = n.at['data-rc'] === 'prompt' ? 'prompt' : 'aviso';
+      /* con algo que no es texto dentro (una imagen, una base de datos, un vídeo…): entero como {bloque N}, que vuelve tal cual */
+      const que = noTextoEn(n);
+      if (que) return { tipo: 'otro', que: (rc === 'prompt' ? 'prompt' : 'aviso') + (n.at['data-titulo'] ? ' «' + String(n.at['data-titulo']).replace(/[{}\r\n]+/g, ' ').trim() + '»' : '') + ' con ' + que };
+      return { tipo: 'recuadro', rc, aviso: rc === 'aviso' ? rcTipo(n.at['data-tipo']) : null, titulo: String(n.at['data-titulo'] || '').trim(), color: rcColor(n.at['data-color']), md: mdDeRecuadro(n) };
+    }
     if (tiene(n, 'sp-doble')) {
       const columnas = n.hijos.filter(c => tiene(c, 'sp-col')).map(c => c.hijos.filter(p => p.t === 'el').map(clasificar).filter(x => !vacio(x)));
       return { tipo: 'doble', columnas };
@@ -181,6 +253,35 @@
       return x;
     }
     return { tipo: 'otro', que: tag };
+  }
+  /* lo primero que no es texto dentro de un nodo («imagen», «base de datos»…), o null */
+  const NO_TEXTO = { img: 'imagen', picture: 'imagen', figure: 'imagen', video: 'vídeo', audio: 'audio', iframe: 'iframe', svg: 'dibujo', canvas: 'dibujo', object: 'objeto', embed: 'objeto' };
+  function noTextoEn(n) {
+    for (const h of n.hijos) {
+      if (h.t !== 'el') continue;
+      if (NO_TEXTO[h.tag]) return NO_TEXTO[h.tag];
+      if (tiene(h, 'db')) return 'base de datos';
+      if (tiene(h, 'portada') || tiene(h, 'ed-fijo') || tiene(h, 'sp-doble') || h.at.contenteditable === 'false') return 'bloque';
+      const x = noTextoEn(h); if (x) return x;
+    }
+    return null;
+  }
+  /* el texto de dentro de un recuadro en Markdown (sus párrafos, listas, títulos…; un elemento de guion, como un párrafo) */
+  function mdDeRecuadro(n) {
+    const partes = []; let suelto = [];
+    const soltar = () => { if (suelto.length) { const t = lineaDe({ hijos: suelto }); if (t) partes.push(t); suelto = []; } };
+    n.hijos.forEach(h => {
+      if (h.t === 'tx' || EN_LINEA.has(h.tag)) { if (h.t !== 'tx' || h.v.replace(/[\s\u200B]/g, '') || suelto.length) suelto.push(h); return; }
+      soltar();
+      let b = clasificar(h);
+      if (CLASE[b.tipo]) b = { tipo: 'parrafo', texto: b.texto };
+      if (b.tipo === 'recuadro') { partes.push(b.md); return; }
+      if (b.tipo === 'otro' || b.tipo === 'doble' || b.tipo === 'portada') { partes.push('[' + (b.que || 'bloque') + ']'); return; }
+      if (vacio(b)) return;
+      partes.push(bloqueTexto(b, 'prosa', 0));
+    });
+    soltar();
+    return partes.join('\n\n');
   }
   const vacio = b => !!b && ['parrafo', 'accion', 'escena', 'subescena', 'personaje', 'parentesis', 'dialogo', 'transicion', 'toma', 'acto', 'nota', 'montaje', 'titulo', 'cita'].includes(b.tipo) && !String(b.texto || '').trim();
   /* Los bloques de un documento: `{ tipo, texto…, html }` con el HTML tal como estaba. Lo que va suelto en el primer nivel (texto
@@ -221,6 +322,10 @@
     const t = b.texto || '';
     if (b.tipo === 'otro') return '{bloque ' + n + ': ' + (b.que || 'otro') + '}';
     if (b.tipo === 'portada') return portadaTexto(b.datos || {});
+    if (b.tipo === 'recuadro') {
+      const v = vallaRecuadro({ rc: b.rc, tipo: b.aviso, titulo: b.titulo, color: b.color }, b.md);
+      return v.apertura + '\n' + (b.md ? b.md + '\n' : '') + v.valla;
+    }
     if (modo === 'guion') {
       switch (b.tipo) {
         case 'escena': { const e = mayus(t); return RE_ESCENA.test(e) ? e : '.' + e; }
@@ -307,6 +412,7 @@
       ['nivel', 'centrado', 'izquierda', 'alineado', 'filas', 'datos', 'que'].forEach(k => { if (b[k] !== undefined) x[k] = b[k]; });
       if (b.tipo === 'lista') x.texto = b.md;
       if (b.tipo === 'doble') x.columnas = b.columnas.map(c => c.map(y => ({ tipo: y.tipo, texto: y.texto })));
+      if (b.tipo === 'recuadro') { x.recuadro = b.rc; if (b.aviso) x.aviso = b.aviso; if (b.titulo) x.titulo = b.titulo; if (b.color) x.color = b.color; x.texto = b.md; }
       out.push(x);
     }
     return out;
@@ -334,12 +440,19 @@
     return s.replace(/\n/g, '<br>');
   }
   const inicioBloque = l => /^(#{1,6}\s|\s*([-*+]|\d+[.)])\s+|\s*>|```|\s*([-*_])(\s*\3){2,}\s*$|\s*\|)/.test(l);
-  function mdBloques(lineas) {
+  /* `dentro`: el cuerpo de un recuadro, donde no cabe otro: un renglón «```prompt» ahí es texto (ni recuadro ni código) */
+  function mdBloques(lineas, dentro) {
     let out = '', i = 0, m;
     while (i < lineas.length) {
       const l = lineas[i];
       if (!l.trim()) { i++; continue; }
-      if ((m = l.match(/^```(\w*)\s*$/))) {
+      const valla = (m = l.match(/^(`{3,})[ \t]*(.*)$/)) && infoRecuadro(m[2]) ? m : null;
+      if (valla && !dentro) {
+        const o = infoRecuadro(valla[2]), cierre = new RegExp('^`{' + valla[1].length + ',}\\s*$'), buf = []; i++;
+        while (i < lineas.length && !cierre.test(lineas[i])) buf.push(lineas[i++]);
+        i++; out += recuadroHtml(o, mdBloques(buf, true)); continue;
+      }
+      if (!valla && (m = l.match(/^```(\w*)\s*$/))) {
         const buf = []; i++;
         while (i < lineas.length && !/^```\s*$/.test(lineas[i])) buf.push(lineas[i++]);
         i++; out += '<pre>' + esc(buf.join('\n')) + '</pre>'; continue;
@@ -348,9 +461,9 @@
       if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) { out += '<hr>'; i++; continue; }
       if (/^\s*>/.test(l)) {
         const buf = []; while (i < lineas.length && /^\s*>/.test(lineas[i])) buf.push(lineas[i++].replace(/^\s*> ?/, ''));
-        out += '<blockquote>' + (mdBloques(buf) || '<p><br></p>') + '</blockquote>'; continue;
+        out += '<blockquote>' + (mdBloques(buf, dentro) || '<p><br></p>') + '</blockquote>'; continue;
       }
-      if (/^\s*([-*+]|\d+[.)])\s+/.test(l)) { const r = mdLista(lineas, i); out += r.html; i = r.sig; continue; }
+      if (/^\s*([-*+]|\d+[.)])\s+/.test(l)) { const r = mdLista(lineas, i, dentro); out += r.html; i = r.sig; continue; }
       if (/^\s*\|/.test(l) && i + 1 < lineas.length && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(lineas[i + 1])) {
         const filas = []; while (i < lineas.length && /^\s*\|/.test(lineas[i])) filas.push(lineas[i++]);
         const celdas = r => r.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, '|'));
@@ -364,7 +477,7 @@
     }
     return out;
   }
-  function mdLista(lineas, i) {
+  function mdLista(lineas, i, dentro) {
     const primero = lineas[i].match(/^(\s*)([-*+]|\d+[.)])\s+/), sangria = primero[1].length;
     const ordenada = /\d/.test(primero[2]), inicio = ordenada ? parseInt(primero[2], 10) : 1;
     let html = ordenada ? (inicio > 1 ? '<ol start="' + inicio + '">' : '<ol>') : '<ul>';
@@ -374,7 +487,7 @@
       i++;
       const sub = [];
       while (i < lineas.length && lineas[i].trim() !== '' && lineas[i].search(/\S/) > sangria) { sub.push(lineas[i].replace(new RegExp('^\\s{1,' + (sangria + 2) + '}'), '')); i++; }
-      let subHtml = sub.length ? mdBloques(sub) : '';
+      let subHtml = sub.length ? mdBloques(sub, dentro) : '';
       subHtml = subHtml.replace(/^<p>([\s\S]*?)<\/p>(?=<[uo]l|$)/, '<br>$1');
       html += '<li>' + enLineaHtml(m[3]) + subHtml + '</li>';
     }
@@ -476,6 +589,7 @@
   /* Un párrafo de guion (líneas seguidas, sin blancos) → bloques descritos. */
   function parrafoGuion(ls) {
     const l0 = ls[0], todo = ls.join('\n');
+    if (/^`{3,}/.test(l0)) return [{ tipo: 'md', md: todo }];                  // un bloque cercado (código, un recuadro): Markdown
     if (/^===+\s*$/.test(l0) && ls.length === 1) return [];                        // salto de página de Fountain: aquí no hace falta
     if (/^\[\[[\s\S]*\]\]$/.test(todo.trim())) return [{ tipo: 'nota', texto: todo.trim().slice(2, -2).trim() }];
     if (/^#\s+/.test(l0)) return [{ tipo: 'acto', texto: todo.replace(/^#\s+/, '').replace(/\n/g, ' ') }];
@@ -503,9 +617,17 @@
   }
   /* Parte el texto en párrafos (líneas separadas por blancos), sin partir un bloque de código. */
   function parrafos(lineas) {
-    const out = []; let cur = [], enCodigo = false;
+    const out = []; let cur = [], enCodigo = null;                   // enCodigo: la valla abierta (```, ````…) o null
     lineas.forEach(l => {
-      if (/^```/.test(l.trim())) enCodigo = !enCodigo;
+      const v = /^(`{3,})(.*)$/.exec(l.trim());
+      if (v && !enCodigo) {                                          // una valla abre su propio párrafo
+        enCodigo = v[1];
+        if (cur.length && infoRecuadro(v[2])) { out.push(cur); cur = []; }
+      } else if (v && v[1].length >= enCodigo.length && !v[2].trim()) {
+        enCodigo = null; cur.push(l);
+        if (infoRecuadro((/^`{3,}(.*)$/.exec(cur[0].trim()) || [])[1])) { out.push(cur); cur = []; }   // y un recuadro lo cierra
+        return;
+      }
       if (!enCodigo && !l.trim()) { if (cur.length) out.push(cur); cur = []; return; }
       cur.push(l);
     });
@@ -547,7 +669,22 @@
       anterior = null;
     });
     soltarMd();
-    return { bloques: out.filter(Boolean), personajes: pj };
+    return conFinal(out, pj);
+  }
+  /* Detrás de un recuadro que acaba el documento tiene que haber dónde escribir: js/recuadros.js pone ahí una línea vacía al abrirlo
+     (y eso contaría como un cambio), así que lo escrito ya la lleva. `lineaFinal` dice si se añadió (quien lo mete en medio de
+     otro documento la quita). */
+  const LINEA_FINAL = '<p><br></p>';
+  function acabaEnRecuadro(html) {
+    const hs = parsear(String(html || '')).hijos.filter(h => h.t === 'el' || String(h.v).replace(/[\s\u200B]/g, ''));
+    const u = hs[hs.length - 1];
+    return !!(u && u.t === 'el' && u.tag === 'div' && u.at['data-rc'] !== undefined);
+  }
+  const conLineaFinal = html => (acabaEnRecuadro(html) ? String(html) + LINEA_FINAL : html);
+  function conFinal(out, pj) {
+    const bl = out.filter(Boolean), fin = bl.length > 0 && acabaEnRecuadro(bl[bl.length - 1]);
+    if (fin) bl.push(LINEA_FINAL);
+    return { bloques: bl, personajes: pj, lineaFinal: fin };
   }
   /* Pone un grupo de diálogo; si su personaje lleva «^», se junta con el grupo de antes en un diálogo doble (js/doble.js). */
   function ponerGrupo(out, g, anterior, pj) {
@@ -583,11 +720,16 @@
         out.push('<div class="sp-doble"><div class="sp-col">' + col(x.columnas[0]) + '</div><div class="sp-col">' + col(x.columnas[1]) + '</div></div>');
         anterior = null; return;
       }
+      if (tipo === 'recuadro' || tipo === 'prompt' || tipo === 'aviso' || x.recuadro) {
+        const rc = x.recuadro === 'prompt' || tipo === 'prompt' ? 'prompt' : 'aviso';
+        out.push(recuadroHtml({ rc, tipo: x.aviso || (tipo === 'aviso' ? x.tipoAviso : null) || 'note', titulo: x.titulo, color: x.color }, mdBloques(String(x.texto || '').replace(/\r\n?/g, '\n').split('\n'), true)));
+        anterior = null; return;
+      }
       if (tipo === 'titulo') out.push(htmlDe({ tipo: 'titulo', nivel: x.nivel, texto: x.texto }, pj));
       else out.push(htmlDe(Object.assign({}, x, { tipo }), pj));
       anterior = null;
     });
-    return { bloques: out.filter(Boolean), personajes: pj };
+    return conFinal(out, pj);
   }
 
   /* El registro de personajes de un documento, rehecho desde su HTML: los que siguen nombrados en un bloque de personaje, con su
@@ -615,7 +757,36 @@
   /* El texto plano de un HTML (búsqueda, extractos). */
   const textoPlano = html => plana(parsear(String(html || '').replace(/<\/(p|div|li|h[1-6]|blockquote|tr)>/gi, '$&\n'))).replace(/\u200B/g, '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 
+  /* El texto de un recuadro sin marcas (lo que se lleva «Copiar» de un prompt): como en Markdown, un bloque tras otro con una línea en
+     blanco en medio (un párrafo, una lista con «- » o «1. » y un renglón por elemento, las anidadas con dos espacios más por nivel);
+     los <br>, saltos de renglón; los párrafos vacíos no cuentan. Lo mismo que `textoDe` de js/recuadros.js, desde el HTML. */
+  function textoRecuadro(html) {
+    const r = parsear(html), raizRc = r.hijos.find(h => h.t === 'el' && h.at['data-rc'] !== undefined) || r, bloquesT = [];
+    const enL = x => x.t === 'tx' ? x.v.replace(/\u200B/g, '').replace(/\u00a0/g, ' ') : x.tag === 'br' ? '\n' : (x.tag === 'ul' || x.tag === 'ol') ? '' : x.hijos.map(enL).join('');
+    const lista = (x, prof, ls) => {
+      let k = +(x.at.start || 1);
+      x.hijos.forEach(li => {
+        if (li.t !== 'el' || li.tag !== 'li') return;
+        ls.push(' '.repeat(prof * 2) + (x.tag === 'ol' ? (k++) + '. ' : '- ') + enL(li).replace(/\n+$/, '').replace(/\n/g, '\n' + ' '.repeat(prof * 2 + 2)));
+        li.hijos.forEach(y => { if (y.t === 'el' && (y.tag === 'ul' || y.tag === 'ol')) lista(y, prof + 1, ls); });
+      });
+    };
+    const poner = t => { t = t.replace(/[ \t]+$/gm, '').replace(/^\n+|\n+$/g, ''); if (t.trim()) bloquesT.push(t); };
+    const bloque = x => {
+      if (x.t === 'tx') { poner(enL(x).replace(/[ \t\r\n]+/g, ' ').trim()); return; }
+      if (x.tag === 'ul' || x.tag === 'ol') { const ls = []; lista(x, 0, ls); poner(ls.join('\n')); return; }
+      if (x.tag === 'blockquote' || x.tag === 'div') { x.hijos.forEach(bloque); return; }
+      let t = enL(x); const u = x.hijos[x.hijos.length - 1];
+      if (/\n$/.test(t) && u && u.t === 'el' && u.tag === 'br') t = t.slice(0, -1);
+      poner(t);
+    };
+    raizRc.hijos.forEach(bloque);
+    return bloquesT.join('\n\n');
+  }
+  const RECUADROS = { TIPOS: RC_TIPOS, COLORES: RC_COLORES, ALIAS_TIPO: RC_ALIAS_TIPO, ALIAS_COLOR: RC_ALIAS_COLOR, tipo: rcTipo, color: rcColor,
+    nombre: rcNombre, info: infoRecuadro, html: recuadroHtml, valla: vallaRecuadro, texto: textoRecuadro };
+
   C.conversor = { parsear, bloques, aTexto, aJson, deTexto, deJson, Personajes, registroDe, palabras, textoPlano, esGuion, clave, titular,
-                  portadaHtml, mdBloques, enLineaHtml, TIPOS: Object.keys(CLASE), ETIQUETAS, EN_LINEA };
+                  portadaHtml, mdBloques, enLineaHtml, conLineaFinal, acabaEnRecuadro, TIPOS: Object.keys(CLASE), ETIQUETAS, EN_LINEA, RECUADROS };
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

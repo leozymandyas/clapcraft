@@ -33,6 +33,19 @@
   const clase = b => (b.className && typeof b.className === 'string' ? (b.className.match(/sp-[a-z]+/) || [''])[0] : '');
 
   const k0 = b => (b.classList && b.classList.contains('sp-doble') ? 'sp-doble' : '');
+  /* ---------- los recuadros (js/recuadros.js, 1.1.57): un prompt o un aviso, en un recuadro sencillo ----------
+     La cabecera («✦ PROMPT» o su título; el icono y el nombre de un aviso) la pinta el editor desde sus atributos: aquí se escribe. */
+  const esRc = b => !!(b && b.nodeType === 1 && b.nodeName === 'DIV' && b.hasAttribute('data-rc'));
+  function cabeceraRc(b) {
+    const R = C.conversor && C.conversor.RECUADROS;
+    const rc = b.getAttribute('data-rc') === 'prompt' ? 'prompt' : 'aviso', tit = (b.getAttribute('data-titulo') || '').trim();
+    if (rc === 'prompt') return '✦ ' + (tit || 'PROMPT');
+    const tipo = R ? R.tipo(b.getAttribute('data-tipo')) : 'note', x = R ? R.TIPOS.find(t => t[0] === tipo) : null;
+    return (x ? x[2] + ' ' : '') + (tit || (x ? x[1] : 'Nota'));
+  }
+  /* sus renglones de texto: los de «Copiar» (los párrafos con una línea en blanco en medio; un renglón por elemento de lista, con
+     «- » o «1. ») */
+  const lineasRc = b => ((C.conversor && C.conversor.RECUADROS) ? C.conversor.RECUADROS.texto(b.outerHTML) : b.textContent).split('\n');
   /* un diálogo doble en texto: las dos columnas lado a lado, de 28 caracteres con 4 de separación (el personaje en el 8, el
      paréntesis en el 4), como en la hoja */
   function textoDoble(b) {
@@ -62,6 +75,7 @@
     }
     bs.forEach((b, i) => {
       if (k0(b) === 'sp-doble') { out += (i ? '\n\n' : '') + textoDoble(b); return; }
+      if (esRc(b)) { out += (i ? '\n\n' : '') + '┌ ' + cabeceraRc(b) + '\n' + lineasRc(b).map(l => '│ ' + l).join('\n').replace(/[ \t]+$/gm, '') + '\n└'; return; }
       const k = clase(b), prev = i ? clase(bs[i - 1]) : '';
       const lineas = n => n.nodeName === 'BR' ? '\n' : n.nodeType === 3 ? n.nodeValue : Array.from(n.childNodes).map(lineas).join('');
       let t = b.tagName === 'HR' ? '* * *' : lineas(b).replace(/\u200B/g, '').replace(/\u00A0/g, ' ');
@@ -141,7 +155,14 @@ hr { border: 0; border-top: 1px solid #000; margin: 12pt 0; }
 ul, ol { margin: 0; padding-left: 3ch; }
 mark { background: none; }
 img { max-width: 100%; }
-table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2pt 4pt; }`;
+table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2pt 4pt; }
+/* un recuadro (prompt o aviso): la cabecera en su renglón y el texto a 3 caracteres del borde; con el relleno y el borde, dos
+   renglones más que su texto (C.maquetar.RECUADRO) */
+.rc { margin: 0 0 12pt; padding: 5pt 3ch 5pt; border: 1pt solid #000; border-radius: 4pt; break-inside: avoid; }
+.rc::before { content: attr(data-cab); display: block; font-weight: 700; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.rc > p, .rc > ul, .rc > ol, .rc > h1, .rc > h2, .rc > h3, .rc > blockquote, .rc > pre { margin: 0; }
+.rc > ul, .rc > ol { padding-left: 3ch; }
+.rc li { margin: 0; }`;
   /* un trozo [a, b) de un bloque (en las posiciones de `textoBloque`), con su formato */
   function recortar(el, a, b) {
     const c = el.cloneNode(true);
@@ -203,6 +224,7 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     t.content.querySelectorAll('.cd-seccion, .db, .portada').forEach(x => x.remove());
     t.content.querySelectorAll('[data-ch]').forEach(x => { x.removeAttribute('data-ch'); x.style.removeProperty('--chl'); x.style.removeProperty('--chd'); });
     const caja = document.createElement('div'); caja.appendChild(t.content);
+    caja.querySelectorAll('div[data-rc]').forEach(b => b.setAttribute('data-cab', cabeceraRc(b)));
     const f = fuentes || 'fonts/';
     const soloTexto = C.maquetar && !caja.querySelector('img, table, pre, video, iframe');
     const paginas = soloTexto ? `
@@ -260,6 +282,7 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
       }
       if (n.nodeType !== 1) return;
       if (n.nodeName === 'BR') { r += '<w:r><w:br/></w:r>'; return; }
+      if (n.nodeName === 'IMG') { r += imagenDocx(n); return; }
       const st = n.style || {}, e = Object.assign({}, estilo);
       if (/^(B|STRONG)$/.test(n.nodeName) || /^(bold|[6-9]00)$/.test(st.fontWeight)) e.b = true;
       if (/^(I|EM)$/.test(n.nodeName) || st.fontStyle === 'italic') e.i = true;
@@ -286,8 +309,23 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
       + `<w:tr><w:trPr><w:cantSplit/></w:trPr>${celda(cols[0], 4608, 576)}${celda(cols[1], 4032, 0)}</w:tr></w:tbl>`
       + '<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>';
   }
+  /* un recuadro en Word: su cabecera en negrita y su texto, en párrafos con el mismo borde (Word los junta en una caja) */
+  function recuadroDocx(b) {
+    const borde = '<w:pBdr><w:top w:val="single" w:sz="6" w:space="4" w:color="000000"/><w:left w:val="single" w:sz="6" w:space="6" w:color="000000"/>'
+      + '<w:bottom w:val="single" w:sz="6" w:space="4" w:color="000000"/><w:right w:val="single" w:sz="6" w:space="6" w:color="000000"/></w:pBdr>';
+    const p = (runsXml, ultimo, extra) => `<w:p><w:pPr><w:keepNext/><w:keepLines/>${borde}<w:spacing w:before="0" w:after="${ultimo ? 240 : 0}"/><w:ind w:left="180" w:right="180"/>${extra || ''}</w:pPr>${runsXml}</w:p>`;
+    const hijos = [];
+    Array.from(b.childNodes).forEach(n => {
+      if (n.nodeType === 1 && /^(UL|OL)$/.test(n.nodeName)) Array.from(n.children).forEach((li, i) => hijos.push({ n: li, pre: n.nodeName === 'OL' ? (i + 1) + '. ' : '• ' }));
+      else if (n.nodeType === 1) hijos.push({ n });
+      else if (n.nodeType === 3 && n.nodeValue.trim()) { const q = document.createElement('p'); q.textContent = n.nodeValue; hijos.push({ n: q }); }
+    });
+    const cab = p(`<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${xml(cabeceraRc(b))}</w:t></w:r>`, !hijos.length);
+    return cab + hijos.map((h, i) => p((h.pre ? `<w:r><w:t xml:space="preserve">${xml(h.pre)}</w:t></w:r>` : '') + runs(h.n, {}, false), i === hijos.length - 1)).join('');
+  }
   function parrafo(b, siguiente) {
     if (k0(b) === 'sp-doble') return tablaDoble(b);
+    if (esRc(b)) return recuadroDocx(b);
     const k = clase(b), st = b.style || {};
     if (b.tagName === 'HR') return '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="000000"/></w:pBdr><w:spacing w:after="360"/></w:pPr></w:p>';
     const pp = [], estilo = {};
@@ -315,7 +353,44 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     const texto = (pre ? `<w:r><w:t xml:space="preserve">${xml(pre)}</w:t></w:r>` : '') + runs(b, estilo, mayus) + (post ? `<w:r><w:t xml:space="preserve">${xml(post)}</w:t></w:r>` : '');
     return `<w:p><w:pPr>${pp.join('')}${size}</w:pPr>${texto}</w:p>`;
   }
-  function docx(html) {
+  /* ---------- las imágenes en Word (1.1.57) ----------
+     Hasta ahora no pasaban. `mediosDocx(html)` (asíncrona: hay que decodificarlas) deja cada imagen distinta del documento en PNG
+     (JPEG si ya lo era; Word no lee WebP) con su tamaño; `docx(html, medios)` las mete en word/media y las pone en su renglón con
+     el ancho del documento (`width`, en píxeles de la hoja = 1/96 in) o el suyo, sin pasar del ancho del texto (6 in). */
+  let MEDIOS = null;
+  async function mediosDocx(html) {
+    const t = document.createElement('template'); t.innerHTML = html || '';
+    const srcs = [...new Set(Array.from(t.content.querySelectorAll('img')).map(i => i.getAttribute('src') || '').filter(s => /^data:image\//i.test(s)))];
+    const medios = new Map();
+    for (const src of srcs) {
+      try {
+        const im = new Image(); im.src = src; await im.decode();
+        const jpg = /^data:image\/jpe?g/i.test(src), cv = document.createElement('canvas');
+        cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+        const g = cv.getContext('2d'); if (jpg) { g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); }
+        g.drawImage(im, 0, 0);
+        const url = jpg ? src : cv.toDataURL('image/png'), bin = atob(url.slice(url.indexOf(',') + 1)), u8 = new Uint8Array(bin.length);
+        for (let j = 0; j < bin.length; j++) u8[j] = bin.charCodeAt(j);
+        medios.set(src, { n: medios.size + 1, ext: jpg ? 'jpeg' : 'png', bytes: u8, w: im.naturalWidth, h: im.naturalHeight });
+      } catch (_) { /* una que no se deja leer se queda fuera, como antes */ }
+    }
+    return medios;
+  }
+  function imagenDocx(img) {
+    const m = MEDIOS && MEDIOS.get(img.getAttribute('src') || ''); if (!m || !m.w || !m.h) return '';
+    const ancho = Math.min(parseInt(img.getAttribute('width'), 10) || m.w, 576), alto = ancho * m.h / m.w, emu = px => Math.round(px * 9525);
+    const id = (MEDIOS.docPr = (MEDIOS.docPr || 0) + 1), a = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+    return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${emu(ancho)}" cy="${emu(alto)}"/><wp:docPr id="${id}" name="Imagen ${id}" descr="${xml(img.getAttribute('alt') || '')}"/>`
+      + `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="${a}" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="${a}"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">`
+      + `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${id}" name="imagen${m.n}.${m.ext}"/><pic:cNvPicPr/></pic:nvPicPr>`
+      + `<pic:blipFill><a:blip r:embed="rIdImg${m.n}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu(ancho)}" cy="${emu(alto)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>`
+      + '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+  }
+  function docx(html, medios) {
+    MEDIOS = medios && medios.size ? medios : null;
+    try { return docxCon(html); } finally { MEDIOS = null; }
+  }
+  function docxCon(html) {
     const bs = bloques(html);
     const po = portadaDe(html);
     const centrado = (t, antes, negrita) => `<w:p><w:pPr><w:spacing w:before="${antes || 0}" w:after="0"/><w:jc w:val="center"/></w:pPr><w:r>${negrita ? '<w:rPr><w:b/></w:rPr>' : ''}<w:t xml:space="preserve">${xml(t)}</w:t></w:r></w:p>`;
@@ -324,14 +399,16 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
       + [po.contacto, po.version, po.fecha].filter(Boolean).map((t, i) => `<w:p><w:pPr><w:spacing w:before="${i ? 0 : 12 * 240}" w:after="0"/></w:pPr><w:r><w:t xml:space="preserve">${xml(t)}</w:t></w:r></w:p>`).join('')
       + '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
     const cuerpo = portada + (bs.map((b, i) => parrafo(b, bs[i + 1])).join('') || '<w:p/>');
-    const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+    const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"';
+    const imgs = MEDIOS ? [...MEDIOS.values()] : [];                  // las imágenes (1.1.57): sus tipos, sus relaciones y sus archivos
     const archivos = {
-      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
+      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' + [...new Set(imgs.map(m => m.ext))].map(e => `<Default Extension="${e}" ContentType="image/${e}"/>`).join('') + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
       '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
-      'word/_rels/document.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+      'word/_rels/document.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' + imgs.map(m => `<Relationship Id="rIdImg${m.n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/imagen${m.n}.${m.ext}"/>`).join('') + '</Relationships>',
       'word/styles.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ${W}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Courier Prime" w:hAnsi="Courier Prime" w:cs="Courier New" w:eastAsia="Courier New"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="es-ES"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="240" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`,
       'word/document.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body>${cuerpo}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="2160" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`
     };
+    imgs.forEach(m => { archivos[`word/media/imagen${m.n}.${m.ext}`] = m.bytes; });
     return zip(archivos);
   }
   /* zip sin comprimir (método 0), con nombres UTF-8 */
@@ -342,7 +419,7 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     let offset = 0;
     const u16 = (v, n) => { v.push(n & 0xFF, (n >>> 8) & 0xFF); }, u32 = (v, n) => { v.push(n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF); };
     Object.keys(archivos).forEach(nombre => {
-      const datos = enc.encode(archivos[nombre]), nom = enc.encode(nombre), crc = crc32(datos);
+      const datos = typeof archivos[nombre] === 'string' ? enc.encode(archivos[nombre]) : archivos[nombre], nom = enc.encode(nombre), crc = crc32(datos);   // (una imagen ya va en bytes)
       const h = []; u32(h, 0x04034b50); u16(h, 20); u16(h, 0x0800); u16(h, 0); u16(h, 0); u16(h, 0x21); u32(h, crc); u32(h, datos.length); u32(h, datos.length); u16(h, nom.length); u16(h, 0);
       partes.push(new Uint8Array(h), nom, datos);
       const c = []; u32(c, 0x02014b50); u16(c, 20); u16(c, 20); u16(c, 0x0800); u16(c, 0); u16(c, 0); u16(c, 0x21); u32(c, crc); u32(c, datos.length); u32(c, datos.length); u16(c, nom.length); u16(c, 0); u16(c, 0); u16(c, 0); u16(c, 0); u32(c, 0); u32(c, offset);
@@ -389,7 +466,7 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
       if (p.matches('p.sp-act') && !primero && !/^FIN\b/i.test(p.textContent.trim())) p.classList.add('nueva-pagina');
       if (p.textContent.trim() && !p.matches('.sp-transition')) primero = false;   // «FADE IN:» delante no cuenta
     });
-    if (sinNotas()) r.querySelectorAll('p.sp-note').forEach(p => p.remove());
+    if (sinNotas()) r.querySelectorAll('p.sp-note, div[data-rc]').forEach(p => p.remove());   // los recuadros también son material de trabajo
     /* «FADE IN:» a la izquierda aunque el documento no traiga la marca del editor */
     r.querySelectorAll('p.sp-transition').forEach(p => { if (/^FADE IN:?$/i.test(p.textContent.replace(/\s+/g, ' ').trim())) p.setAttribute('data-izq', ''); });
     const caja = document.createElement('div'); caja.appendChild(r);
@@ -399,7 +476,7 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     const doc = Object.assign({}, doc0, { html: preparar(doc0.html) });
     const titulo = nombreArchivo(doc.titulo);
     if (formato === 'pdf') return pdf(doc.html, doc.titulo);
-    if (formato === 'docx') return guardar(docx(doc.html), titulo + '.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', { name: 'Documento de Word', extensions: ['docx'] });
+    if (formato === 'docx') return guardar(docx(doc.html, await mediosDocx(doc.html)), titulo + '.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', { name: 'Documento de Word', extensions: ['docx'] });
     if (formato === 'md') return guardar(aMarkdown(doc.html), titulo + '.md', 'text/markdown;charset=utf-8', { name: 'Markdown', extensions: ['md'] });
     return guardar(aTexto(doc.html), titulo + '.txt', 'text/plain;charset=utf-8', { name: 'Texto sin formato', extensions: ['txt'] });
   }
@@ -423,12 +500,12 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     });
     /* ocultar las notas del guion (/nota) al exportar; se recuerda en esta máquina */
     const nt = document.createElement('button'); nt.type = 'button'; nt.className = 'ex-opcion ex-casilla'; nt.setAttribute('role', 'menuitemcheckbox');
-    const pintarCasilla = () => { nt.setAttribute('aria-checked', String(sinNotas())); nt.innerHTML = `<span>${sinNotas() ? '☑' : '☐'} Ocultar las notas del guion</span>`; };
+    const pintarCasilla = () => { nt.setAttribute('aria-checked', String(sinNotas())); nt.innerHTML = `<span>${sinNotas() ? '☑' : '☐'} Ocultar las notas y los recuadros</span>`; };
     pintarCasilla();
     nt.addEventListener('click', () => { try { localStorage.setItem(CLAVE_SIN_NOTAS, sinNotas() ? '0' : '1'); } catch (_) {} pintarCasilla(); });
     f.appendChild(nt);
     C.gestor.pop(trigger, f);
   }
 
-  C.exportar = { menu, exportar, aTexto, aMarkdown, docx, aImprimible, preparar };
+  C.exportar = { menu, exportar, aTexto, aMarkdown, docx, mediosDocx, aImprimible, preparar };
 })(window.Claquedraw);

@@ -179,3 +179,40 @@ html.clapcraft .fb-item.cd-exportar { height: 27px; padding: 0; margin: 0 0 0 6p
 html.clapcraft .fb-item.cd-exportar button { position: static; opacity: 1; display: inline-flex; align-items: center; gap: 7px; width: auto; height: 27px; padding: 0 11px; border: 1px solid var(--bb-line); border-radius: 5px; background: transparent; color: var(--bb-fg); font: 400 12.5px var(--ui-font); cursor: pointer; }
 html.clapcraft .fb-item.cd-exportar button svg { width: 14px; height: 14px; }
 html.clapcraft .fb-item.cd-exportar button:hover { background: var(--hover); }
+
+/* ===== Temas neón: Synthwave y Vaporwave (1.1.57; ver css/clapcraft.css) =====
+   El marco del editor recibe `data-estilo` de la página (texto.js) junto a `data-theme`. Solo tokens y el sol en los rellenos; la
+   hoja: papel índigo con texto claro en Synthwave, papel casi blanco rosado en Vaporwave (Courier Prime, como siempre). */
+html[data-estilo="vaporwave"], html.clapcraft[data-estilo="vaporwave"] {   /* con .clapcraft, por encima de html.clapcraft[data-theme] */
+  --bg: #f3e5f5; --canvas: #fbf3fa; --bar: #f3e5f5; --bar-2: #fbf3fa;
+  --ink: #d8c2e2; --line: #d8c2e2; --line-soft: #e6d3ea;
+  --fg: #271339; --muted: #5e4775; --muted-2: #6a5680; --icon: #5e4775; --hover: #e5cfed;
+  --accent-bg: #fadcf2; --accent-fg: #b0128c; --accent: #b0128c; --accent-linea: rgba(176, 18, 140, .45); --select-bg: rgba(245, 216, 239, .85);
+  --cian-vivo: #38d6ee; --sol: linear-gradient(90deg, #ffd66b, #ffa07a 50%, #ff6fc2);
+  --page-bg: #fffbfe; --page-fg: #271339; --page-muted: #5e4775; --page-soft: #f6e7f5; --page-line: #e6d3ea;
+  --page-shadow: 0 1px 2px rgba(80, 20, 90, .08), 0 10px 26px rgba(120, 30, 130, .13);
+  --bb-bg: #efdff3; --bb-fg: #271339; --bb-muted: #5e4775; --bb-line: #d4bddf; --bb-border: #d4bddf; --bb-thumb: #fffbfe;
+  --bb-active: #b0128c; --bb-active-fg: #ffffff; --bb-top: #d4bddf;
+  --cd-foco-linea: rgba(176, 18, 140, .45); --cd-foco-halo: rgba(214, 38, 170, .22); --cd-globo-bg: #2e1848; --cd-globo-fg: #fbf0ff;
+  --escena: #ffe2a0; --escena-trazo: #c98a00; --rombo: #f1d3fb; --rombo-trazo: #a51fc4;
+}
+html[data-estilo="synthwave"], html.clapcraft[data-estilo="synthwave"] {   /* con .clapcraft, por encima de html.clapcraft[data-theme] */
+  --bg: #1f1545; --canvas: #110b27; --bar: #1f1545; --bar-2: #19113a;
+  --ink: #3b2e72; --line: #3b2e72; --line-soft: #2c2259;
+  --fg: #f3ecff; --muted: #bcaee4; --muted-2: #978ac6; --icon: #bcaee4; --hover: #31245f;
+  --accent-bg: #3d1a5c; --accent-fg: #ff5fd2; --accent: #ff5fd2; --accent-linea: rgba(255, 95, 210, .6); --select-bg: rgba(83, 40, 130, .75); --star: #ffc94a;
+  --cian-vivo: #3ee8ff; --sol: linear-gradient(90deg, #ffe45c, #ff8a3d 50%, #ff2fa0);
+  --page-bg: #1d1545; --page-fg: #efe7ff; --page-muted: #b3a6dc; --page-soft: #2a1f58; --page-line: #3b2e72;
+  --page-shadow: 0 1px 2px rgba(4, 0, 16, .5), 0 12px 30px rgba(4, 0, 16, .55), 0 0 0 1px rgba(255, 95, 210, .05);
+  --bb-bg: #0d0822; --bb-fg: #efe6ff; --bb-muted: #a497d2; --bb-line: #2a2052; --bb-border: #2a2052; --bb-thumb: #251a4f;
+  --bb-active: #ff5fd2; --bb-active-fg: #1c0630; --bb-top: #2a2052;
+  --cd-foco-linea: rgba(255, 95, 210, .6); --cd-foco-halo: rgba(255, 95, 210, .3); --cd-globo-bg: #2c1756; --cd-globo-fg: #f8f0ff;
+  --escena: #6b4a10; --escena-trazo: #ffc94a; --rombo: #3f1f70; --rombo-trazo: #d59bff;
+}
+html.clapcraft[data-estilo] ::-webkit-scrollbar-thumb { background: linear-gradient(135deg, var(--accent), var(--cian-vivo)); background-clip: padding-box; }
+html.clapcraft[data-estilo] ::-webkit-scrollbar-thumb:hover { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 85%, var(--fg)), var(--cian-vivo)); background-clip: padding-box; }
+html.clapcraft[data-estilo] .topbar button.active { border-color: var(--accent-linea); }
+html.clapcraft[data-estilo="synthwave"] .topbar button.active { box-shadow: 0 0 8px rgba(255, 95, 210, .35); }
+html.clapcraft[data-estilo] .page { box-shadow: var(--page-shadow); }
+html.clapcraft[data-estilo] .focus-bar input[type=range] { background: var(--sol) 0 / var(--pct, 50%) 100% no-repeat, var(--bb-line); }
+html.clapcraft[data-estilo="synthwave"] .fb-item.row:has(button.active) { box-shadow: 0 0 10px rgba(255, 95, 210, .45); }

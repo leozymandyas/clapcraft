@@ -1,6 +1,6 @@
 {
   "name": "claquedraw",
-  "version": "1.1.55",
+  "version": "1.1.60",
   "description": "Guiones: editor de texto tipo hoja de Word con atajos Markdown, tablero de tramas y ClapCraft (esquema de pasos con una nota de texto por nodo), listo para empaquetar con Electron",
   "main": "electron/main.js",
   "private": true,
@@ -16,7 +16,21 @@
     "predist": "node claude/empaquetar.js",
     "test:claude": "electron pruebas/claude-electron.js",
     "test:enlaces": "electron pruebas/enlaces-electron.js",
-    "test:segmentos": "electron pruebas/segmentos-electron.js"
+    "test:segmentos": "electron pruebas/segmentos-electron.js",
+    "test:plantillas": "electron pruebas/plantillas-electron.js",
+    "test:imagenes": "electron pruebas/imagenes-electron.js",
+    "test:recuadros": "electron pruebas/recuadros-electron.js",
+    "test:conexiones": "electron pruebas/conexiones-electron.js",
+    "test:temas": "electron pruebas/temas-electron.js",
+    "test:lienzo": "electron pruebas/lienzo-electron.js",
+    "test:lienzo-app": "electron pruebas/lienzo-app-electron.js",
+    "test:lienzo-claude": "electron pruebas/lienzo-claude-electron.js",
+    "test:asistente": "electron pruebas/asistente-electron.js",
+    "test:asistente-vivo-GASTA": "electron pruebas/asistente-vivo-electron.js",
+    "test:formulas": "electron pruebas/formulas-electron.js",
+    "test:ventana": "electron pruebas/ventana-electron.js",
+    "test:memoria": "electron pruebas/memoria-electron.js",
+    "test:vision-vivo-GASTA": "node pruebas/vision-vivo.js"
   },
   "devDependencies": {
     "electron": "^36.0.0",

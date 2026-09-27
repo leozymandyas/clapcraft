@@ -20,10 +20,11 @@ const zlib = require('zlib');
 const { execFile } = require('child_process');
 const { buscarArchivos, buscarPorEnlace } = require('./archivos');
 const atomico = require('./atomico');                          // escribir de una vez, y el mismo archivo aunque la ruta se escriba distinto (1.1.55)
+const imagenes = require('./imagenes');                        // las imágenes de una respuesta, reducidas (1.1.58)
 
 const RAIZ = path.join(__dirname, '..');
-['js/tramas/modelo.js', 'js/claquedraw/biblioteca.js', 'js/claquedraw/documentos.js', 'js/claquedraw/plantillas.js', 'js/claquedraw/guion.js',
- 'js/claquedraw/relaciones.js', 'js/claquedraw/conversor.js', 'js/claquedraw/historial.js', 'js/claquedraw/enlaces.js', 'js/claquedraw/herramientas.js'].forEach(f => require(path.join(RAIZ, f)));
+['js/tramas/modelo.js', 'js/claquedraw/biblioteca.js', 'js/claquedraw/lienzo-modelo.js', 'js/claquedraw/formulas.js', 'js/claquedraw/documentos.js', 'js/claquedraw/plantillas.js', 'js/claquedraw/guion.js',
+ 'js/claquedraw/relaciones.js', 'js/claquedraw/conversor.js', 'js/claquedraw/memoria.js', 'js/claquedraw/historial.js', 'js/claquedraw/enlaces.js', 'js/claquedraw/herramientas.js'].forEach(f => require(path.join(RAIZ, f)));
 const C = globalThis.Claquedraw;
 const H = C.herramientas;
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8')).version || '0'; } catch (_) { return '0'; } })();
@@ -258,7 +259,7 @@ async function crearProyecto(args) {
 
 const HERRAMIENTAS = H.LISTA.concat([
   { name: 'crear_proyecto', title: 'Crear un proyecto', soloServidor: true, annotations: { destructiveHint: false },
-    description: 'Crea un proyecto nuevo de ClapCraft (un archivo .clapcraft) a partir de una plantilla — blanco (un contenedor con un esquema), largo (largometraje: tres actos con sus esquemas de secuencias), serie (una temporada de ocho capítulos), novela, corto o teatro— y lo abre en ClapCraft. Por defecto en ~/Documents/ClapCraft (o ~/Documents).',
+    description: 'Crea un proyecto nuevo de ClapCraft (un archivo .clapcraft) a partir de una plantilla de proyecto (no de nota: esas viven dentro de cada proyecto, en «Plantillas») — blanco (un contenedor con un esquema), largo (largometraje: tres actos con sus esquemas de secuencias), serie (una temporada de ocho capítulos), novela, corto o teatro— y lo abre en ClapCraft. Por defecto en ~/Documents/ClapCraft (o ~/Documents).',
     inputSchema: { type: 'object', required: ['nombre'], properties: { nombre: { type: 'string' }, plantilla: { type: 'string', enum: C.plantillas.PLANTILLAS.map(p => p.id) },
       ruta: { type: 'string', description: 'Carpeta o archivo donde crearlo (opcional).' }, abrir: { type: 'boolean', description: 'Abrirlo en ClapCraft (por defecto sí).' } } } }
 ]);
@@ -303,7 +304,20 @@ const INSTRUCCIONES = 'ClapCraft es el programa de Leo para escribir guiones: ca
   + 'Empieza por listar_proyectos o ver_proyecto; lee un esquema con leer_esquema antes de cambiarlo y cámbialo con editar_esquema (una lista de operaciones que se hace entera o nada; las columnas empiezan en 1). '
   + 'El texto se lee y se escribe con leer_documento y escribir_documento (guion al estilo Fountain, notas en Markdown). Si el proyecto está abierto en ClapCraft, los cambios se ven al momento y se pueden deshacer allí. '
   + 'Si Leo pega enlaces de ClapCraft ([Nodo «…» · esquema «…»](clapcraft://…)), léelos con ver_enlace: dicen exactamente de qué habla, y valen en lugar de un id en cualquier herramienta. '
+  + 'Un esquema puede estar conectado con bibliotecas (ver_proyecto y leer_esquema lo dicen): para partir su guion en fragmentos cortos de vídeo (Seedance, hasta 15 s) usa preparar_fragmentos, que no escribe nada, y luego una nota por fragmento en la biblioteca conectada (editar_biblioteca › crear_nota { fragmento }). '
+  + 'Un proyecto puede tener lienzos de nodos (como los «Space» de Dreamina): entradas (notas, segmentos, bibliotecas, esquemas, personajes, textos, imágenes) conectadas a operaciones (generar guion, partir en fragmentos, escaleta, resumir, reescribir, traducir, instrucción libre) que ejecutas tú. Cuando Leo pulse ▶ o diga «ejecuta el lienzo»: leer_lienzo da las pendientes en orden; para cada una, ejecutar_nodo (el encargo, con las imágenes), escribe la salida con las herramientas de siempre y completar_nodo. '
   + 'Escribe en español y no inventes nombres de personajes o tramas que Leo no haya pedido.';
+/* El resultado de una herramienta en MCP: el texto y, si trae imágenes (ejecutar_nodo, 1.1.58), cada una como contenido de imagen,
+   reducida (claude/imagenes.js); lo que no va se dice al final del texto. */
+async function contenidoDe(r) {
+  const content = [{ type: 'text', text: r.ok ? (r.texto || 'Hecho') : r.error }];
+  if (r.ok && Array.isArray(r.imagenes) && r.imagenes.length) {
+    let im; try { im = await imagenes.preparar(r.imagenes); } catch (e) { im = { contenido: [], avisos: ['(No se pudieron preparar las imágenes: ' + (e && e.message) + ')'] }; }
+    if (im.avisos.length) content[0].text += '\n' + im.avisos.join('\n');
+    content.push(...im.contenido);
+  }
+  return { content, isError: !r.ok };
+}
 function responder(id, result) { if (id !== undefined && id !== null) enviar({ jsonrpc: '2.0', id, result }); }
 function error(id, code, message) { if (id !== undefined && id !== null) enviar({ jsonrpc: '2.0', id, error: { code, message } }); }
 function enviar(obj) { process.stdout.write(JSON.stringify(obj) + '\n'); }
@@ -329,7 +343,7 @@ async function atender(m) {
       cola = cola.then(async () => {
         let r;
         try { r = await llamar(nombre, args); } catch (e) { r = { ok: false, error: e && e.message ? e.message : String(e) }; }
-        responder(id, { content: [{ type: 'text', text: r.ok ? (r.texto || 'Hecho') : r.error }], isError: !r.ok });
+        responder(id, await contenidoDe(r));
       });
       return cola;
     }
@@ -355,4 +369,4 @@ if (require.main === module || process.env.CLAPCRAFT_MCP_ARRANCAR) {
   process.stdin.on('end', () => { cola.then(() => process.exit(0)); });
   log('ClapCraft ' + VERSION + ' · servidor MCP listo');
 }
-module.exports = { llamar, atender, resolver, puente, leerProyecto, escribirProyecto, HERRAMIENTAS };
+module.exports = { llamar, atender, resolver, puente, leerProyecto, escribirProyecto, contenidoDe, HERRAMIENTAS };

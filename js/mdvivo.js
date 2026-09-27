@@ -11,6 +11,8 @@
      bloque con el espacio que va detrás del marcador (`op.bloques(el)` puede negarlo: un elemento de guion no se convierte),
      los atajos de formato (`atajoDe`), pegar (`pegar`), Enter en un renglón vacío de una cita sale de ella y Retroceso al
      principio de un título o de una cita lo vuelve párrafo. Tras cada conversión avisa con un `input`.
+   - `lista(raiz, e, op)` (1.1.60): Enter en una viñeta vacía sale de la lista, Retroceso al principio de una le quita la viñeta
+     (anidada, la sube un nivel) y Tab / Mayús+Tab la anidan y la suben; lo usan `vivo`, el panel flotante y el editor.
    **El formato de lo elegido** (Leo, 25-09-2026, lo que se trajo de ClapBook para la ventana de una nota): `formato(campo,
    accion, valor, op)` hace negrita, cursiva, subrayado, tachado, código, resaltado (con un color o un <mark>), color de letra,
    títulos, quitar el formato y enlaces sobre la selección, siempre con execCommand (entra en Deshacer) y con **el mismo HTML
@@ -460,6 +462,75 @@
     return true;
   }
 
+  /* ====================== las listas: Enter, Retroceso y Tab ======================
+     Leo, 1.1.60: «en las notas, cuando uso viñetas ya no puedo quitarlas, ni siquiera borrando; deben quitarse y dejarme escribir
+     normal cuando dé Enter a una viñeta vacía». Chrome solo sale de una lista con Enter si el elemento está vacío **de verdad**: los
+     \u200B que dejan los atajos en línea (`**x**` al principio de un elemento lleva uno delante y otro detrás; al borrar el texto se
+     quedan) o un espacio duro lo contaban lleno, y Enter abría otra viñeta; Retroceso borraba primero lo invisible (no pasaba nada)
+     y, al principio de un elemento, lo unía al de antes (en el primero del campo, nada). Y Tab sacaba el foco del campo (en la
+     ventana de una nota, al botón de typewriter: el Enter de después lo apagaba). `lista(raiz, e, op)` atiende la tecla (devuelve
+     true) como Notion y ClapBook:
+     - Enter en un elemento vacío (sin contar \u200B ni espacios): fuera de la lista, un párrafo (anidado, un nivel arriba);
+     - Retroceso al principio de uno: vacío, lo mismo; con texto, sin su viñeta (un párrafo que parte la lista) o, anidado, un nivel
+       arriba;
+     - Tab lo anida bajo el de antes; Mayús+Tab lo sube (en el primer nivel, párrafo).
+     Siempre con execCommand (entra en Deshacer): Enter con `insertParagraph` sobre lo invisible (Chrome sale limpio de un elemento
+     vacío), subir con `outdent` y quitar la viñeta con `outdent` + `formatBlock` (el `outdent` solo deja el texto suelto, sin
+     párrafo). `op.cmd` es el comando de quien lo llama (el editor pasa `Ed.cmd` y su clase `fusionando` en `op.fusion`); `op.tab === false`
+     deja Tab en paz. Lo usan `vivo` (la ventana de una nota, la descripción de un nodo, el lienzo), el panel flotante (Mayús+Enter) y el editor (js/editor.js). */
+  const LISTA = /^(UL|OL)$/;
+  const NO_TEXTO = 'img, table, hr, video, iframe, object, embed, svg, canvas, [data-f], [contenteditable="false"]';
+  function lista(raiz, e, op) {
+    op = op || {};
+    if (!raiz || !e || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.defaultPrevented) return false;
+    const enter = e.key === 'Enter' && !e.shiftKey, atras = e.key === 'Backspace' && !e.shiftKey, tab = e.key === 'Tab' && op.tab !== false;
+    if (!enter && !atras && !tab) return false;
+    const r = rango(); if (!r || !r.collapsed || !raiz.contains(r.startContainer)) return false;
+    const el = elDe(r.startContainer), li = el && el.closest('li');
+    if (!li || li === raiz || !raiz.contains(li) || !el.isContentEditable) return false;
+    const L = li.parentNode; if (!L || L.nodeType !== 1 || !LISTA.test(L.tagName)) return false;
+    const P = L.parentNode, anidado = !!P && P !== raiz && raiz.contains(P) && (P.tagName === 'LI' || LISTA.test(P.tagName));
+    const x = typeof op.cmd === 'function' ? op.cmd : cmd;
+    /* lo del elemento sin su sublista */
+    let fin = 0; while (fin < li.childNodes.length && !(li.childNodes[fin].nodeType === 1 && LISTA.test(li.childNodes[fin].tagName))) fin++;
+    const propio = document.createRange(); propio.setStart(li, 0); propio.setEnd(li, fin);
+    const conSublista = fin < li.childNodes.length;
+    const vacio = !conSublista && !propio.toString().replace(/[\s\u200B ]/g, '') && !propio.cloneContents().querySelector(NO_TEXTO);
+    const antes = document.createRange(); antes.setStart(li, 0); antes.setEnd(r.startContainer, r.startOffset);
+    const alPrincipio = !antes.toString().replace(/\u200B/g, '') && !antes.cloneContents().querySelector('br, ' + NO_TEXTO);
+    /* un elemento de una sublista a la manera de Markdown (<li>a<ul>…</ul></li>) lo sube mal Chrome (un <li> dentro de otro): antes
+       se pasa a la suya (<li>a</li><ul>…</ul>, la que deja su Tab), que se ve igual; si detrás de la sublista hay texto, no se toca */
+    let tras = L.nextSibling; while (tras && tras.nodeType === 3 && !tras.nodeValue.trim()) tras = tras.nextSibling;
+    const puedeSubir = anidado && !(P.tagName === 'LI' && tras);
+    const salir = () => {                       // Chrome sale del elemento vacío con un párrafo (anidado: un nivel arriba)
+      if (propio.toString()) poner(propio); else cursor(li, 0);   // lo invisible, dentro de lo que se sustituye
+      x('insertParagraph');
+    };
+    const subir = () => {
+      if (P.tagName === 'LI') { const c = [r.startContainer, r.startOffset]; P.after(L); cursor(c[0], c[1]); }
+      x('outdent');
+    };
+    const aParrafo = () => {
+      poner(propio.collapsed ? (() => { const c = document.createRange(); c.setStart(li, 0); return c; })() : propio);
+      x('outdent'); x('formatBlock', 'p');
+      const s = rango(); if (s) { s.collapse(true); poner(s); }
+    };
+    let hacer = null;
+    if (enter) hacer = vacio ? salir : null;
+    else if (atras) hacer = !alPrincipio ? null : vacio ? salir : anidado ? (puedeSubir ? subir : null) : aParrafo;
+    else if (e.shiftKey) hacer = anidado ? (puedeSubir ? subir : () => {}) : aParrafo;
+    else hacer = li.previousElementSibling ? () => x('indent') : () => {};   // el primero no se anida: no tendría de quién colgar
+    if (!hacer) return false;
+    if (e.preventDefault) e.preventDefault();
+    /* al sacar el texto de la lista Chrome le pondría en un <span style> el tamaño y el color que tenía ahí: mientras dura, los estilos
+       calculados, iguales (`.md-fusion`; el editor pasa `fusionando`) */
+    const fusion = op.fusion || 'md-fusion';
+    raiz.classList.add(fusion);
+    try { hacer(); } finally { raiz.classList.remove(fusion); }
+    raiz.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
+
   function vivo(campo, op) {
     if (!campo || campo.dataset.mdVivo) return;
     campo.dataset.mdVivo = '1'; op = op || {};
@@ -600,6 +671,8 @@
       if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
       const r = rango(); if (!r || !r.collapsed || !campo.contains(r.startContainer)) return;
       const b = bloqueDe(r.startContainer); if (!b || b === campo) return;
+      /* las listas: Enter en una viñeta vacía, Retroceso al principio de una y Tab (ver `lista`) */
+      if (lista(campo, e)) return;
       const enCita = b.parentNode && b.parentNode.tagName === 'BLOCKQUOTE' && dentro(b.parentNode);
       /* Enter en un renglón vacío de una cita: fuera de ella */
       if (e.key === 'Enter' && !e.shiftKey && enCita && !b.textContent.replace(/\u200B/g, '').trim()) {
@@ -619,7 +692,7 @@
     campo.addEventListener('drop', e => e.preventDefault());
   }
 
-  const api = { html, md, plano, vivo, enLinea, escaparMd, formato, pegar, atajoDe, urlEnlace, esUrl, pareceMd, enlaceEn };
+  const api = { html, md, plano, vivo, lista, enLinea, escaparMd, formato, pegar, atajoDe, urlEnlace, esUrl, pareceMd, enlaceEn };
   raiz.MdVivo = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

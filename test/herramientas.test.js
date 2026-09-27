@@ -233,3 +233,207 @@ test('esquema de personaje: una relación entre dos personajes se refleja en otr
   assert.equal(d2.saltos[0].titulo, 'Se conocen');
   assert.match(H.ejecutar(p.ctx, 'escribir_documento', { esquema: e1.id, contenido: 'x' }).error, /Un esquema de personaje no lleva documento/);
 });
+
+/* ---------- las plantillas de nota (1.1.56, de ClapBook) ---------- */
+require('../js/claquedraw/plantillas.js');
+test('plantillas: guardar una nota como plantilla, escribir una con variables y crear notas con ellas; su biblioteca no se toca', () => {
+  const p = proyecto(), { docs, ctx } = p;
+  assert.match(correr(ctx, 'ver_proyecto', {}).texto, /PLANTILLAS: ninguna/);
+  assert.match(H.ejecutar(ctx, 'leer_biblioteca', { biblioteca: 'Plantillas' }).error, /Aún no hay plantillas/);
+  /* un lote que falla no deja creada la biblioteca de las plantillas */
+  const mal = H.ejecutar(ctx, 'editar_biblioteca', { biblioteca: 'Plantillas', operaciones: [{ op: 'crear_nota', titulo: 'X' }, { op: 'volar' }] });
+  assert.equal(mal.ok, false);
+  assert.equal(docs.bibliotecaPlantillas(), null, 'si el lote falla, las plantillas no nacen');
+  const s = docs.crearSub(p.c.id, 'Ideas').sub;
+  correr(ctx, 'editar_biblioteca', { biblioteca: s.id, operaciones: [{ op: 'crear_nota', titulo: 'Acta', contenido: 'Asistentes:\n\nAcuerdos:', color: 'rosa' }] });
+  /* guardar como plantilla: una copia en su bandeja; la nota no cambia */
+  const acta = docs.notasDe(s.id).find(n => n.titulo === 'Acta');
+  let r = correr(ctx, 'editar_proyecto', { operaciones: [{ op: 'guardar_como_plantilla', nota: 'Acta', ref: 'pa' }] });
+  assert.match(r.texto, /plantilla \S+ «Acta» en Plantillas › sin segmento/);
+  const pa = docs.nota(r.datos.refs.pa);
+  assert.ok(docs.esPlantilla(pa) && pa.html === acta.html && pa.color === 'rosa');
+  assert.equal(docs.notasDe(s.id).length, 1, 'la nota se queda donde estaba');
+  assert.match(H.ejecutar(ctx, 'editar_proyecto', { operaciones: [{ op: 'guardar_como_plantilla', nota: pa.id }] }).error, /ya es una plantilla/);
+  /* una plantilla nueva con variables, en un segmento de las plantillas */
+  r = correr(ctx, 'editar_biblioteca', { biblioteca: 'Plantillas', operaciones: [
+    { op: 'crear_segmento', ref: 'g', nombre: 'Reuniones' },
+    { op: 'crear_nota', ref: 'pr', segmento: '$g', titulo: 'Reunión {{fecha}}', contenido: '# {{titulo}}\n\nDe {{proyecto}}: {{cursor}}\n\n{{desconocida}}' }
+  ] });
+  assert.match(r.texto, /^Plantillas:/);
+  const pr = docs.nota(r.datos.refs.pr);
+  assert.ok(docs.esPlantilla(pr));
+  const lista = correr(ctx, 'ver_proyecto', {}).texto;
+  assert.match(lista, new RegExp('PLANTILLAS \\(biblioteca plantillas:biblioteca.*«Acta» \\(' + pa.id + '\\), «Reunión \\{\\{fecha\\}\\}» \\(' + pr.id + '\\)'));
+  const leida = correr(ctx, 'leer_biblioteca', { biblioteca: 'plantillas:biblioteca', contenido: true }).texto;
+  assert.match(leida, /^PLANTILLAS · id plantillas:biblioteca · 2 plantillas/);
+  assert.match(leida, /\{\{cursor\}\}/);
+  assert.match(leida, /Variables/);
+  /* crear una nota con ella: el título y el texto con las variables rellenas, en la biblioteca de destino */
+  r = correr(ctx, 'editar_biblioteca', { biblioteca: 'Ideas', operaciones: [{ op: 'crear_nota', plantilla: pr.id, ref: 'n' }] });
+  const n = docs.nota(r.datos.refs.n);
+  assert.match(r.texto, /desde la plantilla «Reunión \{\{fecha\}\}»/);
+  assert.equal(n.subId, s.id);
+  assert.ok(!docs.esPlantilla(n));
+  assert.match(n.titulo, /^Reunión \d{4}-\d\d-\d\d$/);
+  assert.ok(n.html.includes('>' + n.titulo + '</h1>'), 'el {{titulo}} es el de la nota');
+  assert.ok(n.html.includes('De Prueba:'), '{{proyecto}}, el nombre del proyecto');
+  assert.ok(n.html.includes('{{desconocida}}'), 'una variable que no se conoce se queda');
+  assert.ok(!/\{\{(titulo|fecha|proyecto|cursor)\}\}/.test(n.html));
+  /* con título propio y contenido detrás, por su título */
+  r = correr(ctx, 'editar_biblioteca', { biblioteca: 'Ideas', operaciones: [{ op: 'crear_nota', plantilla: 'Acta', titulo: 'Acta del lunes', contenido: 'Todo bien.', ref: 'm' }] });
+  const m = docs.nota(r.datos.refs.m);
+  assert.equal(m.titulo, 'Acta del lunes');
+  assert.match(m.html, /Asistentes:[\s\S]*Todo bien\./);
+  assert.match(H.ejecutar(ctx, 'editar_biblioteca', { biblioteca: 'Plantillas', operaciones: [{ op: 'crear_nota', plantilla: 'Acta' }] }).error, /no se crea una nota desde otra plantilla/);
+  /* su biblioteca no se renombra, ni se mueve, ni se duplica, ni se agrupa, ni se tira */
+  [{ op: 'renombrar_biblioteca', biblioteca: 'Plantillas', nombre: 'Otra' }, { op: 'duplicar_biblioteca', biblioteca: 'Plantillas' },
+   { op: 'mover_biblioteca', biblioteca: 'Plantillas', contenedor: p.c.id }, { op: 'tirar_biblioteca', biblioteca: 'Plantillas' },
+   { op: 'agrupar', elementos: ['plantillas:biblioteca', s.id] }].forEach(o => {
+    const x = H.ejecutar(ctx, 'editar_proyecto', { operaciones: [o] });
+    assert.equal(x.ok, false, o.op); assert.match(x.error, /plantillas/i, o.op);
+  });
+  assert.ok(docs.bibliotecaPlantillas(), 'sigue ahí');
+  /* leer una plantilla y buscar: salen marcadas */
+  assert.match(correr(ctx, 'leer_documento', { nota: pa.id }).texto, /plantilla en Plantillas › sin segmento/);
+  const b = correr(ctx, 'buscar', { texto: 'asistentes' }).texto;
+  assert.match(b, new RegExp('- plantilla ' + pa.id + ' «Acta» \\(Plantillas › sin segmento\\)'));
+  assert.match(b, new RegExp('- documento ' + acta.id + ' «Acta»'));
+});
+
+/* correcciones de la revisión de las plantillas (1.1.56) */
+test('plantillas: una biblioteca normal llamada «Plantillas» manda por su nombre; con las dos, se piden los ids', () => {
+  const p = proyecto(), { docs, ctx } = p;
+  const mia = docs.crearSub(p.c.id, 'Plantillas').sub;
+  /* sin la especial: el nombre es la suya (y crear_nota no hace nacer la especial) */
+  correr(ctx, 'editar_biblioteca', { biblioteca: 'Plantillas', operaciones: [{ op: 'crear_nota', titulo: 'Mía' }] });
+  assert.equal(docs.bibliotecaPlantillas(), null, 'la especial no nace');
+  assert.deepEqual(docs.notasDe(mia.id).map(n => n.titulo), ['Mía']);
+  assert.match(correr(ctx, 'leer_biblioteca', { biblioteca: 'plantillas' }).texto, /^BIBLIOTECA «Plantillas» · id /);
+  /* con la especial también: el nombre es de las dos, y cada una por su id */
+  correr(ctx, 'editar_biblioteca', { biblioteca: 'plantillas:biblioteca', operaciones: [{ op: 'crear_nota', titulo: 'Modelo' }] });
+  assert.ok(docs.bibliotecaPlantillas());
+  const x = H.ejecutar(ctx, 'leer_biblioteca', { biblioteca: 'Plantillas' });
+  assert.equal(x.ok, false);
+  assert.match(x.error, new RegExp('Hay 2 con el nombre «Plantillas».*' + mia.id + '.*plantillas:biblioteca'));
+  assert.match(correr(ctx, 'leer_biblioteca', { biblioteca: mia.id }).texto, /^BIBLIOTECA «Plantillas»/);
+  assert.match(correr(ctx, 'leer_biblioteca', { biblioteca: 'plantillas:biblioteca' }).texto, /^PLANTILLAS · /);
+  /* sin una normal que se llame así, «Plantillas» es la especial */
+  correr(ctx, 'editar_proyecto', { operaciones: [{ op: 'renombrar_biblioteca', biblioteca: mia.id, nombre: 'Modelos' }] });
+  assert.match(correr(ctx, 'leer_biblioteca', { biblioteca: 'Plantillas' }).texto, /^PLANTILLAS · /);
+});
+
+test('plantillas: crear_nota { plantilla, titulo } — el título pedido manda, sin repetir, y rellena {{titulo}}; lo que no tiene palabras se queda', () => {
+  const p = proyecto(), { docs, ctx } = p;
+  const s = docs.crearSub(p.c.id, 'Ideas').sub;
+  correr(ctx, 'editar_biblioteca', { biblioteca: 'Plantillas', operaciones: [{ op: 'crear_nota', titulo: 'Reunión {{fecha}}', contenido: '# {{titulo}}' }] });
+  let r = correr(ctx, 'editar_biblioteca', { biblioteca: s.id, operaciones: [
+    { op: 'crear_nota', plantilla: 'Reunión {{fecha}}', titulo: 'Lunes', ref: 'a' },
+    { op: 'crear_nota', plantilla: 'Reunión {{fecha}}', titulo: 'Lunes', ref: 'b' }] });
+  const a = docs.nota(r.datos.refs.a), b = docs.nota(r.datos.refs.b);
+  assert.equal(a.titulo, 'Lunes', 'gana al título de la plantilla, aunque lleve variables');
+  assert.match(a.html, />Lunes<\/h1>/);
+  assert.equal(b.titulo, 'Lunes 2', 'dos con el mismo nombre no');
+  assert.match(b.html, />Lunes 2<\/h1>/, 'y el {{titulo}} del texto es el suyo');
+  /* una plantilla sin palabras (una tabla por llenar): con «contenido», la tabla se queda y lo nuevo va detrás */
+  const tabla = '<table><tbody><tr><td><br></td><td><br></td></tr></tbody></table>';
+  const pt = docs.crearNota(C.ID_BIB_PLANTILLAS, null, 'Tabla').nota;
+  docs.guardarNota(pt.id, { title: 'Tabla', html: tabla, characters: {} });
+  r = correr(ctx, 'editar_biblioteca', { biblioteca: s.id, operaciones: [{ op: 'crear_nota', plantilla: pt.id, titulo: 'Con tabla', contenido: 'Notas.', ref: 't' }] });
+  const t = docs.nota(r.datos.refs.t);
+  assert.ok(t.html.startsWith('<table>'), t.html);
+  assert.match(t.html, /<\/table><p>Notas\.<\/p>$/);
+  /* una vacía de verdad sí se descarta */
+  const pv = docs.crearNota(C.ID_BIB_PLANTILLAS, null, 'Vacía').nota;
+  docs.guardarNota(pv.id, { title: 'Vacía', html: '<p><br></p>', characters: {} });
+  r = correr(ctx, 'editar_biblioteca', { biblioteca: s.id, operaciones: [{ op: 'crear_nota', plantilla: pv.id, contenido: 'Solo esto.', ref: 'v' }] });
+  assert.equal(docs.nota(r.datos.refs.v).html, '<p>Solo esto.</p>');
+});
+
+test('plantillas: guardar_como_plantilla con algo que no es una nota da un error claro (nunca un TypeError)', () => {
+  const p = proyecto(), { docs, ctx } = p;
+  const s = docs.crearSub(p.c.id, 'Ideas').sub, n = docs.crearNota(s.id, null, 'Nota').nota;
+  const error = nota => { const r = H.ejecutar(ctx, 'editar_proyecto', { operaciones: [{ op: 'crear_biblioteca', contenedor: p.c.id, nombre: 'X', ref: 'b' }, { op: 'guardar_como_plantilla', nota }] }); assert.equal(r.ok, false, String(nota)); return r.error; };
+  assert.match(error('$b'), /«\$b» es un biblioteca, no un nota/);
+  assert.match(error('$nada'), /no es nada creado antes/);
+  assert.match(error('Otra'), /No encuentro la nota «Otra»/);
+  /* una referencia de nota que ya no resuelve (aquí, escondiendo las plantillas de `nota()`): antes, «Cannot read properties of null» */
+  const nota = docs.nota.bind(docs);
+  docs.nota = id => { const x = nota(id); return x && x.subId === C.ID_BIB_PLANTILLAS ? null : x; };
+  const r = H.ejecutar(ctx, 'editar_proyecto', { operaciones: [{ op: 'guardar_como_plantilla', nota: n.id, ref: 'q' }, { op: 'guardar_como_plantilla', nota: '$q' }] });
+  assert.equal(r.ok, false); assert.doesNotMatch(r.error, /TypeError|Cannot read/); assert.match(r.error, /La operación 2 .*No encuentro la nota «\$q»/);
+  assert.equal(docs.bibliotecaPlantillas(), null, 'el lote se deshizo entero');
+});
+
+/* ---------- las fórmulas (1.1.60): prompts reutilizables de solo texto para las operaciones de IA del lienzo ---------- */
+require('../js/claquedraw/formulas.js');
+test('fórmulas: crear por editar_biblioteca aplana el Markdown; leerlas, listarlas, escribirlas, usarlas y buscarlas; su biblioteca no se toca', () => {
+  const p = proyecto(), { docs, ctx } = p;
+  assert.ok(!/FÓRMULAS/.test(correr(ctx, 'ver_proyecto', {}).texto), 'sin fórmulas, ni se nombran');
+  assert.match(H.ejecutar(ctx, 'leer_biblioteca', { biblioteca: 'Fórmulas' }).error, /Aún no hay fórmulas/);
+  assert.match(H.ejecutar(ctx, 'usar_formula', { formula: 'Noir' }).error, /aún no tiene fórmulas/);
+  /* un lote que falla no deja creada la biblioteca */
+  assert.equal(H.ejecutar(ctx, 'editar_biblioteca', { biblioteca: 'Fórmulas', operaciones: [{ op: 'crear_nota', titulo: 'X' }, { op: 'volar' }] }).ok, false);
+  assert.equal(docs.bibliotecaFormulas(), null, 'si el lote falla, las fórmulas no nacen');
+  /* crear: por su nombre (sin acento también), en un segmento; el Markdown se aplana a párrafos simples */
+  let r = correr(ctx, 'editar_biblioteca', { biblioteca: 'formulas', operaciones: [
+    { op: 'crear_segmento', ref: 'g', nombre: 'Tonos' },
+    { op: 'crear_nota', ref: 'f', segmento: '$g', titulo: 'Noir', contenido: '# Tono **noir**\n\n- Frases *cortas*\n- Nada de `adverbios`\n\n> {{instruccion}}' }
+  ] });
+  assert.match(r.texto, /^Fórmulas:\n1\. segmento .*\n2\. fórmula \S+ «Noir» en Fórmulas › Tonos/);
+  const f = docs.nota(r.datos.refs.f);
+  assert.ok(docs.esFormula(f));
+  assert.ok(!/<(h\d|strong|em|code|ul|li|blockquote)\b/.test(f.html), 'sin formato: ' + f.html);
+  assert.equal(docs.textoFormula(f.id), 'Tono noir\n\n- Frases cortas\n- Nada de adverbios\n\n{{instruccion}}');
+  /* listarla y leerla */
+  const arbol = correr(ctx, 'ver_proyecto', {}).texto;
+  assert.match(arbol, new RegExp('FÓRMULAS \\(biblioteca formulas:biblioteca.*: «Noir» \\(' + f.id + ', Tonos\\)'));
+  const leida = correr(ctx, 'leer_biblioteca', { biblioteca: 'Fórmulas', contenido: true }).texto;
+  assert.match(leida, /^FÓRMULAS · id formulas:biblioteca · 1 fórmula/);
+  assert.match(leida, /Cómo se usan:.*\{\{instruccion\}\}/);
+  assert.match(leida, /- Frases cortas/);
+  assert.ok(!/Esquemas conectados/.test(leida));
+  const doc = correr(ctx, 'leer_documento', { nota: f.id }).texto;
+  assert.match(doc, /fórmula en Fórmulas › Tonos/);
+  assert.match(doc, /Es una FÓRMULA: solo texto/);
+  assert.match(doc, /Tono noir\n\n- Frases cortas/);
+  /* escribir su texto: también se aplana (y queda «Antes de Claude») */
+  r = correr(ctx, 'escribir_documento', { nota: f.id, contenido: '**Diálogos** secos.\n\n[Ver](https://ejemplo.com) {{instruccion}}' });
+  assert.equal(docs.textoFormula(f.id), 'Diálogos secos.\n\nVer (https://ejemplo.com) {{instruccion}}');
+  assert.deepEqual(f.characters, {});
+  /* usarla (como una skill): por título, id o enlace */
+  const u = correr(ctx, 'usar_formula', { formula: 'noir' });
+  assert.match(u.texto, new RegExp('^FÓRMULA «Noir» · id ' + f.id + ' · segmento «Tonos»'));
+  assert.match(u.texto, /donde dice \{\{instruccion\}\} va lo que pide Leo/);
+  assert.match(u.texto, /Diálogos secos\./);
+  assert.equal(u.historial, undefined, 'solo lectura: sin historial');
+  assert.match(H.ejecutar(ctx, 'usar_formula', { formula: 'Épica' }).error, /No encuentro la fórmula «Épica»/);
+  /* buscar la marca como fórmula */
+  assert.match(correr(ctx, 'buscar', { texto: 'secos' }).texto, new RegExp('- fórmula ' + f.id + ' «Noir» \\(Fórmulas › Tonos\\)'));
+  /* su biblioteca no se renombra, ni se mueve, ni se duplica, ni se agrupa, ni se tira; una fórmula no es un fragmento */
+  const s = docs.crearSub(p.c.id, 'Ideas').sub;
+  [{ op: 'renombrar_biblioteca', biblioteca: 'Fórmulas', nombre: 'Otra' }, { op: 'duplicar_biblioteca', biblioteca: 'Fórmulas' },
+   { op: 'mover_biblioteca', biblioteca: 'Fórmulas', contenedor: p.c.id }, { op: 'tirar_biblioteca', biblioteca: 'Fórmulas' },
+   { op: 'agrupar', elementos: ['formulas:biblioteca', s.id] }].forEach(o => {
+    const x = H.ejecutar(ctx, 'editar_proyecto', { operaciones: [o] });
+    assert.equal(x.ok, false, o.op); assert.match(x.error, /fórmulas/i, o.op);
+  });
+  assert.match(H.ejecutar(ctx, 'editar_biblioteca', { biblioteca: 'Fórmulas', operaciones: [{ op: 'editar_nota', nota: f.id, fragmento: { esquema: p.e.id } }] }).error, /no es un fragmento/);
+  assert.match(H.ejecutar(ctx, 'editar_biblioteca', { biblioteca: 'Fórmulas', operaciones: [{ op: 'crear_nota', titulo: 'Y', plantilla: 'Acta' }] }).error, /no sale de una plantilla/);
+});
+
+test('fórmulas: una biblioteca normal llamada «Fórmulas» manda por su nombre; con las dos, se piden los ids', () => {
+  const p = proyecto(), { docs, ctx } = p;
+  const mia = docs.crearSub(p.c.id, 'Fórmulas').sub;
+  correr(ctx, 'editar_biblioteca', { biblioteca: 'Fórmulas', operaciones: [{ op: 'crear_nota', titulo: 'Mía', contenido: '**Con** formato' }] });
+  assert.equal(docs.bibliotecaFormulas(), null, 'la especial no nace');
+  assert.match(docs.notasDe(mia.id)[0].html, /<(b|strong)>Con<\/(b|strong)>/, 'en una biblioteca normal, el Markdown se queda');
+  correr(ctx, 'editar_biblioteca', { biblioteca: 'formulas:biblioteca', operaciones: [{ op: 'crear_nota', titulo: 'Modelo' }] });
+  const x = H.ejecutar(ctx, 'leer_biblioteca', { biblioteca: 'Fórmulas' });
+  assert.equal(x.ok, false);
+  assert.match(x.error, new RegExp('Hay 2 con el nombre «Fórmulas».*' + mia.id + '.*formulas:biblioteca \\(la de las fórmulas\\)'));
+  assert.match(correr(ctx, 'leer_biblioteca', { biblioteca: 'formulas:biblioteca' }).texto, /^FÓRMULAS · /);
+  correr(ctx, 'editar_proyecto', { operaciones: [{ op: 'renombrar_biblioteca', biblioteca: mia.id, nombre: 'Recetas' }] });
+  assert.match(correr(ctx, 'leer_biblioteca', { biblioteca: 'Fórmulas' }).texto, /^FÓRMULAS · /);
+  /* las plantillas siguen por su lado */
+  assert.match(H.ejecutar(ctx, 'leer_biblioteca', { biblioteca: 'Plantillas' }).error, /Aún no hay plantillas/);
+});

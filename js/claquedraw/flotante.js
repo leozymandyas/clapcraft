@@ -205,7 +205,11 @@
     if (e.key === 'Enter') {
       if (e.shiftKey) {
         if (enTit) { e.preventDefault(); return; }
-        if (enDesc) { e.preventDefault(); e.stopPropagation(); document.execCommand('defaultParagraphSeparator', false, 'p'); document.execCommand('insertParagraph'); }
+        if (enDesc) {
+          e.preventDefault(); e.stopPropagation(); document.execCommand('defaultParagraphSeparator', false, 'p');
+          /* en una viñeta vacía, fuera de la lista (MdVivo.lista, 1.1.60: aunque le queden los \u200B de un atajo) */
+          if (!(window.MdVivo && MdVivo.lista && MdVivo.lista(enDesc, { key: 'Enter' }))) document.execCommand('insertParagraph');
+        }
         return;                                                   // en una nota, el salto de renglón del campo
       }
       e.preventDefault(); e.stopPropagation(); cerrar(); return;

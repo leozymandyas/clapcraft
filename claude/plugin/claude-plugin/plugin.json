@@ -1,7 +1,7 @@
 {
   "name": "clapcraft",
   "version": "1.1.49",
-  "description": "Claude en ClapCraft: leer y cambiar los proyectos de guion de ClapCraft (esquemas de pasos, documentos, bibliotecas y personajes), en vivo con la app abierta o sobre sus archivos.",
+  "description": "Claude en ClapCraft: leer y cambiar los proyectos de guion de ClapCraft (esquemas de pasos, documentos, bibliotecas y personajes), en vivo con la app abierta o sobre sus archivos, y adaptar sus guiones a fragmentos de vídeo (Seedance).",
   "author": { "name": "Leo" },
   "keywords": ["clapcraft", "guion", "esquema", "screenwriting"]
 }

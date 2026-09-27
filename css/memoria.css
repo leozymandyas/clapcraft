@@ -1,0 +1,49 @@
+/* ClapCraft · el diálogo «Memoria de estilo» (1.1.60, js/claquedraw/memoria-ui.js). La caja es la de los diálogos del asistente
+   (.as-dlg, css/asistente.css); aquí, lo suyo. Solo tokens: vale en los cuatro temas. */
+.as-dlg.me-dlg { width: min(680px, calc(100vw - 40px)); }
+.me-intro { margin: 0 0 14px; font-size: 13px; line-height: 1.5; color: var(--tenue); }
+.me-sec { margin: 0 0 18px; }
+.me-sec-tit { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; font: 500 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--tenue); }
+.me-sec-tit b { font-weight: 500; color: var(--tinta); text-transform: none; letter-spacing: 0; font-family: var(--sans); font-size: 12px; }
+.me-sec-tit > span:first-child { flex: 1; min-width: 0; }
+.me-cuenta { flex: none; font: 400 10.5px var(--mono); letter-spacing: 0; text-transform: none; color: var(--palido); }
+.me-lista { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid var(--regla); border-radius: 6px; background: var(--papel); overflow: hidden; }
+.me-regla { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-top: 1px solid var(--regla); }
+.me-regla:first-child { border-top: 0; }
+.me-regla:hover { background: var(--lienzo); }
+.me-regla.apagada .me-texto { color: var(--palido); text-decoration: line-through; text-decoration-color: var(--regla-fuerte); }
+.me-on { flex: none; margin: 3px 0 0; accent-color: var(--foco); cursor: pointer; }
+.me-cuerpo { flex: 1; min-width: 0; }
+.me-texto { font-size: 13px; line-height: 1.45; color: var(--tinta); overflow-wrap: anywhere; cursor: text; }
+.me-edit { box-sizing: border-box; width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--foco); border-radius: 4px; background: var(--papel);
+  color: var(--tinta); font: 13px var(--sans); outline: none; box-shadow: 0 0 0 3px var(--foco-halo); }
+.me-meta { display: flex; gap: 5px; margin-top: 2px; font: 400 10.5px var(--mono); color: var(--palido); }
+.me-ejemplo { margin-top: 4px; font: 12px var(--doc); color: var(--tenue); overflow-wrap: anywhere; }
+.me-ejemplo span:first-child { text-decoration: line-through; text-decoration-color: var(--peligro); }
+.me-acc { flex: none; display: flex; align-items: center; gap: 2px; opacity: .55; transition: opacity .12s; }
+.me-regla:hover .me-acc, .me-regla:focus-within .me-acc { opacity: 1; }
+.me-acc .icono { width: 26px; height: 26px; }
+.me-acc .as-enlace-btn { white-space: nowrap; }
+.me-vacio { margin: 0 0 8px; padding: 10px 12px; border: 1px dashed var(--regla-fuerte); border-radius: 6px; font-size: 12.5px; line-height: 1.45; color: var(--tenue); }
+.me-nueva { display: flex; gap: 8px; }
+.me-nueva input { flex: 1; min-width: 0; box-sizing: border-box; height: 32px; padding: 0 10px; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel);
+  color: var(--tinta); font: 13px var(--sans); outline: none; }
+.me-nueva input:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.me-nueva .btn { flex: none; }
+.me-nota { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--palido); }
+.me-nota code { font-size: 11px; }
+.me-aprender { padding: 12px 14px; border: 1px solid var(--regla); border-radius: 6px; background: var(--lienzo); }
+.me-interruptor { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta); cursor: pointer; }
+.me-interruptor input { accent-color: var(--foco); }
+.me-fila { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.me-fila .btn:disabled { opacity: .5; cursor: default; }
+.me-pares { margin-top: 10px; font-size: 12px; color: var(--tenue); }
+.me-pares summary { cursor: pointer; color: var(--foco); }
+.me-pares ol { margin: 8px 0 0; padding-left: 20px; max-height: 220px; overflow-y: auto; }
+.me-pares li { margin: 0 0 6px; font-family: var(--doc); overflow-wrap: anywhere; }
+.me-par-ia { text-decoration: line-through; text-decoration-color: var(--peligro); }
+.me-par-leo { color: var(--tinta); }
+@media (max-width: 560px) {
+  .me-regla { flex-wrap: wrap; }
+  .me-acc { opacity: 1; width: 100%; justify-content: flex-end; }
+}

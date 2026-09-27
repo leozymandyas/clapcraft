@@ -35,7 +35,8 @@
   /* en el árbol manda la etiqueta de tipo, no el icono (rediseño): Esquema en violeta · Biblioteca en azul, enlazada o no */
   /* en el árbol la etiqueta es solo la inicial, para que quepa el nombre (Leo, 16-09-2026); en las cabeceras va entera */
   const CHIPS = { esquema: '<span class="gd-chip gd-chip--esquema" title="Esquema">E</span>', sub: '<span class="gd-chip gd-chip--sub" title="Biblioteca">B</span>',
-                  enlazado: '<span class="gd-chip gd-chip--sub" title="Biblioteca">B</span>' };
+                  enlazado: '<span class="gd-chip gd-chip--sub" title="Biblioteca">B</span>',
+                  lienzo: '<span class="gd-chip gd-chip--lienzo" title="Lienzo">L</span>' };   // los lienzos de nodos (1.1.58), en verde azulado
 
   let o = {};                    // opciones de iniciar()
   let seccion, lado, main, migas;
@@ -56,12 +57,33 @@
   /* Los subcontenedores de un contenedor que no están enlazados a ningún esquema. */
   const sueltosDe = c => c.subs.filter(s => !s.guionEid && !c.esquemas.some(e => e.subId === s.id));   // la de guiones de un esquema no está en el árbol
   const esPapelera = () => !!actual && actual.tipo === PAPELERA;
+  /* las plantillas de nota (1.1.56, de ClapBook): una biblioteca especial fuera del árbol, que se abre desde «Plantillas» al pie
+     del menú (documentos.js). `especial`: una biblioteca que no es de las del árbol (hoy, solo esa). */
+  const BIB_PLANTILLAS = C.ID_BIB_PLANTILLAS || 'plantillas:biblioteca';
+  /* las fórmulas (1.1.60): la otra biblioteca especial, gemela de la de las plantillas, con los prompts reutilizables de las
+     operaciones de IA del lienzo; sus notas son solo texto (la ventana las edita en texto plano) */
+  const BIB_FORMULAS = C.ID_BIB_FORMULAS || 'formulas:biblioteca';
+  const esPlantillas = () => !!actual && actual.tipo === 'sub' && actual.id === BIB_PLANTILLAS;
+  const esFormulas = () => !!actual && actual.tipo === 'sub' && actual.id === BIB_FORMULAS;
+  const especial = id => !!id && (id === BIB_PLANTILLAS || id === BIB_FORMULAS || !!(d && d.esEspecial && d.esEspecial(id)));
+  /* cuál: 'formulas' o 'plantillas' (la de un id especial que no sea el de las fórmulas, la de las plantillas) */
+  const cualEspecial = id => !especial(id) ? null : id === BIB_FORMULAS ? 'formulas' : 'plantillas';
+  const esPlantilla = n => !!(n && d && d.esPlantilla && d.esPlantilla(n));
+  const esFormula = n => { const x = typeof n === 'string' ? d && d.nota(n) : n; return !!(x && (x.subId === BIB_FORMULAS || (d && d.esFormula && d.esFormula(x)))); };
+  /* lo que cambia entre las dos: su nombre, su icono y cómo se llama una de sus notas */
+  const ESPECIAL = {
+    plantillas: { nombre: 'Plantillas', icono: 'plantilla', una: 'plantilla', las: 'las plantillas', volver: 'Volver a las plantillas', ver: 'Ver plantillas' },
+    formulas: { nombre: 'Fórmulas', icono: 'formula', una: 'fórmula', las: 'las fórmulas', volver: 'Volver a las fórmulas', ver: 'Ver fórmulas' }
+  };
+  const infoEspecial = id => ESPECIAL[cualEspecial(id) || 'plantillas'];
+  let ultimaNormal = null;       // la última biblioteca normal que se vio: ahí van las notas que salen de una plantilla
   function valido(s) {
     if (!s || !d) return false;
     if (s.tipo === PAPELERA) return true;
     const c = d.contenedor(s.cid); if (!c) return false;
     if (s.tipo === 'esquema') return c.esquemas.some(e => e.id === s.id);
     if (s.tipo === 'sub') return c.subs.some(x => x.id === s.id);
+    if (s.tipo === 'lienzo') return (c.lienzos || []).some(x => x.id === s.id);
     return s.tipo === 'cont';
   }
   /* El tablero por defecto de un contenedor: su primera biblioteca en el orden del árbol (o él mismo, vacío). Nunca la oculta
@@ -78,7 +100,9 @@
     /* la nota elegida en otra biblioteca ya no es lo elegido (Cmd+Shift+C copiaba una nota que no estaba a la vista) */
     const ns = notaSel && d && d.nota(notaSel);
     if (ns && !(s && s.tipo === 'sub' && ns.subId === s.id)) soltarSeleccion();
-    actual = s; if (expandido && !(s && s.tipo === 'sub' && s.id === expandido.subId)) expandido = null; if (o.alNavegar) o.alNavegar();
+    actual = s; if (expandido && !(s && s.tipo === 'sub' && s.id === expandido.subId)) expandido = null;
+    if (s && s.tipo === 'sub' && !especial(s.id)) ultimaNormal = s.id;
+    if (o.alNavegar) o.alNavegar();
   }
 
   /* El modelo del guion abierto. Se rehace si cambia el guion o si la biblioteca sustituyó sus datos.
@@ -132,13 +156,18 @@
     const fila = document.createElement('div');
     const modo = o.modo ? o.modo() : 'documentos';
     const montado = s.tipo === 'esquema' && o.esquemaMontado && s.id === (o.esquemaMontado() || null);
-    const activo = s.tipo === 'esquema' ? montado && modo !== 'documentos' : modo === 'documentos' && !notaAbierta && mismo(s, actual);
+    /* un lienzo (1.1.58): activo con su vista delante */
+    const lienzoDelante = s.tipo === 'lienzo' && modo === 'lienzo' && o.lienzoMontado && s.id === o.lienzoMontado();
+    const activo = s.tipo === 'lienzo' ? lienzoDelante : s.tipo === 'esquema' ? montado && modo !== 'documentos' && modo !== 'lienzo' : modo === 'documentos' && !notaAbierta && mismo(s, actual);
     fila.className = 'gd-sub gd-sub--' + s.tipo + (activo ? ' activo' : '') + (montado ? ' montado' : '') + (enlazado ? ' enlazado' : '');
     fila.dataset.sub = clave(s);
     let nombre;
     if (s.tipo === 'esquema') {
       const r = d.esquema(s.id); nombre = r ? r.esquema.nombre : '';
       fila.dataset.gdGlobo = 'esquema';
+    } else if (s.tipo === 'lienzo') {
+      const r = d.lienzo && d.lienzo(s.id); nombre = r ? r.lienzo.nombre : '';
+      fila.dataset.gdGlobo = 'lienzo';
     } else {
       const r = d.sub(s.id); nombre = r ? r.sub.nombre : '';
       fila.dataset.gdDropSub = clave(s);                      // recibe notas
@@ -146,9 +175,10 @@
     }
     /* la etiqueta lleva su color si se le puso uno (Leo, 16-09-2026), como la de un personaje */
     const e0 = estiloHijo(s.id);
+    const que = { esquema: ['Esquema', 'E'], lienzo: ['Lienzo', 'L'] }[s.tipo] || ['Biblioteca', 'B'];
     const chip = e0.estilo
-      ? `<span class="gd-chip per-chip" style="${e0.estilo}" title="${s.tipo === 'esquema' ? 'Esquema' : 'Biblioteca'}">${s.tipo === 'esquema' ? 'E' : 'B'}</span>`
-      : (s.tipo === 'esquema' ? CHIPS.esquema : enlazado ? CHIPS.enlazado : CHIPS.sub);
+      ? `<span class="gd-chip per-chip" style="${e0.estilo}" title="${que[0]}">${que[1]}</span>`
+      : (s.tipo === 'esquema' ? CHIPS.esquema : s.tipo === 'lienzo' ? CHIPS.lienzo : enlazado ? CHIPS.enlazado : CHIPS.sub);
     fila.innerHTML = `<span class="gd-sub-punto" aria-hidden="true"></span>${chip}<span class="gd-sub-nom"></span>
       <span class="gd-cont-acc siempre"><button type="button" data-gd-menu="hijo" title="Opciones">${ic('more')}</button></span>`;
     $('.gd-sub-nom', fila).textContent = nombre;
@@ -232,9 +262,34 @@
       f.innerHTML = `<span class="gd-cont-nom">${ic(icono, 16)}<span data-gd-nombre>${texto}</span></span>`;
       return f;
     };
-    return [nav('', 'docs', 'Contenedores', 'data-gd-ir-contenedores', !per && !(esPapelera() && o.modo && o.modo() === 'documentos')),
+    const enDocs = !o.modo || o.modo() === 'documentos';
+    return [nav('', 'docs', 'Contenedores', 'data-gd-ir-contenedores', !per && !((esPapelera() || esPlantillas() || esFormulas()) && enDocs)),
             nav('', 'person', 'Personajes', 'data-gd-ir-personajes', per),
+            filaPlantillas(enDocs),
+            filaFormulas(enDocs),
             filaPapelera()];
+  }
+  /* «Fórmulas» (1.1.60): como «Plantillas», su tablero y cuántas hay; soltar una nota encima guarda su texto como fórmula */
+  function filaFormulas(enDocs) {
+    const f = document.createElement('div');
+    f.className = 'gd-cont papelera gd-nav gd-formulas' + (esFormulas() && enDocs ? ' activo' : '');
+    f.dataset.gdFormulas = ''; f.dataset.gdDropFormulas = '';
+    f.title = 'Fórmulas: prompts reutilizables para las operaciones de IA del lienzo · suelta aquí una nota para guardar su texto como fórmula';
+    const n = d && d.formulas ? d.formulas().length : 0;
+    f.innerHTML = `<span class="gd-cont-nom">${ic('formula', 16)}<span data-gd-nombre>Fórmulas</span>${n ? `<span class="gd-cont-num">${n}</span>` : ''}</span>
+      <span class="gd-cont-acc siempre"><button type="button" data-gd-menu="formulas" title="Opciones de las fórmulas">${ic('more')}</button></span>`;
+    return f;
+  }
+  /* «Plantillas» (1.1.56, de ClapBook): su tablero, con cuántas hay; soltar una nota encima guarda una copia como plantilla */
+  function filaPlantillas(enDocs) {
+    const f = document.createElement('div');
+    f.className = 'gd-cont papelera gd-nav gd-plantillas' + (esPlantillas() && enDocs ? ' activo' : '');
+    f.dataset.gdPlantillas = ''; f.dataset.gdDropPlantillas = '';
+    f.title = 'Plantillas: de ellas salen notas nuevas · suelta aquí una nota para guardarla como plantilla';
+    const n = d && d.plantillas ? d.plantillas().length : 0;
+    f.innerHTML = `<span class="gd-cont-nom">${ic('plantilla', 16)}<span data-gd-nombre>Plantillas</span>${n ? `<span class="gd-cont-num">${n}</span>` : ''}</span>
+      <span class="gd-cont-acc siempre"><button type="button" data-gd-menu="plantillas" title="Opciones de las plantillas">${ic('more')}</button></span>`;
+    return f;
   }
   /* el menú enseña el árbol de Personajes en su ámbito y también con el editor abierto desde él (Leo) */
   const enPersonajes = () => !!(o.enPersonajes && o.enPersonajes());
@@ -317,10 +372,24 @@
   const colorNota = n => n && n.color ? { clase: ' con-color', estilo: ` style="--tc:var(--t-${esc(n.color)});--tf:var(--f-${esc(n.color)})"` } : { clase: '', estilo: '' };
   /* sin `title`: el nombre entero de una nota cortada sale en el globo al pasar el ratón (1.1.54, Leo en ClapBook: «un tooltip que
      cuando le haga hover se vea el nombre completo de la nota») */
+  /* una plantilla lleva «Usar» en lugar de su fecha (como en ClapBook): una nota nueva desde ella */
+  const USAR = '<button type="button" class="gd-usar" data-gd-usar title="Nueva nota con esta plantilla">Usar</button>';
+  /* **Fragmento** (1.1.57): la etiqueta de una nota que es un tramo de un esquema, «Fragmento · 12 s · Piloto»; lleva a sus nodos en
+     el esquema (`o.irAFragmento`). Huérfana (sin esquema, o sin ninguno de sus nodos), se ve apagada y lo dice. `corta`: solo el
+     icono y los segundos (la tarjeta pequeña de una biblioteca). */
+  function fragmentoHtml(n, corta) {
+    const x = d && d.estadoFragmento && d.estadoFragmento(n); if (!x) return '';
+    const segs = x.segundos ? String(x.segundos).replace('.', ',') + ' s' : '';
+    const nom = x.nombre || 'un esquema que ya no está';
+    const t = 'Fragmento' + (x.orden ? ' nº ' + x.orden : '') + ' de «' + nom + '»' + (segs ? ' · ' + segs : '') + (x.nodos.length ? ' · ' + x.nodos.length + (x.nodos.length === 1 ? ' nodo' : ' nodos') : '')
+      + (x.huerfano ? ' · huérfano: ' + (x.esquema ? 'sus nodos ya no están' : x.enPapelera ? 'su esquema está en la papelera' : 'su esquema ya no existe') : ' · clic: ir a ' + (x.nodos.length ? 'sus nodos' : 'su esquema'));
+    const txt = corta ? (segs || 'Frag.') : 'Fragmento' + (segs ? ' · ' + segs : '') + ' · ' + nom;
+    return `<button type="button" class="cx-frag${x.huerfano ? ' huerfano' : ''}${corta ? ' corta' : ''}" data-gd-fragmento="${esc(n.id)}" title="${esc(t)}" aria-label="${esc(t)}">${ic('board', 12)}<span>${esc(txt)}</span></button>`;
+  }
   function notaHtml(n, meta, fijo) {
     const cn = colorNota(n);
     return `<div class="gd-nota${cn.clase}${n.id === notaAbierta ? ' activa' : ''}${n.id === notaSel ? ' sel' : ''}"${cn.estilo} role="button" tabindex="0" data-nota="${esc(n.id)}" aria-label="${esc(n.titulo || 'Sin título')}">
-            <span></span><span class="gd-nota-meta">${esc(meta)}</span>
+            <span></span>${fragmentoHtml(n, true)}${!fijo && esPlantilla(n) ? USAR : `<span class="gd-nota-meta">${esc(meta)}</span>`}
             <button type="button" class="gd-nota-acc" data-gd-menu="nota" title="Opciones de la nota">${ic('more', 13)}</button></div>`;
   }
   /* Una tarjeta: un segmento (o la bandeja, e = null) con sus notas, ya filtradas y ordenadas (`info` = { total, filtro, propio }):
@@ -389,8 +458,8 @@
   /* El color propio de la etiqueta de un esquema o una biblioteca (Leo, 16-09-2026: el mismo en todas las pantallas);
      sin color, la clase de siempre (violeta el esquema, azul la biblioteca). */
   function estiloHijo(id, porDefecto) {
-    const r = d && (d.esquema(id) || d.sub(id));
-    const x = r && (r.esquema || r.sub);
+    const r = d && (d.esquema(id) || d.sub(id) || (d.lienzo && d.lienzo(id)));
+    const x = r && (r.esquema || r.sub || r.lienzo);
     const par = x && x.color !== undefined && x.color !== null && PAL[x.color];
     return par ? { clase: 'per-chip', estilo: `--chl:${par[1]};--chd:${par[2]}` } : { clase: porDefecto || '', estilo: '' };
   }
@@ -399,6 +468,14 @@
     op = op || {};
     const tagName = op.boton ? 'button' : 'span';
     return `<${tagName}${op.boton ? ' type="button"' : ''} class="gd-chip gd-chip-nom ${clase}"${op.estilo ? ` style="${esc(op.estilo)}"` : ''}${op.attrs || ''} aria-label="${esc(op.title || nombre)}"><span>${esc(nombre)}</span>${op.icono || ''}</${tagName}>`;   // sin title: cortado, sale el globo (texto.js)
+  }
+  /* el chip de las plantillas en las cabeceras, con su icono (no tienen contenedor: no están en el árbol). `op`: { boton, attrs, icono } */
+  function chipPlantillas(op) { return chipEspecial(BIB_PLANTILLAS, op); }
+  /* el de una biblioteca especial (las plantillas o las fórmulas, 1.1.60): su nombre y su icono */
+  function chipEspecial(id, op) {
+    op = op || {};
+    const tag = op.boton ? 'button' : 'span', k = cualEspecial(id) || 'plantillas', x = ESPECIAL[k];
+    return `<${tag}${op.boton ? ' type="button"' : ''} class="gd-chip gd-chip-nom gd-chip--plantillas gd-chip--${k}"${op.attrs || ''} aria-label="${x.nombre}">${ic(x.icono, 13)}<span>${x.nombre}</span>${op.icono || ''}</${tag}>`;
   }
   function datosSegmento(m, subId, claveSeg) {
     const r = m.sub(subId); if (!r || !claveSeg) return null;
@@ -427,7 +504,7 @@
     el.className = 'gd-exp' + (x.apariciones ? ' gd-exp--apariciones' : '');
     const subId = x.r.sub.id;
     let n = 0, tarjetas = '', rejilla = '', visibles = null, f = null, filtros = '';
-    const pie = (meta, ruta) => `<div class="gd-exp-pie">${ruta ? '<span class="gd-exp-ruta"></span>' : `<span class="gd-nota-meta">${esc(meta)}</span>`}</div>`;
+    const pie = (meta, ruta, usar) => `<div class="gd-exp-pie">${usar ? USAR : ''}${ruta ? '<span class="gd-exp-ruta"></span>' : `<span class="gd-nota-meta">${esc(meta)}</span>`}</div>`;
     if (x.notas) {
       n = x.notas.length;
       /* buscar, filtrar y ordenar (1.1.54, de ClapBook): aquí manda el filtro del segmento; lo que no pone, lo pone el de la
@@ -436,7 +513,7 @@
       visibles = filtrarNotas(x.notas, f);
       tarjetas = visibles.map(nt => `<div class="gd-exp-nota${colorNota(nt).clase}${nt.id === notaSel ? ' sel' : ''}"${colorNota(nt).estilo} role="button" tabindex="0" data-nota="${esc(nt.id)}" aria-label="${esc(nt.titulo || 'Sin título')}">
           <div class="gd-exp-nota-cab"><span class="gd-exp-tit"></span><span class="gd-asa" aria-hidden="true">${ic('drag', 13)}</span><button type="button" class="gd-nota-acc" data-gd-menu="nota" title="Opciones de la nota">${ic('more', 13)}</button></div>
-          <div class="gd-exp-texto"></div>${pie(fechaSegun(nt, f.orden))}</div>`).join('')
+          <div class="gd-exp-texto"></div>${fragmentoHtml(nt)}${pie(fechaSegun(nt, f.orden), false, esPlantilla(nt))}</div>`).join('')
         + `<button type="button" class="gd-exp-add" data-gd-crear-nota="${esc(x.etq)}"${x.guiones ? ' data-gd-doc' : ''}>${ic('plus', 14)}${x.guiones ? 'documento' : 'nota'}</button>`;
       rejilla = (f.color && !visibles.length ? `<div class="gd-filtro-vacio">${esc(f.color === 'sin' ? 'Todas las notas del segmento tienen color.' : 'Ninguna nota del segmento es de color ' + nombreColor(f.color).toLowerCase() + '.')}</div>` : '')
         + `<div class="gd-exp-grid${f.orden !== 'manual' ? ' ordenada' : ''}" data-gd-drop="${esc(x.etq)}">${tarjetas}</div>`;
@@ -509,12 +586,19 @@
   const sinMarcasLado = el => { const c = el.cloneNode(true); c.removeAttribute('data-l'); c.querySelectorAll('[data-l]').forEach(x => x.removeAttribute('data-l')); return c.outerHTML; };
   /* lo que se ve en el campo: una copia del documento con cada bloque señalado y lo que no es texto como una marca */
   function htmlDeLado(html) {
-    const t = document.createElement('template'); t.innerHTML = html || '';
     ladoOrig = []; ladoVista = [];
+    return vistaLado(html) || '<p><br></p>';
+  }
+  /* la vista de un trozo de documento, con sus bloques apuntados **detrás** de los que ya hay en `ladoOrig` (así también se pinta
+     lo que se inserta en el campo: una plantilla, `insertarPlantillaEnVentana`); `quitar`, un selector de lo que no debe volver
+     al documento (la marca del cursor de una plantilla: se ve en el campo, pero no en lo apuntado) */
+  function vistaLado(html, quitar) {
+    const t = document.createElement('template'); t.innerHTML = html || '';
     const marca = (n, k) => {
       if (n.matches('img')) {                                  // una imagen se ve tal cual (no se edita: al guardar vuelve la suya)
         const el = document.createElement('span');
         el.className = 'gd-lado-fijo gd-lado-img'; el.contentEditable = 'false'; el.dataset.f = k;
+        el.title = 'Doble clic: verla en grande, marcarla o recortarla';   // (abrirImagenLado, 1.1.57)
         const img = n.cloneNode(false); img.draggable = false; el.appendChild(img);
         return el;
       }
@@ -543,7 +627,8 @@
       const x = vista(n, true); if (x) caja.appendChild(x);
     });
     caja.querySelectorAll('[data-l]').forEach(el => { ladoVista[+el.dataset.l] = sinMarcasLado(el); });
-    return caja.innerHTML || '<p><br></p>';
+    if (quitar) t.content.querySelectorAll(quitar).forEach(x => x.remove());   // de lo apuntado (lo que se ve la conserva)
+    return caja.innerHTML;
   }
   /* del campo al documento: lo que no cambió, tal cual; lo que cambió, con los atributos de su bloque; las marcas, lo que eran.
      Los espacios de anchura cero que deja un atajo (MdVivo) no pasan al documento, y un bloque que se queda vacío lleva su <br>. */
@@ -580,6 +665,217 @@
     return out.innerHTML || '<p><br></p>';
   }
 
+  /* ---------- los recuadros en la ventana de una nota (1.1.57) ----------
+     Un prompt o un aviso del documento (`div.rc[data-rc]`, js/recuadros.js) se ve en el campo con su cabecera (css/recuadros.css
+     la pinta desde sus atributos) y su texto se edita ahí: `vistaLado` lo copia como a cualquier bloque (con sus párrafos
+     señalados) y `htmlDeLadoEditado` lo devuelve con sus atributos. Lo que en el editor hace js/recuadros.js (que vive en el marco),
+     aquí en pequeño: un clic en la cabecera abre su menú (título, tipo, color, copiar, quitar) o copia el prompt; Enter en la
+     última línea vacía sale; Retroceso y Supr no lo mezclan con lo de al lado; el clic derecho lo ofrece arriba del de formato. */
+  const RCX = () => C.conversor && C.conversor.RECUADROS;
+  const recuadroEn = (n, campo) => { const e = n && (n.nodeType === 3 ? n.parentNode : n), rc = e && e.closest ? e.closest('div[data-rc]') : null; return rc && rc.parentNode === campo ? rc : null; };
+  /* 'copiar', 'menu' o null: dónde cae (x, y) en la cabecera del recuadro (por encima de su primer bloque; «Copiar», a la derecha) */
+  function zonaRc(rc, x, y) {
+    const caja = rc.getBoundingClientRect(), p = rc.firstElementChild, tope = p ? p.getBoundingClientRect().top - 2 : caja.top + 32;
+    if (y < caja.top || y > tope || x < caja.left || x > caja.right) return null;
+    return rc.getAttribute('data-rc') === 'prompt' && x > caja.right - 92 ? 'copiar' : 'menu';
+  }
+  function copiarPrompt(rc) {
+    const t = RCX() ? RCX().texto(rc.outerHTML) : rc.innerText;
+    const hecho = ok => { if (o.avisar) o.avisar(ok ? 'Prompt copiado' : 'No se pudo copiar el prompt'); };
+    if (window.editorAPI && window.editorAPI.copiarTexto) window.editorAPI.copiarTexto(t).then(() => hecho(true), () => hecho(false));
+    else if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => hecho(true), () => hecho(false));
+  }
+  const tocado = campo => campo.dispatchEvent(new Event('input', { bubbles: true }));   // se guarda como lo escrito
+  const cursorRc = (n, k) => { const r = document.createRange(); r.setStart(n, k); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+  function quitarRecuadroLado(rc, campo) {
+    const ultimo = rc.lastElementChild;
+    while (rc.firstChild) rc.parentNode.insertBefore(rc.firstChild, rc);
+    rc.remove();
+    if (ultimo) { campo.focus({ preventScroll: true }); cursorRc(ultimo, ultimo.childNodes.length); }
+    tocado(campo);
+  }
+  /* su menú: título, tipo (un aviso), color, copiar, convertir y quitar */
+  function menuRecuadroLado(rc, campo, x, y) {
+    const R = RCX(); if (!R) return;
+    const f = document.createDocumentFragment(), caja = document.createElement('div'); caja.className = 'rc-menu rc-menu-lado';
+    const dato = k => rc.getAttribute(k), esPrompt = dato('data-rc') === 'prompt';
+    const pintar = () => {
+      const tipo = R.tipo(dato('data-tipo')), col = R.color(dato('data-color')), oscuro = document.documentElement.dataset.theme === 'dark';
+      caja.innerHTML = `<div class="gd-pop-tit">${esPrompt ? 'Prompt' : 'Aviso'}</div>`
+        + `<label class="rc-menu-tit"><span>Título</span><input type="text" data-rc-titulo spellcheck="false" autocomplete="off" placeholder="${esc(R.nombre({ rc: esPrompt ? 'prompt' : 'aviso', tipo }))}"></label>`
+        + (esPrompt ? '' : '<div class="gd-pop-tit">Tipo de aviso</div><div class="rc-menu-tipos">' + R.TIPOS.map(([id, nom, gl]) => `<button type="button" data-rc-tipo="${id}" class="${tipo === id ? 'active' : ''}"><i>${esc(gl)}</i><span>${esc(nom)}</span></button>`).join('') + '</div>')
+        + '<div class="gd-pop-tit">Color</div><div class="rc-menu-colores">' + `<button type="button" data-rc-color="" class="auto${col ? '' : ' active'}">Auto</button>`
+        + R.COLORES.map(([id, nom, cl, os]) => `<button type="button" data-rc-color="${id}" class="${col === id ? 'active' : ''}" title="${esc(nom)}" style="--sw: ${oscuro ? cl : os}; --sw-f: ${oscuro ? os : cl}"></button>`).join('') + '</div>';
+      $('[data-rc-titulo]', caja).value = dato('data-titulo') || '';
+    };
+    pintar();
+    caja.addEventListener('click', e => {
+      const t = e.target.closest('[data-rc-tipo]'), c = e.target.closest('[data-rc-color]');
+      if (t) { rc.setAttribute('data-tipo', t.dataset.rcTipo); pintar(); tocado(campo); }
+      else if (c) { if (c.dataset.rcColor) rc.setAttribute('data-color', c.dataset.rcColor); else rc.removeAttribute('data-color'); pintar(); tocado(campo); }
+    });
+    caja.addEventListener('input', e => {
+      if (!e.target.matches('[data-rc-titulo]')) return;
+      const v = e.target.value.replace(/[\r\n]+/g, ' ').trim();
+      if (v) rc.setAttribute('data-titulo', v); else rc.removeAttribute('data-titulo');
+      tocado(campo);
+    });
+    caja.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); cerrarPop(); campo.focus({ preventScroll: true }); } });
+    f.appendChild(caja);
+    f.appendChild(separador());
+    if (esPrompt) f.appendChild(opcion('Copiar el texto del prompt', () => copiarPrompt(rc)));
+    f.appendChild(opcion(esPrompt ? 'Convertir en aviso' : 'Convertir en prompt', () => {
+      rc.setAttribute('data-rc', esPrompt ? 'aviso' : 'prompt'); rc.className = 'rc rc-' + (esPrompt ? 'aviso' : 'prompt');
+      if (esPrompt) rc.setAttribute('data-tipo', 'note'); else rc.removeAttribute('data-tipo');
+      tocado(campo);
+    }));
+    f.appendChild(opcion('Quitar el recuadro', () => quitarRecuadroLado(rc, campo), { clase: 'peligro' }));
+    cerrarPop();
+    abrirPop(anclaEn(x, y), f);
+    const campoTit = abierto && $('[data-rc-titulo]', abierto); if (campoTit) { campoTit.focus({ preventScroll: true }); campoTit.select(); }
+  }
+  /* los oyentes del campo (una vez, al crear la ventana) */
+  function recuadrosEnCampo(campo) {
+    /* en el `mousedown` no se pone el cursor; en el `click` se actúa y no llega a la capa (su clic cierra los menús abiertos) */
+    let pulsado = null;
+    campo.addEventListener('mousedown', e => {
+      pulsado = null;
+      if (e.button !== 0 || !e.target.matches || !e.target.matches('div[data-rc]') || e.target.parentNode !== campo) return;
+      const z = zonaRc(e.target, e.clientX, e.clientY); if (!z) return;
+      e.preventDefault(); e.stopPropagation();
+      pulsado = { rc: e.target, z };
+    }, true);
+    campo.addEventListener('click', e => {
+      if (!pulsado) return;
+      const { rc, z } = pulsado; pulsado = null;
+      e.preventDefault(); e.stopPropagation();
+      if (z === 'copiar') copiarPrompt(rc); else menuRecuadroLado(rc, campo, e.clientX, e.clientY);
+    }, true);
+    campo.addEventListener('keydown', e => {
+      if (e.metaKey || e.ctrlKey || e.altKey || !campo.querySelector(':scope > div[data-rc]')) return;
+      const s = getSelection(), r = s && s.rangeCount ? s.getRangeAt(0) : null;
+      if (!r || !r.collapsed || !campo.contains(r.startContainer)) return;
+      let b = r.startContainer.nodeType === 3 ? r.startContainer.parentNode : r.startContainer;
+      b = b.closest ? b.closest('p, li, h1, h2, h3, h4, h5, h6, pre, blockquote') : null;
+      if (!b || !campo.contains(b)) return;
+      const vacio = el => !el.textContent.replace(/\u200B/g, '').trim() && !el.querySelector('img, table');
+      const borde = final => { const t = document.createRange(); if (final) { t.setStart(r.endContainer, r.endOffset); t.setEnd(b, b.childNodes.length); } else { t.setStart(b, 0); t.setEnd(r.startContainer, r.startOffset); } return !t.toString().replace(/\u200B/g, ''); };
+      const parar = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+      const rc = recuadroEn(b, campo), linea = () => { const p = document.createElement('p'); p.appendChild(document.createElement('br')); return p; };
+      if (e.key === 'Enter' && !e.shiftKey) {
+        if (rc && b.parentNode === rc && b.tagName === 'P' && vacio(b) && b === rc.lastElementChild && rc.children.length > 1) {
+          parar(); b.remove();
+          let n = rc.nextElementSibling; if (!(n && n.tagName === 'P' && vacio(n))) { n = linea(); rc.after(n); }
+          cursorRc(n, 0); tocado(campo);
+        }
+        return;
+      }
+      if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+      const atras = e.key === 'Backspace';
+      if (rc && b.parentNode === rc) {
+        if (atras && b === rc.firstElementChild && borde(false)) {
+          parar();
+          if (vacio(rc)) { const p = linea(); rc.replaceWith(p); cursorRc(p, 0); tocado(campo); }
+          else if (vacio(b) && b.nextElementSibling) { const sig = b.nextElementSibling; b.remove(); cursorRc(sig, 0); tocado(campo); }
+          else { const prev = rc.previousElementSibling; if (prev && !prev.matches('[data-f], div[data-rc]')) cursorRc(prev, prev.childNodes.length); }
+        } else if (!atras && b === rc.lastElementChild && borde(true)) parar();
+        return;
+      }
+      if (b.parentNode !== campo) return;
+      const vecino = atras ? b.previousElementSibling : b.nextElementSibling;
+      if (!(vecino && vecino.matches('div[data-rc]') && borde(!atras))) return;
+      parar();
+      if (vacio(b) && (atras ? b.nextElementSibling : true)) { b.remove(); tocado(campo); }
+      const dest = atras ? vecino.lastElementChild : vecino.firstElementChild;
+      if (dest && (atras || !b.isConnected)) cursorRc(dest, atras ? dest.childNodes.length : 0);
+    }, true);
+  }
+
+  /* ---------- una imagen de la ventana de una nota: verla, marcarla y recortarla (1.1.57, js/anotar.js) ----------
+     Lo mismo que en el editor (js/imagenes.js): la marcada va en `src` y la de antes, las formas y el recorte en `data-original`,
+     `data-anotaciones` y `data-recorte`. La imagen del documento es `ladoOrig[k]` (la marca del campo solo la enseña): se
+     sustituye ahí, se repinta la marca y se guarda la nota. */
+  function abrirImagenLado(marca) {
+    const An = window.Anotar, k = +marca.dataset.f, orig = ladoOrig[k], id = ladoId;
+    if (!An || !orig || !orig.matches('img')) return;
+    const at = {}; Array.from(orig.attributes).forEach(a => { at[a.name] = a.value; });
+    const d = An.leer(at), src = d.original || d.src; if (!src) return;
+    const poner = cambios => {
+      if (ladoId !== id || !marca.isConnected || ladoOrig[k] !== orig) { if (o.avisar) o.avisar('La ventana de esa nota ya se cerró'); return; }
+      const nueva = orig.cloneNode(false);
+      Object.keys(cambios).forEach(a => { if (cambios[a] == null) nueva.removeAttribute(a); else nueva.setAttribute(a, cambios[a]); });
+      if (nueva.outerHTML === orig.outerHTML) return;
+      ladoOrig[k] = nueva;
+      const img = nueva.cloneNode(false); img.draggable = false; marca.replaceChildren(img);
+      guardarLadoYa();
+    };
+    An.abrir({ nombre: orig.getAttribute('alt') || 'Imagen', src, vista: d.src, tipo: An.tipoDe(src), anotaciones: d.anotaciones, recorte: d.recorte,
+      avisar: t => { if (o.avisar) o.avisar(t); },
+      alCerrar: () => { const c = campoLado(); if (c && ladoId === id) c.focus({ preventScroll: true }); },
+      alGuardar: async r => { const datos = r && r.datos ? await An.ligera(r.datos) : null; poner(An.atributosTrasEditar(d, Object.assign({}, r, { datos }))); },
+      alOriginal: d.original ? () => poner(An.atributosTrasEditar(d, null)) : null });
+  }
+
+  /* ---------- una fórmula en su ventana: solo texto (1.1.60) ----------
+     Una fórmula es un prompt: su campo se edita como texto plano (renglones; sin formato, sin elementos de guion, sin recuadros ni
+     imágenes) y se guarda como párrafos simples. `lineasDe` saca el texto de un árbol renglón a renglón (un bloque o un <br>
+     cortan; un bloque vacío es un renglón en blanco) y `htmlPlano` lo vuelve párrafos. */
+  function lineasDe(raiz) {
+    const lineas = []; let linea = null;
+    const andar = n => {
+      if (n.nodeType === 3) {
+        const t = n.nodeValue.replace(/\u200B/g, '').replace(/\u00a0/g, ' ');
+        if (linea === null && !/\S/.test(t) && /\n/.test(t)) return;   // el salto de línea del HTML entre dos bloques
+        linea = (linea || '') + t.replace(/\n/g, ' '); return;
+      }
+      if (n.nodeType !== 1 && n.nodeType !== 11) return;
+      if (n.nodeType === 1 && n.tagName === 'BR') { lineas.push(linea || ''); linea = null; return; }
+      if (n.nodeType === 1 && n.matches('img, video, iframe, object, embed, svg, canvas, hr, style, script')) return;
+      const bloque = n.nodeType === 1 && LADO_BLOQUE.test(n.tagName);
+      if (bloque && linea !== null) { lineas.push(linea); linea = null; }
+      const antes = lineas.length;
+      n.childNodes.forEach(andar);
+      if (bloque) { if (linea !== null) { lineas.push(linea); linea = null; } else if (lineas.length === antes) lineas.push(''); }
+    };
+    andar(raiz);
+    if (linea !== null) lineas.push(linea);
+    return lineas.map(l => l.replace(/[ \t]+$/, ''));
+  }
+  const htmlPlano = lineas => lineas.length ? lineas.map(l => l.trim() ? '<p>' + esc(l) + '</p>' : '<p><br></p>').join('') : '<p><br></p>';
+  /* el documento de una fórmula, como se ve en su campo */
+  function vistaPlana(html) {
+    if (C.formulas && C.formulas.textoDeHtml) { const x = C.formulas.textoDeHtml(html || ''); return htmlPlano(x ? x.split('\n') : []); }   // como lo lee el modelo
+    const t = document.createElement('template'); t.innerHTML = html || ''; return htmlPlano(lineasDe(t.content));
+  }
+  const esPlano = campo => !!(campo && campo.classList.contains('plano'));
+  /* lo que el campo en modo texto no deja: los atajos de formato, el formato del sistema (Cmd+B de Chrome), soltar cosas y los
+     atajos Markdown de MdVivo (su `input`); pegar entra como texto. Va en captura en la capa, antes que los oyentes del campo. */
+  function soloTexto(capa, campo) {
+    const dentro = e => esPlano(campo) && e.target && (e.target === campo || campo.contains(e.target));
+    capa.addEventListener('keydown', e => {
+      if (!dentro(e)) return;
+      const mod = e.metaKey || e.ctrlKey;
+      const fmt = (window.MdVivo && MdVivo.atajoDe && MdVivo.atajoDe(e)) || (mod && !e.shiftKey && !e.altKey && /^[biuek]$/i.test(e.key));
+      if (fmt) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    capa.addEventListener('beforeinput', e => {
+      if (!dentro(e)) return;
+      if (/^format/.test(e.inputType || '') || e.inputType === 'insertFromDrop' || e.inputType === 'insertLink') { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    capa.addEventListener('input', e => {
+      if (!dentro(e)) return;
+      e.stopPropagation();                                     // ni los atajos Markdown ni nada: solo guardar, como lo escrito
+      clearTimeout(ladoT); ladoT = setTimeout(guardarLadoYa, 400);
+    }, true);
+    capa.addEventListener('paste', e => {
+      if (!dentro(e)) return;
+      e.preventDefault(); e.stopPropagation();
+      const t = ((e.clipboardData && e.clipboardData.getData('text/plain')) || '').replace(/\r\n?/g, '\n');
+      if (t) document.execCommand('insertText', false, t);
+    }, true);
+    capa.addEventListener('drop', e => { if (dentro(e)) { e.preventDefault(); e.stopPropagation(); } }, true);
+  }
+
   /* ---------- la ventana de una nota (1.1.54, como en ClapBook) ----------
      Leo, en ClapBook: «En lugar del sidepanel que usamos como vista previa en los segmentos y bibliotecas, que sea mejor un modal
      como en notion, que puede expandirse y se cierra si se presiona fuera del modal», «En el modal de notas, se extrañan las
@@ -614,7 +910,7 @@
         <header class="gd-modal-cab">
           <button type="button" class="icono" data-gd-lado-abrir title="Abrir en el editor (doble clic en la nota)" aria-label="Abrir en el editor">${ic('expand', 15)}</button>
           <nav class="gd-modal-ruta" aria-label="Dónde está la nota"></nav><span class="spacer"></span>
-          <span class="gd-modal-nav" data-gd-nav-lado></span>
+          <span class="gd-modal-usar"></span><span class="gd-modal-nav" data-gd-nav-lado></span>
           <button type="button" class="icono gd-modal-color" data-gd-lado-color aria-label="Color de la nota"><i></i></button>
           ${o.copiarEnlace ? `<button type="button" class="icono" data-gd-lado-enlace title="Copiar enlace para Claude (Cmd+Shift+C)" aria-label="Copiar enlace para Claude">${ic('link', 15)}</button>` : ''}
           <button type="button" class="icono" data-gd-menu="nota" title="Opciones de la nota" aria-label="Opciones de la nota">${ic('more', 15)}</button>
@@ -632,6 +928,19 @@
     /* el campo: Markdown al escribir, los atajos del editor (MdVivo) y, al pegar, una dirección sobre lo elegido es un enlace y
        lo que parece Markdown entra con su formato (como en el editor) */
     if (window.MdVivo) MdVivo.vivo(campo, { bloques: sinGuion, markdown: true, resaltado: () => colorResaltado(), pedirEnlace: () => cuadroEnlace(campo) });
+    recuadrosEnCampo(campo);                                   // los prompts y los avisos (1.1.57): su cabecera, Enter, Retroceso
+    soloTexto(capa, campo);                                    // una fórmula (1.1.60): texto plano
+    /* el menú «/», el zoom del texto, la longitud de línea, typewriter y citar en el asistente (1.1.60, js/claquedraw/ventana.js) */
+    if (C.ventana) C.ventana.montar(capa, {
+      campo, id: () => ladoId, plano: () => esPlano(campo), nota: () => { const m = modelo(); return ladoId && m ? m.nota(ladoId) : null; },
+      vista: h => vistaLado(h), guardar: () => guardarLadoYa(), avisar: t => { if (o.avisar) o.avisar(t); },
+      plantilla: r0 => insertarPlantillaEnVentana(null, r0 && campo.contains(r0.startContainer) ? r0 : undefined),
+      citar: o.citar ? (ref, texto) => o.citar(ref, texto) : null,
+      prefs: () => o.vista || (o.vista = {}), guardarPrefs: () => guardarVista(),
+      versiones: boton => menuVersionesLado(boton)             // las versiones de la nota (1.1.60, como en ClapBook)
+    });
+    /* doble clic en una imagen: el visor, para marcarla o recortarla (1.1.57); no llega al de la capa (que abriría el editor) */
+    campo.addEventListener('dblclick', e => { const s = e.target.closest && e.target.closest('.gd-lado-img'); if (s && campo.contains(s)) { e.preventDefault(); e.stopPropagation(); abrirImagenLado(s); } });
     capa.addEventListener('mousedown', e => { capa._fuera = e.target === capa; });
     capa.addEventListener('click', e => {
       e.stopPropagation();                                     // ni el tablero de tramas ni el «clic fuera» del gestor
@@ -651,6 +960,7 @@
       if (b.matches('[data-gd-lado-color]')) { if (nt) abrirPop(b, paletaNota(nt.id)); return; }
       if (b.matches('[data-gd-lado-enlace]')) { if (nt && o.copiarEnlace) o.copiarEnlace({ tipo: 'nota', id: nt.id }); return; }
       if (b.matches('[data-gd-lado-tirar]')) { if (nt) { guardarLadoYa(); tirarNota(nt.id); } return; }
+      if (b.matches('[data-gd-usar]')) { if (nt) { guardarLadoYa(); const id = nt.id; cerrarLado(); desdePlantilla(id); } return; }   // una plantilla: una nota nueva desde ella
       if (b.matches('[data-gd-modal-cola]')) alFinalDelCampo();
     });
     /* el segundo clic de un doble clic en la tarjeta ya cae en la ventana (recién abierta): el doble clic la lleva al editor */
@@ -663,7 +973,12 @@
         if (e.target === tit) aplicarTituloLado();
         cerrarLado(); soltarSeleccion(); return;
       }
-      if (e.target === tit && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); aplicarTituloLado(); alPrincipioDelCampo(); return; }
+      if (e.target === tit && e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault(); e.stopPropagation(); aplicarTituloLado();
+        const pc = cursorTrasTitulo && cursorTrasTitulo.id === ladoId ? cursorTrasTitulo.p : null; cursorTrasTitulo = null;
+        if (!(pc && reponerLado(pc) && verCursor())) alPrincipioDelCampo();   // desde una plantilla: donde decía {{cursor}}
+        return;
+      }
       const mod = e.metaKey || e.ctrlKey;
       if (['Delete', 'Backspace', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', ' '].includes(e.key) || (mod && /^[zyd]$/i.test(e.key))) e.stopPropagation();
     });
@@ -679,31 +994,39 @@
     campo.addEventListener('focusout', () => guardarLadoYa());
     return capa;
   }
-  /* `op`: { enfocarTitulo } (una nota nueva: el nombre elegido, para escribir encima), { porTarjeta } (un clic en su tarjeta) */
+  /* `op`: { enfocarTitulo } (una nota nueva: el nombre elegido, para escribir encima), { porTarjeta } (un clic en su tarjeta),
+     { cursor } (una nota que sale de una plantilla: `{ bloque, caracter }` en el documento, donde decía {{cursor}}; con
+     `enfocarTitulo`, Enter en el nombre lleva allí), { alFinal } (sin `cursor`: el cursor al final del campo) */
   function mostrarLado(id, op) {
     op = op || {};
     const m = modelo(), nt = m && m.nota(id); if (!nt || m.enPapelera(id)) return;
     const c = capaNota();
     if (ladoId === id && !c.hidden) { refrescarVentana(); if (op.enfocarTitulo) setTimeout(() => { const t = tituloLado(); t.focus(); t.select(); }, 0); return; }   // ya está
     guardarLadoYa(); apuntarLado();
-    ladoId = id; abiertaEn = Date.now(); porTarjeta = op.porTarjeta ? abiertaEn : 0;
+    ladoId = id; abiertaEn = Date.now(); porTarjeta = op.porTarjeta ? abiertaEn : 0; cursorTrasTitulo = null;
     c.hidden = false; document.body.classList.add('con-ventana');
     if (o.alNavegar) setTimeout(() => o.alNavegar(), 0);         // la pestaña de delante apunta la nota elegida
     pintarCabeceraLado(m, nt);
     tituloLado().value = tituloCargado = nt.titulo || '';
     pintarCampo(nt);
     const hoja = hojaLado(); hoja.scrollTop = 0;
+    if (C.ventana) C.ventana.alAbrir();
+    pintarVersionLado();
     const antes = posLado.get(id);
+    const pc = op.cursor ? cursorDe(nt.html, op.cursor) : null;
     setTimeout(() => {
       if (ladoId !== id) return;
-      if (op.enfocarTitulo) { const t = tituloLado(); t.focus(); t.select(); return; }
+      if (op.enfocarTitulo) { if (pc) cursorTrasTitulo = { id, p: pc }; const t = tituloLado(); t.focus(); t.select(); return; }
+      if (pc && reponerLado(pc)) { verCursor(); return; }
+      if (op.alFinal) { alFinalDelCampo(); verCursor(); return; }   // desde una plantilla, ya con nombre: a escribir detrás
       if (!(antes && reponerLado(antes))) $('.gd-modal', c).focus({ preventScroll: true });
       if (antes) { hoja.scrollTop = antes.scroll; setTimeout(() => { if (ladoId === id) hoja.scrollTop = antes.scroll; }, 80); }   // otra vez, con las imágenes ya medidas
     }, 0);
   }
   function pintarCampo(nt) {
-    const campo = campoLado();
-    campo.innerHTML = htmlDeLado(nt.html);
+    const campo = campoLado(), plano = esFormula(nt);
+    campo.classList.toggle('plano', plano);
+    campo.innerHTML = plano ? vistaPlana(nt.html) : htmlDeLado(nt.html);
     campo.dataset.base = campo.innerHTML;                      // lo que había, para saber si se tocó
     ladoCargado = nt.html || '';
   }
@@ -711,7 +1034,12 @@
   function pintarCabeceraLado(m, nt) {
     $('.gd-modal-ruta', capa).innerHTML = rutaLadoHtml(m, nt);
     const cont = $('.gd-modal-cont', capa), r = m.sub(nt.subId);
-    if (cont && r) cont.textContent = r.contenedor.id === C.ID_PERSONAJES ? 'Personajes' : r.contenedor.nombre;
+    if (cont && r) cont.textContent = especial(r.sub.id) ? '' : r.contenedor.id === C.ID_PERSONAJES ? 'Personajes' : r.contenedor.nombre;   // las plantillas no tienen contenedor
+    const fx = esFormula(nt);                                  // una fórmula (1.1.60): no va al editor de guion
+    $('[data-gd-lado-abrir]', capa).hidden = fx;
+    $('.gd-modal', capa).classList.toggle('gd-modal--formula', fx);
+    $('[data-gd-lado-texto]', capa).dataset.vacio = fx ? 'Escribe la fórmula: el formato, el tono, el estilo o las reglas. {{instruccion}} marca dónde va lo escrito en «Qué escribir»' : 'Escribe aquí; se ve igual al abrir el documento';
+    $('.gd-modal-usar', capa).innerHTML = esPlantilla(nt) ? `<button type="button" class="btn gd-lado-usar" data-gd-usar title="Nueva nota con esta plantilla">${ic('plantilla', 14)}Usar</button>` : '';
     $('[data-gd-nav-lado]', capa).innerHTML = navHtml(m, nt);
     const col = $('[data-gd-lado-color]', capa), modal = $('.gd-modal', capa);
     [col, modal].forEach(x => { x.classList.toggle('con-color', !!nt.color); if (nt.color) x.style.setProperty('--tc', `var(--t-${nt.color})`); else x.style.removeProperty('--tc'); });
@@ -724,13 +1052,14 @@
     const r = m.sub(n.subId); if (!r) return '';
     const e = n.etiquetaId ? m.etiqueta(n.etiquetaId) : null, per = r.contenedor.id === C.ID_PERSONAJES;
     const pj = per && m.personaje(r.sub.lineaId), pt = pj && PAL[pj.color], nomSub = pj ? pj.nombre : r.sub.nombre;
-    const chipSub = per
+    const chipSub = especial(r.sub.id) ? chipEspecial(r.sub.id, { boton: true, attrs: ` data-gd-ruta="bib" title="${infoEspecial(r.sub.id).las.replace(/^l/, 'L')}"` })
+      : per
       ? chipNombre(nomSub, 'per-chip', { boton: true, attrs: ` data-gd-ruta="bib" title="${esc('Ir a «' + nomSub + '»')}"`, estilo: pt ? `--chl:${pt[1]};--chd:${pt[2]}` : '' })
       : chipNombre(nomSub, estiloHijo(r.sub.id, 'gd-chip--sub').clase, { boton: true, estilo: estiloHijo(r.sub.id).estilo, attrs: ` data-gd-ruta="bib" title="${esc('La biblioteca «' + nomSub + '»')}"` });
     const nomSeg = e ? e.nombre : 'Bandeja';
     const chipSeg = chipNombre(nomSeg, 'gd-seg-chip' + (e ? '' : ' gd-seg-chip--bandeja'), { boton: true, estilo: e ? estiloTag(e) : '',
       attrs: ` data-gd-ruta="seg" title="${esc((e ? 'El segmento «' + nomSeg + '»' : 'La bandeja') + ', expandido')}"` });
-    return `<span class="gd-modal-cont"></span>${chipSub}<span class="gd-ruta-sep" aria-hidden="true">›</span>${chipSeg}`;
+    return `<span class="gd-modal-cont"></span>${chipSub}<span class="gd-ruta-sep" aria-hidden="true">›</span>${chipSeg}${fragmentoHtml(n)}`;   // y, si es un fragmento, su etiqueta (1.1.57)
   }
   /* lo que cambió por fuera con la ventana abierta (Claude, una versión, un personaje renombrado, un render cualquiera): la
      cabecera al día y, si el documento cambió y aquí no se ha tocado, el campo otra vez; la nota que ya no está, fuera */
@@ -748,6 +1077,7 @@
       tit.value = tituloCargado = nuevo; if (todo) tit.select();
     }
     const campo = campoLado();
+    pintarVersionLado();
     if ((nt.html || '') !== ladoCargado && campo.innerHTML === campo.dataset.base) {
       const hoja = hojaLado(), y = hoja.scrollTop, conFoco = document.activeElement === campo || campo.contains(document.activeElement);
       if (conFoco) apuntarLado();                              // el cursor, donde estaba (si no, lo siguiente iría al principio)
@@ -779,6 +1109,8 @@
     else if (!b.matches('[data-f]')) {
       const tw = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); let n, resto = p.car || 0;
       while ((n = tw.nextNode())) { if (resto <= n.nodeValue.length) { destino = [n, resto]; break; } resto -= n.nodeValue.length; }
+      /* un bloque sin texto (el {{cursor}} de una plantilla que se queda solo en su párrafo): dentro de él, con su <br> para que se vea */
+      if (!destino && !b.textContent && !b.matches('table')) { if (!b.querySelector('br, img')) { b.appendChild(document.createElement('br')); campo.dataset.base = campo.innerHTML; } destino = [b, 0]; }
     }
     campo.focus({ preventScroll: true });
     const r = document.createRange();
@@ -787,13 +1119,30 @@
     const s = getSelection(); s.removeAllRanges(); s.addRange(r);
     return true;
   }
+  /* el cursor de una plantilla (`{ bloque, caracter }`: el hijo de primer nivel del documento y el carácter en su texto) en el
+     campo, cuyos bloques son los del documento sin los textos en blanco sueltos (htmlDeLado) */
+  let cursorTrasTitulo = null;                                 // { id, p }: adónde lleva Enter en el nombre
+  function cursorDe(html, cur) {
+    if (!cur || typeof cur.bloque !== 'number') return null;
+    const t = document.createElement('template'); t.innerHTML = html || '';
+    const nodos = t.content.childNodes; let k = 0;
+    for (let i = 0; i < Math.min(cur.bloque, nodos.length); i++) { const n = nodos[i]; if (n.nodeType === 1 || (n.nodeType === 3 && n.nodeValue.trim())) k++; }
+    return { bloque: k, car: cur.caracter || 0 };
+  }
+  /* la hoja de la ventana, hasta el cursor */
+  function verCursor() {
+    const s = getSelection(), n = s && s.rangeCount ? s.getRangeAt(0).startContainer : null;
+    const el = n && (n.nodeType === 1 ? n : n.parentElement);
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    return true;
+  }
   const ponerCursor = (nodo, i) => { const r = document.createRange(); r.setStart(nodo, i); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
   function alPrincipioDelCampo() { const c = campoLado(); c.focus({ preventScroll: true }); ponerCursor(c.firstChild && c.firstChild.nodeType === 1 && !c.firstChild.matches('[data-f]') ? c.firstChild : c, 0); }
   /* un clic debajo de todo: el cursor al final (detrás de una tabla o de una marca, en un párrafo nuevo) */
   function alFinalDelCampo() {
     const c = campoLado(); if (!c) return;
     const ult = c.lastElementChild;
-    if (!ult || ult.matches('table, [data-f]')) { const p = document.createElement('p'); p.appendChild(document.createElement('br')); c.appendChild(p); }
+    if (!ult || ult.matches('table, pre, [data-f], div[data-rc]')) { const p = document.createElement('p'); p.appendChild(document.createElement('br')); c.appendChild(p); }
     c.focus({ preventScroll: true });
     const r = document.createRange(); r.selectNodeContents(c.lastElementChild); r.collapse(false);
     const s = getSelection(); s.removeAllRanges(); s.addRange(r);
@@ -801,20 +1150,88 @@
   function cerrarLado() {
     guardarLadoYa(); apuntarLado();
     const habia = !!ladoId; ladoId = null;
+    if (C.ventana) C.ventana.alCerrar();
     if (!navSigue) ordenNav = null;
     clearTimeout(ladoT); ladoT = null;
     if (capa) { if (capa.contains(document.activeElement)) document.activeElement.blur(); capa.hidden = true; }
     document.body.classList.remove('con-ventana');
     if (habia && o.alNavegar) setTimeout(() => o.alNavegar(), 0);
   }
+  /* ---------- las versiones de la nota de la ventana (1.1.60) ----------
+     Leo: «en las notas sería bueno que [lo que reemplaza la IA] se pusiera como nueva versión, aprovechando la funcionalidad;
+     rescátala en el modal como lo haces ya en ClapBook». El botón «Versiones» del pie (ventana.js) abre el menú de siempre
+     (js/claquedraw/versiones.js, el del editor): la lista con la que coincide con lo de ahora marcada «Actual», cargar una
+     (pregunta si lo de ahora no está guardado como versión), el doble clic la renombra, su «×» la elimina, «Guardar versión…» pide
+     el nombre y «Comparar con la actual…». El botón lleva el nombre de la versión que coincide con el texto. Las versiones son las de
+     la nota (documentos.js), así que las «Antes de Claude» / «Antes de DeepSeek» que deja la IA al reemplazar están aquí. */
+  const versionDeLado = n => (n && (n.versiones || []).find(v => v.html === n.html)) || null;
+  function pintarVersionLado() {
+    if (!C.ventana || !C.ventana.pintarVersion) return;
+    const m = modelo(), nt = ladoId && m && m.nota(ladoId), v = versionDeLado(nt);
+    C.ventana.pintarVersion(v ? v.nombre : null);
+  }
+  function menuVersionesLado(boton) {
+    guardarLadoYa();
+    const m = modelo(), n = ladoId && m && m.nota(ladoId); if (!n || !C.versiones) return;
+    const id = n.id, avisarV = t => { if (o.avisar) o.avisar(t); };
+    const tras = r => { if (!r.ok) { avisarV(r.aviso); return false; } if (o.guardar) o.guardar(); pintarVersionLado(); return true; };
+    const actual = versionDeLado(n);
+    C.versiones.menu(boton, { titulo: n.titulo, versiones: m.versionesDe(id), actual: actual ? actual.id : null, html: n.html }, {
+      cargar: async vid => {
+        cerrarPop();
+        const v = m.version(id, vid); if (!v) return;
+        if (!versionDeLado(n) && n.html !== v.html && !await o.confirmar('¿Cargar «' + v.nombre + '»? Lo que has escrito y no has guardado como versión se pierde.', 'Cargar')) return;
+        if (!tras(m.cargarVersion(id, vid))) return;
+        if (ladoId === id) {                                   // el campo, con la versión (arriba, con el cursor al principio)
+          pintarCampo(n); hojaLado().scrollTop = 0;
+          if (C.ventana) C.ventana.alAbrir();
+          alPrincipioDelCampo();
+        }
+        const t = textoDe(n.html);
+        $$(`.gd-exp-nota[data-nota="${CSS.escape(id)}"] .gd-exp-texto`).forEach(x => { x.textContent = t || 'Sin texto'; x.classList.toggle('vacio', !t); });
+        avisarV('Versión «' + v.nombre + '» cargada');
+      },
+      guardar: async () => {
+        cerrarPop();
+        const r0 = await pedirNombre({ ceja: 'Versión de «' + n.titulo + '»', titulo: 'Guardar versión', pista: 'Por ejemplo, v1 o Primer borrador', boton: 'Guardar', valor: 'v' + (m.versionesDe(id).length + 1) });
+        if (!r0) return;
+        if (!r0.nombre.trim()) { avisarV('Escribe un nombre para la versión'); return; }
+        const r = m.guardarVersion(id, r0.nombre);
+        if (tras(r)) avisarV(r.aviso);
+      },
+      comparar: vid => {
+        cerrarPop();
+        const lista = m.versionesDe(id); if (!lista.length) return;
+        const abrirC = v => C.versiones.abrirComparacion({ nombre: v.nombre, html: v.html }, { nombre: 'Ahora', html: n.html });
+        if (vid) { const v = m.version(id, vid); if (v) abrirC(v); return; }
+        if (lista.length === 1) { abrirC(lista[0]); return; }
+        menuLista(boton, 'Comparar con la actual…', lista.slice().reverse().map(v => ({ id: v.id, nombre: v.nombre })), x => abrirC(m.version(id, x)));
+      },
+      renombrar: async vid => {
+        cerrarPop();
+        const v = m.version(id, vid); if (!v) return;
+        const r0 = await pedirNombre({ ceja: 'Versión de «' + n.titulo + '»', titulo: 'Renombrar la versión', boton: 'Renombrar', valor: v.nombre });
+        if (!r0 || !r0.nombre.trim()) return;
+        tras(m.renombrarVersion(id, vid, r0.nombre));
+      },
+      eliminar: async vid => {
+        const v = m.version(id, vid); if (!v) return;
+        cerrarPop();
+        if (!await o.confirmar('¿Eliminar la versión «' + v.nombre + '»? La nota de ahora no se toca.', 'Eliminar')) return;
+        const r = m.eliminarVersion(id, vid);
+        if (tras(r)) avisarV(r.aviso);
+      }
+    });
+  }
   /* lo escrito en la ventana, a la nota (y a su tarjeta, sin redibujar la biblioteca) */
   function guardarLadoYa() {
     clearTimeout(ladoT); ladoT = null;
     const m = modelo(), nt = ladoId && m && m.nota(ladoId), campo = campoLado(); if (!nt || !campo) return;
     if (campo.innerHTML === campo.dataset.base) return;            // sin tocar: el documento no se reescribe
-    const r = m.guardarNota(nt.id, { title: nt.titulo, html: htmlDeLadoEditado(campo), characters: nt.characters || {} });
+    const r = m.guardarNota(nt.id, { title: nt.titulo, html: esPlano(campo) ? htmlPlano(lineasDe(campo)) : htmlDeLadoEditado(campo), characters: nt.characters || {} });
     campo.dataset.base = campo.innerHTML; ladoCargado = nt.html || '';
     if (r.ok && r.cambio && o.guardar) o.guardar();
+    pintarVersionLado();
     if (capa) $('[data-gd-nav-lado]', capa).innerHTML = navHtml(m, nt);   // (el orden va congelado: no salta)
     const t = textoDe(nt.html);
     $$(`.gd-exp-nota[data-nota="${CSS.escape(nt.id)}"] .gd-exp-texto`).forEach(x => { x.textContent = t || 'Sin texto'; x.classList.toggle('vacio', !t); });
@@ -880,7 +1297,7 @@
     mostrarLado(sig.id);
   }
   /* ⤢ (o el doble clic en la tarjeta): la nota, en el editor */
-  function expandirLado() { const id = ladoId; if (!id) return; navSigue = true; try { cerrarLado(); abrirNota(id); } finally { navSigue = false; } }
+  function expandirLado() { const id = ladoId; if (!id || esFormula(id)) return; navSigue = true; try { cerrarLado(); abrirNota(id); } finally { navSigue = false; } }
   /* la ruta de la ventana: «bib», su biblioteca; «seg», su segmento expandido (con la nota marcada) */
   function irARuta(id, k) {
     const m = modelo(), n = m && m.nota(id), r = n && m.sub(n.subId); if (!r) return;
@@ -939,6 +1356,7 @@
   function rangoEn(campo) { const s = getSelection(); if (!s || !s.rangeCount) return null; const r = s.getRangeAt(0); return campo.contains(r.commonAncestorContainer) ? r.cloneRange() : null; }
   function volverA(campo, r0) { campo.focus({ preventScroll: true }); if (r0) { const s = getSelection(); s.removeAllRanges(); s.addRange(r0); } }
   function menuFormato(e, campo) {
+    if (esPlano(campo)) { menuTextoPlano(e, campo); return; }
     if (!window.MdVivo || !MdVivo.formato || e.target.closest('.gd-lado-fijo')) return;
     e.preventDefault();
     const r0 = rangoEn(campo), hay = !!r0 && !r0.collapsed;
@@ -948,6 +1366,17 @@
     const a = MdVivo.enlaceEn ? MdVivo.enlaceEn(campo) : null;
     const aplicar = (accion, valor) => () => { volverA(campo, r0); MdVivo.formato(campo, accion, valor, { bloques: sinGuion }); };
     const f = document.createDocumentFragment();
+    /* dentro de un prompt o un aviso: lo suyo, arriba (1.1.57) */
+    const rcAqui = recuadroEn(e.target, campo);
+    if (rcAqui) {
+      const esPrompt = rcAqui.getAttribute('data-rc') === 'prompt', R = RCX();
+      f.appendChild(titulo(esPrompt ? 'Prompt' : 'Aviso · ' + (R ? R.TIPOS.find(t => t[0] === R.tipo(rcAqui.getAttribute('data-tipo')))[1] : '')));
+      if (esPrompt) f.appendChild(opcion('Copiar el texto del prompt', () => copiarPrompt(rcAqui)));
+      const x = e.clientX, y = e.clientY;
+      f.appendChild(opcion('Título, tipo y color…', () => setTimeout(() => menuRecuadroLado(rcAqui, campo, x, y), 0)));
+      f.appendChild(opcion('Quitar el recuadro', () => quitarRecuadroLado(rcAqui, campo)));
+      f.appendChild(separador());
+    }
     if (hay) {
       const barra = document.createElement('div'); barra.className = 'gd-fmt-barra';
       [['negrita', '<b>B</b>', 'Negrita', 'Mod+B', estado('bold')], ['cursiva', '<i>I</i>', 'Cursiva', 'Mod+I', estado('italic')],
@@ -999,10 +1428,112 @@
       volverA(campo, r0);
       if (MdVivo.pegar) MdVivo.pegar(campo, t, { markdown: true, bloques: sinGuion }); else document.execCommand('insertText', false, t);
     }, { atajo: tecla('Mod+V') }));
+    /* una plantilla de nota, donde está el cursor (1.1.56; en ClapBook también se inserta en la ventana) */
+    if (ladoId && C.plantillas && C.plantillas.rellenarHtml) { f.appendChild(separador()); f.appendChild(opcion('Insertar plantilla…', () => insertarPlantillaEnVentana(null, r0))); }
+    /* lo elegido, al asistente, con el enlace de su tramo (1.1.60, js/claquedraw/ventana.js) */
+    if (C.ventana && C.ventana.puedeCitar(r0)) { f.appendChild(separador()); f.appendChild(opcion('Citar en el asistente', () => { volverA(campo, r0); C.ventana.citar(r0); }, { atajo: tecla('Mod+Shift+A') })); }
     if (o.copiarEnlace && ladoId) { f.appendChild(separador()); const id = ladoId; f.appendChild(opcion('Copiar enlace para Claude', () => { volverA(campo, r0); o.copiarEnlace({ tipo: 'nota', id }); }, { atajo: tecla('Mod+Shift+C') })); }
     cerrarPop();
     const ancla = anclaEn(e.clientX, e.clientY); ancla._volver = () => volverA(campo, r0);   // Esc: el foco y lo elegido, al campo
     abrirPop(ancla, f);
+  }
+  /* el clic derecho en el campo de una fórmula (1.1.60): sin formato; cortar, copiar, pegar (como texto) y el enlace para Claude */
+  function menuTextoPlano(e, campo) {
+    e.preventDefault();
+    const r0 = rangoEn(campo), hay = !!r0 && !r0.collapsed, f = document.createDocumentFragment();
+    if (hay) {
+      f.appendChild(opcion('Cortar', () => { volverA(campo, r0); document.execCommand('cut'); }, { atajo: tecla('Mod+X') }));
+      f.appendChild(opcion('Copiar', () => { volverA(campo, r0); document.execCommand('copy'); }, { atajo: tecla('Mod+C') }));
+    }
+    f.appendChild(opcion('Pegar', async () => {
+      let t = '';
+      try { t = window.editorAPI && window.editorAPI.leerPortapapeles ? await window.editorAPI.leerPortapapeles() : await navigator.clipboard.readText(); } catch (_) {}
+      if (!t) { if (o.avisar) o.avisar('No se pudo leer el portapapeles: pega con ' + tecla('Mod+V')); return; }
+      volverA(campo, r0); document.execCommand('insertText', false, String(t).replace(/\r\n?/g, '\n'));
+    }, { atajo: tecla('Mod+V') }));
+    /* lo elegido, al asistente, con el enlace de su tramo (1.1.60, js/claquedraw/ventana.js) */
+    if (C.ventana && C.ventana.puedeCitar(r0)) { f.appendChild(separador()); f.appendChild(opcion('Citar en el asistente', () => { volverA(campo, r0); C.ventana.citar(r0); }, { atajo: tecla('Mod+Shift+A') })); }
+    if (o.copiarEnlace && ladoId) { f.appendChild(separador()); const id = ladoId; f.appendChild(opcion('Copiar enlace para Claude', () => { volverA(campo, r0); o.copiarEnlace({ tipo: 'nota', id }); }, { atajo: tecla('Mod+Shift+C') })); }
+    cerrarPop();
+    const ancla = anclaEn(e.clientX, e.clientY); ancla._volver = () => volverA(campo, r0);
+    abrirPop(ancla, f);
+  }
+  /* ---------- insertar una plantilla en la ventana de una nota (1.1.56) ----------
+     Archivo › Insertar plantilla… (app.js) o «Insertar plantilla…» del clic derecho del campo, con una nota en su ventana (en
+     ClapBook también se inserta en el editor del panel). Como `insertarHtml` de texto.js, pero en el campo: la plantilla, ya
+     rellena y con la marca de {{cursor}}, se pinta como el campo pinta el documento (`vistaLado`, que apunta sus bloques detrás
+     de los que había: un elemento de guion que no se toque vuelve al documento tal cual, con su clase y su chip; lo que no es
+     texto va como su marca) y entra con **un solo `insertHTML`** (un paso de Deshacer; `.md-fusion` evita los spans de estilo
+     de Chrome). Dónde, según el bloque del cursor: vacío, la plantilla lo sustituye; una plantilla de un solo párrafo sin clase,
+     su texto en el cursor; si no, detrás del bloque (se elige su contenido y se escribe él tal cual más la plantilla) o, si no es
+     un párrafo, delante del siguiente. Luego el cursor va a la marca, sus personajes pasan al registro de la nota y se guarda
+     como guarda la ventana (`guardarLadoYa`). Sin `pid`, se elige antes (el menú se lleva el foco: `r0` es lo elegido en el campo). */
+  const MARCA_CURSOR = '<span data-cursor-plantilla></span>';
+  function insertarPlantillaEnVentana(pid, r0) {
+    if (!ventanaAbierta() || !C.plantillas || !C.plantillas.rellenarHtml) return false;
+    if (esFormula(ladoId)) { if (o.avisar) o.avisar('Una fórmula es solo texto: en ella no se insertan plantillas'); return false; }
+    const m = modelo(), id = ladoId, nt = m && m.nota(id), campo = campoLado(); if (!nt || !campo) return false;
+    const elegido = r0 !== undefined ? r0 : rangoEn(campo);
+    if (!pid) {
+      let rr = elegido && elegido.getBoundingClientRect();
+      if (!rr || !(rr.width || rr.height)) {                   // un cursor en un renglón vacío no mide: su bloque
+        let b = elegido && elegido.startContainer; while (b && b.parentNode !== campo && b !== campo) b = b.parentNode;
+        rr = (b && b !== campo && b.nodeType === 1 ? b : campo).getBoundingClientRect();
+      }
+      const ancla = anclaEn(rr.left, rr.bottom); ancla._volver = () => volverA(campo, elegido);   // Esc: vuelve al campo
+      elegirPlantilla('Insertar plantilla', x => {
+        if (ladoId !== id || !ventanaAbierta()) { if (o.avisar) o.avisar('La ventana de esa nota ya se cerró'); return; }
+        insertarPlantillaEnVentana(x, elegido);
+      }, ancla);
+      return true;
+    }
+    const p = m.nota(pid);
+    if (!p || !esPlantilla(p)) { if (o.avisar) o.avisar('Esa plantilla ya no existe'); return false; }
+    const x = C.plantillas.rellenarHtml(p.html || '', { titulo: nt.titulo, proyecto: o.nombreProyecto ? o.nombreProyecto() : '', marca: MARCA_CURSOR });
+    const vista = vistaLado(x.html, '[data-cursor-plantilla]');
+    if (!vista.replace(/<span data-cursor-plantilla=""><\/span>/g, '').replace(/<p[^>]*>(?:\s|<br\s*\/?>)*<\/p>/gi, '').trim()) { volverA(campo, elegido); if (o.avisar) o.avisar('La plantilla «' + (p.titulo || 'Sin título') + '» está vacía'); return false; }
+    volverA(campo, elegido && campo.contains(elegido.startContainer) ? elegido : null);
+    const elegir = (a, ao, b, bo) => { const y = document.createRange(); y.setStart(a, ao); y.setEnd(b, bo); const s = getSelection(); s.removeAllRanges(); s.addRange(y); };
+    const topeDe = n => { while (n && n.parentNode !== campo) n = n.parentNode; return n; };
+    let r = rangoEn(campo);
+    if (!r) { alFinalDelCampo(); r = rangoEn(campo); } if (!r) return false;
+    let t = r.startContainer === campo ? campo.childNodes[Math.max(0, r.startOffset - (r.startOffset >= campo.childNodes.length ? 1 : 0))] || null : topeDe(r.startContainer);
+    const simple = el => !!el && el.nodeType === 1 && /^(P|H[1-6]|PRE|BLOCKQUOTE)$/.test(el.tagName) && !el.hasAttribute('data-f')
+      && !el.querySelector('img, table, hr, [contenteditable="false"], [data-f]');
+    const vacio = el => !el.textContent.replace(/[\u200B\s]/g, '');
+    /* una plantilla que es un solo párrafo sin clase: va en el texto, donde está el cursor */
+    const tpl = document.createElement('template'); tpl.innerHTML = vista;
+    const hijos = [...tpl.content.childNodes].filter(n => n.nodeType === 1 || n.textContent.trim());
+    const solo = hijos.length === 1 && hijos[0].nodeType === 1 && hijos[0].tagName === 'P' && [...hijos[0].attributes].every(a => a.name === 'data-l') ? hijos[0] : null;
+    const enLinea = solo ? solo.innerHTML
+      : hijos.every(n => n.nodeType === 3 || (!/^(P|H[1-6]|PRE|BLOCKQUOTE|UL|OL|LI|TABLE|DIV|HR)$/.test(n.tagName) && !n.hasAttribute('data-f'))) ? vista : null;
+    let poner = vista;
+    if (simple(t) && vacio(t)) { elegir(t, 0, t, 0); poner = enLinea !== null ? enLinea : vista; }
+    else if (enLinea !== null && r.collapsed && t && t.nodeType === 1 && !t.hasAttribute('data-f')) poner = enLinea;
+    else if (simple(t)) { elegir(t, 0, t, t.childNodes.length); poner = t.outerHTML + vista; }
+    else if (t && simple(t.nextElementSibling)) { const n = t.nextElementSibling; elegir(n, 0, n, n.childNodes.length); poner = vista + n.outerHTML; }
+    else {                                                     // detrás de una tabla, una marca o lo último: en un párrafo nuevo
+      const pv = document.createElement('p'); pv.appendChild(document.createElement('br'));
+      if (t && t.parentNode === campo) t.after(pv); else campo.appendChild(pv);
+      elegir(pv, 0, pv, 0); poner = enLinea !== null ? enLinea : vista;
+    }
+    campo.classList.add('md-fusion');
+    try { document.execCommand('insertHTML', false, poner); } finally { campo.classList.remove('md-fusion'); }
+    const mk = campo.querySelector('[data-cursor-plantilla]');
+    if (mk) {
+      const padre = mk.parentNode, i = [...padre.childNodes].indexOf(mk);
+      mk.remove();
+      if (!padre.childNodes.length && padre !== campo) { padre.appendChild(document.createElement('br')); ponerCursor(padre, 0); }
+      else ponerCursor(padre, i);
+    }
+    campo.querySelectorAll('[data-cursor-plantilla]').forEach(y => y.remove());   // por si Chrome la hubiera partido
+    /* sus personajes, al registro de la nota (los que ya tenía mandan) */
+    const reg = nt.characters || (nt.characters = {});
+    Object.keys(p.characters || {}).forEach(k => { if (!reg[k]) reg[k] = Object.assign({}, p.characters[k]); });
+    guardarLadoYa();
+    verCursor();
+    if (o.avisar) o.avisar('Plantilla «' + (p.titulo || 'Sin título') + '» insertada');
+    return true;
   }
   function copiarTexto(t) {
     const hecho = () => { if (o.avisar) o.avisar('Dirección copiada'); };
@@ -1193,7 +1724,7 @@
       const hace = x => { const dias = diasEn(x.eliminadoEn); return dias ? 'hace ' + dias + (dias === 1 ? ' día' : ' días') : 'hoy'; };
       /* arriba, lo tirado entero (Leo, 18-09-2026): esquemas, bibliotecas y personajes, cada uno con su «⋯» para restaurarlo */
       main.innerHTML = cabeceraHtml(null, '', 'Papelera') + `<div class="gd-cuerpo">`
-        + (piezas.length ? `${seccion(`Esquemas, bibliotecas y personajes · ${piezas.length} · se eliminan solos a los ${C.DIAS_PAPELERA} días`)}
+        + (piezas.length ? `${seccion(`Esquemas, bibliotecas, lienzos y personajes · ${piezas.length} · se eliminan solos a los ${C.DIAS_PAPELERA} días`)}
         <section class="gd-etq gd-etq--bandeja gd-papelera gd-papelera--piezas"><div class="gd-etq-body"></div></section>` : '')
         + `${seccion(`Notas tiradas · ${lista.length} · se eliminan solas a los ${C.DIAS_PAPELERA} días`)}
         <section class="gd-etq gd-etq--bandeja gd-papelera gd-papelera--notas"><div class="gd-etq-body" data-gd-drop-cont="${PAPELERA}">${todo.length ? (lista.length ? '' : '<div class="gd-etq-vacia">No hay notas sueltas</div>') : '<div class="gd-etq-vacia">La papelera está vacía</div>'}</div></section></div>`;
@@ -1201,16 +1732,16 @@
       if (ladoId) cerrarLado(); olvidarBusqueda();
       const cajaP = $('.gd-papelera--piezas .gd-etq-body', main);
       piezas.forEach(x => {
-        const id = x.tipo === 'esquema' ? x.esquema.id : x.tipo === 'sub' ? x.sub.id : x.personaje.id;
+        const id = x.tipo === 'esquema' ? x.esquema.id : x.tipo === 'sub' ? x.sub.id : x.tipo === 'lienzo' ? x.lienzo.id : x.personaje.id;
         const par = x.tipo === 'personaje' ? (PAL[x.personaje.color] || PAL[0]) : null;
-        const chip = x.tipo === 'esquema' ? CHIPS.esquema : x.tipo === 'sub' ? CHIPS.sub : `<span class="gd-chip per-chip" style="--chl:${par[1]};--chd:${par[2]}" title="Personaje">${esc(C.iniciales(x.nombre || (x.personaje && x.personaje.nombre) || ''))}</span>`;
-        const n = x.tipo === 'esquema' ? (x.esquema.datos.puntos || []).length : (x.notas || []).length;
-        const cuanto = x.tipo === 'esquema' ? n + (n === 1 ? ' nodo' : ' nodos') : n + (n === 1 ? ' nota' : ' notas');
+        const chip = x.tipo === 'esquema' ? CHIPS.esquema : x.tipo === 'sub' ? CHIPS.sub : x.tipo === 'lienzo' ? CHIPS.lienzo : `<span class="gd-chip per-chip" style="--chl:${par[1]};--chd:${par[2]}" title="Personaje">${esc(C.iniciales(x.nombre || (x.personaje && x.personaje.nombre) || ''))}</span>`;
+        const n = x.tipo === 'esquema' ? (x.esquema.datos.puntos || []).length : x.tipo === 'lienzo' ? (x.lienzo.nodos || []).length : (x.notas || []).length;
+        const cuanto = x.tipo === 'esquema' || x.tipo === 'lienzo' ? n + (n === 1 ? ' nodo' : ' nodos') : n + (n === 1 ? ' nota' : ' notas');
         const donde = x.tipo === 'personaje' ? 'de Personajes' : 'de «' + (x.origenNombre || '?') + '»';
         cajaP.insertAdjacentHTML('beforeend', `<div class="gd-nota gd-pieza" role="button" tabindex="0" data-pieza="${esc(id)}" title="Doble clic: restaurar">
             ${chip}<span class="gd-pieza-nom"></span><span class="gd-nota-meta">${esc(donde + ' · ' + cuanto + ' · ' + hace(x))}</span>
             <button type="button" class="gd-nota-acc" data-gd-menu="pieza" title="Opciones">${ic('more', 13)}</button></div>`);
-        cajaP.lastElementChild.querySelector('.gd-pieza-nom').textContent = C.nombreEnPapelera(x);
+        cajaP.lastElementChild.querySelector('.gd-pieza-nom').textContent = x.tipo === 'lienzo' ? x.lienzo.nombre : C.nombreEnPapelera(x);
       });
       const cuerpo = $('.gd-papelera--notas .gd-etq-body', main);
       lista.forEach(x => {
@@ -1228,7 +1759,9 @@
       const x = expandido && expandido.subId === s.id && datosSegmento(m, s.id, expandido.clave);
       if (x) {
         const e0 = estiloHijo(s.id, 'gd-chip--sub');
-        main.replaceChildren(vistaExpandida(m, x, { cont: c.nombre, chip: chipNombre(s.nombre, e0.clase, { boton: true, estilo: e0.estilo, attrs: ' data-gd-contraer', title: 'Volver a la biblioteca «' + s.nombre + '»' }) }));
+        main.replaceChildren(vistaExpandida(m, x, especial(s.id)
+          ? { cont: '', chip: chipEspecial(s.id, { boton: true, attrs: ` data-gd-contraer title="${infoEspecial(s.id).volver}"` }) }
+          : { cont: c.nombre, chip: chipNombre(s.nombre, e0.clase, { boton: true, estilo: e0.estilo, attrs: ' data-gd-contraer', title: 'Volver a la biblioteca «' + s.nombre + '»' }) }));
         reponerBusqueda(foco);
         ventanaTrasPintar(m, s.id);
         return;
@@ -1236,16 +1769,26 @@
       if (expandido && expandido.subId === s.id) expandido = null;   // el segmento ya no existe
       const enl = m.enlace(s.id);
       const eid = enl && enl.esquema ? enl.esquema.id : null;
-      const verEsq = eid ? `<button type="button" class="btn" data-gd-ver-esquema="${esc(eid)}" title="Abrir el esquema enlazado a esta biblioteca">${ic('board', 15)}Ver esquema</button>` : '';
-      const chipSub = chipNombre(s.nombre, estiloHijo(s.id, 'gd-chip--sub').clase, { estilo: estiloHijo(s.id).estilo, title: 'Biblioteca «' + s.nombre + '»' });
+      /* conectada con esquemas (1.1.57): sus chips (llevan a cada uno) en lugar de «Ver esquema»; sin conexiones, «Ver esquema» por el grupo */
+      const conex = especial(s.id) ? '' : chipsConexiones('sub', s.id);
+      const verEsq = (eid && !(enl && enl.conectado) ? `<button type="button" class="btn" data-gd-ver-esquema="${esc(eid)}" title="Abrir el esquema enlazado a esta biblioteca">${ic('board', 15)}Ver esquema</button>` : '') + conex;
+      /* la de las plantillas (1.1.56): su chip, sin contenedor, «Nueva plantilla» y un aviso de cómo se usan; en las demás,
+         «Desde plantilla» */
+      const esp = especial(s.id), fx = esp && cualEspecial(s.id) === 'formulas';   // las fórmulas (1.1.60): lo mismo, con su aviso y «Nueva fórmula»
+      const chipSub = esp ? chipEspecial(s.id) : chipNombre(s.nombre, estiloHijo(s.id, 'gd-chip--sub').clase, { estilo: estiloHijo(s.id).estilo, title: 'Biblioteca «' + s.nombre + '»' });
       /* buscar y el filtro general de la biblioteca (1.1.54): manda sobre el de cada segmento en sus tarjetas */
       const fb = filtroDe(claveFiltroBib(s.id)), colB = fb.color || null, ordB = fb.orden || 'manual';
-      const filtrosBib = cajaBuscar('Buscar en la biblioteca', 'Buscar en las notas de la biblioteca (Cmd+F)')
+      const filtrosBib = cajaBuscar(esp ? 'Buscar en ' + infoEspecial(s.id).las : 'Buscar en la biblioteca', 'Buscar en las notas de la biblioteca (Cmd+F)')
         + botonColor('colorBib', colB, false, (colB ? 'Solo las notas ' + (colB === 'sin' ? 'sin color' : 'de color ' + nombreColor(colB).toLowerCase()) + ', en todos los segmentos' : 'Solo las notas de un color, en todos los segmentos') + ' (aquí manda sobre el filtro de cada segmento)')
         + (colB ? `<button type="button" class="gd-filtro-quitar" data-gd-quitar-color-bib title="Quitar el filtro" aria-label="Quitar el filtro">${ic('close', 12)}</button>` : '')
         + `<button type="button" class="gd-filtro${ordB !== 'manual' ? ' on' : ''}" data-gd-menu="ordenBib" title="${esc((ordB === 'manual' ? 'El orden de las notas de todos los segmentos' : 'Orden: ' + rotuloOrden(ordB).toLowerCase() + ', en todos los segmentos') + ' (aquí manda sobre el de cada segmento)')}">${ic('sort', 14)}<span>${esc(ordB === 'manual' ? 'Orden' : rotuloOrden(ordB))}</span>${ic('chev-d', 12)}</button>`;
-      main.innerHTML = cabeceraHtml(c.nombre, chipSub, null, filtrosBib + verEsq) + '<div class="gd-exp-medio gd-bib-medio"><div class="gd-cuerpo"></div></div>';
+      const botonPl = fx ? `<button type="button" class="btn" data-gd-nueva-formula title="Una fórmula nueva en la bandeja">${ic('plus', 15)}Nueva fórmula</button>`
+        : esp ? `<button type="button" class="btn" data-gd-nueva-plantilla title="Una plantilla nueva en la bandeja">${ic('plus', 15)}Nueva plantilla</button>`
+        : `<button type="button" class="btn" data-gd-desde-plantilla title="Nueva nota desde una plantilla (${esc(tecla('Mod+Alt+N'))})">${ic('plantilla', 15)}Desde plantilla</button>`;
+      main.innerHTML = cabeceraHtml(esp ? null : c.nombre, chipSub, null, filtrosBib + verEsq + botonPl) + `<div class="gd-exp-medio gd-bib-medio${esp ? ' gd-bib-plantillas' : ''}${fx ? ' gd-bib-formulas' : ''}"><div class="gd-cuerpo"></div></div>`;
       const cuerpo = $('.gd-cuerpo', main);
+      if (fx) cuerpo.insertAdjacentHTML('beforeend', `<div class="gd-plantillas-aviso gd-formulas-aviso">${ic('formula', 18)}<div><b>Fórmulas</b> · Prompts reutilizables para las operaciones de IA de los lienzos, como las skills: el formato, el tono, el estilo o las reglas que quieres que se sigan. Se eligen en cada operación, junto a «Qué escribir» (el botón <b>Fórmula</b>), se pueden elegir varias —van en orden— y se combinan con lo que escribas ahí: si una lleva {{instruccion}}, lo escrito va en ese sitio; si no, detrás, como tu instrucción. Son solo texto (sin formato). Para guardar el texto de una nota como fórmula, su menú ⋯ o suéltala sobre «Fórmulas».</div></div>`);
+      else if (esp) cuerpo.insertAdjacentHTML('beforeend', `<div class="gd-plantillas-aviso">${ic('plantilla', 18)}<div><b>Plantillas</b> · De estas notas salen notas nuevas: «Usar», <b>Desde plantilla</b> en una biblioteca, ${esc(tecla('Mod+Alt+N'))} o <b>/plantilla</b> dentro del editor. Sus variables se rellenan al usarlas: {{titulo}}, {{fecha}}, {{hora}}, {{ayer}}, {{mañana}}, {{proyecto}} y {{cursor}} (dónde se empieza a escribir); la fecha y la hora aceptan formato, como {{fecha:dddd D [de] MMMM}}. Llevan su color y sus personajes, pero no cuentan como apariciones de nadie. Para guardar una nota como plantilla, su menú ⋯ o suéltala sobre «Plantillas».</div></div>`);
       {
         /* la biblioteca de un personaje estrena la sección «Apariciones» (Leo, 16-09-2026: los personajes son
            bibliotecas, y sus apariciones dejan de vivir en el carrusel) */
@@ -1261,7 +1804,7 @@
           $$('.gd-bloque:not(.gd-bloque--apariciones) > .gd-seccion', main).forEach(h => { h.title = 'Arrastra el título para cambiar el orden de las secciones'; h.insertAdjacentHTML('afterbegin', `<span class="gd-asa">${ic('drag', 13)}</span>`); });
       }
       aplicarSecciones();                                      // lo contraído y lo expandido de la vista
-      ponerCabecera(c.nombre, null);
+      ponerCabecera(esp ? '' : c.nombre, null);
       reponerBusqueda(foco);
       ventanaTrasPintar(m, s.id);
     }
@@ -1330,22 +1873,23 @@
     const chipSeg = chipNombre(nomSeg, 'gd-seg-chip' + (e ? '' : ' gd-seg-chip--bandeja'), { boton: true, attrs: ' data-gd-expandir-nota', estilo: e ? estiloTag(e) : '', icono: ic('expand', 12),
       title: (e ? 'Segmento «' + e.nombre + '»' : 'Bandeja') + ' · pulsa para expandirlo' });
     /* la biblioteca (en Personajes, el personaje con su color): al pulsarla, su tablero */
-    const pj = per && m.personaje(r.sub.lineaId), pt = pj && PAL[pj.color];
-    const chipSub = per
+    const pj = per && m.personaje(r.sub.lineaId), pt = pj && PAL[pj.color], pl = especial(r.sub.id);   // una plantilla: «[Plantillas]», sin contenedor
+    const chipSub = pl ? chipEspecial(r.sub.id, { boton: true, attrs: ` data-gd-ir="${esc(clave(s))}" title="${infoEspecial(r.sub.id).las.replace(/^l/, 'L')}"` })
+      : per
       ? chipNombre(pj ? pj.nombre : r.sub.nombre, 'per-chip', { boton: true, attrs: ' data-gd-volver', estilo: pt ? `--chl:${pt[1]};--chd:${pt[2]}` : '', title: 'Volver a «' + (pj ? pj.nombre : r.sub.nombre) + '»' })
       : chipNombre(r.sub.nombre, estiloHijo(r.sub.id, 'gd-chip--sub').clase, { boton: true, estilo: estiloHijo(r.sub.id).estilo, attrs: ` data-gd-ir="${esc(clave(s))}"`, title: 'Biblioteca «' + r.sub.nombre + '»' });
     migas.dataset.migaNota = n.id;   // no `data-nota`: el tablero de tramas lo tomaría por uno de sus post-it y bloquearía el clic
     migas.innerHTML = `<div class="esq-titulo">
-        <button type="button" class="esq-cont gd-miga" ${per ? 'data-gd-volver' : `data-gd-ir="${esc(clave(entradaDe(r.contenedor)))}"`} data-gd-miga-cont></button>
+        ${pl ? '' : `<button type="button" class="esq-cont gd-miga" ${per ? 'data-gd-volver' : `data-gd-ir="${esc(clave(entradaDe(r.contenedor)))}"`} data-gd-miga-cont></button>`}
         ${chipSub}${chipSeg}
         <input type="text" class="texto-nom" data-gd-miga-nom readonly spellcheck="false" autocomplete="off" placeholder="Sin título" aria-label="Título del documento">
       </div>
       <span class="spacer"></span>
-      <button type="button" class="btn" data-gd-volver title="${per ? 'Volver al personaje' : 'Volver a la biblioteca'}">${ic(per ? 'person' : 'docs', 15)}${per ? 'Ver personaje' : 'Ver biblioteca'}</button>
+      <button type="button" class="btn" data-gd-volver title="${per ? 'Volver al personaje' : pl ? infoEspecial(r.sub.id).volver : 'Volver a la biblioteca'}">${ic(per ? 'person' : pl ? infoEspecial(r.sub.id).icono : 'docs', 15)}${per ? 'Ver personaje' : pl ? infoEspecial(r.sub.id).ver : 'Ver biblioteca'}</button>
       <span class="par-nav"><button type="button" data-gd-miga-mover="-1" ${i > 0 ? '' : 'disabled'} title="Nota anterior del segmento" aria-label="Nota anterior">${ic('arr-l', 13)}</button><button type="button" data-gd-miga-mover="1" ${i >= 0 && i < hermanas.length - 1 ? '' : 'disabled'} title="Nota siguiente del segmento" aria-label="Nota siguiente">${ic('arr-r', 13)}</button></span>
       <button type="button" class="icono gd-miga-tirar" data-gd-miga-tirar title="Mover la nota a la papelera" aria-label="Mover la nota a la papelera">${ic('trash', 15)}</button>
       <button type="button" class="icono" data-gd-contraer-nota title="Contraer: verla en su ventana, encima de la biblioteca" aria-label="Contraer la nota">${ic('collapse', 15)}</button>`;
-    $('[data-gd-miga-cont]', migas).textContent = per ? 'Personajes' : r.contenedor.nombre;
+    if (!pl) $('[data-gd-miga-cont]', migas).textContent = per ? 'Personajes' : r.contenedor.nombre;
     $('[data-gd-miga-nom]', migas).value = n.titulo;
   }
   /* La cabecera de un documento de «Guiones generados» (rediseño 11, «Documento plano»): «CONTENEDOR [Biblioteca] [segmento de
@@ -1375,6 +1919,8 @@
     const m = modelo(); if (!m) return;
     if (m.enPapelera(id)) { if (o.avisar) o.avisar('Está en la papelera: restáurala para abrirla'); return; }
     const n = m.nota(id), r = n && m.sub(n.subId); if (!r) return;
+    /* una fórmula (1.1.60) no va al editor de guion: se abre en su ventana, encima de su tablero */
+    if (esFormula(n)) { abrirFormula(id); return; }
     if (ladoId) cerrarLado();                                    // la ventana de una nota se va: esta ocupa el editor
     /* los documentos de un esquema (los guiones) se abren en la vista Texto, con su tira de referencia (Leo, 16-09-2026) */
     if (r.sub.guionEid && o.abrirTexto) { if (notaAbierta) cerrarNota(); o.abrirTexto(id); return; }
@@ -1420,8 +1966,10 @@
       $$('[data-dlg-color]', grid).forEach(b => { b.onclick = () => { col = paletaDlg[+b.dataset.dlgColor].valor; pintarCol(); inp.focus(); }; });
       pintarCol();
     }
-    const pintarTipo = () => { $$('[data-dlg-tipo]', dlg).forEach(b => b.classList.toggle('on', b.dataset.dlgTipo === tipo)); $('[data-dlg-titulo]', dlg).textContent = op.tipos ? (tipo === 'esquema' ? 'Crear esquema de pasos' : 'Crear biblioteca') : op.titulo; };
+    const pintarTipo = () => { $$('[data-dlg-tipo]', dlg).forEach(b => b.classList.toggle('on', b.dataset.dlgTipo === tipo)); $('[data-dlg-titulo]', dlg).textContent = op.tipos ? (tipo === 'esquema' ? 'Crear esquema de pasos' : tipo === 'lienzo' ? 'Crear lienzo' : 'Crear biblioteca') : op.titulo; };
     tipos.hidden = !op.tipos; pintarTipo();
+    /* la tarjeta «Lienzo» (1.1.58), solo donde caben lienzos (`op.conLienzo`) */
+    const tLienzo = $('[data-dlg-tipo="lienzo"]', dlg); if (tLienzo) tLienzo.hidden = !op.conLienzo;
     const habilitar = () => { ok.disabled = !inp.value.trim(); };   // «Crear» solo con un nombre escrito
     inp.oninput = habilitar; habilitar();
     return new Promise(resolve => {
@@ -1459,9 +2007,11 @@
   async function nuevoHijo(cid, tipoInicial, carpetaId, grupoId) {
     const c = d.contenedor(cid); if (!c) return;
     const k = carpetaId && d.carpeta(carpetaId);
-    const r0 = await pedirNombre({ ceja: 'Nuevo en «' + (k ? k.carpeta.nombre : c.nombre) + '»', titulo: 'Crear', tipos: true, tipo: tipoInicial || 'sub', pista: 'Nombre' });
+    const conLienzo = !!d.crearLienzo && !c.oculto && !c.especial;   // un lienzo también es un hijo del contenedor (1.1.58)
+    const r0 = await pedirNombre({ ceja: 'Nuevo en «' + (k ? k.carpeta.nombre : c.nombre) + '»', titulo: 'Crear', tipos: true, tipo: tipoInicial || 'sub', pista: 'Nombre', conLienzo });
     if (!r0) return;
     if (!r0.nombre.trim()) { o.avisar && o.avisar('Escribe un nombre'); return; }
+    if (r0.tipo === 'lienzo' && conLienzo) { crearLienzoEn(cid, r0.nombre, k ? carpetaId : null, grupoId || null); return; }
     const abrirCarpeta = () => { if (k) { d.plegarCarpeta(carpetaId, false); if (c.plegado) d.plegarContenedor(cid, false); } };
     const enGrupo = id => { if (grupoId && d.grupo(grupoId)) d.aGrupo(grupoId, id); };   // lo creado desde el ⋯ de un grupo entra en él
     if (r0.tipo === 'esquema') {
@@ -1612,7 +2162,7 @@
   };
   const separador = () => Object.assign(document.createElement('div'), { className: 'gd-pop-sep' });
   const titulo = t => Object.assign(document.createElement('div'), { className: 'gd-pop-tit', textContent: t });
-  const frag = (...xs) => { const f = document.createDocumentFragment(); xs.forEach(x => f.appendChild(x)); return f; };
+  const frag = (...xs) => { const f = document.createDocumentFragment(); xs.forEach(x => { if (x) f.appendChild(x); }); return f; };
 
   /* La paleta: crea un segmento con ese color (y pide su nombre) o recolorea uno existente. */
   function paleta(etiquetaId, subId, seccionId) {
@@ -1648,16 +2198,16 @@
   function puntoPieza(id) {
     const g = d.grupoDe(id);
     if (g) return 'var(--t-' + g.grupo.color + ')';
-    const r = d.esquema(id) || d.sub(id) || (d.personaje(id) ? { pieza: d.personaje(id) } : null);
-    const x = r && (r.esquema || r.sub || r.pieza);
+    const r = d.esquema(id) || d.sub(id) || lienzoDe(id) || (d.personaje(id) ? { pieza: d.personaje(id) } : null);
+    const x = r && (r.esquema || r.sub || r.lienzo || r.pieza);
     if (x && x.color !== undefined && x.color !== null) return colores(x.color)[0];
-    return d.esquema(id) ? 'var(--p-violeta-bg)' : 'var(--p-azul-bg)';   // el de siempre: violeta el esquema, azul la biblioteca
+    return d.esquema(id) ? 'var(--p-violeta-bg)' : lienzoDe(id) ? 'var(--t-teal)' : 'var(--p-azul-bg)';   // el de siempre: violeta el esquema, azul la biblioteca, verde azulado el lienzo
   }
   function menuEnlazar(s) {
     if (d.grupoDe(s.id)) return frag(opcion('Sacar del grupo', () => tras(d.quitarEnlace(s.id))));
     const c = d.contenedor(s.cid); if (!c) return null;
-    const mia = (d.esquema(s.id) || d.sub(s.id) || {});
-    const nivel = ((mia.esquema || mia.sub || {}).carpetaId) || null;
+    const mia = (d.esquema(s.id) || d.sub(s.id) || lienzoDe(s.id) || {});
+    const nivel = ((mia.esquema || mia.sub || mia.lienzo || {}).carpetaId) || null;
     const candidatos = d.nivelArbol(c.id, nivel).filter(x => x.tipo !== 'carpeta' && x.id !== s.id);
     const f = frag(titulo('Agrupar con…'));
     f.appendChild(opcion('Un grupo con este solo', () => tras(d.crearGrupo(c.id, [s.id]))));   // grupos de uno (Leo, 16-09-2026)
@@ -1690,17 +2240,19 @@
     return frag(titulo('Color de «' + r.grupo.nombre + '»'), grid);
   }
   function paletaHijo(id) {
-    const r = d.esquema(id) || d.sub(id); if (!r) return null;
-    const x = r.esquema || r.sub;
+    const r = d.esquema(id) || d.sub(id) || lienzoDe(id); if (!r) return null;
+    const x = r.esquema || r.sub || r.lienzo;
     const grid = document.createElement('div'); grid.className = 'gd-paleta';
     PAL.forEach((t, i) => {
       const b = document.createElement('button');
       b.type = 'button'; b.title = t[0]; b.style.background = colores(i)[0];
       if (x.color === i) b.classList.add('on');
-      b.addEventListener('click', () => { cerrarPop(); tras(d.colorearHijo(id, i)); });
+      b.addEventListener('click', () => { cerrarPop(); coloreado(tras(d.colorearHijo(id, i))); });
       grid.appendChild(b);
     });
-    const quitar = opcion('El de siempre', () => tras(d.colorearHijo(id, null)), { punto: 'var(--hover-fuerte)' });
+    const quitar = opcion('El de siempre', () => coloreado(tras(d.colorearHijo(id, null))), { punto: 'var(--hover-fuerte)' });
+    /* un lienzo abierto repinta su cabecera (la etiqueta lleva su color) y sus pestañas (1.1.58) */
+    function coloreado(ok) { if (ok && lienzoDe(id) && o.lienzoRenombrado) o.lienzoRenombrado(id); }
     return frag(titulo('Color de la etiqueta'), grid, quitar);
   }
   /* Las primeras líneas de una nota, para la vista expandida. */
@@ -1742,40 +2294,121 @@
      esquemas… para facilitar el decirle a Claude a qué puntos me refiero»): su enlace en Markdown, al portapapeles (app.js) */
   const conEnlace = ref => (o.copiarEnlace ? [opcion('Copiar enlace para Claude', () => o.copiarEnlace(ref))] : []);
   function menuHijo(t, s) {
-    const actualCarpeta = ((s.tipo === 'esquema' ? (d.esquema(s.id) || {}).esquema : (d.sub(s.id) || {}).sub) || {}).carpetaId || null;
-    const mover = opcion('Mover a carpeta…', () => abrirPop(t, menuMoverCarpeta(s.tipo === 'esquema' ? 'esquema' : 'sub', s.id, s.cid, actualCarpeta)));
+    const actualCarpeta = ((s.tipo === 'esquema' ? (d.esquema(s.id) || {}).esquema : s.tipo === 'lienzo' ? (lienzoDe(s.id) || {}).lienzo : (d.sub(s.id) || {}).sub) || {}).carpetaId || null;
+    const mover = opcion('Mover a carpeta…', () => abrirPop(t, menuMoverCarpeta(s.tipo === 'sub' ? 'sub' : s.tipo, s.id, s.cid, actualCarpeta)));
     const grupo = d.grupoDe(s.id);
     const enlace = [opcion('Cambiar color', () => abrirPop(t, paletaHijo(s.id))),
       grupo ? opcion('Sacar del grupo', () => tras(d.quitarEnlace(s.id))) : opcion('Agrupar con…', () => abrirPop(t, menuEnlazar(s)))];
     const duplicar = opcion('Duplicar', () => duplicarHijo(s));
+    /* un lienzo de nodos (1.1.58): se abre, se renombra, se colorea, se agrupa, se duplica y va a la papelera como los demás; no
+       se conecta con bibliotecas (sus nodos ya apuntan a lo que usan) */
+    if (s.tipo === 'lienzo') return frag(
+      opcion('Abrir lienzo', () => abrirLienzo(s.id)),
+      ...enPestana({ tipo: 'lienzo', id: s.id }),
+      ...conEnlace({ tipo: 'lienzo', id: s.id }),
+      separador(),
+      opcion('Renombrar', () => renombrarHijo(s, t)),
+      duplicar, mover,
+      separador(), ...enlace,
+      opcion('Mover a la papelera', () => eliminarLienzo(s.id), { clase: 'peligro' }));
+    /* lo que se puede poner en un lienzo como entrada: el esquema y la biblioteca (1.1.58) */
+    const alLienzo = anadirAlLienzoOpcion(t, s.tipo === 'esquema' ? 'esquema' : 'biblioteca', s.id);
+    /* conexiones esquema ↔ biblioteca (1.1.57): de muchos a muchos, aparte de los grupos */
+    const conectar = s.tipo === 'esquema' ? [opcion('Conectar con biblioteca…', () => menuConectar(t, 'esquema', s.id), { atajo: String(d.bibliotecasDe(s.id).length || '') })]
+      : d.conectable(s.id) ? [opcion('Conectar con esquema…', () => menuConectar(t, 'sub', s.id), { atajo: String(d.esquemasConectados(s.id).length || '') })] : [];
     if (s.tipo === 'esquema') return frag(
       opcion('Abrir esquema', () => abrirEsquema(s.id)),
       ...enPestana({ tipo: 'esquema', id: s.id }),
       ...(d.esEsquemaPersonaje(s.id) ? [] : enPestana({ tipo: 'documento', id: s.id }, 'Abrir el documento en pestaña')),
       ...conEnlace({ tipo: 'esquema', id: s.id }),
+      ...alLienzo,
       separador(),
       opcion('Renombrar', () => renombrarHijo(s, t)),
       duplicar, mover,
-      separador(), ...enlace,
+      separador(), ...conectar, ...enlace,
       opcion('Mover a la papelera', () => eliminarEsquema(s.id), { clase: 'peligro' }));
     return frag(
       ...enPestana({ tipo: 'sub', id: s.id }),
       ...conEnlace({ tipo: 'biblioteca', id: s.id }),
+      ...alLienzo,
       separador(),
       opcion('Nueva nota', () => nuevaNota(s.id, null)),
       opcion('Nuevo segmento', () => abrirPop(t, paleta(null, s.id))),
       separador(),
       opcion('Renombrar', () => renombrarHijo(s, t)),
       duplicar, mover,
-      separador(), ...enlace,
+      separador(), ...conectar, ...enlace,
       opcion('Mover a la papelera', () => eliminarSub(s.id), { clase: 'peligro' }));
   }
   /* una copia con todo su contenido, detrás del original (el esquema montado y el documento abierto se guardan antes: la copia
      lleva lo último) */
   function duplicarHijo(s) {
     if (o.volcar) o.volcar();
+    if (s.tipo === 'lienzo') { tras(d.duplicarLienzo ? d.duplicarLienzo(s.id) : { ok: false, aviso: 'Esta versión no sabe duplicar lienzos' }); return; }
     tras(s.tipo === 'esquema' ? d.duplicarEsquema(s.id) : d.duplicarSub(s.id));
   }
+  /* ---------- conexiones esquema ↔ biblioteca (1.1.57) ----------
+     Leo, 27-09-2026: «tenía la posibilidad de conectar esquemas con bibliotecas, varios a la vez». El menú lista las bibliotecas (o los
+     esquemas) de todos los contenedores, con las conectadas marcadas; un clic conecta o desconecta, con «Deshacer» en el aviso. */
+  function menuConectar(trigger, tipo, id) {
+    if (!d) return;
+    const esEsq = tipo === 'esquema', r = esEsq ? d.esquema(id) : d.sub(id); if (!r) return;
+    const nombre = esEsq ? r.esquema.nombre : r.sub.nombre;
+    const f = frag(titulo(esEsq ? 'Conectar «' + nombre + '» con…' : 'Conectar «' + nombre + '» con…'));
+    const grupos = [];
+    if (esEsq) todasLasBibliotecas().forEach(x => { let g = grupos.find(y => y.c === x.contenedor); if (!g) grupos.push(g = { c: x.contenedor, xs: [] }); g.xs.push({ id: x.sub.id, nombre: x.sub.nombre, on: d.conectado(id, x.sub.id) }); });
+    else {
+      const L = d.contenedores();
+      [...L.fijados, ...L.sueltos, d.contenedor(C.ID_ESQUEMAS_PERSONAJE)].filter(Boolean).forEach(c => {
+        const xs = c.esquemas.map(e => ({ id: e.id, nombre: e.nombre, on: d.conectado(e.id, id) }));
+        if (xs.length) grupos.push({ c, xs, rotulo: c.id === C.ID_ESQUEMAS_PERSONAJE ? 'Esquemas de personaje' : c.nombre });
+      });
+    }
+    if (!grupos.length) f.appendChild(Object.assign(document.createElement('div'), { className: 'gd-pop-vacio', textContent: esEsq ? 'Aún no hay bibliotecas: créalas con el «＋» de un contenedor' : 'Aún no hay esquemas' }));
+    grupos.forEach(g => {
+      if (grupos.length > 1) f.appendChild(Object.assign(document.createElement('div'), { className: 'gd-pop-sub', textContent: g.rotulo || g.c.nombre }));
+      g.xs.forEach(x => f.appendChild(opcion(x.nombre, () => alternarConexion(esEsq ? id : x.id, esEsq ? x.id : id), { clase: x.on ? 'on' : '', punto: x.on ? 'var(--foco)' : 'var(--hover-fuerte)' })));
+    });
+    abrirPop(trigger, f);
+  }
+  const todasLasBibliotecas = () => (d.todasLasBibliotecas ? d.todasLasBibliotecas() : []).filter(x => d.conectable(x.sub.id));
+  /* conecta si no lo estaban y desconecta si lo estaban; el aviso trae «Deshacer» (que la devuelve a su sitio en la lista) */
+  function alternarConexion(eid, subId) {
+    if (!d) return false;
+    const ya = d.conectado(eid, subId), r = ya ? d.desconectar(eid, subId) : d.conectar(eid, subId);
+    if (!r.ok || !r.cambio) return tras(r);
+    const listo = () => { if (o.guardar) o.guardar(); render(); if (o.alConectar) o.alConectar(); };
+    listo();
+    if (o.avisar) o.avisar(r.aviso, { texto: 'Deshacer', fn: () => { const x = ya ? d.conectar(eid, subId, { pos: r.pos }) : d.desconectar(eid, subId); if (x.ok) listo(); } });
+    return true;
+  }
+  /* las conexiones de un esquema o de una biblioteca como chips (para las cabeceras): cada una lleva allí y su × desconecta, y
+     el último botón conecta otra. `tipo`: 'esquema' (sus bibliotecas) o 'sub' (sus esquemas). También lo usa app.js. */
+  function chipsConexiones(tipo, id) {
+    if (!d) return '';
+    const esEsq = tipo === 'esquema', xs = esEsq ? d.bibliotecasDe(id) : d.esquemasConectados(id);
+    if (!esEsq && !d.conectable(id)) return '';
+    const chips = xs.map(x => {
+      const obj = esEsq ? x.sub : x.esquema, e = estiloHijo(obj.id, esEsq ? 'gd-chip--sub' : 'gd-chip--esquema');
+      const par = esEsq ? id + '|' + obj.id : obj.id + '|' + id;
+      return `<span class="cx-chip">${chipNombre(obj.nombre, e.clase, { boton: true, estilo: e.estilo, attrs: ` data-cx-ir="${esEsq ? 'sub' : 'esquema'}:${esc(obj.id)}"`, title: (esEsq ? 'Biblioteca conectada «' : 'Esquema conectado «') + obj.nombre + '»' })}`
+        + `<button type="button" class="cx-quitar" data-cx-quitar="${esc(par)}" title="Desconectar" aria-label="${esc('Desconectar «' + obj.nombre + '»')}">${ic('close', 10)}</button></span>`;
+    }).join('');
+    return `<span class="cx-conexiones" aria-label="${esEsq ? 'Bibliotecas conectadas' : 'Esquemas conectados'}">${chips}`
+      + `<button type="button" class="cx-mas" data-cx-conectar="${esc(tipo + ':' + id)}" title="${esEsq ? 'Conectar con una biblioteca… (ahí van, por ejemplo, los fragmentos de su guion)' : 'Conectar con un esquema…'}" aria-label="${esEsq ? 'Conectar con una biblioteca' : 'Conectar con un esquema'}">${ic('link', 13)}${xs.length ? '' : '<span>Conectar</span>'}</button></span>`;
+  }
+  /* un clic en un chip de conexión, en su × o en «Conectar», y en la etiqueta de un fragmento: en captura, antes que las tarjetas
+     (la etiqueta va dentro de una) y en cualquier sitio (también en la cabecera del esquema, que pinta app.js, y en la ventana) */
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-cx-ir], [data-cx-quitar], [data-cx-conectar], [data-gd-fragmento]'); if (!b || !d) return;
+    e.preventDefault(); e.stopPropagation();
+    if (b.dataset.gdFragmento) { const id = b.dataset.gdFragmento; if (ladoId) { guardarLadoYa(); cerrarLado(); } if (o.irAFragmento) o.irAFragmento(id); return; }
+    if (b.dataset.cxConectar) { const [t, id] = b.dataset.cxConectar.split(/:(.*)/s); menuConectar(b, t, id); return; }
+    if (b.dataset.cxQuitar) { cerrarPop(); const [eid, sid] = b.dataset.cxQuitar.split('|'); alternarConexion(eid, sid); return; }
+    cerrarPop();
+    const [t, id] = b.dataset.cxIr.split(/:(.*)/s);
+    if (t === 'esquema') abrirEsquema(id); else abrirSub(id);
+  }, true);
   /* la nota de un botón: su tarjeta, o la ventana de la nota (que no lleva `data-nota`: el tablero de tramas lo oye) */
   const notaDeBoton = t => t.dataset.notaId || ((t.closest('[data-nota]') || {}).dataset || {}).nota;
   const MENUS = {
@@ -1815,7 +2448,8 @@
         : r.ambito === C.ID_ESQUEMAS_PERSONAJE
           ? [opcion('Nuevo esquema…', () => { if (o.nuevoEsquemaPersonaje) o.nuevoEsquemaPersonaje(t, r.grupo.carpetaId || null, gid); })]
           : [opcion('Nuevo esquema…', () => nuevoHijo(r.ambito, 'esquema', r.grupo.carpetaId || null, gid)),
-             opcion('Nueva biblioteca…', () => nuevoHijo(r.ambito, 'sub', r.grupo.carpetaId || null, gid))];
+             opcion('Nueva biblioteca…', () => nuevoHijo(r.ambito, 'sub', r.grupo.carpetaId || null, gid)),
+             ...(d.crearLienzo ? [opcion('Nuevo lienzo…', () => nuevoLienzo(r.ambito, r.grupo.carpetaId || null, gid))] : [])];
       crear.push(opcion('Nuevo grupo dentro…', () => nuevoGrupo(r.ambito, { padreId: gid, carpetaId: r.grupo.carpetaId || null })));
       return frag(
         titulo(r.grupo.nombre + ' · ' + (n === 1 ? '1 elemento' : n + ' elementos')),
@@ -1844,6 +2478,7 @@
       return frag(
         opcion('Nuevo esquema…', () => nuevoEsquema(c.id)),
         opcion('Nueva biblioteca…', () => nuevoSub(c.id)),
+        ...(d.crearLienzo ? [opcion('Nuevo lienzo…', () => nuevoLienzo(c.id))] : []),   // 1.1.58
         opcion('Nueva carpeta…', () => nuevaCarpeta(c.id, null)),
         opcion('Nuevo grupo…', () => nuevoGrupo(c.id)),
         separador(),
@@ -1867,7 +2502,8 @@
       const id = t.closest('[data-carpeta]').dataset.carpeta, r = d.carpeta(id); if (!r) return null;
       return frag(
         opcion('Nueva carpeta…', () => nuevaCarpeta(r.ambito, id)),
-        ...(r.contenedor ? [opcion('Nuevo esquema…', () => nuevoHijo(r.contenedor.id, 'esquema', id)), opcion('Nueva biblioteca…', () => nuevoHijo(r.contenedor.id, 'sub', id))]
+        ...(r.contenedor ? [opcion('Nuevo esquema…', () => nuevoHijo(r.contenedor.id, 'esquema', id)), opcion('Nueva biblioteca…', () => nuevoHijo(r.contenedor.id, 'sub', id)),
+            ...(d.crearLienzo && r.contenedor.id !== C.ID_ESQUEMAS_PERSONAJE ? [opcion('Nuevo lienzo…', () => nuevoLienzo(r.contenedor.id, id))] : [])]
           : [opcion('Nuevo personaje…', () => nuevoPersonajeEn(id))]),
         opcion('Nuevo grupo…', () => nuevoGrupo(r.ambito, { carpetaId: id })),
         separador(),
@@ -1885,6 +2521,7 @@
         opcion('Abrir', () => o.abrirPersonaje && o.abrirPersonaje(id)),
         ...enPestana({ tipo: 'personaje', id }),
         ...conEnlace({ tipo: 'personaje', id }),
+        ...anadirAlLienzoOpcion(t, 'personaje', id),
         separador(),
         opcion('Renombrar', () => renombrarPersonaje(id)),
         opcion('Cambiar color', () => abrirPop(t, paletaPersonaje(id))),
@@ -1909,6 +2546,7 @@
       return frag(
         ...enPestana({ tipo: 'segmento', id: e.subId, clave: 'etq:' + e.id }),
         ...conEnlace({ tipo: 'segmento', biblioteca: e.subId, id: e.id }),
+        ...anadirAlLienzoOpcion(t, 'segmento', e.id, { subId: e.subId, etiquetaId: e.id }),
         separador(),
         opcion('Renombrar', () => renombrarEtiqueta(e.id)),
         opcion('Cambiar color', () => abrirPop(t, paleta(e.id))),
@@ -1932,7 +2570,7 @@
     mover: t => { const id = notaDeBoton(t), n = id && d.nota(id); if (!n) return null; return menuDestinos('Mover a…', eid => tras(d.moverNota(id, eid)), n.etiquetaId, n.subId); },
     pieza: t => {
       const id = t.closest('[data-pieza]').dataset.pieza, x = d.piezaEnPapelera(id); if (!x) return null;
-      const nombre = C.nombreEnPapelera(x);
+      const nombre = x.tipo === 'lienzo' ? x.lienzo.nombre : C.nombreEnPapelera(x);
       return frag(
         opcion('Restaurar' + (x.tipo === 'personaje' ? ' en Personajes' : x.origenNombre ? ' en «' + x.origenNombre + '»' : ''), () => restaurarPieza(id)),
         separador(),
@@ -1959,26 +2597,124 @@
         separador(),
         opcion('Mover a la papelera', () => tirarNota(id), { clase: 'peligro' }));
       return frag(
-        opcion('Abrir documento', () => abrirNota(id)),
+        opcion(esFormula(n) ? 'Abrir la fórmula' : 'Abrir documento', () => abrirNota(id)),
         ...enPestana({ tipo: 'nota', id }),
         ...conEnlace({ tipo: 'nota', id }),
+        ...(esPlantilla(n) || esFormula(n) ? [] : anadirAlLienzoOpcion(t, 'nota', id)),
         opcion('Renombrar', () => { if (enVentana) { const x = tituloLado(); x.focus(); x.select(); } else renombrarNota(id, t.closest('[data-nota]')); }),
         opcion('Exportar…', () => { if (enVentana) guardarLadoYa(); if (C.exportar) C.exportar.menu(t, () => ({ titulo: (d.nota(id) || n).titulo, html: (d.nota(id) || n).html }), o.avisar); }),
         opcion('Color…', () => abrirPop(t, paletaNota(id))),
         opcion('Mover a…', () => abrirPop(t, MENUS.mover(t))),
+        /* una plantilla: una nota nueva desde ella; cualquier otra, una copia como plantilla (1.1.56, de ClapBook) y su texto como
+           fórmula (1.1.60); una fórmula, nada de eso */
+        ...(esFormula(n) ? [] : [separador(), esPlantilla(n) ? opcion('Nueva nota con esta plantilla', () => { if (enVentana) guardarLadoYa(); desdePlantilla(id); })
+          : opcion('Guardar como plantilla…', () => abrirPop(t, menuGuardarPlantilla(id)))]),
+        ...(esPlantilla(n) || esFormula(n) ? [] : [opcion('Guardar como fórmula…', () => abrirPop(t, menuGuardarFormula(id)))]),
         separador(),
         opcion('Mover a la papelera', () => tirarNota(id), { clase: 'peligro' }));
+    },
+    /* el ⋯ de «Plantillas», al pie del menú: crear, y abrirla en otra pestaña o copiar su enlace (no se renombra, ni se mueve, ni
+       se duplica, ni se tira) */
+    plantillas: t => {
+      const hay = d.bibliotecaPlantillas && d.bibliotecaPlantillas();
+      return frag(
+        opcion('Nueva plantilla', () => { const r = asegurarPlantillas(); if (r) nuevaNota(r.sub.id, null); }),
+        opcion('Nuevo segmento', () => { const r = asegurarPlantillas(); if (r) abrirPop(t, paleta(null, r.sub.id)); }),
+        ...(hay ? [separador(), ...enPestana({ tipo: 'sub', id: hay.sub.id }), ...conEnlace({ tipo: 'biblioteca', id: hay.sub.id })] : []));
+    },
+    /* el ⋯ de «Fórmulas» (1.1.60), como el de las plantillas */
+    formulas: t => {
+      const hay = d.bibliotecaFormulas && d.bibliotecaFormulas();
+      return frag(
+        opcion('Nueva fórmula', () => { const r = asegurarFormulas(); if (r) nuevaNota(r.sub.id, null); }),
+        opcion('Nuevo segmento', () => { const r = asegurarFormulas(); if (r) abrirPop(t, paleta(null, r.sub.id)); }),
+        ...(hay ? [separador(), ...enPestana({ tipo: 'sub', id: hay.sub.id }), ...conEnlace({ tipo: 'biblioteca', id: hay.sub.id })] : []));
     }
   };
 
   /* ---------- acciones ---------- */
   function abrirEsquema(eid) { if (eid && !d.esquema(eid)) return; if (o.abrirEsquema) o.abrirEsquema(eid || null); }
+
+  /* ---------- lienzos de nodos (1.1.58) ----------
+     Leo, 27-09-2026: «un lienzo con nodos donde se conecten notas, notas con imágenes y esquemas» (como los «Space» de Dreamina). Un
+     lienzo es una pieza más del árbol, como un esquema: fila con su «L», su ⋯ (abrir, en pestaña, enlace, renombrar, duplicar,
+     carpeta, color, grupo, papelera con «Deshacer»), doble clic renombra y se arrastra igual. Lo abre app.js (`o.abrirLienzo`: la
+     vista «lienzo», con js/claquedraw/lienzo.js). Lo que puede ser una entrada del lienzo —un esquema, una biblioteca o un
+     personaje del árbol— se suelta en el lienzo abierto arrastrándolo (el árbol está siempre a su lado); las notas y los segmentos
+     viven en la biblioteca, que no se ve a la vez que el lienzo, así que llevan «Añadir al lienzo…» en su ⋯ (y el árbol también). */
+  const lienzoDe = id => (id && d && d.lienzo ? d.lienzo(id) : null);
+  function abrirLienzo(lid) { if (!lienzoDe(lid)) return; if (o.abrirLienzo) o.abrirLienzo(lid); }
+  function eliminarLienzo(lid) {
+    if (!lienzoDe(lid) || !d.eliminarLienzo) return;
+    if (o.volcar) o.volcar();                                // lo último del lienzo abierto, a sus datos: lo tirado lo lleva
+    if (conDeshacer(d.eliminarLienzo(lid), () => restaurarPieza(lid)) && o.lienzoEliminado) o.lienzoEliminado(lid);
+  }
+  /* «Nuevo lienzo…» del ⋯ de un contenedor, de una carpeta o de un grupo: el diálogo del nombre y, creado, se abre */
+  async function nuevoLienzo(cid, carpetaId, grupoId) {
+    const c = d && d.contenedor(cid); if (!c || !d.crearLienzo) return null;
+    const k = carpetaId && d.carpeta(carpetaId), g = grupoId && d.grupo(grupoId);
+    const r0 = await pedirNombre({ ceja: 'Nuevo lienzo en «' + (g ? g.grupo.nombre : k ? k.carpeta.nombre : c.nombre) + '»', titulo: 'Crear lienzo',
+      pista: 'Por ejemplo, Del esquema a los fragmentos', boton: 'Crear' });
+    if (!r0) return null;
+    if (!r0.nombre.trim()) { if (o.avisar) o.avisar('Escribe un nombre para el lienzo'); return null; }
+    return crearLienzoEn(cid, r0.nombre, k ? carpetaId : null, g ? grupoId : null);
+  }
+  /* crea el lienzo (en su carpeta y su grupo, si los hay), despliega lo que lo tapa y lo abre */
+  function crearLienzoEn(cid, nombre, carpetaId, grupoId) {
+    const c = d && d.contenedor(cid); if (!c || !d.crearLienzo) return null;
+    const k = carpetaId && d.carpeta(carpetaId), g = grupoId && d.grupo(grupoId);
+    const r = d.crearLienzo(cid, nombre, { carpetaId: k ? carpetaId : null, grupoId: g ? grupoId : null });
+    if (!r.ok) { tras(r); return null; }
+    if (k) d.plegarCarpeta(carpetaId, false);
+    if (c.plegado) d.plegarContenedor(cid, false);
+    tras(r);
+    abrirLienzo(r.lienzo.id);
+    return r.lienzo;
+  }
+  /* **«Añadir al lienzo…»**: la lista de los lienzos del proyecto (por contenedor) y «Nuevo lienzo…»; lo elegido entra en ese
+     lienzo como un nodo de entrada (app.js, `o.anadirAlLienzo`, que lo pone sin abrirlo y avisa con «Abrir»). `tipo`: 'nota',
+     'segmento', 'biblioteca', 'esquema' o 'personaje'; `datos`, los del nodo ({ notaId }, { subId, etiquetaId }…). */
+  function todosLosLienzos() {
+    if (!d) return [];
+    return d.datos.contenedores.filter(c => !c.oculto && !c.especial && (c.lienzos || []).length).map(c => ({ c, lienzos: c.lienzos }));
+  }
+  function menuAnadirAlLienzo(trigger, tipo, datos, cidNuevo) {
+    const f = frag(titulo('Añadir al lienzo…'));
+    const grupos = todosLosLienzos(), montado = o.lienzoMontado && o.lienzoMontado();
+    if (!grupos.length) f.appendChild(Object.assign(document.createElement('div'), { className: 'gd-pop-vacio', textContent: 'Aún no hay lienzos en el proyecto' }));
+    grupos.forEach(({ c, lienzos }) => {
+      if (grupos.length > 1) f.appendChild(Object.assign(document.createElement('div'), { className: 'gd-pop-sub', textContent: c.nombre }));
+      lienzos.forEach(l => f.appendChild(opcion(l.nombre, () => { if (o.anadirAlLienzo) o.anadirAlLienzo(l.id, tipo, datos); },
+        { punto: puntoPieza(l.id), clase: l.id === montado ? 'on' : '' })));
+    });
+    const cid = cidNuevo || (grupos[0] && grupos[0].c.id) || ((d.datos.contenedores.find(c => !c.oculto && !c.especial) || {}).id);
+    if (cid) {
+      f.appendChild(separador());
+      f.appendChild(opcion('Nuevo lienzo…', async () => {
+        const l = await nuevoLienzo(cid); if (l && o.anadirAlLienzo) o.anadirAlLienzo(l.id, tipo, datos, { yaAbierto: true });
+      }));
+    }
+    return f;
+  }
+  /* la opción, para los ⋯ (sin lienzos ni modo de crearlos, no sale) */
+  function anadirAlLienzoOpcion(t, tipo, id, extra) {
+    if (!d || !d.crearLienzo || !o.anadirAlLienzo) return [];
+    const datos = tipo === 'nota' ? { notaId: id } : tipo === 'biblioteca' ? { subId: id } : tipo === 'esquema' ? { eid: id }
+      : tipo === 'personaje' ? { personajeId: id } : tipo === 'segmento' ? { subId: extra.subId, etiquetaId: extra.etiquetaId || null } : null;
+    if (!datos) return [];
+    const r = tipo === 'esquema' ? d.esquema(id) : tipo === 'biblioteca' ? d.sub(id) : tipo === 'nota' ? d.sub((d.nota(id) || {}).subId) : tipo === 'segmento' ? d.sub(extra.subId) : null;
+    const cid = r && r.contenedor && !r.contenedor.oculto && !r.contenedor.especial ? r.contenedor.id : null;
+    return [opcion('Añadir al lienzo…', () => abrirPop(t, menuAnadirAlLienzo(t, tipo, datos, cid)))];
+  }
   /* Subir o bajar un hijo dentro de su contenedor. */
   function renombrarHijo(s, t) {
     const fila = t && (t.classList && t.classList.contains('gd-sub') ? t : t.closest('.gd-sub'));
     const el = fila && fila.querySelector('.gd-sub-nom'); if (!el) return;
-    const actualNombre = s.tipo === 'esquema' ? (d.esquema(s.id) || {}).esquema : (d.sub(s.id) || {}).sub; if (!actualNombre) return;
-    editarEnSitio(el, actualNombre.nombre, v => { if (v !== null && v.trim()) tras(s.tipo === 'esquema' ? d.renombrarEsquema(s.id, v) : d.renombrarSub(s.id, v)); else render(); });
+    const actualNombre = s.tipo === 'esquema' ? (d.esquema(s.id) || {}).esquema : s.tipo === 'lienzo' ? (lienzoDe(s.id) || {}).lienzo : (d.sub(s.id) || {}).sub; if (!actualNombre) return;
+    editarEnSitio(el, actualNombre.nombre, v => {
+      if (v === null || !v.trim()) { render(); return; }
+      if (tras(s.tipo === 'esquema' ? d.renombrarEsquema(s.id, v) : s.tipo === 'lienzo' ? d.renombrarLienzo(s.id, v) : d.renombrarSub(s.id, v)) && s.tipo === 'lienzo' && o.lienzoRenombrado) o.lienzoRenombrado(s.id);
+    });
   }
   /* A la papelera enteros, sin preguntar: desde ahí se restauran (Leo, 18-09-2026). El esquema montado y lo abierto en el
      editor se guardan antes, para que lo tirado lleve lo último. */
@@ -2019,6 +2755,221 @@
     notaSel = r.nota.id; marcarElegida(r.nota.id, true);
     mostrarLado(r.nota.id, { enfocarTitulo: true });
   }
+  /* ---------- plantillas de nota (1.1.56, de ClapBook: «Agrega la funcionalidad, junto con su lugar especial en el menú, de
+     plantillas de Clapbook a Clapcraft») ----------
+     Viven en su biblioteca especial (documentos.js), fuera del árbol: se abre con «Plantillas» al pie del menú y su tablero es el
+     de una biblioteca más (bandeja, segmentos, secciones, buscar, filtrar, ordenar, la ventana de la nota) con su aviso y «Usar»
+     en cada una. «Guardar como plantilla…» (⋯ de una nota, o soltarla sobre «Plantillas») copia ahí una nota; «Desde plantilla»
+     (la cabecera de una biblioteca), Cmd+Alt+N (app.js) y «Usar» crean una nota con sus variables rellenas (plantillas.js) en la
+     biblioteca de ahora —nunca en la de las plantillas— y la abren en su ventana con el cursor donde decía {{cursor}}. */
+  const PL = () => C.plantillas || {};
+  const conVariables = t => (PL().tieneVariables ? PL().tieneVariables(t) : /\{\{[^}]+\}\}/.test(String(t || '')));
+  const conTitulo = html => (PL().usaTitulo ? PL().usaTitulo(html) : /\{\{\s*(t[ií]tulo|title)\s*\}\}/iu.test(String(html || '')));
+  /* una biblioteca donde puede nacer una nota: de las del árbol (o de un personaje), no la de las plantillas ni la oculta de un guion */
+  function subNormal(id) { const r = id && d && d.sub(id); return !!(r && !especial(id) && !r.sub.guionEid); }
+  /* adónde va una nota que sale de una plantilla: la pedida, la de delante, la última normal que se vio o la primera del árbol */
+  function bibliotecaDestino(op) {
+    if (subNormal(op.subId)) return op.subId;
+    if (actual && actual.tipo === 'sub' && subNormal(actual.id)) return actual.id;
+    if (subNormal(ultimaNormal)) return ultimaNormal;
+    const b = d.todasLasBibliotecas ? d.todasLasBibliotecas()[0] : null;
+    return b ? b.sub.id : null;
+  }
+  /* la biblioteca de las plantillas (se crea la primera vez que hace falta, y entonces se guarda) */
+  function asegurarPlantillas() {
+    const m = modelo(); if (!m || !m.asegurarPlantillas) return null;
+    const nueva = !(m.bibliotecaPlantillas && m.bibliotecaPlantillas()), r = m.asegurarPlantillas();
+    if (!r || !r.sub) return null;
+    if (nueva && o.guardar) o.guardar();
+    return r;
+  }
+  function abrirPlantillas() {
+    const r = asegurarPlantillas(); if (!r) return;
+    expandido = null; notaAntes = null;
+    navegar(ref('sub', r.contenedor.id, r.sub.id));
+    if (notaAbierta) cerrarNota(); else render();
+    irAlTablero();
+  }
+  /* un menú suelto: junto a `ancla` o, sin ella (un atajo, el menú de la app, «/plantilla» en el editor), centrado arriba del lienzo */
+  function abrirPopEn(ancla, nodo) {
+    if (!nodo) return;
+    if (ancla && ancla.getBoundingClientRect) { abrirPop(ancla, nodo); return; }
+    const z = main && main.offsetParent !== null ? main.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth };
+    const cx = z.left + z.width / 2, y = z.top + 56;
+    abrirPop({ getBoundingClientRect: () => ({ left: cx, right: cx, top: y, bottom: y, width: 0, height: 0 }) }, nodo);
+    if (abierto) abierto.style.left = Math.max(8, Math.min(innerWidth - abierto.offsetWidth - 8, cx - abierto.offsetWidth / 2)) + 'px';
+  }
+  /* Elegir una plantilla: la lista (con el color de su segmento y su nombre a la derecha), un campo para buscar entre ellas si
+     son muchas (con las flechas y Enter) y «Administrar plantillas…». Sin ninguna, cómo se guarda una. */
+  function elegirPlantilla(tituloTexto, fn, ancla) {
+    const m = modelo(); if (!m) return;
+    const ps = m.plantillas ? m.plantillas() : [];
+    const f = frag(titulo(tituloTexto || 'Elegir una plantilla'));
+    if (!ps.length) f.appendChild(Object.assign(document.createElement('div'), { className: 'gd-pop-vacio', textContent: 'Aún no hay plantillas. Guarda una nota como plantilla con su menú ⋯ («Guardar como plantilla…») o suéltala sobre «Plantillas», al pie del menú.' }));
+    const lista = document.createElement('div'); lista.className = 'gd-pop-lista';
+    ps.forEach(p => {
+      const e = p.etiquetaId && m.etiqueta(p.etiquetaId);
+      const b = opcion(p.titulo || 'Sin título', () => fn(p.id), { punto: e ? colores(e.color)[0] : 'var(--hover-fuerte)', atajo: e ? e.nombre : '' });
+      b.dataset.plTitulo = p.titulo || '';
+      lista.appendChild(b);
+    });
+    let campo = null;
+    if (ps.length > 6) {
+      campo = document.createElement('input');
+      campo.type = 'search'; campo.className = 'gd-pop-buscar'; campo.placeholder = 'Buscar una plantilla'; campo.setAttribute('aria-label', 'Buscar una plantilla');
+      const norm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      campo.addEventListener('input', () => { const q = norm(campo.value); $$('button', lista).forEach(b => { b.hidden = !!q && !norm(b.dataset.plTitulo).includes(q); }); });
+      campo.addEventListener('keydown', e => {
+        const vis = $$('button', lista).filter(b => !b.hidden);
+        if (e.key === 'Enter') { e.preventDefault(); if (vis[0]) vis[0].click(); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (vis[0]) vis[0].focus(); }
+      });
+      f.appendChild(campo);
+    }
+    /* las flechas pasan de una a otra (y, arriba del todo, al campo) */
+    lista.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const vis = $$('button', lista).filter(b => !b.hidden), i = vis.indexOf(document.activeElement);
+      const sig = vis[i + (e.key === 'ArrowDown' ? 1 : -1)];
+      if (sig) sig.focus(); else if (e.key === 'ArrowUp' && campo) campo.focus();
+    });
+    if (ps.length) f.appendChild(lista);
+    f.appendChild(separador());
+    f.appendChild(opcion('Administrar plantillas…', () => abrirPlantillas()));
+    abrirPopEn(ancla, f);
+    if (campo && abierto) campo.focus({ preventScroll: true });
+  }
+  /* Una nota nueva desde la plantilla `pid` (sin ella, se elige antes). `op`: { subId, etiquetaId, ancla }. Si su texto lleva
+     {{titulo}} y su nombre no lleva variables, se pregunta el nombre antes de crearla. Se abre en su ventana con el cursor donde
+     decía {{cursor}} (sin él, al final del texto); si no tiene nombre (se queda «Sin título»), con el nombre elegido para
+     escribir encima (y, con {{cursor}}, Enter en el nombre lleva allí). */
+  async function desdePlantilla(pid, op) {
+    op = op || {};
+    const m = modelo(); if (!m) return;
+    if (!pid) { elegirPlantilla('Nueva nota desde plantilla', id => desdePlantilla(id, op), op.ancla); return; }
+    const p = m.nota(pid);
+    if (!p || !esPlantilla(p)) { if (o.avisar) o.avisar('Esa plantilla ya no existe'); return; }
+    if (!m.crearDesdePlantilla) return;
+    const subId = bibliotecaDestino(op);
+    if (!subId) { if (o.avisar) o.avisar('Crea antes una biblioteca con el «＋» de un contenedor'); return; }
+    if (ladoId) guardarLadoYa();
+    if (notaAbierta && o.texto.volcar) o.texto.volcar();
+    const variables = conVariables(p.titulo);
+    let nombre = null;
+    if (!variables && conTitulo(p.html)) {                     // el texto lleva el nombre: se pide antes
+      const r0 = await pedirNombre({ ceja: 'Nueva nota desde «' + (p.titulo || 'Sin título') + '»', titulo: 'Nombre de la nota', pista: 'Por ejemplo, ' + (p.titulo || 'Reunión') + ' de hoy', boton: 'Crear' });
+      if (!r0 || !r0.nombre.trim()) return;
+      nombre = r0.nombre.trim();
+    }
+    const x = d && d.sub(subId); if (!x) return;              // (pudo irse mientras se pedía el nombre)
+    const r = d.crearDesdePlantilla(pid, subId, subId === op.subId ? op.etiquetaId || null : null,
+      { titulo: nombre, proyecto: o.nombreProyecto ? o.nombreProyecto() : '', arriba: true });
+    if (!r || !r.ok) { tras(r); return; }
+    olvidarBusqueda();
+    if (ladoId) cerrarLado();
+    const s = ref('sub', x.contenedor.id, subId);
+    if (!mismo(actual, s) || notaAbierta) navegar(s);
+    if (notaAbierta) cerrarNota();                                 // la nueva se crearía detrás del editor
+    if (o.guardar) o.guardar();
+    render();
+    irAlTablero();
+    notaSel = r.nota.id; marcarElegida(r.nota.id, true);
+    const sinNombre = !variables && !nombre;
+    /* el nombre se elige solo si se quedó sin él («Sin título»): con uno ya puesto, lo siguiente que se teclease lo borraría;
+       entonces el cursor va donde decía {{cursor}} o, si no lo dice, al final del texto */
+    mostrarLado(r.nota.id, { enfocarTitulo: sinNombre, cursor: r.cursor || null, alFinal: !r.cursor });
+    if (o.avisar) o.avisar('Nota creada desde «' + (p.titulo || 'Sin título') + '»');
+  }
+  /* «Guardar como plantilla…»: en la bandeja de las plantillas o en uno de sus segmentos; lo abierto de esa nota se vuelca antes */
+  function menuGuardarPlantilla(id) {
+    const n = d && d.nota(id); if (!n) return null;
+    const r = d.bibliotecaPlantillas ? d.bibliotecaPlantillas() : null, f = frag(titulo('Guardar «' + (n.titulo || 'Sin título') + '» como plantilla en…'));
+    const guardar = eid => {
+      if (ladoId === id) guardarLadoYa();
+      if (notaAbierta === id && o.texto.volcar) o.texto.volcar();
+      const x = d.guardarComoPlantilla(id, eid);
+      if (!x || !x.ok) { tras(x); return; }
+      if (o.guardar) o.guardar();
+      render();
+      if (o.avisar) o.avisar(x.aviso || 'Guardada como plantilla', { texto: 'Ver', fn: () => abrirPlantillas() });
+    };
+    f.appendChild(opcion('Bandeja', () => guardar(null), { punto: 'var(--hover-fuerte)' }));
+    if (r) d.etiquetasDe(r.sub.id).forEach(e => f.appendChild(opcion(e.nombre, () => guardar(e.id), { punto: colores(e.color)[0] })));
+    return f;
+  }
+  function guardarComoPlantilla(id, ancla) {
+    const m = modelo(), n = m && m.nota(id); if (!n || !m.guardarComoPlantilla) return;
+    if (esPlantilla(n)) { if (o.avisar) o.avisar('Esta nota ya es una plantilla'); return; }
+    abrirPopEn(ancla, menuGuardarPlantilla(id));
+  }
+  /* ---------- fórmulas (1.1.60) ----------
+     Leo, 27-09-2026: «Agrega una sección en el menú (como Plantillas) que se llame "Fórmulas"… notas que solo tengan texto y sirvan
+     como prompts reutilizables en los bloques del lienzo que llaman a la IA. Sería algo parecido a las skills». Su biblioteca especial
+     (documentos.js) se abre con «Fórmulas» al pie del menú; su tablero es el de una biblioteca, con su aviso y «Nueva fórmula», y una
+     fórmula se edita en su ventana como texto plano (no va al editor de guion). «Guardar como fórmula…» (⋯ de una nota, o soltarla
+     sobre «Fórmulas») copia su texto; el lienzo (lienzo.js) las elige en cada operación y crea una desde lo escrito. */
+  function asegurarFormulas() {
+    const m = modelo(); if (!m || !m.asegurarFormulas) return null;
+    const nueva = !(m.bibliotecaFormulas && m.bibliotecaFormulas()), r = m.asegurarFormulas();
+    if (!r || !r.sub) return null;
+    if (nueva && o.guardar) o.guardar();
+    return r;
+  }
+  function abrirFormulas() {
+    const r = asegurarFormulas(); if (!r) return;
+    expandido = null; notaAntes = null;
+    navegar(ref('sub', r.contenedor.id, r.sub.id));
+    if (notaAbierta) cerrarNota(); else render();
+    irAlTablero();
+  }
+  /* una biblioteca especial por su id: su tablero (las plantillas o las fórmulas) */
+  function abrirEspecial(id) { if (cualEspecial(id) === 'formulas') abrirFormulas(); else abrirPlantillas(); }
+  /* una fórmula, en su ventana encima de su tablero (desde el lienzo, un enlace o «Abrir») */
+  function abrirFormula(id) {
+    const m = modelo(), n = m && m.nota(id); if (!n || m.enPapelera(id) || !esFormula(n)) return false;
+    const r = m.sub(n.subId); if (!r) return false;
+    const s = ref('sub', r.contenedor.id, r.sub.id);
+    if (!mismo(actual, s) || notaAbierta) { expandido = null; navegar(s); if (notaAbierta) cerrarNota(); else render(); }
+    irAlTablero();
+    notaSel = id; marcarElegida(id, true);
+    mostrarLado(id);
+    return true;
+  }
+  /* «Guardar como fórmula…»: su texto (sin formato) en la bandeja de las fórmulas o en uno de sus segmentos */
+  function menuGuardarFormula(id) {
+    const n = d && d.nota(id); if (!n) return null;
+    const r = d.bibliotecaFormulas ? d.bibliotecaFormulas() : null, f = frag(titulo('Guardar el texto de «' + (n.titulo || 'Sin título') + '» como fórmula en…'));
+    const guardar = eid => {
+      if (ladoId === id) guardarLadoYa();
+      if (notaAbierta === id && o.texto.volcar) o.texto.volcar();
+      const x = d.guardarComoFormula ? d.guardarComoFormula(id, eid) : null;
+      if (!x || !x.ok) { tras(x || { ok: false, aviso: 'No se pudo guardar como fórmula' }); return; }
+      if (o.guardar) o.guardar();
+      render();
+      if (o.avisar) o.avisar(x.aviso || 'Guardada como fórmula', { texto: 'Ver', fn: () => { const k = x.nota && x.nota.id; if (k) abrirFormula(k); else abrirFormulas(); } });
+    };
+    f.appendChild(opcion('Bandeja', () => guardar(null), { punto: 'var(--hover-fuerte)' }));
+    if (r) d.etiquetasDe(r.sub.id).forEach(e => f.appendChild(opcion(e.nombre, () => guardar(e.id), { punto: colores(e.color)[0] })));
+    return f;
+  }
+  function guardarComoFormula(id, ancla) {
+    const m = modelo(), n = m && m.nota(id); if (!n || !m.guardarComoFormula) return;
+    if (esFormula(n)) { if (o.avisar) o.avisar('Esta nota ya es una fórmula'); return; }
+    abrirPopEn(ancla, menuGuardarFormula(id));
+  }
+  /* una fórmula nueva con este texto (el lienzo: «Nueva fórmula desde lo escrito…»), en la bandeja o en el segmento `etiquetaId`;
+     devuelve su id (o null). No abre nada: quien la pide decide. */
+  function crearFormula(tituloF, textoF, etiquetaId) {
+    const r = asegurarFormulas(); if (!r) return null;
+    const x = d.crearNota(r.sub.id, etiquetaId || null, tituloF || 'Sin título', { arriba: true, texto: String(textoF || '') });
+    if (!x || !x.ok) { tras(x); return null; }
+    if (!x.nota.html && String(textoF || '').trim()) d.guardarNota(x.nota.id, { title: x.nota.titulo, html: htmlPlano(String(textoF).replace(/\r\n?/g, '\n').split('\n')), characters: {} });   // (sin `op.texto` en el modelo)
+    if (o.guardar) o.guardar();
+    render();
+    return x.nota.id;
+  }
+
   /* **Mover una nota a la papelera pregunta antes** (1.1.40, Leo: «cuando se elimine una nota de segmentos, que aparezca dialog
      modal de confirmación»); arrastrarla a la papelera no pregunta (es un gesto deliberado) y, como todo lo que se va a la
      papelera, el aviso lleva «Deshacer». */
@@ -2346,10 +3297,31 @@
     if (visual) marcaCaida(visual.el, visual.donde, visual.color); else sinCaida();
   }
   const mitadDe = (fila, y) => { const r = fila.getBoundingClientRect(); return y < r.top + r.height / 2 ? 'antes' : 'despues'; };
+  /* **Al lienzo abierto** (1.1.58): un esquema, una biblioteca o un personaje del árbol (y una nota de sus filas) soltados sobre
+     `#lienzo` entran en él como un nodo de entrada, donde caen (`o.soltarEnLienzo` → `C.lienzoUI.soltar`). Lo que puede ir: */
+  function paraLienzo() {
+    if (!pd || !o.lienzoVisible || !o.lienzoVisible()) return null;
+    if (pd.tipo === 'hijo' && pd.ref && pd.ref.tipo === 'esquema') return { tipo: 'esquema', id: pd.id };
+    if (pd.tipo === 'hijo' && pd.ref && pd.ref.tipo === 'sub') {
+      const r = d.sub(pd.id); if (!r) return null;
+      return r.sub.lineaId && d.personaje(r.sub.lineaId) ? { tipo: 'personaje', id: r.sub.lineaId } : { tipo: 'biblioteca', id: pd.id };
+    }
+    if (pd.tipo === 'personaje') return { tipo: 'personaje', id: pd.id };
+    if (pd.tipo === 'nota' && d.nota(pd.id) && !d.enPapelera(pd.id) && !esPlantilla(d.nota(pd.id)) && !esFormula(d.nota(pd.id))) return { tipo: 'nota', id: pd.id };
+    return null;
+  }
+  function sobreLienzo(v) {
+    const L = document.getElementById('lienzo'); if (L) L.classList.toggle('gd-sobre-lienzo', !!v);
+    if (pd && pd.fantasma) pd.fantasma.classList.toggle('al-lienzo', !!v);
+  }
   function moverArrastre(e) {
     pd.px = e.clientX; pd.py = e.clientY;
     pd.fantasma.style.left = (e.clientX + 12) + 'px'; pd.fantasma.style.top = (e.clientY + 8) + 'px';
     const el = bajo(e.clientX, e.clientY); if (!el || !el.closest) { marcar(null, null); return; }
+    const sobre = o.dentroLienzo ? o.dentroLienzo(e.clientX, e.clientY) : !!el.closest('#lienzo');   // su lienzo, no su cabecera ni su barra
+    const aL = sobre ? paraLienzo() : null;
+    pd.alLienzo = aL; sobreLienzo(aL);
+    if (aL) { marcar(null, null); return; }
     if (pd.tipo === 'orden') {                               // un segmento: entre los de su sección o a otra de la biblioteca (también vacía)
       const o0 = pd.origen.padre, card = el.closest('[data-clave]');
       if (!card) {
@@ -2398,7 +3370,7 @@
         colocarEnCuerpo(cuerpo, ':scope > [data-nota]'); return;
       }
       if (cuerpo && cuerpo.closest(TABLEROS) === pd.enTablero) { devolverAlOrigen(); return; }
-      if (el.closest('[data-gd-drop-sub], [data-gd-drop-cont]')) devolverAlOrigen();   // hacia la barra o la papelera: vuelve a su sitio y se marca el destino
+      if (el.closest('[data-gd-drop-sub], [data-gd-drop-cont], [data-gd-drop-plantillas], [data-gd-drop-formulas]')) devolverAlOrigen();   // hacia la barra o la papelera: vuelve a su sitio y se marca el destino
       else return;                                           // por fuera de todo: se queda donde iba
     }
     if (pd.tipo === 'seccion') { const b = el.closest('.gd-bloque'); if (!b || b === pd.el) { marcar(null, null); return; } marcar(b, null, mitadDe(b, e.clientY)); return; }
@@ -2434,6 +3406,8 @@
       if (elenco) { const raiz = el.closest('[data-gd-raiz-elenco]') || el.closest(`.gd-cont[data-id="${C.ID_PERSONAJES}"]`) || (el.closest('.gd-arbol') && !el.closest('.gd-per, .gd-carpeta') ? $('[data-gd-nuevo-personaje]', lado) : null); marcar(raiz || null, null); return; }
       const cont = !elenco && el.closest('.gd-cont:not(.papelera)'); marcar(cont || null, null); return;
     }
+    const plEl = pd.tipo === 'nota' && el.closest('[data-gd-drop-plantillas], [data-gd-drop-formulas]');   // «Plantillas»: una copia como plantilla; «Fórmulas», su texto (1.1.60)
+    if (plEl) { marcar(plEl, null); return; }
     const subEl = el.closest('[data-gd-drop-sub]');
     if (subEl) { marcar(subEl, null); return; }
     const cont = el.closest('[data-gd-drop-cont]');
@@ -2447,6 +3421,8 @@
   }
   function terminarArrastre(soltar) {
     const { activo, zona, antes, id, el, fantasma, tipo, mitad } = pd, hijo = pd.ref, cardNodo = pd.card, origen = pd.origen, enTablero = pd.enTablero;
+    const alLienzo = pd.alLienzo, px = pd.px, py = pd.py;
+    sobreLienzo(false);
     if (activo && !soltar && origen) devolverAlOrigen();       // cancelado: todo vuelve a su sitio
     clearInterval(pd.auto); pd = null;
     soltarAgarre(el);
@@ -2457,6 +3433,7 @@
     if (!activo) return;
     suprimirClic = Date.now();
     if (!soltar) return;
+    if (alLienzo) { if (o.soltarEnLienzo) o.soltarEnLienzo(alLienzo.tipo, alLienzo.id, px, py); return; }   // al lienzo abierto (1.1.58)
     /* en vivo: se guarda el orden que se ve (lo arrastrado ya está en su sitio) */
     const siguiente = sel => { let n = el.nextElementSibling; while (n && !n.matches(sel)) n = n.nextElementSibling; return n; };
     if (VIVOS[tipo]) {
@@ -2497,11 +3474,16 @@
     if (tipo === 'carpeta' || tipo === 'personaje' || tipo === 'hijo' || tipo === 'grupo') {
       return animarArbol(() => soltarEnArbol(tipo, id, hijo, zona, mitad), id);
     }
-    if (tipo === 'cont') { const r = zona.dataset.id, lista = d.datos.contenedores.map(c => c.id), j = lista.indexOf(r); return animarArbol(() => tras(d.colocarContenedor(id, mitad === 'antes' ? r : (lista[j + 1] || null))), id); }
+    if (tipo === 'cont') {
+      /* «detrás» es delante del siguiente **que se ve** en el árbol (fijados y luego sueltos): el siguiente de
+         `datos.contenedores` podía ser uno oculto (Personajes, las plantillas) */
+      const L = d.contenedores({ orden: 'manual' }), lista = [...L.fijados, ...L.sueltos].map(c => c.id), r = zona.dataset.id, j = lista.indexOf(r);
+      return animarArbol(() => tras(d.colocarContenedor(id, mitad === 'antes' ? r : (lista[j + 1] || null))), id);
+    }
     return soltarResto();
 
     function soltarEnArbol(tipo, id, hijo, zona, mitad) {
-      const tipoModelo = tipo === 'hijo' ? (hijo.tipo === 'esquema' ? 'esquema' : 'sub') : tipo;
+      const tipoModelo = tipo === 'hijo' ? (hijo.tipo === 'esquema' || hijo.tipo === 'lienzo' ? hijo.tipo : 'sub') : tipo;
       if (zona.classList.contains('gd-arb-marca')) {
         const gid = zona.dataset.grupoId;
         if (mitad === 'antes') { tras(d.colocarEnArbol(id, gid)); return; }        // delante del grupo, como hermano
@@ -2540,6 +3522,32 @@
       return;
     }
     function soltarResto() {
+      if (zona.dataset.gdDropFormulas !== undefined) {          // en «Fórmulas» (1.1.60): su texto, como fórmula (a su bandeja)
+        const n = d.nota(id);
+        if (!n || d.enPapelera(id)) return;
+        if (esFormula(n)) { if (o.avisar) o.avisar('Esta nota ya es una fórmula'); return; }
+        if (esPlantilla(n)) { if (o.avisar) o.avisar('Una plantilla no se guarda como fórmula'); return; }
+        if (ladoId === id) guardarLadoYa();
+        if (notaAbierta === id && o.texto.volcar) o.texto.volcar();
+        const x = d.guardarComoFormula ? d.guardarComoFormula(id, null) : null;
+        if (!x || !x.ok) { tras(x || { ok: false, aviso: 'No se pudo guardar como fórmula' }); return; }
+        if (o.guardar) o.guardar(); render();
+        if (o.avisar) o.avisar(x.aviso || 'Guardada como fórmula', { texto: 'Ver', fn: () => { if (x.nota) abrirFormula(x.nota.id); else abrirFormulas(); } });
+        return;
+      }
+      if (zona.dataset.gdDropPlantillas !== undefined) {        // en «Plantillas»: una copia de la nota, como plantilla (a su bandeja)
+        const n = d.nota(id);
+        if (!n || d.enPapelera(id)) return;
+        if (esPlantilla(n)) { if (o.avisar) o.avisar('Esta nota ya es una plantilla'); return; }
+        if (esFormula(n)) { if (o.avisar) o.avisar('Una fórmula no se guarda como plantilla'); return; }
+        if (ladoId === id) guardarLadoYa();
+        if (notaAbierta === id && o.texto.volcar) o.texto.volcar();
+        const x = d.guardarComoPlantilla ? d.guardarComoPlantilla(id, null) : null;
+        if (!x || !x.ok) { tras(x); return; }
+        if (o.guardar) o.guardar(); render();
+        if (o.avisar) o.avisar(x.aviso || 'Guardada como plantilla', { texto: 'Ver', fn: () => abrirPlantillas() });
+        return;
+      }
       const aSub = zona.dataset.gdDropSub !== undefined ? desclave(zona.dataset.gdDropSub) : null;
       if (aSub) {
         if (d.enPapelera(id)) { tras(d.restaurarNota(id, aSub.id)); return; }
@@ -2589,6 +3597,15 @@
       if (e.target.closest('[data-gd-quitar-color-seg]')) { if (expandido) ponerFiltro(claveFiltroSeg(expandido.subId, expandido.clave), { color: filtroDe(claveFiltroBib(expandido.subId)).color ? '' : undefined }); return; }
       if (e.target.closest('[data-gd-quitar-color-bib]')) { if (actual && actual.tipo === 'sub') ponerFiltro(claveFiltroBib(actual.id), { color: undefined }); return; }
       if (e.target.closest('.gd-buscar-vista')) return;
+      /* las plantillas (1.1.56): «Usar» en su tarjeta, «Nueva plantilla» y «Desde plantilla» en la cabecera, y su fila del pie */
+      const usar = e.target.closest('[data-gd-usar]'); if (usar) { const c = usar.closest('[data-nota]'); if (c) desdePlantilla(c.dataset.nota); return; }
+      if (e.target.closest('[data-gd-nueva-plantilla]')) { if (actual && actual.tipo === 'sub') nuevaNota(actual.id, null); return; }
+      const dp = e.target.closest('[data-gd-desde-plantilla]');
+      if (dp) { if (actual && actual.tipo === 'sub') { const sid = actual.id; elegirPlantilla('Nueva nota desde plantilla', id => desdePlantilla(id, { subId: sid }), dp); } return; }
+      if (e.target.closest('[data-gd-plantillas]')) { abrirPlantillas(); return; }
+      /* las fórmulas (1.1.60): «Nueva fórmula» en su cabecera y su fila del pie */
+      if (e.target.closest('[data-gd-nueva-formula]')) { if (actual && actual.tipo === 'sub') nuevaNota(actual.id, null); return; }
+      if (e.target.closest('[data-gd-formulas]')) { abrirFormulas(); return; }
       if (e.target.closest('[data-gd-nueva-seccion]')) { if (actual && actual.tipo === 'sub') nuevaSeccion(actual.id); return; }
       const ps = e.target.closest('[data-gd-plegar-seccion]'); // biblioteca: contraer una sección
       if (ps) {
@@ -2668,7 +3685,11 @@
       const subEl = e.target.closest('.gd-sub');
       if (subEl) {
         const s = desclave(subEl.dataset.sub); if (!s) return;
+        /* el segundo clic de un doble clic (1.1.58): el primero abre y redibuja el árbol, así que el `dblclick` no siempre llega
+           (cae en otra fila); `detail` sí dice 2. Renombra, como el doble clic. */
+        if (e.detail >= 2) { if (!subEl.querySelector('input.gd-edit')) renombrarHijo(s, subEl); return; }
         if (s.tipo === 'esquema') { abrirEsquema(s.id); return; }
+        if (s.tipo === 'lienzo') { abrirLienzo(s.id); return; }
         if (s.tipo === 'sub' && volverANota(s.id)) return;     // su nota seguía en el editor antes de irse: se vuelve a ella
         navegar(s); if (notaAbierta) cerrarNota(); else render(); irAlTablero(); return;
       }
@@ -2698,7 +3719,7 @@
       const per = e.target.closest('[data-personaje]'); if (per && !e.target.closest('button')) { e.stopPropagation(); sinClicPendiente(); renombrarPersonaje(per.dataset.personaje); return; }
       /* el clic de abrir estaba pendiente: sin cancelarlo, su render se llevaba por delante el campo de renombrar
          (Leo, 16-09-2026: «quiero poder cambiar nombres de los elementos del árbol dando doble clic») */
-      const fila = e.target.closest('.gd-sub'); if (fila) { e.stopPropagation(); sinClicPendiente(); const s = desclave(fila.dataset.sub); if (s) renombrarHijo(s, fila); return; }
+      const fila = e.target.closest('.gd-sub'); if (fila) { e.stopPropagation(); sinClicPendiente(); const s = desclave(fila.dataset.sub); if (s && !fila.querySelector('input.gd-edit')) renombrarHijo(s, fila); return; }
       const etq = e.target.closest('[data-gd-etq-nombre]'); if (etq) { e.stopPropagation(); renombrarEtiqueta(etq.closest('[data-etq]').dataset.etq); }
     });
     /* el título de la nota (se edita con doble clic en la cabecera, texto.js): al aplicarlo pasa al título del documento
@@ -2788,8 +3809,8 @@
       const f = e.target.closest('.gd-sub'); if (!f || !d || pd) { if (!f) esconderGlobo(); return; }
       if (globo.dataset.para === f.dataset.sub && !globo.hidden) return;
       esconderGlobo();
-      const s = desclave(f.dataset.sub), x = s && (s.tipo === 'esquema' ? d.esquema(s.id) : d.sub(s.id)); if (!x) return;
-      const nombre = (x.esquema || x.sub).nombre, tipo = s.tipo === 'esquema' ? 'Esquema' : 'Biblioteca';
+      const s = desclave(f.dataset.sub), x = s && (s.tipo === 'esquema' ? d.esquema(s.id) : s.tipo === 'lienzo' ? lienzoDe(s.id) : d.sub(s.id)); if (!x) return;
+      const nombre = (x.esquema || x.lienzo || x.sub).nombre, tipo = s.tipo === 'esquema' ? 'Esquema' : s.tipo === 'lienzo' ? 'Lienzo' : 'Biblioteca';
       globoT = setTimeout(() => {
         if (!f.isConnected) return;
         globo.dataset.para = f.dataset.sub;
@@ -2914,7 +3935,7 @@
     abrirNota(id); return true;
   }
   /* Al cambiar de guion (pestaña): nada abierto, y el modelo se rehace solo. */
-  function reiniciar() { cerrarPop(); if (ladoId) cerrarLado(); reabrir = false; olvidarBusqueda(); notaAntes = null; if (notaAbierta) { o.texto.cerrarDocumento(); notaAbierta = null; document.body.classList.remove('nota-abierta'); } d = null; guionId = null; actual = null; notaSel = null; expandido = null; render(); }
+  function reiniciar() { cerrarPop(); if (ladoId) cerrarLado(); reabrir = false; ultimaNormal = null; olvidarBusqueda(); notaAntes = null; if (notaAbierta) { o.texto.cerrarDocumento(); notaAbierta = null; document.body.classList.remove('nota-abierta'); } d = null; guionId = null; actual = null; notaSel = null; expandido = null; render(); }
 
   /* Abre el tablero de unos documentos desde fuera («Ver documentos» del esquema, en app.js). */
   /* la papelera, desde fuera (una pestaña que la enseña) */
@@ -3008,7 +4029,7 @@
     return sec;
   }
 
-  C.gestor = { iniciar, pop: (t, nodo) => abrirPop(t, nodo), cerrarPop: () => cerrarPop(), hayPop: () => !!abierto, expandir, contraer: () => { if (expandido) expandido = null; }, pedirPersonaje, pedirNombre, menuLista, renombrarPersonaje, menuCarril, paletaTrama, mostrar, salir, reiniciar, render, abrirNota, cerrarNota, abrirSub, estiloHijo, nuevoContenedor, notaAbierta: () => notaAbierta, subActual: () => actual,
+  C.gestor = { iniciar, menuConectar, alternarConexion, chipsConexiones, fragmentoHtml, pop: (t, nodo) => abrirPop(t, nodo), cerrarPop: () => cerrarPop(), hayPop: () => !!abierto, expandir, contraer: () => { if (expandido) expandido = null; }, pedirPersonaje, pedirNombre, menuLista, renombrarPersonaje, menuCarril, paletaTrama, mostrar, salir, reiniciar, render, abrirNota, cerrarNota, abrirSub, estiloHijo, nuevoContenedor, notaAbierta: () => notaAbierta, subActual: () => actual,
     expandidoActual: () => expandido && Object.assign({}, expandido), abrirPapelera, sinVolver: () => { notaAntes = null; },
     /* la nota elegida con su panel abierto, y elegir una (sin pintar: lo hace lo que se abra después) — las pestañas */
     notaElegida: () => (ladoId && notaSel === ladoId ? notaSel : null), elegirNota: id => { if (ladoId && ladoId !== id) cerrarLado(); notaSel = id || null; reabrir = !!id; }, documentos: () => (o.guion ? modelo() : null), PAPELERA,
@@ -3016,5 +4037,15 @@
        al día con lo de fuera; si está abierta, y cerrarla. Cmd+F en la biblioteca. */
     guardarPanel: () => guardarLadoYa(), refrescarVentana, ventanaAbierta, cerrarVentana: () => { if (ladoId) { cerrarLado(); soltarSeleccion(); } }, buscarEnVista,
     /* enlaces (1.1.52): la nota marcada con un clic (lo elegido, para Cmd+Shift+C), llevar el árbol a una pieza y una sección a la vista */
-    notaMarcada: () => notaSel, revelar, verSeccion };
+    notaMarcada: () => notaSel, revelar, verSeccion,
+    /* las plantillas de nota (1.1.56): su tablero, crear desde una (sin `pid`, se elige), elegir una, guardar una nota como
+       plantilla, si su tablero es el de delante y la última biblioteca normal que se vio */
+    abrirPlantillas, desdePlantilla, elegirPlantilla, guardarComoPlantilla, esPlantillas, ultimaBiblioteca: () => ultimaNormal,
+    /* las fórmulas (1.1.60): su tablero, una en su ventana, guardar una nota como fórmula, crear una con un texto (el lienzo) y si
+       su tablero es el de delante; `abrirEspecial(id)`, el tablero de una biblioteca especial por su id */
+    abrirFormulas, abrirFormula, guardarComoFormula, crearFormula, esFormulas, abrirEspecial, esEspecial: especial,
+    /* e insertar una en la nota de la ventana, en el cursor (sin `pid`, se elige antes) */
+    insertarPlantilla: pid => insertarPlantillaEnVentana(pid || null),
+    /* los lienzos de nodos (1.1.58): crear uno (Archivo › Nuevo lienzo…) y el menú «Añadir al lienzo…» */
+    nuevoLienzo: (cid, carpetaId, grupoId) => nuevoLienzo(cid, carpetaId || null, grupoId || null), menuAnadirAlLienzo };
 })(window.Claquedraw);

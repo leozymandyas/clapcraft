@@ -1,0 +1,127 @@
+/* Recuadros: el bloque de prompt y los avisos (js/recuadros.js; 1.1.57). Los carga el editor (index.html) y la app
+   (claquedraw.html, para la ventana de una nota), así que no dependen de `.page`: valen en cualquier campo que lleve el HTML del
+   documento. Estilo «Glass» de ClapBook: un vidrio teñido de su color, borde fino, brillo arriba y esquinas de 14 px.
+   **La cabecera no es contenido**: `::before` y `::after` la pintan desde los atributos (`data-titulo`, `data-tipo`,
+   `data-color`); un clic en ella lo atiende js/recuadros.js por la altura (por encima del primer bloque).
+   El color: `--rc-l` / `--rc-d`, el par claro/oscuro del tono (los 16 de la paleta de etiquetas: TONES de js/editor.js, PALETTE
+   de js/characters.js, COLORES de js/recuadros.js; si cambian, aquí también), y `--rc-c`, el que se usa según el tema. */
+
+/* ---------- el vidrio y el color ---------- */
+.rc {
+  --rc-c: var(--rc-d, var(--accent, var(--foco, #6141c9)));   /* letra, iconos y borde */
+  --rc-f: var(--rc-d, var(--accent, var(--foco, #6141c9)));   /* el tinte del fondo: el tono saturado en los dos temas */
+  --rc-tinte: 9%;
+  --rc-luz: rgba(255, 255, 255, .6); --rc-brillo: rgba(255, 255, 255, .42); --rc-sombra: rgba(20, 20, 30, .14);
+}
+html[data-theme="dark"] .rc {
+  --rc-c: var(--rc-l, var(--accent, var(--foco, #b3a6f7)));
+  --rc-tinte: 30%;
+  --rc-luz: rgba(255, 255, 255, .08); --rc-brillo: rgba(255, 255, 255, .04); --rc-sombra: rgba(0, 0, 0, .45);
+}
+/* un prompt sin color va en el acento, que en oscuro ya es claro: menos tinte */
+html[data-theme="dark"] .rc-prompt:not([data-color]) { --rc-tinte: 14%; }
+/* sin color propio: el de su tipo (un prompt, el acento) */
+.rc-aviso { --rc-l: #DBE8FF; --rc-d: #1A4A86; --rc-glifo: "◆"; --rc-nombre: "Nota"; }
+.rc-aviso[data-tipo="info"] { --rc-l: #D6EEFF; --rc-d: #05618F; --rc-glifo: "i"; --rc-nombre: "Info"; }
+.rc-aviso[data-tipo="tip"] { --rc-l: #D2F0ED; --rc-d: #0A6663; --rc-glifo: "✧"; --rc-nombre: "Consejo"; }
+.rc-aviso[data-tipo="success"] { --rc-l: #D8F2DF; --rc-d: #11643D; --rc-glifo: "✓"; --rc-nombre: "Hecho"; }
+.rc-aviso[data-tipo="question"] { --rc-l: #FFEEC9; --rc-d: #875408; --rc-glifo: "?"; --rc-nombre: "Pregunta"; }
+.rc-aviso[data-tipo="warning"] { --rc-l: #FFE0C4; --rc-d: #94480A; --rc-glifo: "!"; --rc-nombre: "Advertencia"; }
+.rc-aviso[data-tipo="failure"] { --rc-l: #FFE3D5; --rc-d: #9C3F14; --rc-glifo: "✕"; --rc-nombre: "Fallo"; }
+.rc-aviso[data-tipo="danger"] { --rc-l: #FFE3DD; --rc-d: #A83A26; --rc-glifo: "!!"; --rc-nombre: "Peligro"; }
+.rc-aviso[data-tipo="bug"] { --rc-l: #F9DCF6; --rc-d: #8B2280; --rc-glifo: "✱"; --rc-nombre: "Error"; }
+.rc-aviso[data-tipo="example"] { --rc-l: #EAE0FF; --rc-d: #5326AB; --rc-glifo: "◇"; --rc-nombre: "Ejemplo"; }
+.rc-aviso[data-tipo="quote"] { --rc-l: #E6E2EE; --rc-d: #3C3648; --rc-glifo: "❝"; --rc-nombre: "Cita"; }
+.rc-aviso[data-tipo="abstract"] { --rc-l: #E2E2FF; --rc-d: #33359C; --rc-glifo: "≡"; --rc-nombre: "Resumen"; }
+.rc-aviso[data-tipo="todo"] { --rc-l: #F4E8CF; --rc-d: #6F5722; --rc-glifo: "☐"; --rc-nombre: "Pendiente"; }
+/* con color propio (detrás: manda sobre el del tipo) */
+.rc[data-color="azul"] { --rc-l: #DBE8FF; --rc-d: #1A4A86; }
+.rc[data-color="verde"] { --rc-l: #D8F2DF; --rc-d: #11643D; }
+.rc[data-color="terracota"] { --rc-l: #FFE3D5; --rc-d: #9C3F14; }
+.rc[data-color="violeta"] { --rc-l: #EAE0FF; --rc-d: #5326AB; }
+.rc[data-color="ambar"] { --rc-l: #FFEEC9; --rc-d: #875408; }
+.rc[data-color="rosa"] { --rc-l: #FFE0EA; --rc-d: #A51A5A; }
+.rc[data-color="teal"] { --rc-l: #D2F0ED; --rc-d: #0A6663; }
+.rc[data-color="oliva"] { --rc-l: #E8F4CD; --rc-d: #4C6B0F; }
+.rc[data-color="indigo"] { --rc-l: #E2E2FF; --rc-d: #33359C; }
+.rc[data-color="coral"] { --rc-l: #FFE3DD; --rc-d: #A83A26; }
+.rc[data-color="ciruela"] { --rc-l: #F9DCF6; --rc-d: #8B2280; }
+.rc[data-color="arena"] { --rc-l: #F4E8CF; --rc-d: #6F5722; }
+.rc[data-color="cielo"] { --rc-l: #D6EEFF; --rc-d: #05618F; }
+.rc[data-color="lima"] { --rc-l: #E9F8C8; --rc-d: #4F7205; }
+.rc[data-color="oxido"] { --rc-l: #FFE0C4; --rc-d: #94480A; }
+.rc[data-color="grafito"] { --rc-l: #E6E2EE; --rc-d: #3C3648; }
+
+.rc {
+  position: relative; display: block;
+  margin: 4pt 0 12pt; padding: 40px 18px 12px;
+  border: 1px solid color-mix(in srgb, var(--rc-c) 30%, transparent); border-radius: 14px;
+  background: linear-gradient(to bottom, var(--rc-brillo), transparent 46px), color-mix(in srgb, var(--rc-f) var(--rc-tinte), var(--page-bg, var(--papel, transparent)));
+  box-shadow: inset 0 1px 0 var(--rc-luz), 0 14px 26px -20px var(--rc-sombra);
+}
+.page .rc { margin: 4pt 0 12pt; }
+.rc > p, .rc > ul, .rc > ol, .rc > h1, .rc > h2, .rc > h3, .rc > h4, .rc > h5, .rc > h6, .rc > blockquote, .rc > pre, .rc > table { margin: 0 0 4pt; }
+.rc > :last-child { margin-bottom: 0; }
+.rc > ul, .rc > ol { padding-left: 2.2em; }
+.rc:focus-within { border-color: color-mix(in srgb, var(--rc-c) 55%, transparent); }
+
+/* ---------- la cabecera ---------- */
+.rc::before, .rc::after { position: absolute; top: 9px; box-sizing: border-box; cursor: pointer; user-select: none; -webkit-user-select: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: none; text-decoration: none; font-style: normal; }
+/* el prompt: «✦ PROMPT» (o su título) en una pastilla y, a la derecha, «Copiar» */
+.rc-prompt::before {
+  content: "✦\2002 PROMPT"; left: 12px; max-width: calc(100% - 118px); height: 22px; padding: 0 11px;
+  font: 600 10.5px/22px var(--mono, ui-monospace, Menlo, monospace); letter-spacing: .12em;
+  color: var(--rc-c); border-radius: 999px; background: color-mix(in srgb, var(--rc-c) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rc-c) 24%, transparent), inset 0 1px 0 var(--rc-luz);
+}
+.rc-prompt[data-titulo]::before { content: "✦\2002" attr(data-titulo); font: 700 12px/22px var(--doc-font, var(--doc, inherit)); letter-spacing: 0; }
+.rc-prompt::after {
+  content: "Copiar"; right: 12px; width: 70px; height: 22px; text-align: center;
+  font: 500 11px/22px var(--ui-font, var(--sans, system-ui, sans-serif)); color: var(--rc-c);
+  border-radius: 999px; background: color-mix(in srgb, var(--rc-c) 10%, var(--page-bg, var(--papel, transparent)));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rc-c) 30%, transparent), inset 0 1px 0 var(--rc-luz);
+}
+/* el aviso: su icono tipográfico en una pastilla y su título (sin él, el de su tipo) */
+.rc-aviso::before {
+  content: var(--rc-glifo); left: 12px; width: 24px; height: 22px; text-align: center; overflow: visible;
+  font: 700 12px/22px var(--doc-font, var(--doc, inherit)); color: var(--rc-c);
+  border-radius: 999px; background: color-mix(in srgb, var(--rc-c) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rc-c) 24%, transparent), inset 0 1px 0 var(--rc-luz);
+}
+.rc-aviso::after { content: var(--rc-nombre); left: 44px; right: 16px; height: 22px; font: 700 1em/22px var(--doc-font, var(--doc, inherit)); color: var(--rc-c); }
+.rc-aviso[data-titulo]::after { content: attr(data-titulo); }
+/* la pista de un recuadro vacío */
+.rc > p:only-child:has(> br:only-child)::before { content: "Escribe aquí…"; color: color-mix(in srgb, var(--rc-c) 55%, transparent); pointer-events: none; }
+.rc-prompt > p:only-child:has(> br:only-child)::before { content: "Escribe el prompt… ([huecos] entre corchetes)"; }
+
+/* ---------- los [huecos] de un prompt (API de Highlight) ---------- */
+::highlight(rc-hueco) { background-color: color-mix(in srgb, var(--accent, var(--foco, #6141c9)) 20%, transparent); color: var(--accent-fg, var(--accent, var(--foco, #6141c9))); }
+
+/* ---------- el menú del recuadro y el aviso de «Copiado» ---------- */
+.rc-menu { width: 300px; max-height: min(80vh, 560px); overflow-y: auto; }
+.rc-menu .rc-menu-tit { display: flex; align-items: center; gap: 8px; padding: 4px 10px 8px; }
+.rc-menu .rc-menu-tit > span { font-size: 12px; color: var(--muted, var(--tenue)); }
+.rc-menu .rc-menu-tit > input { flex: 1; min-width: 0; height: 26px; padding: 0 8px; border: 1px solid var(--line, var(--borde)); border-radius: 4px;
+  background: var(--page-bg, var(--lienzo, transparent)); color: var(--fg, var(--tinta)); font: 13px var(--ui-font, var(--sans, system-ui)); }
+.rc-menu .rc-menu-tipos { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 4px; padding: 0 4px 6px; }
+.rc-menu .rc-menu-tipos > button { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rc-menu .rc-menu-tipos > button > i { font-style: normal; width: 22px; text-align: center; font-weight: 700; flex: none; }
+.rc-menu .rc-menu-tipos > button.active { background: var(--accent-bg, var(--foco-suave)); color: var(--accent-fg, var(--foco)); }
+.rc-menu .rc-menu-colores { display: grid; grid-template-columns: repeat(9, 1fr); gap: 5px; padding: 2px 10px 8px; }
+.rc-menu .rc-menu-colores > button { width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 50%; border: 0;
+  background: var(--sw-f); box-shadow: inset 0 0 0 5px var(--sw-f), inset 0 0 0 11px var(--sw); cursor: pointer; }
+.rc-menu .rc-menu-colores > button.auto { width: auto; grid-column: span 2; border-radius: 999px; font-size: 11px; background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line, var(--borde)); color: var(--fg, var(--tinta)); }
+.rc-menu .rc-menu-colores > button.active { outline: 2px solid var(--accent, var(--foco)); outline-offset: 1px; }
+.rc-toast { position: fixed; z-index: 120; padding: 4px 10px; border-radius: 999px; font: 500 12px var(--ui-font, var(--sans, system-ui, sans-serif));
+  background: var(--fg, var(--tinta, #1b1d22)); color: var(--bg, var(--inverso, #fff)); pointer-events: none; transition: opacity .35s; }
+.rc-toast.fuera { opacity: 0; }
+
+/* el mismo menú dentro de un menú de la app (.gd-pop): sin su marco */
+.rc-menu.rc-menu-lado { width: 286px; max-height: none; overflow: visible; }
+.gd-pop .rc-menu .rc-menu-tipos > button { width: auto; padding: 4px 6px; }
+
+/* ---------- en la ventana de una nota (js/claquedraw/gestor.js): el mismo recuadro, en la letra de la nota ---------- */
+.gd-lado-texto .rc { margin: 6px 0 12px; }
+.gd-lado-texto .rc-aviso::after, .gd-lado-texto .rc-aviso::before, .gd-lado-texto .rc-prompt[data-titulo]::before { font-family: inherit; }

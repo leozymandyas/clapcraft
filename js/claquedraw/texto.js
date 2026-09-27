@@ -80,11 +80,21 @@
     if (cmd && e.shiftKey && k === 'b') { e.preventDefault(); e.stopPropagation(); if (o.alternarLado) o.alternarLado(); return; }
     if (cmd && e.shiftKey && k === 'f') { e.preventDefault(); e.stopPropagation(); if (o.documentos) o.documentos(); return; }   // la vista Documentos, también con el foco en el editor (1.1.54)
     if (cmd && e.shiftKey && k === 'c' && !(window.editorAPI && window.editorAPI.isElectron)) { e.preventDefault(); e.stopPropagation(); if (o.copiarEnlace) o.copiarEnlace(); return; }   // en Electron lo lleva el menú Claude
+    /* el asistente con otra IA (1.1.60): Cmd+Shift+I con el foco en el editor, que no llega a la página. Como en la página (app.js),
+       se atiende aquí y se cancela: cancelado, el menú de Electron no lo repite */
+    if (cmd && e.shiftKey && !e.altKey && (e.code === 'KeyI' || k === 'i')) { e.preventDefault(); e.stopPropagation(); if (o.asistente) o.asistente(); return; }
+    /* «Citar en el asistente» (1.1.60): Cmd/Ctrl+Mayús+A con texto elegido (no choca con el editor: Cmd+Mayús+E centra) */
+    if (cmd && e.shiftKey && !e.altKey && (e.code === 'KeyA' || k === 'a') && citarElegido()) { e.preventDefault(); e.stopPropagation(); return; }
+    /* nueva nota desde plantilla (1.1.56): por el código de la tecla (en el Mac, Alt+N escribe «˜»); en Electron lo lleva el menú */
+    if (cmd && e.altKey && !e.shiftKey && e.code === 'KeyN') { e.preventDefault(); e.stopPropagation(); if (o.desdePlantilla) o.desdePlantilla(); return; }
   }
 
   function tema(oscuro) {
     if (!marco || !marco.contentDocument) return;
-    marco.contentDocument.documentElement.dataset.theme = oscuro ? 'dark' : 'light';
+    const h = marco.contentDocument.documentElement;
+    h.dataset.theme = oscuro ? 'dark' : 'light';
+    const e = document.documentElement.dataset.estilo;            // los temas neón (1.1.57): el marco sigue a la página
+    if (e) h.dataset.estilo = e; else delete h.dataset.estilo;
   }
 
   /* ---------- el documento abierto ---------- */
@@ -221,6 +231,15 @@
     const t = C.conversor ? C.conversor.textoPlano(htmlDe(primero)) : textoDe(primero);
     const esDb = primero.some(n => n.nodeType === 1 && n.matches && n.matches('.db'));
     return Object.assign({ bloques: [ia + 1, ib + 1], extracto }, t && !esDb && C.enlaces ? { huella: C.enlaces.huella(t) } : {});
+  }
+  /* lo seleccionado en el editor, al asistente (1.1.60): su texto y el tramo; false si no hay nada seleccionado */
+  function citarElegido() {
+    const w = marco && marco.contentWindow, s = w && w.getSelection(), ed = w && w.document.getElementById('editor');
+    if (!documento || !o.citarTramo || !s || s.isCollapsed || !ed || !ed.contains(s.anchorNode)) return false;
+    const texto = s.toString().replace(/\u200B/g, '').trim(); if (!texto) return false;
+    volcar();
+    o.citarTramo(tramo(), texto);
+    return true;
   }
   /* Elige los bloques desde…hasta (desde 1) del documento `clave` y los trae a la vista; espera a que el editor lo tenga abierto. */
   function irATramo(clave, desde, hasta) {
@@ -584,15 +603,30 @@
       ctxMenu.insertAdjacentHTML('afterbegin', '<button type="button" id="cdEnlace"><span>Copiar enlace para Claude</span><kbd>Cmd+Shift+C</kbd></button><hr id="cdEnlaceSep">');
       const b = d.getElementById('cdEnlace');
       b.addEventListener('click', () => { const t = tramo({ bloque: true }); if (t && o.copiarTramo) o.copiarTramo(t); });
+      /* «Mandar al asistente» (1.1.59): el enlace del párrafo o de lo seleccionado, a la caja de escribir del asistente con otra IA */
+      b.insertAdjacentHTML('afterend', '<button type="button" id="cdAsistente" hidden><span>Mandar al asistente</span></button>');
+      const ba = d.getElementById('cdAsistente');
+      ba.addEventListener('click', () => { const t = tramo({ bloque: true }); if (t && o.mandarTramo) o.mandarTramo(t); });
+      /* «Citar en el asistente» (1.1.60): el texto seleccionado, con el enlace de su tramo */
+      ba.insertAdjacentHTML('afterend', '<button type="button" id="cdCitar" hidden><span>Citar en el asistente</span><kbd>Cmd+Shift+A</kbd></button>');
+      d.getElementById('cdCitar').addEventListener('click', () => citarElegido());
       d.addEventListener('contextmenu', () => {                 // antes de que el editor enseñe el menú: solo con un documento abierto
         const hay = !!documento && !!o.copiarTramo;
         b.hidden = !hay; d.getElementById('cdEnlaceSep').hidden = !hay;
+        ba.hidden = !(hay && o.mandarTramo && o.hayAsistente && o.hayAsistente());
+        const sc = w.getSelection();
+        d.getElementById('cdCitar').hidden = !(hay && o.citarTramo && o.hayAsistente && o.hayAsistente() && sc && !sc.isCollapsed && sc.toString().trim());
         const s = w.getSelection();
         b.title = s && !s.isCollapsed ? 'El enlace de lo seleccionado (sus párrafos), para pegarlo en Claude' : 'El enlace de este párrafo, para pegarlo en Claude';
       }, true);
     }
     if (w.Ed && w.Ed.blocks && !w.Ed.blocks.extras.some(x => x.id === 'enlace')) {
       w.Ed.blocks.extras.push({ id: 'enlace', etiqueta: 'Copiar enlace para Claude', ejecutar: nodos => { const t = tramo({ nodos }); if (t && o.copiarTramo) o.copiarTramo(t); }, visible: () => !!documento && !!o.copiarTramo });
+    }
+    /* «/plantilla» en el menú «/» (1.1.56): elegir una plantilla de nota y ponerla donde está el cursor (app.js, `insertarPlantilla`) */
+    if (w.Ed && w.Ed.slash && w.Ed.slash.agregar) {
+      w.Ed.slash.agregar({ group: 'Plantillas', id: 'plantilla', label: 'Insertar plantilla…', keys: 'plantilla plantillas template modelo insertar', hint: 'elegir',
+        siempre: true, visible: () => !!documento && !!o.insertarPlantilla, run: () => { if (o.insertarPlantilla) o.insertarPlantilla(); } });
     }
     if (barra && !d.getElementById('cdLado')) {
       const b = d.createElement('div');
@@ -738,6 +772,72 @@
     ['pointerdown', 'scroll'].forEach(t => document.addEventListener(t, esconderGlobo, true));
   }
 
+  /* ---------- insertar una plantilla de nota (1.1.56) ----------
+     «Insertar plantilla» (/plantilla o el menú Archivo) elige la plantilla en la página, que se lleva el foco: `cursorGuardado`
+     apunta antes dónde estaba el cursor y `insertarHtml` pone ahí la plantilla (ya rellena) con **un solo `insertHTML`** (entra
+     en Deshacer como un paso; `Ed.cmd` evita los spans de estilo de Chrome). Cómo, según el bloque del cursor (probado en Electron:
+     Chrome une el primer y el último bloque de lo insertado con el párrafo donde cae, y se perdían sus clases de guion):
+     · vacío: la plantilla lo sustituye (con el cursor dentro, Chrome lo cambia limpio);
+     · una plantilla de un solo párrafo sin clase: su texto, en el cursor;
+     · si no, detrás del bloque: se elige su contenido y se escribe el bloque tal cual + la plantilla (queda intacto); un bloque que
+       no es un párrafo (una lista, una tabla, un diálogo doble…) se deja y la plantilla va delante del siguiente, igual.
+     La marca `[data-cursor-plantilla]` que puso `rellenarHtml` donde decía {{cursor}} dice dónde queda el cursor, y se quita. */
+  function cursorGuardado() {
+    if (!E || !documento) return null;
+    const r = E.getRange();
+    return { clave: claveDoc, rango: r && E.editor.contains(r.startContainer) ? r.cloneRange() : null };
+  }
+  /* el rectángulo del cursor en coordenadas de la página (para colgar de él el menú de las plantillas) */
+  function rectCursor() {
+    if (!E || !documento || !marco) return null;
+    const r = E.getRange(); if (!r || !E.editor.contains(r.startContainer)) return null;
+    let x = r.getBoundingClientRect();
+    if (!x.height) { const b = E.closestBlock(r.startContainer, E.editor); if (b) x = b.getBoundingClientRect(); }
+    if (!x.height) return null;
+    const m = marco.getBoundingClientRect();
+    return { left: m.left + x.left, top: m.top + x.top, right: m.left + x.right, bottom: m.top + x.bottom, width: x.width, height: x.height };
+  }
+  const tituloDoc = () => { const t = marco && marco.contentDocument && marco.contentDocument.getElementById('docTitle'); return t ? t.value : ''; };
+  function insertarHtml(html, pos) {
+    if (!E || !documento || (pos && pos.clave !== claveDoc)) return false;
+    const w = marco.contentWindow, d = w.document, ed = E.editor;
+    try { w.focus(); } catch (_) {}
+    ed.focus({ preventScroll: true });
+    if (pos && pos.rango && ed.contains(pos.rango.startContainer)) E.restoreSelection(pos.rango);
+    let r = E.getRange();
+    if (!r || !ed.contains(r.startContainer)) {                 // sin cursor en el documento: al final
+      r = d.createRange(); r.selectNodeContents(ed); r.collapse(false); E.restoreSelection(r);
+    }
+    const elegir = (a, ao, b, bo) => { const x = d.createRange(); x.setStart(a, ao); x.setEnd(b, bo); E.restoreSelection(x); };
+    let tope = r.startContainer;
+    while (tope && tope.parentNode !== ed) tope = tope.parentNode;
+    const simple = el => !!el && el.nodeType === 1 && /^(P|H[1-6]|PRE|BLOCKQUOTE)$/.test(el.tagName) && el.isContentEditable
+      && !el.classList.contains('ed-fijo') && !el.querySelector('img, table, hr, [contenteditable="false"]');
+    const vacio = el => !el.textContent.replace(/[\u200B\s]/g, '');
+    /* una plantilla que es un solo párrafo sin clase: va en el texto, donde está el cursor */
+    const trozo = d.createElement('template'); trozo.innerHTML = html;
+    const hijos = [...trozo.content.childNodes].filter(n => n.nodeType === 1 || n.textContent.trim());
+    const enLinea = hijos.length === 1 && hijos[0].nodeType === 1 && hijos[0].tagName === 'P' && !hijos[0].attributes.length ? hijos[0].innerHTML
+      : hijos.every(n => n.nodeType === 3 || !/^(P|H[1-6]|PRE|BLOCKQUOTE|UL|OL|LI|TABLE|DIV|HR)$/.test(n.tagName)) ? html : null;
+    let poner = html;
+    if (simple(tope) && vacio(tope)) { E.setCaret(tope, 0); poner = enLinea !== null ? enLinea : html; }
+    else if (enLinea !== null && r.collapsed && E.closestBlock(r.startContainer, ed)) poner = enLinea;
+    else if (simple(tope)) { elegir(tope, 0, tope, tope.childNodes.length); poner = tope.outerHTML + html; }
+    else if (tope && simple(tope.nextElementSibling)) { const n = tope.nextElementSibling; elegir(n, 0, n, n.childNodes.length); poner = html + n.outerHTML; }
+    E.cmd('insertHTML', poner);
+    const m = ed.querySelector('[data-cursor-plantilla]');
+    if (m) {
+      const padre = m.parentNode, i = [...padre.childNodes].indexOf(m);
+      m.remove();
+      if (!padre.childNodes.length && padre !== ed) { padre.appendChild(d.createElement('br')); E.setCaret(padre, 0); }
+      else E.setCaret(padre, i);
+    }
+    ed.querySelectorAll('[data-cursor-plantilla]').forEach(x => x.remove());   // por si Chrome la hubiera partido
+    if (E.afterChange) E.afterChange();
+    if (E.updateToolbar) E.updateToolbar();
+    return true;
+  }
+
   /* el título del documento abierto, escrito desde fuera (la cabecera de una nota de biblioteca) */
   /* El nombre de la versión que hay en el editor, en el botón de la barra inferior. */
   function versionEnBoton(nombre) {
@@ -755,6 +855,8 @@
     abrirDocumento, cerrarDocumento, recargar, clave: () => (documento ? claveDoc : null), enDocumento: () => !!documento, conTira: () => conTira,
     /* enlaces (1.1.52): el tramo elegido en el editor y llevar el editor a uno */
     tramo, irATramo,
+    /* plantillas de nota (1.1.56): dónde está el cursor, el título del documento y poner una donde estaba el cursor */
+    cursorGuardado, rectCursor, titulo: tituloDoc, insertarHtml,
     /* suelta el documento **sin guardarlo**: lo que hay en el editor ya no debe volver a su nota (al cargar una versión) */
     soltar: () => { documento = null; if (claveDoc) posiciones.delete(claveDoc); },
     linea: () => lineaId, posicion: () => posicion,

@@ -1,0 +1,56 @@
+/* css/conexiones.css · conexiones esquema ↔ biblioteca y fragmentos (1.1.57)
+   Leo, 27-09-2026: «tenía la posibilidad de conectar esquemas con bibliotecas, varios a la vez […] dividir el guion en fragmentos
+   más pequeños que vivan en notas de segmentos». Las conexiones se ven como chips en la cabecera del esquema (app.js, #conexionesEsq)
+   y en la de la biblioteca (gestor.js, `chipsConexiones`); un fragmento lleva su etiqueta en su tarjeta y en su ventana
+   (`fragmentoHtml`). Todo por tokens (var(--…)): la piel y los temas (claro, oscuro, synthwave, vaporwave) los alcanzan.
+   Va antes que clapcraft.css: por eso los selectores llevan su clase propia delante. */
+
+/* ---------- chips de lo conectado ---------- */
+.cx-cab { display: contents; }
+.cx-conexiones { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.cx-chip { display: inline-flex; align-items: center; flex: 0 1 auto; min-width: 64px; max-width: 220px; position: relative; }
+.cx-chip .gd-chip-nom { flex: 0 1 auto; min-width: 0; max-width: 100%; height: 24px; padding: 0 22px 0 9px; gap: 6px; font-size: 11.5px; border-radius: 5px;
+  justify-content: flex-start; cursor: pointer; }
+.cx-chip .gd-chip-nom:hover { filter: brightness(.97); box-shadow: 0 0 0 1px var(--foco-linea, var(--foco)); }
+.cx-chip .gd-chip-nom:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+.cx-quitar { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; display: grid; place-items: center;
+  border: 0; border-radius: 3px; padding: 0; background: transparent; color: inherit; opacity: .55; cursor: pointer; }
+.cx-quitar:hover { opacity: 1; background: var(--hover-fuerte, var(--hover)); }
+.cx-quitar:focus-visible { opacity: 1; outline: 2px solid var(--foco); }
+.cx-mas { display: inline-flex; align-items: center; gap: 5px; height: 24px; flex: none; padding: 0 7px; border: 1px dashed var(--borde-fuerte, var(--borde));
+  border-radius: 5px; background: transparent; color: var(--tenue, var(--tinta)); font: 500 11.5px/1 var(--sans, inherit); cursor: pointer; }
+.cx-mas:hover { border-color: var(--foco); color: var(--foco); background: var(--foco-suave, var(--hover)); }
+.cx-mas:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+/* en una cabecera estrecha, solo el icono (como sus botones) */
+@container (max-width: 720px) { .cx-mas > span { display: none; } .cx-chip { max-width: 140px; } }
+
+/* el menú de conectar: el rótulo de cada contenedor */
+.gd-pop-sub { padding: 8px 12px 3px; font: 500 10px/1.2 var(--mono, monospace); letter-spacing: .09em; text-transform: uppercase; color: var(--tenue, var(--tinta)); }
+
+/* ---------- la etiqueta de un fragmento ---------- */
+.cx-frag { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 20px; padding: 0 7px; flex: 0 1 auto;
+  border: 1px solid color-mix(in srgb, var(--foco) 35%, transparent); border-radius: 10px; background: var(--foco-suave, var(--hover));
+  color: var(--foco); font: 500 10.5px/1 var(--sans, inherit); cursor: pointer; white-space: nowrap; }
+.cx-frag > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cx-frag > svg { flex: none; }
+.cx-frag:hover { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo, transparent); }
+.cx-frag:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+.cx-frag.corta { height: 18px; padding: 0 6px; font-size: 10px; flex: none; }
+/* huérfano: su esquema o sus nodos ya no están */
+.cx-frag.huerfano { border-style: dashed; border-color: var(--borde-fuerte, var(--borde)); background: transparent; color: var(--tenue, var(--tinta)); }
+/* en la tarjeta expandida, sobre el pie; en la ventana de una nota, detrás de la ruta */
+.gd-exp-nota > .cx-frag { align-self: flex-start; margin-top: 2px; }
+.gd-modal-ruta .cx-frag { margin-left: 8px; max-width: 260px; }
+
+/* ---------- los lienzos de nodos en el árbol, las pestañas y la papelera (1.1.58) ----------
+   Su etiqueta «L» va en verde azulado (`--t-teal`), apartada del violeta de los esquemas y del azul de las bibliotecas; con color
+   propio manda `.per-chip`, como en las demás. Con doble clase: `.gd-chip` y `.pestana-tipo` van después (clapcraft.css). */
+.gd-chip.gd-chip--lienzo, .pestana-tipo.pestana-tipo--lienzo {
+  background: color-mix(in srgb, var(--t-teal) 16%, var(--papel)); border-color: color-mix(in srgb, var(--t-teal) 45%, transparent);
+  color: color-mix(in srgb, var(--t-teal) 75%, var(--tinta)); }
+/* en Synthwave, cian de neón (la cabecera del lienzo, el árbol y las pestañas) */
+html[data-estilo="synthwave"] .gd-chip.gd-chip--lienzo:not(.per-chip), html[data-estilo="synthwave"] .pestana-tipo.pestana-tipo--lienzo {
+  background: color-mix(in srgb, var(--cian) 16%, var(--papel)); color: var(--cian); border-color: color-mix(in srgb, var(--cian) 45%, transparent); }
+/* arrastrando algo del árbol sobre el lienzo abierto: el lienzo se marca y el fantasma dice que entra */
+#lienzo.gd-sobre-lienzo { box-shadow: inset 0 0 0 2px var(--foco), inset 0 0 0 6px var(--foco-halo, transparent); }
+.gd-fantasma.al-lienzo { border-color: var(--foco); box-shadow: 0 0 0 2px var(--foco-halo, transparent), var(--sombra-alta); }

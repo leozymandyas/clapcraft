@@ -359,10 +359,13 @@
     if (!file || !file.type.startsWith('image/')) return;
     imagenLigera(file).then(src => {
       Ed.focusEditor();
-      Ed.cmd('insertHTML', `<img src="${src}" alt="${Ed.escapeHtml(file.name)}">`);
+      Ed.cmd('insertHTML', `<img src="${src}" alt="${Ed.escapeHtml(file.name || '')}">`);
       afterChange();
     });
   }
+  /* para js/imagenes.js (1.1.57): «/imagen» inserta un archivo y la imagen marcada o recortada pasa por la misma regla */
+  Ed.imagenLigera = imagenLigera;
+  Ed.insertarImagen = insertImageFile;
 
   const HL_KEY = 'guiones.editor.hilite';
 
@@ -905,6 +908,9 @@
     if (Ed.characters && Ed.characters.onKeydown(e)) return;
     if (Ed.formato && Ed.formato.onKeydown(e)) return;
     if (Ed.slash && Ed.slash.onKeydown(e)) return;
+    /* las listas (js/mdvivo.js, `MdVivo.lista`, 1.1.60): Enter en una viñeta vacía sale de la lista, Retroceso al principio de una le
+       quita la viñeta (anidada, la sube un nivel) y Tab / Mayús+Tab la anidan y la suben; con varios bloques elegidos, `indent` */
+    if (window.MdVivo && MdVivo.lista && MdVivo.lista(editor, e, { cmd: Ed.cmd, fusion: 'fusionando' })) return;
     if (e.key === 'Tab' && !mod && !e.altKey && Ed.screenplay && Ed.screenplay.onTab(e)) return;
     if (e.key === 'Tab') { e.preventDefault(); if (!Ed.table.tab(e.shiftKey)) indent(e.shiftKey ? -1 : 1); return; }
     if (Ed.table.onKeydown(e)) return;

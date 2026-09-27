@@ -227,3 +227,72 @@ test('el archivo cambia de nombre: el sello se pone al día, los enlaces de dent
   assert.match(t, /NODO p\d+ «Llega Ryan»/);
   assert.match(p.correr('ver_proyecto', {}).texto, /su archivo se llamó antes «the-office», «analisis-de-the-office»/);
 });
+
+/* las plantillas de nota (1.1.56): su biblioteca, sus segmentos y cada plantilla se nombran «Plantillas» */
+test('plantillas: los enlaces de su biblioteca, de un segmento y de una plantilla dicen «Plantillas», y ver_enlace los lee', () => {
+  const p = proyecto(), { docs, s } = p;
+  require('../js/claquedraw/plantillas.js');
+  const gel = docs.notasDe(s.id).find(n => n.titulo === 'Gelatina');
+  const r = p.correr('editar_proyecto', { operaciones: [{ op: 'guardar_como_plantilla', nota: gel.id, ref: 'pl' }] });
+  const pl = docs.nota(r.datos.refs.pl);
+  const g = docs.crearEtiqueta(C.ID_BIB_PLANTILLAS, 'Reuniones').etiqueta;
+  const et = ref => { const x = E.resolver(docs, ref, {}); assert.ok(x.ok, x.aviso); return x.etiqueta; };
+  assert.equal(et({ tipo: 'biblioteca', id: C.ID_BIB_PLANTILLAS }), 'Plantillas');
+  assert.equal(et({ tipo: 'segmento', biblioteca: C.ID_BIB_PLANTILLAS, id: g.id }), 'Segmento «Reuniones» · Plantillas');
+  assert.equal(et({ tipo: 'segmento', biblioteca: C.ID_BIB_PLANTILLAS, id: 'bandeja' }), 'Plantillas sin segmento');
+  assert.equal(et({ tipo: 'nota', id: pl.id }), 'Plantilla «Gelatina» · Plantillas');
+  assert.equal(et({ tipo: 'nota', id: gel.id }), 'Nota «Gelatina» · biblioteca «Ideas» › «Bromas»', 'la nota de la que salió no cambia');
+  const u = E.crear('analisis-de-the-office', { tipo: 'biblioteca', id: C.ID_BIB_PLANTILLAS });
+  assert.equal(u, 'clapcraft://analisis-de-the-office/biblioteca/plantillas:biblioteca');
+  assert.deepEqual(E.leer(u).id, C.ID_BIB_PLANTILLAS);
+  const v = p.correr('ver_enlace', { enlace: '[Plantillas](' + u + ')' }).texto;
+  assert.match(v, /^ENLACE clapcraft:\/\/analisis-de-the-office\/biblioteca\/plantillas:biblioteca\nPlantillas\nPLANTILLAS · id plantillas:biblioteca · 1 plantilla/);
+  /* el enlace vale en lugar del id: crear una nota con la plantilla por su enlace */
+  const up = E.crear('analisis-de-the-office', { tipo: 'nota', id: pl.id });
+  const x = p.correr('editar_biblioteca', { biblioteca: s.id, operaciones: [{ op: 'crear_nota', plantilla: '[Plantilla «Gelatina»](' + up + ')', titulo: 'Otra gelatina' }] });
+  assert.match(x.texto, /desde la plantilla «Gelatina»/);
+});
+
+/* las fórmulas (1.1.60): su biblioteca, sus segmentos y cada fórmula se nombran «Fórmulas» */
+test('fórmulas: los enlaces de su biblioteca, de un segmento y de una fórmula dicen «Fórmulas», ver_enlace los lee y valen en lugar del id', () => {
+  const p = proyecto(), { docs } = p;
+  require('../js/claquedraw/formulas.js');
+  const r = p.correr('editar_biblioteca', { biblioteca: 'Fórmulas', operaciones: [{ op: 'crear_segmento', nombre: 'Tonos', ref: 'g' }, { op: 'crear_nota', titulo: 'Noir', segmento: '$g', contenido: 'Frases **cortas**.', ref: 'f' }] });
+  const f = docs.nota(r.datos.refs.f), g = docs.etiqueta(r.datos.refs.g);
+  const et = ref => { const x = E.resolver(docs, ref, {}); assert.ok(x.ok, x.aviso); return x; };
+  assert.equal(et({ tipo: 'biblioteca', id: C.ID_BIB_FORMULAS }).etiqueta, 'Fórmulas');
+  assert.equal(et({ tipo: 'biblioteca', id: C.ID_BIB_FORMULAS }).formulas, true);
+  assert.equal(et({ tipo: 'segmento', biblioteca: C.ID_BIB_FORMULAS, id: g.id }).etiqueta, 'Segmento «Tonos» · Fórmulas');
+  assert.equal(et({ tipo: 'segmento', biblioteca: C.ID_BIB_FORMULAS, id: 'bandeja' }).etiqueta, 'Fórmulas sin segmento');
+  const x = et({ tipo: 'nota', id: f.id });
+  assert.equal(x.etiqueta, 'Fórmula «Noir» · Fórmulas › «Tonos»');
+  assert.ok(x.formula && !x.plantilla);
+  const u = E.crear('analisis-de-the-office', { tipo: 'biblioteca', id: C.ID_BIB_FORMULAS });
+  assert.equal(u, 'clapcraft://analisis-de-the-office/biblioteca/formulas:biblioteca');
+  assert.equal(E.leer(u).id, C.ID_BIB_FORMULAS);
+  const v = p.correr('ver_enlace', { enlace: '[Fórmulas](' + u + ')' }).texto;
+  assert.match(v, /^ENLACE clapcraft:\/\/analisis-de-the-office\/biblioteca\/formulas:biblioteca\nFórmulas\nFÓRMULAS · id formulas:biblioteca · 1 fórmula/);
+  const uf = E.crear('analisis-de-the-office', { tipo: 'nota', id: f.id });
+  assert.match(p.correr('ver_enlace', { enlace: uf }).texto, /Es una FÓRMULA[\s\S]*\[1\] Frases cortas\./);
+  /* el enlace vale en lugar del id: usar_formula */
+  assert.match(p.correr('usar_formula', { formula: '[Fórmula «Noir»](' + uf + ')' }).texto, /^FÓRMULA «Noir»/);
+});
+
+test('lienzos (1.1.58): el enlace de un lienzo y el de uno de sus nodos, ida y vuelta, su nombre y lo que ya no está', () => {
+  require('../js/claquedraw/lienzo-modelo.js');
+  const p = proyecto(), c = p.docs.datos.contenedores[0];
+  const l = p.docs.crearLienzo(c.id, 'Taller').lienzo, m = p.docs.modeloLienzo(l.id);
+  const g = m.crearNodo('generar', 0, 0, {}, { titulo: 'Escena 1' }).nodo, t = m.crearNodo('texto', 0, 0, { md: 'Idea' }).nodo;
+  p.docs.guardarLienzo(l.id, m);
+  [{ tipo: 'lienzo', id: l.id }, { tipo: 'lienzo', id: l.id, nodo: g.id }].forEach(ref => {
+    const u = E.crear('amor-tiktoker', ref), x = E.leer(u);
+    assert.equal(x.url, u); assert.equal(x.tipo, 'lienzo'); assert.equal(x.id, l.id); assert.equal(x.nodo, ref.nodo);
+  });
+  assert.equal(E.crear('a', { tipo: 'lienzo', id: l.id, nodo: g.id }), 'clapcraft://a/lienzo/' + l.id + '/nodo/' + g.id);
+  assert.equal(E.etiqueta(p.docs, { tipo: 'lienzo', id: l.id }), 'Lienzo «Taller»');
+  assert.equal(E.etiqueta(p.docs, { tipo: 'lienzo', id: l.id, nodo: g.id }), 'Nodo «Escena 1» · lienzo «Taller»');
+  assert.equal(E.etiqueta(p.docs, { tipo: 'lienzo', id: l.id, nodo: t.id }), 'Nodo «Texto» · lienzo «Taller»', 'sin título, el nombre de su tipo');
+  p.docs.eliminarLienzo(l.id);
+  assert.deepEqual(E.resolver(p.docs, { tipo: 'lienzo', id: l.id }), { ok: false, aviso: 'Ese lienzo está en la papelera' });
+  assert.equal(E.etiqueta(p.docs, { tipo: 'lienzo', id: l.id, nodo: g.id }), 'Nodo del lienzo');
+});

@@ -86,3 +86,90 @@ test('el analizador de HTML aguanta lo raro: entidades, comentarios, atributos s
   assert.equal(V.textoPlano('<p>Uno</p><p>Dos <b>tres</b></p>'), 'Uno\nDos tres');
   assert.equal(V.palabras('<p>Hola, ¿qué tal?</p>'), 3);
 });
+
+/* ---------- los recuadros (1.1.57): el prompt y los avisos ---------- */
+const RC = '<p class="sp-scene">INT. CASA - DÍA</p>'
+  + '<div class="rc rc-prompt" data-rc="prompt" data-titulo="Plano 1" data-color="azul"><p>Una <b>ciudad</b> de [noche]<br>segunda</p><ul><li>uno</li><li>dos</li></ul><p><br></p></div>'
+  + '<div class="rc rc-aviso" data-rc="aviso" data-tipo="info"><p>0:00–0:15</p></div>'
+  + '<div class="rc rc-aviso" data-rc="aviso" data-tipo="note"><p>con código:</p><pre>x</pre></div>'
+  + '<p class="sp-action">Sale.</p>';
+
+test('recuadros: cada uno es un bloque y se lee como ```prompt Título {.color} y ```aviso:tipo', () => {
+  const bs = V.bloques(RC);
+  assert.deepEqual(bs.map(b => b.tipo), ['escena', 'recuadro', 'recuadro', 'recuadro', 'accion']);
+  assert.deepEqual([bs[1].rc, bs[1].titulo, bs[1].color, bs[2].rc, bs[2].aviso], ['prompt', 'Plano 1', 'azul', 'aviso', 'info']);
+  const t = V.aTexto(RC);
+  assert.match(t, /^INT\. CASA - DÍA\n\n```prompt Plano 1 \{\.azul\}\nUna \*\*ciudad\*\* de \[noche\]\nsegunda\n\n- uno\n- dos\n```\n\n```aviso:info\n0:00–0:15\n```\n\n````aviso\ncon código:\n\n```\nx\n```\n````\n\nSale\.$/);
+  assert.match(V.aTexto(RC, { modo: 'prosa' }), /```prompt Plano 1 \{\.azul\}\nUna \*\*ciudad\*\*/, 'en prosa, igual');
+  const j = V.aJson(RC);
+  assert.deepEqual(j[1], { n: 2, tipo: 'recuadro', recuadro: 'prompt', titulo: 'Plano 1', color: 'azul', texto: 'Una **ciudad** de [noche]\nsegunda\n\n- uno\n- dos' });
+});
+
+test('recuadros: ida y vuelta en los dos modos (y un recuadro de verdad desde lo que escribe Claude)', () => {
+  const sinVacio = RC.replace('<p><br></p></div>', '</div>');        // un párrafo vacío al final no tiene texto: no vuelve
+  ['guion', 'prosa'].forEach(modo => {
+    const html = V.deTexto(V.aTexto(RC, { modo }), { modo }).bloques.join('');
+    assert.equal(html, sinVacio, 'en ' + modo);
+  });
+  /* lo que escribe Claude: sin línea en blanco alrededor, con color de ClapBook, un tipo en español y Fountain detrás */
+  const f = 'INT. CASA - DÍA\nEntra.\n```prompt Fragmento 3 {.rojo}\nPlano medio, [personaje] entra.\nDuración: 15 s\n```\n```aviso:consejo\n- uno\n```\nMARA\nHola.';
+  const h = V.deTexto(f, { modo: 'guion' }).bloques.join('');
+  assert.match(h, /^<p class="sp-scene">INT\. CASA - DÍA<\/p><p class="sp-action">Entra\.<\/p>/);
+  assert.match(h, /<div class="rc rc-prompt" data-rc="prompt" data-titulo="Fragmento 3" data-color="coral"><p>Plano medio, \[personaje\] entra\.<br>Duración: 15 s<\/p><\/div>/);
+  assert.match(h, /<div class="rc rc-aviso" data-rc="aviso" data-tipo="tip"><ul><li>uno<\/li><\/ul><\/div>/);
+  assert.match(h, /<p class="sp-character"[^>]*>Mara<\/p><p class="sp-dialogue">Hola\.<\/p>$/, 'lo de detrás sigue siendo guion');
+  /* en JSON */
+  const hj = V.deJson([{ tipo: 'recuadro', recuadro: 'aviso', aviso: 'warning', titulo: 'Ojo', texto: 'uno\ndos' }, { tipo: 'prompt', texto: '**x**' }]).bloques.join('');
+  assert.equal(hj, '<div class="rc rc-aviso" data-rc="aviso" data-tipo="warning" data-titulo="Ojo"><p>uno<br>dos</p></div><div class="rc rc-prompt" data-rc="prompt"><p><b>x</b></p></div><p><br></p>',
+    'acaba en un recuadro: con su línea vacía detrás');
+});
+
+test('recuadros: con una imagen (o algo que no es texto) dentro salen enteros como {bloque N} y vuelven tal cual', () => {
+  const H = '<div class="rc rc-prompt" data-rc="prompt" data-titulo="Ref"><p>Mira esto:</p><p><img src="data:image/png;base64,AAAA" alt="ref" width="200"></p></div><p>x</p>';
+  ['guion', 'prosa'].forEach(modo => {
+    const t = V.aTexto(H, { modo });
+    assert.match(t, /^\{bloque 1: prompt «Ref» con imagen\}/, 'en ' + modo);
+    assert.equal(V.deTexto(t, { modo, originales: V.bloques(H) }).bloques.join(''), H, 'vuelve igual en ' + modo);
+  });
+  assert.deepEqual(V.aJson(H)[0], { n: 1, tipo: 'otro', que: 'prompt «Ref» con imagen' });
+  const db = '<div class="rc rc-aviso" data-rc="aviso" data-tipo="info"><div class="db" contenteditable="false" data-db="{}"></div></div>';
+  assert.match(V.aTexto(db, { modo: 'prosa' }), /^\{bloque 1: aviso con base de datos\}$/);
+});
+
+test('recuadros: dentro de uno, un renglón «```prompt» es texto (no abre otro)', () => {
+  const H = '<div class="rc rc-prompt" data-rc="prompt"><p>```prompt</p><p>hola</p></div><p>fin</p>';
+  ['guion', 'prosa'].forEach(modo => {
+    const t = V.aTexto(H, { modo });
+    assert.equal(V.deTexto(t, { modo }).bloques.join('').replace('<p>fin</p>', ''), H.replace('<p>fin</p>', ''), 'en ' + modo);
+  });
+  assert.equal(V.deTexto('````aviso:tip\n```aviso\nuno\n````', { modo: 'prosa' }).bloques[0], '<div class="rc rc-aviso" data-rc="aviso" data-tipo="tip"><p>```aviso<br>uno</p></div>');
+  /* fuera de un recuadro, un bloque de código sigue siéndolo */
+  assert.equal(V.deTexto('```\ncódigo\n```', { modo: 'prosa' }).bloques[0], '<pre>código</pre>');
+});
+
+test('recuadros: «{.color}» al final del título solo es el color si es de la paleta; «{.}» es sin color', () => {
+  const R = V.RECUADROS;
+  assert.deepEqual(R.info('prompt Plano {.azul}'), { rc: 'prompt', tipo: null, titulo: 'Plano', color: 'azul' });
+  assert.deepEqual(R.info('prompt Plano {.3}'), { rc: 'prompt', tipo: null, titulo: 'Plano', color: 'violeta' });
+  assert.deepEqual(R.info('aviso:tip Plano {.nada}'), { rc: 'aviso', tipo: 'tip', titulo: 'Plano {.nada}', color: null }, 'no es un color: es del título');
+  assert.deepEqual(R.info('prompt Uno {.azul} {.}'), { rc: 'prompt', tipo: null, titulo: 'Uno {.azul}', color: null });
+  /* un título que acaba en algo que se leería como color vuelve igual */
+  const H = '<div class="rc rc-aviso" data-rc="aviso" data-tipo="warning" data-titulo="Uno {.azul}"><p>a</p></div><p>x</p>';
+  const t = V.aTexto(H, { modo: 'prosa' });
+  assert.match(t, /^```aviso:warning Uno \{\.azul\} \{\.\}\n/);
+  assert.equal(V.deTexto(t, { modo: 'prosa' }).bloques.join(''), H);
+});
+
+test('recuadros: lo escrito que acaba en un recuadro lleva detrás su línea vacía (la que pondría el editor al abrirlo)', () => {
+  const r = V.deTexto('Antes\n\n```prompt\nuno\n```', { modo: 'prosa' });
+  assert.equal(r.bloques.join(''), '<p>Antes</p><div class="rc rc-prompt" data-rc="prompt"><p>uno</p></div><p><br></p>');
+  assert.equal(r.lineaFinal, true);
+  assert.equal(V.deTexto('```prompt\nuno\n```\n\nDespués', { modo: 'prosa' }).lineaFinal, false);
+  assert.equal(V.conLineaFinal('<p>a</p><div class="rc rc-aviso" data-rc="aviso" data-tipo="note"><p>b</p></div>'), '<p>a</p><div class="rc rc-aviso" data-rc="aviso" data-tipo="note"><p>b</p></div><p><br></p>');
+  assert.equal(V.conLineaFinal('<p>a</p>'), '<p>a</p>');
+});
+
+test('recuadros: el texto que copia «Copiar» separa los párrafos con una línea en blanco y deja las listas como texto', () => {
+  const h = '<div class="rc rc-prompt" data-rc="prompt"><p>Plano medio.<br>Luz de tarde.</p><p><br></p><p>Estilo: <b>35 mm</b></p><ol><li>uno</li><li>dos</li></ol></div>';
+  assert.equal(V.RECUADROS.texto(h), 'Plano medio.\nLuz de tarde.\n\nEstilo: 35 mm\n\n1. uno\n2. dos');
+});

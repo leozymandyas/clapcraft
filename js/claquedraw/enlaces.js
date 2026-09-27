@@ -9,6 +9,9 @@
      esquema/<id>/enlace/<nodo>/<nodo> (el tramo entre dos nodos seguidos) · esquema/<id>/raya/<trama>/<columna>
      esquema/<id>/columna/<n> · esquema/<id>/columnas/<a>-<b> (columnas desde 1, como en el tablero)
      biblioteca/<id> · biblioteca/<id>/seccion/<id> · biblioteca/<id>/segmento/<id | bandeja>
+     (las plantillas de nota son la biblioteca `plantillas:biblioteca` y cada una, una nota: sus nombres dicen «Plantillas», 1.1.56;
+     las fórmulas, `formulas:biblioteca`, y sus nombres dicen «Fórmulas», 1.1.60)
+     lienzo/<id> · lienzo/<id>/nodo/<id> (los lienzos de nodos, 1.1.58: la referencia es { tipo: 'lienzo', id, nodo? })
    Un tramo de texto (del guion o de una nota) lleva `?b=<desde>-<hasta>` —los bloques de leer_documento, desde 1— y `h=`, la
    huella del primero, para encontrarlo aunque se haya movido.
    Se copian en Markdown, con un nombre que se lee: [Nodo «La broma» · esquema «Piloto»](clapcraft://…/esquema/d…/nodo/p6). Así,
@@ -56,6 +59,7 @@
     if (t === 'raya') return ref.esquema && ref.trama && ref.columna ? ['esquema', ref.esquema, 'raya', ref.trama, String(ref.columna)] : null;
     if (t === 'columnas') return ref.esquema && ref.desde ? ['esquema', ref.esquema].concat(ref.hasta && ref.hasta !== ref.desde ? ['columnas', ref.desde + '-' + ref.hasta] : ['columna', String(ref.desde)]) : null;
     if (t === 'seccion' || t === 'segmento') return ref.biblioteca && ref.id ? ['biblioteca', ref.biblioteca, t, ref.id] : null;
+    if (t === 'lienzo') return ref.id ? ['lienzo', ref.id].concat(ref.nodo ? ['nodo', ref.nodo] : []) : null;
     return null;
   }
   const conTexto = ref => ref.tipo === 'documento' || (ref.tipo === 'nota' && !ref.esquema);
@@ -91,6 +95,12 @@
         const r = /^(\d+)(?:-(\d+))?$/.exec(s[3]); if (!r || !+r[1]) return null;
         const a = +r[1], b = r[2] ? +r[2] : a; return { tipo: 'columnas', esquema: id, desde: Math.min(a, b), hasta: Math.max(a, b) };
       }
+      return null;
+    }
+    /* un lienzo (1.1.58) y uno de sus nodos: el mismo tipo, con `nodo` */
+    if (t === 'lienzo') {
+      if (s.length === 2) return { tipo: 'lienzo', id };
+      if (s.length === 4 && s[2] === 'nodo') return { tipo: 'lienzo', id, nodo: s[3] };
       return null;
     }
     if (SUELTOS.includes(t) && s.length === 2) return { tipo: t, id };
@@ -158,7 +168,19 @@
     return m;
   }
   const no = aviso => ({ ok: false, aviso });
+  /* las bibliotecas especiales, sin contenedor: la de las plantillas de nota (1.1.56) se nombra «Plantillas» y la de las fórmulas
+     (1.1.60), «Fórmulas»; `que` es cómo se llama cada una de sus notas */
+  const ESPECIALES = { plantillas: { nombre: 'Plantillas', que: 'plantilla ', id: () => C.ID_BIB_PLANTILLAS || 'plantillas:biblioteca' },
+    formulas: { nombre: 'Fórmulas', que: 'fórmula ', id: () => C.ID_BIB_FORMULAS || 'formulas:biblioteca' } };
+  const especialDe = r => (r ? Object.keys(ESPECIALES).find(k => r.sub.id === ESPECIALES[k].id() || r.contenedor.especial === k) || null : null);
+  const esPlantillas = r => especialDe(r) === 'plantillas';
   const tituloNodo = p => (p && String(p.titulo || '').trim() ? comillas(corto(p.titulo, 60)) : 'sin título');
+  /* el nombre de un nodo de un lienzo: su título o el de su tipo («Generar guion», «Nota»…: C.Lienzo.TIPOS) */
+  function nombreNodoLienzo(n) {
+    if (n && String(n.titulo || '').trim()) return String(n.titulo).trim();
+    const T = C.Lienzo && C.Lienzo.TIPOS, t = T && n && T[n.tipo];
+    return (t && (t.nombre || t.label)) || (n && n.tipo) || 'nodo';
+  }
   /* Lo que dice una referencia, en el proyecto: { ok, …lo encontrado, etiqueta } o { ok: false, aviso }. `op.modelo(eid)` da el
      modelo vivo de un esquema, `op.proyecto` el nombre del proyecto y `op.extracto` el texto de un tramo (para el nombre). */
   function resolver(docs, ref, op) {
@@ -186,15 +208,15 @@
     if (t === 'biblioteca' || t === 'seccion' || t === 'segmento') {
       const bid = t === 'biblioteca' ? ref.id : ref.biblioteca, r = docs.sub(bid);
       if (!r || r.sub.guionEid) return no(docs.piezaEnPapelera && docs.piezaEnPapelera(bid) ? 'Esa biblioteca está en la papelera' : 'Esa biblioteca ya no está en el proyecto');
-      const per = r.sub.lineaId && docs.personaje(r.sub.lineaId);
-      const nomB = per ? 'biblioteca de ' + comillas(per.nombre) : 'biblioteca ' + comillas(r.sub.nombre);
-      const x = { ok: true, contenedor: r.contenedor, sub: r.sub, personaje: per || null };
+      const per = r.sub.lineaId && docs.personaje(r.sub.lineaId), pl = esPlantillas(r), es = especialDe(r);
+      const nomB = per ? 'biblioteca de ' + comillas(per.nombre) : es ? ESPECIALES[es].nombre : 'biblioteca ' + comillas(r.sub.nombre);
+      const x = { ok: true, contenedor: r.contenedor, sub: r.sub, personaje: per || null, plantillas: pl, formulas: es === 'formulas' };
       if (t === 'biblioteca') return Object.assign(x, { etiqueta: nomB.charAt(0).toUpperCase() + nomB.slice(1) });
       if (t === 'seccion') {
         const k = docs.seccion(ref.id); if (!k || k.sub.id !== bid) return no('Esa sección ya no está en la ' + nomB);
         return Object.assign(x, { seccion: k.seccion, etiqueta: 'Sección ' + comillas(k.seccion.nombre) + ' · ' + nomB });
       }
-      if (ref.id === 'bandeja') return Object.assign(x, { bandeja: true, etiqueta: 'Notas sin segmento · ' + nomB });
+      if (ref.id === 'bandeja') return Object.assign(x, { bandeja: true, etiqueta: (es ? ESPECIALES[es].nombre + ' sin segmento' : 'Notas sin segmento · ' + nomB) });
       const e = docs.etiqueta(ref.id); if (!e || e.subId !== bid) return no('Ese segmento ya no está en la ' + nomB);
       return Object.assign(x, { segmento: e, etiqueta: 'Segmento ' + comillas(e.nombre) + ' · ' + nomB });
     }
@@ -203,12 +225,23 @@
       if (!n) return no(docs.enPapelera && docs.enPapelera(ref.id) ? 'Esa nota está en la papelera' : 'Esa nota ya no está en el proyecto');
       const r = docs.sub(n.subId), eid = r && r.sub.guionEid;
       if (eid) { const e = docs.esquema(eid); return Object.assign(resolver(docs, Object.assign({}, ref, { tipo: 'documento', esquema: eid }), op), e ? {} : { ok: false, aviso: 'Ese documento ya no tiene esquema' }); }
-      const per = r && r.sub.lineaId && docs.personaje(r.sub.lineaId), seg = n.etiquetaId && docs.etiqueta(n.etiquetaId);
-      const donde = r ? (per ? 'biblioteca de ' + comillas(per.nombre) : 'biblioteca ' + comillas(r.sub.nombre)) + (seg ? ' › ' + comillas(seg.nombre) : '') : '';
-      const tit = comillas(corto(n.titulo || 'Sin título', 60));
-      const etiqueta = ref.bloques ? (op.extracto ? comillas(corto(op.extracto, 70)) + ' · ' : '') + 'nota ' + tit + ', ' + (ref.bloques[0] === ref.bloques[1] ? 'bloque ' + ref.bloques[0] : 'bloques ' + rango(ref.bloques[0], ref.bloques[1]))
-        : 'Nota ' + tit + (donde ? ' · ' + donde : '');
-      return { ok: true, nota: n, sub: r && r.sub, contenedor: r && r.contenedor, segmento: seg || null, personaje: per || null, etiqueta: etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1) };
+      const per = r && r.sub.lineaId && docs.personaje(r.sub.lineaId), seg = n.etiquetaId && docs.etiqueta(n.etiquetaId), pl = esPlantillas(r), es = especialDe(r);
+      const donde = r ? (per ? 'biblioteca de ' + comillas(per.nombre) : es ? ESPECIALES[es].nombre : 'biblioteca ' + comillas(r.sub.nombre)) + (seg ? ' › ' + comillas(seg.nombre) : '') : '';
+      const tit = comillas(corto(n.titulo || 'Sin título', 60)), que = es ? ESPECIALES[es].que : 'nota ';
+      const etiqueta = ref.bloques ? (op.extracto ? comillas(corto(op.extracto, 70)) + ' · ' : '') + que + tit + ', ' + (ref.bloques[0] === ref.bloques[1] ? 'bloque ' + ref.bloques[0] : 'bloques ' + rango(ref.bloques[0], ref.bloques[1]))
+        : que + tit + (donde ? ' · ' + donde : '');
+      return { ok: true, nota: n, sub: r && r.sub, contenedor: r && r.contenedor, segmento: seg || null, personaje: per || null, plantilla: pl, formula: es === 'formulas', etiqueta: etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1) };
+    }
+    /* un lienzo de nodos y uno de sus nodos (1.1.58) */
+    if (t === 'lienzo') {
+      const r = docs.lienzo ? docs.lienzo(ref.id) : null;
+      if (!r) return no(docs.piezaEnPapelera && docs.piezaEnPapelera(ref.id) ? 'Ese lienzo está en la papelera' : 'Ese lienzo ya no está en el proyecto');
+      const nomL = 'lienzo ' + comillas(r.lienzo.nombre);
+      const x = { ok: true, contenedor: r.contenedor, lienzo: r.lienzo };
+      if (!ref.nodo) return Object.assign(x, { etiqueta: 'Lienzo ' + comillas(r.lienzo.nombre) });
+      const n = (r.lienzo.nodos || []).find(y => y.id === ref.nodo);
+      if (!n) return no('Ese nodo ya no está en el ' + nomL);
+      return Object.assign(x, { nodo: n, etiqueta: 'Nodo ' + comillas(corto(nombreNodoLienzo(n), 60)) + ' · ' + nomL });
     }
     /* lo de un esquema */
     const eid = t === 'esquema' ? ref.id : ref.esquema, r = docs.esquema(eid);
@@ -280,7 +313,7 @@
     if (r.ok) return r.etiqueta;
     return ({ proyecto: 'Proyecto', contenedor: 'Contenedor', carpeta: 'Carpeta', grupo: 'Grupo', personaje: 'Personaje', biblioteca: 'Biblioteca', seccion: 'Sección',
       segmento: 'Segmento', nota: 'Nota', esquema: 'Esquema', documento: 'Guion', nodo: 'Nodo', salto: 'Salto', trama: 'Trama', acto: 'Acto', enlace: 'Enlace', raya: 'Raya',
-      columnas: 'Columnas' })[ref.tipo] || 'Enlace';
+      columnas: 'Columnas', lienzo: ref.nodo ? 'Nodo del lienzo' : 'Lienzo' })[ref.tipo] || 'Enlace';
   }
   /* El enlace en Markdown: [nombre](clapcraft://…). Los corchetes del nombre van escapados. */
   function markdown(docs, proyecto, ref, op) {
@@ -319,6 +352,11 @@
       (d.puntos || []).forEach(p => { p.titulo = rep(p.titulo); p.descripcion = rep(p.descripcion); });
       (d.notas || []).forEach(x => { x.texto = rep(x.texto); });
     }));
+    /* y en los lienzos (1.1.58): títulos, el texto de los nodos de texto y las instrucciones de las operaciones */
+    (datos.contenedores || []).forEach(c => (c.lienzos || []).forEach(l => (l.nodos || []).forEach(x => {
+      x.titulo = rep(x.titulo);
+      const dd = x.datos; if (dd && typeof dd === 'object') ['md', 'instruccion'].forEach(k => { if (typeof dd[k] === 'string') dd[k] = rep(dd[k]); });
+    })));
     return n;
   }
   /* El archivo se llama `ahora`: si el sello dice otra cosa, se pone al día. Con `op.corregir === false` (una copia, o un «Guardar
@@ -344,7 +382,89 @@
     return null;
   }
 
+  /* ---------- de un id suelto a lo que es (1.1.60, el asistente) ----------
+     Leo: «el asistente de IA me da el ID de la nota en lugar del nombre». La IA ve los ids en lo que devuelven las herramientas y a
+     veces los copia; el panel los cambia por el nombre, y los pasos y el permiso dicen el nombre de lo que tocan. `indice(docs, op)`
+     da un Map id → referencia con todo lo que tiene id en el proyecto (notas y documentos, esquemas, bibliotecas, secciones,
+     segmentos, lienzos y sus nodos, personajes, contenedores, carpetas y grupos; y, con `op.esquema`, los nodos, saltos, tramas,
+     actos y notas de ese esquema, cuyos ids —«p6»— solo son únicos dentro de él). Un id que tienen dos cosas no entra. `porId`,
+     uno solo; `nombre(docs, ref, op)`, el nombre a secas de lo que dice una referencia («Detonante»), o null. */
+  function refDeNota(docs, n) {
+    const r = docs.sub(n.subId), eid = r && r.sub.guionEid;
+    return eid ? { tipo: 'documento', esquema: eid } : { tipo: 'nota', id: n.id };
+  }
+  function indice(docs, op) {
+    op = op || {};
+    const M = new Map(), dobles = new Set();
+    const pon = (id, ref) => { if (!id || typeof id !== 'string') return; if (M.has(id)) { dobles.add(id); return; } M.set(id, ref); };
+    const d = docs && docs.datos; if (!d) return M;
+    (d.notas || []).forEach(n => pon(n.id, refDeNota(docs, n)));
+    (d.etiquetas || []).forEach(e => pon(e.id, { tipo: 'segmento', biblioteca: e.subId, id: e.id }));
+    (d.elenco || []).forEach(p => pon(p.id, { tipo: 'personaje', id: p.id }));
+    (d.carpetasElenco || []).forEach(k => pon(k.id, { tipo: 'carpeta', id: k.id }));
+    (d.gruposElenco || []).forEach(g => pon(g.id, { tipo: 'grupo', id: g.id }));
+    (d.contenedores || []).forEach(c => {
+      pon(c.id, { tipo: 'contenedor', id: c.id });
+      (c.esquemas || []).forEach(e => pon(e.id, { tipo: 'esquema', id: e.id }));
+      (c.subs || []).forEach(s => {
+        if (!s.guionEid) pon(s.id, { tipo: 'biblioteca', id: s.id });
+        (s.secciones || []).forEach(k => pon(k.id, { tipo: 'seccion', biblioteca: s.id, id: k.id }));
+      });
+      (c.lienzos || []).forEach(l => { pon(l.id, { tipo: 'lienzo', id: l.id }); (l.nodos || []).forEach(n => pon(n.id, { tipo: 'lienzo', id: l.id, nodo: n.id })); });
+      (c.carpetas || []).forEach(k => pon(k.id, { tipo: 'carpeta', id: k.id }));
+      (c.grupos || []).forEach(g => pon(g.id, { tipo: 'grupo', id: g.id }));
+    });
+    const eid = op.esquema && docs.esquema(op.esquema) ? op.esquema : null, m = eid ? modeloDe(docs, eid, op) : null, md = m && m.datos;
+    if (md) {
+      (md.puntos || []).forEach(p => pon(p.id, { tipo: 'nodo', esquema: eid, id: p.id }));
+      (md.saltos || []).forEach(s => pon(s.id, { tipo: 'salto', esquema: eid, id: s.id }));
+      (md.lineas || []).forEach(l => pon(l.id, { tipo: 'trama', esquema: eid, id: l.id }));
+      (md.actos || []).forEach(a => pon(a.id, { tipo: 'acto', esquema: eid, id: a.id }));
+      (md.notas || []).forEach(n => pon(n.id, { tipo: 'nota', esquema: eid, id: n.id }));
+    }
+    dobles.forEach(id => M.delete(id));
+    return M;
+  }
+  function porId(docs, id, op) {
+    const s = String(id ?? '').trim();
+    if (!docs || !s || s.length > 120 || /\s/.test(s)) return null;
+    const n = docs.nota(s); if (n) return refDeNota(docs, n);
+    if (docs.esquema(s)) return { tipo: 'esquema', id: s };
+    const b = docs.sub(s); if (b && !b.sub.guionEid) return { tipo: 'biblioteca', id: s };
+    const e = docs.etiqueta(s); if (e) return { tipo: 'segmento', biblioteca: e.subId, id: s };
+    const k = docs.seccion && docs.seccion(s); if (k) return { tipo: 'seccion', biblioteca: k.sub.id, id: s };
+    if (docs.lienzo && docs.lienzo(s)) return { tipo: 'lienzo', id: s };
+    if (docs.personaje && docs.personaje(s)) return { tipo: 'personaje', id: s };
+    if (docs.contenedor(s)) return { tipo: 'contenedor', id: s };
+    if (docs.carpeta && docs.carpeta(s)) return { tipo: 'carpeta', id: s };
+    if (docs.grupo && docs.grupo(s)) return { tipo: 'grupo', id: s };
+    op = op || {};
+    const lz = op.lienzo && docs.lienzo ? docs.lienzo(op.lienzo) : null;
+    if (lz && (lz.lienzo.nodos || []).some(x => x.id === s)) return { tipo: 'lienzo', id: lz.lienzo.id, nodo: s };
+    return (op.esquema && indice(docs, { esquema: op.esquema, modelo: op.modelo }).get(s)) || null;
+  }
+  function nombre(docs, ref, op) {
+    const r = ref && resolver(docs, ref, op); if (!r || !r.ok) return null;
+    const t = ref.tipo, val = v => (v && String(v).trim() ? String(v).replace(/\s+/g, ' ').trim() : null);
+    if (t === 'documento') return val(r.nota && r.nota.titulo) || val(r.esquema && r.esquema.nombre);
+    if (t === 'nota') return ref.esquema ? val(corto(r.nota.texto, 50)) : val(r.nota.titulo) || 'Sin título';
+    if (t === 'nodo') return val(r.punto ? r.punto.titulo : r.de && r.de.titulo);
+    if (t === 'salto') return val(r.de && r.de.titulo);
+    if (t === 'trama') return val(r.linea.nombre);
+    if (t === 'acto') return val(r.acto.nombre);
+    if (t === 'lienzo') return r.nodo ? val(nombreNodoLienzo(r.nodo)) : val(r.lienzo.nombre);
+    if (t === 'segmento') return r.bandeja ? 'Sin segmento' : val(r.segmento.nombre);
+    if (t === 'seccion') return val(r.seccion.nombre);
+    if (t === 'biblioteca') return r.personaje ? 'Biblioteca de ' + r.personaje.nombre : val(r.sub.nombre);
+    if (t === 'esquema') return val(r.esquema.nombre);
+    if (t === 'personaje') return val(r.personaje.nombre);
+    if (t === 'contenedor') return val(r.contenedor.nombre);
+    if (t === 'carpeta') return val(r.carpeta.nombre);
+    if (t === 'grupo') return val(r.grupo.nombre);
+    return null;
+  }
+
   C.enlaces = { ESQUEMA: ESQUEMA_URL, slug, proyectoDe, crear, leer, extraer, esEnlace, ruta, resolver, etiqueta, markdown, huella, huellaBloque, tramo, modeloDe,
-    nombres, sellar, corregir, renombrar, rangoNombre };
+    nombres, sellar, corregir, renombrar, rangoNombre, nombreNodoLienzo, indice, porId, nombre };
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

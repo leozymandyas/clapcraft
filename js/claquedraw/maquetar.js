@@ -279,10 +279,25 @@
   /* las columnas de un diálogo doble, como listas de { tipo, texto } */
   const columnasDe = el => Array.from(el.children).filter(c => /(^|\s)sp-col(\s|$)/.test(c.className))
     .map(c => Array.from(c.children).map(p => { const tipo = tipoDe(p) || 'dialogue'; let texto = textoBloque(p); if (tipo === 'character') texto = texto.replace(/\s+/g, ' ').trim(); return { tipo, texto }; }));
+  /* Renglones de un recuadro (un prompt o un aviso, js/recuadros.js): su cabecera y el relleno (dos) más los de lo de dentro, sin
+     líneas en blanco entre sus párrafos, a 54 caracteres (3 de relleno a cada lado; los elementos de una lista, a 51). No se parte
+     entre páginas (como el diálogo doble). En el PDF se pinta con esas medidas (exportar.js). */
+  const RECUADRO = { ancho: 54, lista: 51, extra: 2 };
+  function lineasRecuadro(el) {
+    let n = RECUADRO.extra;
+    const hijos = Array.from(el.children || []);
+    if (!hijos.length) return n + envolver(textoBloque(el), [RECUADRO.ancho]).length;
+    hijos.forEach(c => {
+      if (/^(UL|OL)$/.test(c.nodeName)) Array.from(c.children).forEach(li => { n += envolver(textoBloque(li), [RECUADRO.lista]).length; });
+      else n += envolver(textoBloque(c), [RECUADRO.ancho]).length;
+    });
+    return n;
+  }
+  const esRecuadro = el => !!(el && el.getAttribute && el.getAttribute('data-rc') !== null && el.nodeName === 'DIV');
   /* los elementos que se reparten en páginas: los hijos del documento, con las listas por elemento */
   const elementos = hijos => [].concat(...Array.from(hijos).map(n => /^(UL|OL)$/.test(n.nodeName) ? Array.from(n.children) : [n]));
   /* Los bloques de `els` para `paginar`, y de qué elemento sale cada uno (`indices`). Fuera las bases de datos, la portada y,
-     con `op.sinNotas`, las notas; con `op.numerar`, cada escena lleva delante «ESCENA n - » (`prefijos`: cuántos caracteres).
+     con `op.sinNotas`, las notas y los recuadros (material de trabajo: un prompt, un aviso); con `op.numerar`, cada escena lleva delante «ESCENA n - » (`prefijos`: cuántos caracteres).
      El personaje, con un solo espacio antes de su extensión (como sale en el PDF). Un diálogo doble ocupa lo de su columna más
      larga y lo que no es texto (una tabla, una imagen) los renglones que diga `op.fijo(el)`. */
   function bloquesDe(els, op) {
@@ -293,8 +308,10 @@
       if (/(^|\s)(db|portada)(\s|$)/.test(el.className || '')) return;
       const tipo = tipoDe(el);
       if (tipo === 'note' && op.sinNotas) return;
+      if (esRecuadro(el) && op.sinNotas) return;
       let b, pre = 0;
-      if (tipo === 'doble') b = { tipo: 'doble', texto: '', lineas: lineasDoble(columnasDe(el)) };
+      if (esRecuadro(el)) b = { tipo: 'recuadro', texto: '', lineas: lineasRecuadro(el) };
+      else if (tipo === 'doble') b = { tipo: 'doble', texto: '', lineas: lineasDoble(columnasDe(el)) };
       else if (op.fijo && (/^(TABLE|IMG|FIGURE|VIDEO|IFRAME)$/.test(el.nodeName) || (el.querySelector && el.querySelector('img, table')))) b = { tipo: 'fijo', texto: '', lineas: Math.max(1, op.fijo(el)) };
       else {
         let texto = textoBloque(el);
@@ -307,7 +324,7 @@
     return { bloques, indices, prefijos };
   }
 
-  const API = { LINEAS, FORMATOS, DOBLE, envolver, renglones, lineasDoble, finesDeOracion, corte, paginar, tipoDe, textoBloque, columnasDe, elementos, bloquesDe };
+  const API = { LINEAS, FORMATOS, DOBLE, RECUADRO, envolver, renglones, lineasDoble, lineasRecuadro, esRecuadro, finesDeOracion, corte, paginar, tipoDe, textoBloque, columnasDe, elementos, bloquesDe };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else { raiz.Claquedraw = raiz.Claquedraw || {}; raiz.Claquedraw.maquetar = API; }
 })(typeof window !== 'undefined' ? window : globalThis);

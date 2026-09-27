@@ -1638,3 +1638,190 @@ html[data-theme="dark"] .gd-lado-texto .sp-character[data-ch] .ch-nom { backgrou
 .pestana.editando .pestana-nom { overflow: visible; }
 .pestana-edit { width: 18ch; max-width: 220px; height: 22px; box-sizing: border-box; padding: 0 6px; border: 1px solid var(--foco); border-radius: 4px;
   background: var(--papel); color: var(--tinta); font: inherit; outline: none; box-shadow: 0 0 0 3px var(--foco-halo); }
+
+/* ---------- las plantillas de nota (1.1.56, de ClapBook; gestor.js) ----------
+   «Plantillas» va al pie del menú, entre Personajes y la Papelera (se le puede soltar una nota: una copia, como plantilla); su
+   tablero es el de una biblioteca, con su chip (sin contenedor), un fondo rayado muy tenue, el aviso de cómo se usan y «Usar» en
+   cada una. En las demás bibliotecas, «Desde plantilla» en la cabecera. */
+.gd-cont.gd-plantillas .gd-cont-nom svg { color: var(--tenue); }
+.gd-chip--plantillas { gap: 6px; background: var(--foco-suave); color: var(--foco); border-color: var(--foco-linea); }
+.gd-chip--plantillas svg { flex: none; }
+button.gd-chip--plantillas { cursor: pointer; }
+button.gd-chip--plantillas:hover { box-shadow: 0 0 0 2px var(--foco-halo); }
+.gd-bib-plantillas > .gd-cuerpo { background: repeating-linear-gradient(-45deg, transparent 0 14px, color-mix(in srgb, var(--foco) 3.5%, transparent) 14px 15px); }
+.gd-plantillas-aviso { display: flex; gap: 12px; align-items: flex-start; max-width: 820px; margin: 14px 0 6px; padding: 11px 14px; border: 1px dashed var(--foco-linea); border-radius: 6px;
+  background: color-mix(in srgb, var(--foco-suave) 70%, var(--papel)); color: var(--tenue); font: 400 12.5px/1.55 var(--sans); }
+.gd-plantillas-aviso > svg { flex: none; margin-top: 1px; color: var(--foco); }
+.gd-plantillas-aviso b { color: var(--tinta); font-weight: 600; }
+.gd-bib-plantillas .gd-nota { border-style: dashed; }
+.gd-usar { flex: none; height: 20px; padding: 0 8px; border: 1px solid var(--foco-linea); border-radius: 10px; background: var(--papel); color: var(--foco); font: 500 10.5px var(--sans); cursor: pointer; }
+.gd-usar:hover { background: var(--foco); border-color: var(--foco); color: var(--foco-sobre); }
+.gd-exp-pie .gd-usar { margin-right: auto; }
+.gd-lado-usar { height: 26px; padding: 0 10px; gap: 5px; margin-right: 6px; color: var(--foco); border-color: var(--foco-linea); box-shadow: none; }
+.gd-modal-usar:empty { display: none; }
+/* elegir una plantilla: un campo para buscar (si son muchas) y la lista, que se desplaza */
+.gd-pop-buscar { display: block; width: 100%; box-sizing: border-box; height: 28px; margin: 2px 0 4px; padding: 0 9px; border: 1px solid var(--borde); border-radius: 4px;
+  background: var(--lienzo); color: var(--tinta); font: 400 12.5px var(--sans); outline: none; }
+.gd-pop-buscar:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.gd-pop-lista { max-height: min(50vh, 360px); overflow-y: auto; max-width: 360px; }
+.gd-pop button[hidden] { display: none; }
+.gd-exp-cab .esq-cont:empty { display: none; }                          /* el segmento expandido de las plantillas: sin contenedor */
+
+/* ---------- las fórmulas (1.1.60; gestor.js) ----------
+   La otra biblioteca especial, gemela de las plantillas: «Fórmulas» al pie del menú, entre Plantillas y la Papelera, con su matraz;
+   su tablero lleva las clases de las plantillas (chip, fondo rayado, aviso) más las suyas. Una fórmula es solo texto: en su ventana
+   el campo (`.plano`) va en letra de máquina, renglón a renglón, y sin ⤢ (no se abre en el editor de guion). */
+.gd-cont.gd-formulas .gd-cont-nom svg { color: var(--tenue); }
+.gd-cont.gd-formulas.activo .gd-cont-nom svg { color: var(--foco); }
+.gd-formulas-aviso > svg { color: var(--foco); }
+.gd-lado-texto.plano { font: 400 13.5px/1.65 var(--mono); tab-size: 4; }
+.gd-lado-texto.plano p { margin: 0; }
+.gd-modal--formula .gd-modal-titulo { font-family: var(--sans); }
+.gd-modal [data-gd-lado-abrir][hidden] { display: none; }
+
+/* ===== Temas neón: Synthwave y Vaporwave (1.1.57) =====
+   Leo, 27-09-2026: «cambia el estilo de la aplicación a algo más neón que recuerde a synthwave o vaporwave» (con la imagen del sol
+   degradado, las palmeras y la rejilla cian) y «que sean temas adicionales al modo claro y oscuro que tenemos actualmente».
+   Mecanismo: el tema base sigue en `html[data-theme="dark"|"light"]` (todas las reglas de oscuro y claro valen) y el estilo va
+   aparte en `html[data-estilo="synthwave"]` (siempre con data-theme="dark") o `html[data-estilo="vaporwave"]` (con "light"); lo pone
+   app.js (clave `guiones.claquedraw.estilo`) y el marco del editor lo sigue (texto.js). Aquí solo se redefinen los tokens y se añade
+   lo que los tokens no alcanzan: el sol (`--sol`: amarillo → naranja → magenta) en la marca, la pestaña activa, el botón primario y
+   los rellenos de las barras; el brillo de neón (`--neon-*`) en lo elegido, el foco y el hover; el cian como segundo acento
+   (arrastres, destinos, la rejilla del tablero); y una rejilla en perspectiva en las pantallas vacías. Contraste comprobado (WCAG
+   AA, 4,5:1 para el texto) en los dos. Las paletas de datos (24 tonos, 16 pares, fondos de acto) no cambian. */
+html[data-estilo="vaporwave"] {
+  /* claro pastel: rosa, lila y cian suaves; cuatro planos bien distintos (franja, menú, tablero, papel casi blanco rosado) */
+  --chrome: #f3e5f5; --panel: #eddcf2; --papel: #fffbfe; --lienzo: #fbf3fa;
+  --hover: #e5cfed; --hover-fuerte: #dcc2e6; --pista-hot: #f6e7f5;
+  --regla: #e6d3ea; --regla-fuerte: #d4bddf; --borde: #d8c2e2; --borde-fuerte: #bb9fcd; --linea-menu: #e6d3ea; --cuadricula: #d3ebf2;
+  --tinta: #271339; --tenue: #5e4775; --palido: #6a5680; --inverso: #fdf6ff;
+  --foco: #b0128c; --foco-sobre: #ffffff; --foco-suave: #fadcf2; --foco-halo: rgba(214, 38, 170, .22); --foco-linea: rgba(176, 18, 140, .45); --foco-banda: rgba(214, 38, 170, .06);
+  --cian: #00798f; --cian-vivo: #38d6ee; --cian-suave: #d6f3f8; --cian-halo: rgba(56, 214, 238, .3);
+  --sel-bg: #f5d8ef; --drop-bg: rgba(56, 214, 238, .14);
+  --peligro: #c0143a; --peligro-sobre: #ffffff; --peligro-bg: #fde0e7; --ok: #0a7d49;
+  --nota: #fdf0d6; --nota-borde: #ecc98e; --nota-tinta: #6c4810; --nota-edit: #fff7e6; --nota-tenue: #b27c1d;
+  --sombra: 0 1px 1px rgba(80, 20, 90, .06); --sombra-alta: 0 1px 2px rgba(80, 20, 90, .08), 0 10px 26px rgba(120, 30, 130, .13);
+  --sombra-lado: 1px 0 0 rgba(80, 20, 90, .05); --sombra-modal: 0 4px 12px rgba(80, 20, 90, .16), 0 24px 60px rgba(120, 30, 130, .24);
+  --sombra-dura: rgba(80, 20, 90, .12); --sombra-suave: rgba(80, 20, 90, .07);
+  --backdrop: rgba(46, 16, 60, .34);
+  --toast-bg: #2e1848; --toast-fg: #fbf0ff; --toast-acento: #6ff0ff;
+  --escena: #ffe2a0; --escena-trazo: #c98a00; --rombo: #f1d3fb; --rombo-trazo: #a51fc4;
+  --p-grafito-bg: #ece0f2; --p-grafito-tinta: #3d2c50; --p-violeta-bg: #f7daf2; --p-violeta-tinta: #86146f; --p-azul-bg: #d4f1f7; --p-azul-tinta: #0a566b;
+  --p-violeta-linea: rgba(134, 20, 111, .38); --p-azul-linea: rgba(10, 86, 107, .38);
+  --bb-bg: #efdff3; --bb-line: #d4bddf; --bb-fg: #271339; --bb-muted: #5e4775;
+  --guion-cab: #271339; --guion-cab-tinta: #fdf6ff;
+  /* el sol, más suave en claro; el texto que va encima, --sol-tinta (≥ 6,9:1 sobre sus tres tonos) */
+  --sol-a: #ffd66b; --sol-b: #ffa07a; --sol-c: #ff6fc2; --sol-tinta: #2a0a36;
+  --marca-sol: linear-gradient(180deg, #cf5a00 5%, #d63b6b 50%, #b0128c 95%);   /* tonos que pasan de 3:1 sobre el menú */
+  --neon-brillo: 0 0 0 1px var(--foco-linea), 0 0 10px rgba(214, 38, 170, .22);
+  --neon-texto: none; --marca-brillo: 0 0 0 transparent;
+  --rejilla-neon: rgba(0, 150, 190, .32); --rejilla-opacidad: .55;
+}
+html[data-estilo="synthwave"] {
+  /* oscuro synthwave: noche violeta e índigo (sin negro puro), magenta caliente y cian eléctrico con brillo */
+  --chrome: #1f1545; --panel: #19113a; --papel: #251a4f; --lienzo: #110b27;
+  --hover: #31245f; --hover-fuerte: #3a2b6c; --pista-hot: #1a1238;
+  --regla: #2c2259; --regla-fuerte: #3b2e72; --borde: #3b2e72; --borde-fuerte: #56449c; --linea-menu: #2c2259; --cuadricula: rgba(62, 232, 255, .11);
+  --tinta: #f3ecff; --tenue: #bcaee4; --palido: #978ac6; --inverso: #110b27;
+  --foco: #ff5fd2; --foco-sobre: #1c0630; --foco-suave: #3d1a5c; --foco-halo: rgba(255, 95, 210, .3); --foco-linea: rgba(255, 95, 210, .6); --foco-banda: rgba(255, 95, 210, .07);
+  --cian: #3ee8ff; --cian-vivo: #3ee8ff; --cian-suave: #10304d; --cian-halo: rgba(62, 232, 255, .3);
+  --sel-bg: #35205f; --drop-bg: rgba(62, 232, 255, .1);
+  --peligro: #ff6f93; --peligro-sobre: #2a0614; --peligro-bg: #45163a; --ok: #47eeaa;
+  --nota: #3b2c22; --nota-borde: #7a5a2c; --nota-tinta: #ffd684; --nota-edit: #45332a; --nota-tenue: #e8ad4c;
+  --sombra: 0 1px 1px rgba(4, 0, 16, .4); --sombra-alta: 0 1px 2px rgba(4, 0, 16, .5), 0 12px 30px rgba(4, 0, 16, .55), 0 0 0 1px rgba(255, 95, 210, .06);
+  --sombra-lado: 1px 0 0 rgba(4, 0, 16, .3); --sombra-modal: 0 4px 12px rgba(4, 0, 16, .55), 0 28px 64px rgba(4, 0, 16, .65), 0 0 40px rgba(255, 95, 210, .1);
+  --sombra-dura: rgba(4, 0, 16, .55); --sombra-suave: rgba(4, 0, 16, .38);
+  --backdrop: rgba(8, 3, 26, .68);
+  --toast-bg: #2c1756; --toast-fg: #f8f0ff; --toast-acento: #5cf0ff;
+  --escena: #6b4a10; --escena-trazo: #ffc94a; --rombo: #3f1f70; --rombo-trazo: #d59bff;
+  --p-grafito-bg: #2e2454; --p-grafito-tinta: #dcd2f7; --p-violeta-bg: #40205f; --p-violeta-tinta: #f6c8ff; --p-azul-bg: #14335c; --p-azul-tinta: #aeeeff;
+  --p-violeta-linea: rgba(255, 95, 210, .45); --p-azul-linea: rgba(62, 232, 255, .4);
+  --bb-bg: #0d0822; --bb-line: #2a2052; --bb-fg: #efe6ff; --bb-muted: #a497d2;
+  --guion-cab: #07030f; --guion-cab-tinta: #f3ecff;
+  --sol-a: #ffe45c; --sol-b: #ff8a3d; --sol-c: #ff2fa0; --sol-tinta: #23062f;
+  --marca-sol: linear-gradient(180deg, var(--sol-a), var(--sol-b) 55%, var(--sol-c));
+  --neon-brillo: 0 0 0 1px var(--foco-linea), 0 0 12px rgba(255, 95, 210, .45);
+  --neon-texto: 0 0 8px rgba(255, 95, 210, .55); --marca-brillo: 0 0 6px rgba(255, 95, 210, .55);
+  --rejilla-neon: rgba(62, 232, 255, .5); --rejilla-opacidad: .5;
+}
+html[data-estilo] { --sol: linear-gradient(90deg, var(--sol-a), var(--sol-b) 50%, var(--sol-c)); }
+/* En Synthwave, los fondos pálidos de la paleta (acto, nota con color, comparación) se tiñen de la noche índigo: los del oscuro,
+   pardos, se veían turbios sobre ella. Mismos tonos, mezclados con #2a1a5e; los valores de la paleta no cambian. */
+html[data-estilo="synthwave"] { --f-rojo: color-mix(in oklab, #3a282a 62%, #2a1a5e); --f-ladrillo: color-mix(in oklab, #3a2b27 62%, #2a1a5e); --f-cobre: color-mix(in oklab, #3a2c24 62%, #2a1a5e); --f-ambar: color-mix(in oklab, #393121 62%, #2a1a5e); --f-oro: color-mix(in oklab, #362f1f 62%, #2a1a5e); --f-lima: color-mix(in oklab, #313524 62%, #2a1a5e); --f-oliva: color-mix(in oklab, #2d3327 62%, #2a1a5e); --f-verde: color-mix(in oklab, #23352c 62%, #2a1a5e); --f-esmeralda: color-mix(in oklab, #1e3430 62%, #2a1a5e); --f-teal: color-mix(in oklab, #1d3435 62%, #2a1a5e); --f-turquesa: color-mix(in oklab, #1e333b 62%, #2a1a5e); --f-cielo: color-mix(in oklab, #21313d 62%, #2a1a5e); --f-azul: color-mix(in oklab, #292f3f 62%, #2a1a5e); --f-marino: color-mix(in oklab, #262d38 62%, #2a1a5e); --f-pizarra: color-mix(in oklab, #2b2d34 62%, #2a1a5e); --f-indigo: color-mix(in oklab, #2c2b3e 62%, #2a1a5e); --f-violeta: color-mix(in oklab, #302b3e 62%, #2a1a5e); --f-uva: color-mix(in oklab, #342b3d 62%, #2a1a5e); --f-ciruela: color-mix(in oklab, #372a3d 62%, #2a1a5e); --f-magenta: color-mix(in oklab, #392938 62%, #2a1a5e); --f-rosa: color-mix(in oklab, #3a2833 62%, #2a1a5e); --f-vino: color-mix(in oklab, #37272d 62%, #2a1a5e); --f-salvia: color-mix(in oklab, #2c3231 62%, #2a1a5e); --f-gris: color-mix(in oklab, #2d2d32 62%, #2a1a5e); }
+/* el logo: la claqueta de Leo (1.1.57), en sus dos colores; Claro y Oscuro siguen con el de antes */
+html[data-estilo] .logo img { object-fit: contain; }
+html[data-estilo="synthwave"] .logo .logo-oscuro { content: url("../img/clapcraft-synthwave.svg"); }
+html[data-estilo="vaporwave"] .logo .logo-claro { content: url("../img/clapcraft-vaporwave.svg"); }
+/* la marca: Courier New negrita (requisito fijo) con el degradado del sol y, en Synthwave, su resplandor */
+html[data-estilo] .gd-marca > span:not(.logo) { background: var(--marca-sol); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(var(--marca-brillo)); }
+/* desplazadores: el pulgar, de magenta a cian */
+html[data-estilo] ::-webkit-scrollbar-thumb,
+html[data-estilo] .gd-etq-body::-webkit-scrollbar-thumb { background: linear-gradient(135deg, var(--foco), var(--cian-vivo)); background-clip: padding-box; }
+html[data-estilo] ::-webkit-scrollbar-thumb:hover { background: linear-gradient(135deg, color-mix(in srgb, var(--foco) 85%, var(--tinta)), var(--cian-vivo)); background-clip: padding-box; }
+html[data-estilo] .hilo::-webkit-scrollbar-thumb, html[data-estilo] #esquema #board::-webkit-scrollbar-thumb { background: linear-gradient(90deg, var(--foco), var(--cian-vivo)); background-clip: border-box; }
+html[data-estilo] .hilo::-webkit-scrollbar-thumb:hover, html[data-estilo] #esquema #board::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--foco) 85%, var(--tinta)), var(--cian-vivo)); }
+/* las barras de escala del pie: el relleno es el sol */
+html[data-estilo] .tool input[type=range] { background: var(--sol) 0 / var(--pct, 50%) 100% no-repeat, var(--bb-line); }
+/* la pestaña activa: una raya de sol arriba */
+html[data-estilo] .pestana.activa::before { content: ''; position: absolute; left: 6px; right: 6px; top: -1px; height: 2px; border-radius: 2px; background: var(--sol); }
+html[data-estilo="synthwave"] .pestana.activa::before { box-shadow: 0 0 8px rgba(255, 95, 210, .6); }
+/* el botón primario: el sol, con la letra oscura que se lee sobre sus tres tonos */
+html[data-estilo] :is(.btn.primario, .act-btn[data-nota-abrir]) { background: var(--sol); border-color: transparent; color: var(--sol-tinta); }
+html[data-estilo] :is(.btn.primario, .act-btn[data-nota-abrir]) svg { color: var(--sol-tinta); }
+html[data-estilo] :is(.btn.primario, .act-btn[data-nota-abrir]):hover { background: var(--sol); color: var(--sol-tinta); opacity: 1; filter: saturate(1.15) brightness(1.04);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--sol-c) 45%, transparent); }
+html[data-estilo] .btn.primario:disabled { background: var(--hover); color: var(--palido); filter: none; box-shadow: none; }
+html[data-estilo] #dlg .btn.danger { color: var(--peligro-sobre); }
+/* hovers que eran un negro translúcido (en la noche no se veían) */
+html[data-estilo] .acto .mini:hover { background: color-mix(in srgb, var(--tinta) 9%, transparent); }
+html[data-estilo] .gd-arb-mas:hover { background: var(--hover); }
+html[data-estilo] :is(.vs-capa, .hc-capa) { background: var(--backdrop); }
+/* el brillo de neón: foco de teclado, campos, lo elegido */
+html[data-estilo] :focus-visible { outline-color: var(--foco); }
+html[data-estilo] :is(.field input:focus, .field textarea:focus, .field select:focus, .field .md-campo:focus, #panel .field select:focus,
+  .np-nombre:focus, .texto-nom:focus, .gd-pop-buscar:focus, .pestana-edit, .cap-edit, .nota-edit, .lname:not([readonly]), .aname:not([readonly])) {
+  box-shadow: 0 0 0 1px var(--foco), 0 0 0 3px var(--foco-halo), 0 0 14px var(--foco-halo); }
+html[data-estilo] .pt.sel .dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, var(--foco)) 30%, transparent), 0 0 12px var(--c, var(--foco)); }
+html[data-estilo] .pt:hover .dot { box-shadow: 0 0 10px color-mix(in srgb, var(--c, var(--foco)) 70%, transparent); }
+html[data-estilo] :is(.pt.sel.caja, .pt.sel.rombo) .dot { box-shadow: 0 0 0 4px var(--foco-halo), 0 0 12px var(--foco); }
+html[data-estilo] .nota.sel { box-shadow: 0 0 0 3px var(--foco-halo), 0 0 14px var(--foco-halo); }
+html[data-estilo] :is(.gd-nota.sel, .gd-nota.activa, .gd-exp-nota.sel, .gd-exp-nota.activa, .np-plantilla.activa) { box-shadow: var(--neon-brillo); }
+html[data-estilo] :is(.gd-sub.activo, .gd-per.activo, .gd-cont.gd-nav.activo, .gd-cont.papelera.activo, .gd-nota-fila.activa, .gd-nota-fila.sel):not(.sobre-antes, .sobre-despues) {
+  box-shadow: inset 2px 0 0 var(--foco), inset 3px 0 8px -4px var(--foco); }
+html[data-estilo="synthwave"] :is(.gd-sub, .gd-per, .gd-cont.gd-nav).activo :is(.gd-sub-nom, .gd-per-nom, [data-gd-nombre]) { text-shadow: var(--neon-texto); }
+html[data-estilo] #esquema :is(.label:hover, .label.sel) .chip { box-shadow: 0 0 0 3px var(--foco-halo), 0 0 10px currentColor; }
+html[data-estilo] .acto.sel { box-shadow: inset 0 -2px 0 var(--foco), 0 6px 12px -8px var(--foco); }
+html[data-estilo] .estado-punto, html[data-estilo] .pestana-sucio { box-shadow: 0 0 6px var(--foco); }
+/* el horizonte: la raya bajo el eje del tablero, cian */
+html[data-estilo] #esquema .axis { border-bottom-color: transparent; box-shadow: 0 1px 0 0 color-mix(in srgb, var(--cian-vivo) 45%, transparent); }
+html[data-estilo="synthwave"] #esquema .axis { box-shadow: 0 1px 0 0 color-mix(in srgb, var(--cian-vivo) 55%, transparent), 0 2px 10px -2px rgba(62, 232, 255, .35); }
+html[data-estilo="synthwave"] main { border-top-color: color-mix(in srgb, var(--foco) 40%, var(--borde)); }
+/* menús, avisos y ventanas: en Synthwave, un filo de neón */
+html[data-estilo="synthwave"] :is(#menu, .gd-pop, #dlg, #dlgNombre, .hilo-flot, .vs-caja, .hc-caja, .gd-modal) { border-color: color-mix(in srgb, var(--foco) 35%, var(--borde)); }
+html[data-estilo="synthwave"] #aviso { box-shadow: var(--sombra-alta), 0 0 0 1px rgba(62, 232, 255, .35), 0 0 16px rgba(62, 232, 255, .18); }
+html[data-estilo="synthwave"] :is(#tip, .gd-globo) { box-shadow: var(--sombra-alta), 0 0 0 1px rgba(255, 95, 210, .3); }
+/* arrastres y destinos: el segundo acento, cian */
+html[data-estilo] .gd-caida { background: var(--cc, var(--cian-vivo)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cc, var(--cian-vivo)) 25%, transparent), 0 0 10px var(--cc, var(--cian-vivo)); }
+html[data-estilo] .gd-caida::before { background: var(--cc, var(--cian-vivo)); }
+html[data-estilo] .marquesina { border-color: var(--cian-vivo); background: color-mix(in srgb, var(--cian-vivo) 10%, transparent); box-shadow: 0 0 10px var(--cian-halo); }
+html[data-estilo] #celda:hover { box-shadow: 0 0 10px var(--foco-halo); }
+html[data-estilo] .gd-borde::after { background: linear-gradient(180deg, var(--foco), var(--cian-vivo)); }
+html[data-estilo] body.panel-abajo #panelAsa:hover::after, html[data-estilo] body.redimensionando #panelAsa::after { background: var(--sol); }
+/* «Sin proyectos» y «Nuevo proyecto»: una rejilla de neón en perspectiva, muy tenue, al pie, y el resplandor del sol en el horizonte */
+html[data-estilo] :is(.sinp-cuerpo, .np-cuerpo) { position: relative; isolation: isolate; overflow: hidden; }
+html[data-estilo] :is(.sinp-cuerpo, .np-cuerpo)::before { content: ''; position: absolute; z-index: -1; left: -40%; right: -40%; bottom: 42px; height: 1000px; pointer-events: none;
+  background: repeating-linear-gradient(90deg, var(--rejilla-neon) 0 1px, transparent 1px 96px), repeating-linear-gradient(0deg, var(--rejilla-neon) 0 1px, transparent 1px 80px);
+  transform: perspective(700px) rotateX(55deg); transform-origin: 50% 100%;   /* el suelo: ~260 px de alto sobre el pie */
+  -webkit-mask-image: linear-gradient(to top, #000 5%, transparent 70%); mask-image: linear-gradient(to top, #000 5%, transparent 70%);
+  opacity: var(--rejilla-opacidad); }
+html[data-estilo] :is(.sinp-cuerpo, .np-cuerpo)::after { content: ''; position: absolute; z-index: -1; left: 50%; bottom: 30%; width: 760px; height: 320px; transform: translateX(-50%); pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sol-c) 16%, transparent), transparent); opacity: var(--rejilla-opacidad); }
+html[data-estilo] :is(.sinp-cuerpo, .np-cuerpo) > * { position: relative; }
+/* el selector de tema de la franja (app.js): las cuatro opciones con su muestra */
+.tema-opcion { display: flex; align-items: center; gap: 10px; }
+.tema-muestra { width: 22px; height: 14px; flex: none; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18); }
+.tema-muestra--claro { background: linear-gradient(90deg, #f5f6f8 50%, #6141c9 50%); }
+.tema-muestra--oscuro { background: linear-gradient(90deg, #191a1d 50%, #b3a6f7 50%); }
+.tema-muestra--synthwave { background: linear-gradient(90deg, #19113a 50%, #ff5fd2 50% 75%, #3ee8ff 75%); }
+.tema-muestra--vaporwave { background: linear-gradient(90deg, #fbf3fa 50%, #ffd66b 50% 66%, #ff6fc2 66% 83%, #38d6ee 83%); }

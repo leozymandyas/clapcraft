@@ -1,0 +1,135 @@
+/* ===== Imágenes: el marco de la elegida en el editor (js/imagenes.js) y el visor para marcarlas y recortarlas (js/anotar.js) =====
+   1.1.57, de ClapBook. Se carga en index.html (el editor) y en claquedraw.html (la app: el visor tapa la ventana entera y la
+   ventana de una nota abre sus imágenes con él). Todo va por los tokens `--an-*`, que salen de los de cada página (la app:
+   --papel, --foco…; el editor: --page-bg, --accent…), así la piel que se ponga encima los alcanza. */
+:root {
+  --an-capa: var(--backdrop, rgba(12, 12, 16, .62));
+  --an-papel: var(--papel, var(--page-bg, #ffffff));
+  --an-lienzo: var(--lienzo, var(--canvas, #f5f6f8));
+  --an-borde: var(--borde, var(--line, #c5c8d0));
+  --an-regla: var(--regla, var(--line-soft, #d7d9df));
+  --an-tinta: var(--tinta, var(--fg, #1b1d22));
+  --an-tenue: var(--tenue, var(--muted, #5a5f68));
+  --an-palido: var(--palido, var(--muted-2, #878d97));
+  --an-hover: var(--hover, #d8dae0);
+  --an-foco: var(--foco, var(--accent, #6141c9));
+  --an-foco-suave: var(--foco-suave, var(--accent-bg, #e9e6f8));
+  --an-foco-sobre: var(--foco-sobre, #ffffff);
+  --an-sombra: var(--sombra-modal, 0 4px 10px rgba(24, 24, 32, .14), 0 24px 60px rgba(24, 24, 32, .22));
+  --an-sans: var(--sans, var(--ui-font, -apple-system, "Segoe UI", Roboto, sans-serif));
+  --an-mono: var(--mono, ui-monospace, Menlo, monospace);
+  /* el marco de la imagen elegida y su barra (sobre la hoja) */
+  --img-marco: var(--an-foco);
+  --img-asa-fondo: #ffffff;
+  --img-barra-bg: var(--toast-bg, var(--bb-bg, #2b2b31));
+  --img-barra-fg: var(--toast-fg, var(--bb-fg, #ececef));
+  --img-barra-hover: rgba(255, 255, 255, .14);
+  /* el recorte y el fondo del lienzo */
+  --an-rc-fuera: rgba(8, 8, 12, .58);
+}
+
+/* ---------- el editor: la imagen elegida y su marco ---------- */
+#editor img { cursor: default; }
+html.img-elegida #editor ::selection { background: transparent; }  /* elegida, se nota por su marco, no por el tinte */
+html.img-midiendo, html.img-midiendo * { cursor: ew-resize !important; }
+.img-sel { position: fixed; z-index: 40; pointer-events: none; box-sizing: border-box; }
+.img-sel[hidden] { display: none; }
+.img-sel-marco { position: absolute; inset: -2px; border: 2px solid var(--img-marco); border-radius: 3px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .6); }
+.img-asa { position: absolute; width: 11px; height: 11px; margin: -6px 0 0 -6px; box-sizing: border-box; border: 2px solid var(--img-marco); border-radius: 3px;
+  background: var(--img-asa-fondo); pointer-events: auto; touch-action: none; }
+.img-asa--nw { left: 0; top: 0; cursor: nwse-resize; }
+.img-asa--ne { left: 100%; top: 0; cursor: nesw-resize; }
+.img-asa--se { left: 100%; top: 100%; cursor: nwse-resize; }
+.img-asa--sw { left: 0; top: 100%; cursor: nesw-resize; }
+.img-asa--e, .img-asa--w { top: 50%; width: 7px; height: 30px; margin: -15px 0 0 -4px; border-radius: 4px; cursor: ew-resize; }
+.img-asa--e { left: 100%; }
+.img-asa--w { left: 0; }
+.img-barra { position: absolute; left: 0; bottom: calc(100% + 8px); display: flex; align-items: center; gap: 1px; padding: 3px; border-radius: 7px;
+  background: var(--img-barra-bg); color: var(--img-barra-fg); box-shadow: 0 4px 14px rgba(0, 0, 0, .22); pointer-events: auto; white-space: nowrap;
+  font: 500 12px/1 var(--an-sans); }
+.img-sel.arriba .img-barra { bottom: auto; top: 8px; left: 8px; }
+.img-sel.midiendo .img-barra { opacity: .55; }
+.img-barra button { display: inline-flex; align-items: center; gap: 5px; height: 26px; min-width: 26px; padding: 0 6px; border: 0; border-radius: 5px; background: none;
+  color: inherit; font: inherit; cursor: pointer; }
+.img-barra button:hover:not(:disabled) { background: var(--img-barra-hover); }
+.img-barra button:disabled { opacity: .38; cursor: default; }
+.img-barra button[hidden] { display: none; }
+.img-barra svg { flex: none; }
+.img-medida { padding: 0 6px 0 4px; font: 400 11px/1 var(--an-mono); opacity: .75; }
+
+/* ---------- la ventana de una nota (ClapCraft): sus imágenes se abren con doble clic ---------- */
+.gd-lado-img { cursor: zoom-in; }
+
+/* ---------- el visor y las herramientas (anotar.js) ---------- */
+.an-capa { position: fixed; inset: 0; z-index: 88; display: flex; padding: 3vh 3vw; background: var(--an-capa); animation: an-capa .12s ease-out;
+  font: 400 13px/1.3 var(--an-sans); color: var(--an-tinta); }
+@keyframes an-capa { from { opacity: 0; } to { opacity: 1; } }
+.an-capa.an-directo .an-caja { visibility: hidden; }               /* «Editar» de la barra: sin pasar por el visor */
+.an-caja { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--an-papel); border: 1px solid var(--an-borde); border-radius: 10px;
+  box-shadow: var(--an-sombra); overflow: hidden; outline: none; position: relative; }
+.an-barra { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 8px 10px; border-bottom: 1px solid var(--an-regla); }
+.an-grupo { display: flex; align-items: center; gap: 2px; }
+.an-sep { width: 1px; height: 22px; margin: 0 4px; background: var(--an-regla); }
+.an-espacio { flex: 1; }
+.an-b { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: none;
+  color: var(--an-tenue); cursor: pointer; }
+.an-b:hover:not(:disabled) { background: var(--an-hover); color: var(--an-tinta); }
+.an-b.on { background: var(--an-foco-suave); color: var(--an-foco); }
+.an-b:disabled { opacity: .35; cursor: default; }
+.an-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--an-borde); border-radius: 5px; background: var(--an-papel);
+  color: var(--an-tinta); font: 500 13px/1 var(--an-sans); cursor: pointer; white-space: nowrap; }
+.an-btn:hover:not(:disabled) { background: var(--an-hover); }
+.an-btn:disabled { opacity: .45; cursor: default; }
+.an-btn.primario { background: var(--an-foco); border-color: var(--an-foco); color: var(--an-foco-sobre); }
+.an-btn.primario:hover:not(:disabled) { background: var(--an-foco); filter: brightness(1.08); }
+.an-btn svg { flex: none; }
+.an-grosor i { display: block; width: 16px; border-radius: 2px; background: currentColor; }
+.an-color { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.an-color i { width: 18px; height: 18px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .2); }
+.an-color.on { box-shadow: 0 0 0 2px var(--an-foco); }
+.an-vista-barra { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 14px; }
+.an-vista-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px var(--an-sans); }
+.an-vista-acc { justify-self: center; gap: 8px; }
+.an-vista-barra [data-an-cerrar] { justify-self: end; }
+.an-vista-lienzo { position: relative; overflow: hidden; }
+.an-vista-lienzo img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.an-vista-estado { position: absolute; font: 400 13px var(--an-sans); color: var(--an-tenue); }
+.an-vista-estado[hidden] { display: none; }
+.an-lienzo { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 24px;
+  background: repeating-conic-gradient(var(--an-lienzo) 0% 25%, var(--an-papel) 0% 50%) 50% / 20px 20px; }
+.an-marco { position: relative; flex: none; box-shadow: 0 6px 30px rgba(0, 0, 0, .25); }
+.an-marco img { display: block; width: 100%; height: 100%; user-select: none; }
+.an-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; touch-action: none; cursor: crosshair; }
+.an-marco[data-herr="mover"] .an-svg { cursor: default; }
+.an-marco[data-herr="texto"] .an-svg { cursor: text; }
+.an-svg [data-i] { cursor: move; }
+.an-marco[data-herr="texto"] .an-svg [data-i] { cursor: text; }
+.an-caja-sel { fill: none; stroke: var(--an-foco); pointer-events: none; }
+.an-asa { fill: #ffffff; stroke: var(--an-foco); cursor: nwse-resize; }
+.an-asa[data-asa="ne"], .an-asa[data-asa="sw"] { cursor: nesw-resize; }
+.an-asa[data-asa="p1"], .an-asa[data-asa="p2"] { cursor: move; }
+.an-texto { position: absolute; z-index: 2; margin: 0; border: 1px dashed var(--an-foco); background: transparent; resize: none; overflow: hidden; outline: none; white-space: pre; box-sizing: content-box; }
+/* recortar: la tira de las proporciones y el marco encima de la imagen */
+.an-subbarra { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 12px; border-bottom: 1px solid var(--an-regla); background: var(--an-lienzo); }
+.an-subbarra[hidden] { display: none; }
+.an-sub-rot { font: 400 9.5px var(--an-mono); letter-spacing: .09em; text-transform: uppercase; color: var(--an-palido); }
+.an-chip { height: 26px; padding: 0 10px; border: 1px solid var(--an-borde); border-radius: 13px; background: var(--an-papel); color: var(--an-tenue); font: 500 12px var(--an-sans); cursor: pointer; }
+.an-chip:hover { color: var(--an-tinta); }
+.an-chip.on { background: var(--an-foco-suave); border-color: var(--an-foco); color: var(--an-foco); }
+.an-subbarra .an-grupo { gap: 4px; }
+.an-rc-medida { font: 400 11px var(--an-mono); color: var(--an-tenue); }
+.an-subbarra .an-btn { height: 28px; }
+.an-marco.recortada { overflow: hidden; }
+.an-marco[data-herr="recortar"] .an-svg { cursor: crosshair; }
+.an-rc-fuera { fill: var(--an-rc-fuera); }
+.an-rc-tercios { fill: none; stroke: rgba(255, 255, 255, .55); pointer-events: none; }
+.an-rc-borde { fill: none; stroke: #ffffff; pointer-events: none; filter: drop-shadow(0 0 1px rgba(0, 0, 0, .6)); }
+.an-rc-asas { fill: none; stroke: #ffffff; stroke-linecap: square; pointer-events: none; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .55)); }
+.an-pie { flex: none; display: flex; align-items: center; gap: 12px; padding: 7px 14px; border-top: 1px solid var(--an-regla); font: 400 11px var(--an-mono); color: var(--an-palido); }
+.an-nombre { color: var(--an-tenue); font-weight: 500; }
+/* una pregunta dentro de la ventana (salir sin guardar, volver al original) */
+.an-pregunta { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; background: var(--an-capa); }
+.an-pregunta-caja { max-width: 380px; padding: 18px 20px 14px; border: 1px solid var(--an-borde); border-radius: 8px; background: var(--an-papel); box-shadow: var(--an-sombra); outline: none; }
+.an-pregunta-caja p { margin: 0 0 16px; font: 400 14px/1.45 var(--an-sans); color: var(--an-tinta); }
+.an-pregunta-acc { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 700px) { .an-capa { padding: 8px; } .an-pie { display: none; } }

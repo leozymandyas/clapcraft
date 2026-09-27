@@ -7,7 +7,14 @@
 <link rel="icon" href="img/clapcraft.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/tramas.css">
 <link rel="stylesheet" href="css/claquedraw.css">
+<link rel="stylesheet" href="css/recuadros.css">
+<link rel="stylesheet" href="css/imagenes.css">
+<link rel="stylesheet" href="css/conexiones.css">
+<link rel="stylesheet" href="css/lienzo.css">
+<link rel="stylesheet" href="css/asistente.css">
+<link rel="stylesheet" href="css/memoria.css">
 <link rel="stylesheet" href="css/clapcraft.css">
+<link rel="stylesheet" href="css/ventana.css">
 <script>
 /* Tema antes del primer pintado, para que no parpadee. Misma clave que tramas.html y respaldo en la del editor. */
 (function () {
@@ -15,6 +22,12 @@
     var t = localStorage.getItem('guiones.tramas.theme') || localStorage.getItem('guiones.editor.theme');
     if (!t && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
     document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+    /* los temas neón (1.1.57): Synthwave va sobre el oscuro y Vaporwave sobre el claro */
+    var e = localStorage.getItem('guiones.claquedraw.estilo');
+    if (e === 'synthwave' || e === 'vaporwave') {
+      document.documentElement.dataset.estilo = e;
+      document.documentElement.dataset.theme = e === 'synthwave' ? 'dark' : 'light';
+    }
   } catch (e) {}
 })();
 </script>
@@ -53,6 +66,33 @@
 <symbol id="ic-person" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.4"/><path d="M3.4 13.6c0-2.5 2.1-4 4.6-4s4.6 1.5 4.6 4"/></symbol>
 <symbol id="ic-link" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.7 9.3a3.2 3.2 0 0 0 4.6.2l2-2a3.2 3.2 0 0 0-4.5-4.5l-1.1 1.1"/><path d="M9.3 6.7a3.2 3.2 0 0 0-4.6-.2l-2 2a3.2 3.2 0 0 0 4.5 4.5l1.1-1.1"/></symbol>
 <symbol id="ic-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></symbol>
+<symbol id="ic-plantilla" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 2.4h5.6l3.2 3.2v8H3.6z"/><path d="M9.2 2.4v3.2h3.2"/><path d="M7 7.6c-.7 0-.9.3-.9 1v.3c0 .5-.2.7-.7.7.5 0 .7.2.7.7v.3c0 .7.2 1 .9 1M9 7.6c.7 0 .9.3.9 1v.3c0 .5.2.7.7.7-.5 0-.7.2-.7.7v.3c0 .7-.2 1-.9 1"/></symbol>
+<!-- las fórmulas (1.1.60): un matraz, prompts reutilizables para las operaciones de IA del lienzo -->
+<symbol id="ic-formula" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 2.4h3.6"/><path d="M6.8 2.4v3.9L3.3 12.1c-.5.8.1 1.5.9 1.5h7.6c.8 0 1.4-.7.9-1.5L9.2 6.3V2.4"/><path d="M4.7 10h6.6"/></symbol>
+<!-- los del lienzo de nodos (1.1.58): tipos de nodo, pedir a Claude, encajar -->
+<symbol id="ic-play" viewBox="0 0 16 16" fill="currentColor"><path d="M5.2 3.3v9.4c0 .5.5.8.9.5l7-4.7c.4-.3.4-.8 0-1.1l-7-4.7c-.4-.2-.9.1-.9.6z"/></symbol>
+<symbol id="ic-nota" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 2.4h5.8l3 3v8.2H3.6z"/><path d="M9.4 2.4v3h3"/><path d="M5.8 8.2h4.4M5.8 10.6h2.8"/></symbol>
+<symbol id="ic-segmento" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4v4.2l5.8 5.8 5-5-5.8-5.8H3.4a.8.8 0 0 0-.8.8z"/><circle cx="5.6" cy="5.6" r="1"/></symbol>
+<symbol id="ic-imagen" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.3" y="2.9" width="11.4" height="10.2" rx="1.4"/><circle cx="5.9" cy="6.3" r="1.1"/><path d="M2.6 11.6 6.2 8.4l2.6 2.3 1.9-1.5 2.8 2.5"/></symbol>
+<symbol id="ic-texto" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 4.4V3h9.2v1.4M8 3v10M6.2 13h3.6"/></symbol>
+<symbol id="ic-magia" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2.4 8.2 5.8l3.4 1.2-3.4 1.2L7 11.6 5.8 8.2 2.4 7l3.4-1.2z"/><path d="M12.2 10.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></symbol>
+<symbol id="ic-tijera" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.4" cy="11.6" r="1.9"/><circle cx="11.6" cy="11.6" r="1.9"/><path d="M5.8 10.3 12.2 2.8M10.2 10.3 3.8 2.8"/></symbol>
+<symbol id="ic-escaleta" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.8" cy="4.2" r="1.1"/><circle cx="3.8" cy="8" r="1.1"/><circle cx="3.8" cy="11.8" r="1.1"/><path d="M6.8 4.2h6.6M6.8 8h6.6M6.8 11.8h4.4"/></symbol>
+<symbol id="ic-resumir" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 3.4h10.4M2.8 6.4h10.4M2.8 9.4h6"/><path d="M11.4 9.6v4M9.8 12l1.6 1.6L13 12"/></symbol>
+<symbol id="ic-reescribir" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 2.8 13.2 5.4 6.8 11.8l-3.2.8.8-3.2z"/><path d="M9.4 13.4h4.2"/></symbol>
+<symbol id="ic-traducir" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 3.8h6.4M5.6 2.4v1.4M7.4 3.8c-.4 2.4-2 4.2-4.6 5.2M4 5.6c.6 1.4 1.8 2.6 3.4 3.2"/><path d="M8.8 13.6 11.1 8l2.3 5.6M9.6 11.8h3"/></symbol>
+<symbol id="ic-instruccion" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.2h10.8v7.4H7.4L4.4 13v-2.4H2.6z"/><path d="M5.4 6.1h5.2M5.4 8.1h3"/></symbol>
+<symbol id="ic-encajar" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.6v-3h3M10.4 2.6h3v3M13.4 10.4v3h-3M5.6 13.4h-3v-3"/><rect x="5.8" y="5.8" width="4.4" height="4.4" rx=".7"/></symbol>
+<symbol id="ic-lienzo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.8" width="4.8" height="3.8" rx=".9"/><rect x="9.4" y="9.4" width="4.8" height="3.8" rx=".9"/><path d="M6.6 4.7c3.4 0 .4 6.6 2.8 6.6"/></symbol>
+<symbol id="ic-aviso" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.6 13.9 13H2.1z"/><path d="M8 6.8v2.8M8 11.3v.1"/></symbol>
+<!-- el asistente con otra IA (1.1.59): el bocadillo con su chispa, los ajustes, detener, mandar, la clave y abrir fuera -->
+<symbol id="ic-asistente" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 4.1c0-.8.6-1.4 1.4-1.4h5.2M13.4 7.4v2.9c0 .8-.6 1.4-1.4 1.4H7.6L4.6 14v-2.3H4c-.8 0-1.4-.6-1.4-1.4V4.1"/><path d="M11.8 1.6l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"/></symbol>
+<symbol id="ic-ajustes" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 4.4h6.2M12 4.4h1.4M2.6 11.6h1.4M7.2 11.6h6.2"/><circle cx="10.4" cy="4.4" r="1.6"/><circle cx="5.6" cy="11.6" r="1.6"/></symbol>
+<symbol id="ic-detener" viewBox="0 0 16 16" fill="currentColor"><rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.4"/></symbol>
+<symbol id="ic-mandar" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3.4M4.2 7.2 8 3.4l3.8 3.8"/></symbol>
+<symbol id="ic-llave" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.4" cy="10.6" r="2.8"/><path d="M7.4 8.6 13 3M11 5l1.6 1.6M9.6 6.4l1.2 1.2"/></symbol>
+<symbol id="ic-fuera" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.4 2.8h3.8v3.8M13.2 2.8 7.6 8.4"/><path d="M11.6 9.4v2.8c0 .6-.5 1-1 1H3.8c-.6 0-1-.4-1-1V5.4c0-.6.4-1 1-1h2.8"/></symbol>
+<symbol id="ic-herramienta" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 2.8a3 3 0 0 0-3 3.9L2.9 11a1.3 1.3 0 0 0 1.9 1.9l4.3-4.3a3 3 0 0 0 3.9-3L11.3 7.3 9.5 6.8 9 5l1.7-1.7a3 3 0 0 0-.5-.5z"/></symbol>
 </defs></svg>
 
 <!-- franja de pestañas (38 px): el nombre del proyecto de la ventana y sus pestañas (lo abierto del proyecto: esquemas,
@@ -69,6 +109,8 @@
     <button class="btn" id="btnGuardar" title="Guardar ahora en el archivo del guion (Ctrl+S)">Guardar</button>
     <button class="btn" id="btnGuardarComo" title="Guardar en otro archivo (.clapcraft) y seguir guardando ahí (Ctrl+Shift+S)">Guardar como…</button>
     <input type="file" id="archivo" accept=".clapcraft" hidden>
+    <!-- el asistente con otra IA (1.1.59): abre y cierra su panel (Cmd/Ctrl+Shift+I); también en la app de escritorio -->
+    <button type="button" class="as-franja-btn" id="asistenteBtn" title="Asistente IA (Ctrl+Shift+I)" aria-label="Asistente IA" aria-pressed="false"><svg width="16" height="16"><use href="#ic-asistente"></use></svg><span>Asistente</span></button>
   </div>
 </div>
 
@@ -158,10 +200,45 @@
     <nav id="migas" class="migas" aria-label="Ruta de la nota"></nav>
     <iframe id="editorMarco" title="Editor de texto"></iframe>
   </section>
+  <!-- Vista Lienzo (1.1.58): nodos que se conectan con cables, como los «Space» de Dreamina; las entradas apuntan a notas,
+       segmentos, bibliotecas, esquemas y personajes, y las operaciones las ejecuta Claude (js/claquedraw/lienzo.js, css/lienzo.css) -->
+  <section id="lienzo" aria-label="Lienzo de nodos">
+    <header class="esq-cab lz-cab">
+      <div class="esq-titulo"><span class="esq-cont" data-lz-cont></span><span class="gd-chip gd-chip-nom gd-chip--lienzo"><span data-lz-nom></span></span></div>
+      <span class="spacer"></span>
+      <span class="lz-cuenta" data-lz-cuenta></span>
+      <button type="button" class="btn con-icono" data-lz-anadir title="Añadir un nodo (doble clic en el fondo o clic derecho)"><svg width="15" height="15"><use href="#ic-plus"></use></svg>Añadir nodo</button>
+    </header>
+    <div class="lz-cuerpo" id="lzCuerpo" tabindex="-1">
+      <div class="lz-mundo" id="lzMundo"><svg class="lz-cables" id="lzCables" aria-hidden="true"></svg><div class="lz-nodos" id="lzNodos"></div></div>
+      <div class="lz-vacio" id="lzVacio" hidden></div>
+    </div>
+    <footer class="esq-pie lz-pie">
+      <div class="tool"><span>Zoom</span>
+        <span class="zoom-vista lz-zoom">
+          <button type="button" class="icono" data-lz-zoom="-1" title="Alejar (Cmd −)" aria-label="Alejar">−</button>
+          <button type="button" class="zoom-pct" data-lz-zoom="0" title="Zoom: pulsa para volver al 100 % (Cmd 0)">100 %</button>
+          <button type="button" class="icono" data-lz-zoom="1" title="Acercar (Cmd +)" aria-label="Acercar">+</button>
+          <button type="button" class="icono" data-lz-encajar title="Encajar: ver todos los nodos (Mayús 1)" aria-label="Encajar"><svg width="15" height="15"><use href="#ic-encajar"></use></svg></button>
+        </span>
+      </div>
+      <span class="lz-pista">Arrastra el fondo para moverte · Mayús + arrastrar elige · doble clic añade</span>
+      <span class="spacer"></span>
+      <button type="button" class="btn primario lz-pedir-todo" data-lz-pedir-todo title="Deja pendientes todas las operaciones y copia el encargo para Claude"><svg width="13" height="13"><use href="#ic-play"></use></svg>Pedir todo</button>
+      <div class="historia">
+        <button class="icono" id="lzDeshacer" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><svg width="16" height="16"><use href="#ic-undo"></use></svg></button>
+        <button class="icono" id="lzRehacer" title="Rehacer (Ctrl+Shift+Z)" aria-label="Rehacer"><svg width="16" height="16"><use href="#ic-redo"></use></svg></button>
+      </div>
+    </footer>
+  </section>
   <!-- Vista Documentos: barra lateral (solo aquí) y tablero de etiquetas del contenedor abierto -->
   <section id="documentos" aria-label="Gestor de documentos">
     <div class="gd-main" id="gdMain"></div>
   </section>
+  <!-- el asistente con otra IA (1.1.59, js/claquedraw/asistente.js, css/asistente.css): un chat a la derecha que trabaja con las
+       herramientas de Claude sobre el proyecto abierto. Convive con todas las vistas (el contenido se estrecha), se ensancha
+       arrastrando su borde izquierdo y se pliega a un riel. Lo pinta asistente.js -->
+  <aside id="asistente" class="as-panel" aria-label="Asistente IA" hidden></aside>
 </main>
 
 <dialog id="dlg">
@@ -191,6 +268,7 @@
       <div class="dlg-tipos-grid">
         <button type="button" class="dlg-tipo" data-dlg-tipo="esquema"><span class="dlg-tipo-cab"><span class="gd-chip gd-chip--esquema">Esquema</span><span class="dlg-radio"><svg width="11" height="11"><use href="#ic-check"></use></svg></span></span><span class="dlg-tipo-desc">Un tablero de tramas, actos y nodos.</span></button>
         <button type="button" class="dlg-tipo" data-dlg-tipo="sub"><span class="dlg-tipo-cab"><span class="gd-chip gd-chip--sub">Biblioteca</span><span class="dlg-radio"><svg width="11" height="11"><use href="#ic-check"></use></svg></span></span><span class="dlg-tipo-desc">Tarjetas por segmento con notas.</span></button>
+        <button type="button" class="dlg-tipo" data-dlg-tipo="lienzo" hidden><span class="dlg-tipo-cab"><span class="gd-chip gd-chip--lienzo">Lienzo</span><span class="dlg-radio"><svg width="11" height="11"><use href="#ic-check"></use></svg></span></span><span class="dlg-tipo-desc">Nodos que Claude convierte en guiones y fragmentos.</span></button>
       </div>
     </div>
     <menu>
@@ -202,6 +280,12 @@
   </form>
 </dialog>
 
+<!-- la configuración del asistente: proveedor, clave (vive cifrada en el proceso principal; aquí solo «••••1234»), modelo,
+     temperatura, tope de gasto y «Probar conexión». La pinta asistente.js -->
+<dialog id="dlgIA" class="as-dlg" aria-label="Configurar el asistente IA"></dialog>
+<!-- el tutorial paso a paso (Leo no sabe nada de APIs): de crear la cuenta en APIMart a usar el asistente -->
+<dialog id="dlgTutorialIA" class="as-dlg as-tut" aria-label="Configurar el asistente paso a paso"></dialog>
+
 <div id="menu"></div>
 <div id="tip"></div>
 <div id="aviso"></div>
@@ -211,21 +295,30 @@
 <script src="js/tramas/tablero.js"></script>
 <script src="js/claquedraw/biblioteca.js"></script>
 <script src="js/claquedraw/documentos.js"></script>
+<script src="js/claquedraw/lienzo-modelo.js"></script>
+<script src="js/claquedraw/formulas.js"></script>
 <script src="js/claquedraw/plantillas.js"></script>
 <script src="js/claquedraw/relaciones.js"></script>
 <script src="js/claquedraw/guion.js"></script>
 <script src="js/claquedraw/conversor.js"></script>
+<script src="js/claquedraw/memoria.js"></script>
 <script src="js/claquedraw/busqueda.js"></script>
 <script src="js/claquedraw/historial.js"></script>
 <script src="js/claquedraw/enlaces.js"></script>
 <script src="js/claquedraw/herramientas.js"></script>
+<script src="js/claquedraw/asistente-motor.js"></script>
 <script src="js/claquedraw/versiones.js"></script>
 <script src="js/claquedraw/flotante.js"></script>
 <script src="js/claquedraw/texto.js"></script>
 <script src="js/claquedraw/maquetar.js"></script>
 <script src="js/claquedraw/exportar.js"></script>
+<script src="js/anotar.js"></script>
+<script src="js/claquedraw/lienzo.js"></script>
+<script src="js/claquedraw/ventana.js"></script>
 <script src="js/claquedraw/gestor.js"></script>
 <script src="js/claquedraw/proyectos.js"></script>
+<script src="js/claquedraw/asistente.js"></script>
+<script src="js/claquedraw/memoria-ui.js"></script>
 <script src="js/claquedraw/app.js"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /* Proceso principal de Electron: ventana + diálogos nativos de abrir/guardar */
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell, clipboard, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 
@@ -176,8 +176,8 @@ ipcMain.handle('ventana:cerrar', (e, { forzar } = {}) => {
    va el modo oscuro (Leo): las vistas se cambian desde la barra de documentos y con los atajos de la
    página (Ctrl+Shift+G/F/K/T/B), que en Electron llegan porque el menú ya no los captura. */
 function enviar(accion) { const w = BrowserWindow.getFocusedWindow() || [...ventanas.values()].map(v => v.win).find(x => !x.isDestroyed()); if (w) w.webContents.send('menu', accion); }
-let temaOscuro = false;
-ipcMain.on('tema', (_e, oscuro) => { temaOscuro = !!oscuro; montarMenu(); });   // el rótulo del menú sigue al tema
+let temaActual = 'claro';   // 'claro', 'oscuro', 'synthwave' o 'vaporwave' (1.1.57: los temas neón)
+ipcMain.on('tema', (_e, t) => { temaActual = typeof t === 'string' ? t : (t ? 'oscuro' : 'claro'); montarMenu(); });   // Ver › Tema marca el que hay
 function montarMenu() {
   const mac = process.platform === 'darwin';
   const plantilla = [
@@ -192,6 +192,14 @@ function montarMenu() {
       { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => enviar('guardar') },
       { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => enviar('guardarComo') },
       { type: 'separator' },
+      /* las plantillas de nota (1.1.56, de ClapBook): crear una nota desde una, ponerla en el editor o guardar una nota como plantilla */
+      { label: 'Nueva nota desde plantilla…', accelerator: 'CmdOrCtrl+Alt+N', click: () => enviar('desdePlantilla') },
+      { label: 'Nueva nota con esta plantilla', click: () => enviar('usarPlantilla') },   // la plantilla de delante (si no lo es, lo avisa)
+      { label: 'Insertar plantilla…', click: () => enviar('insertarPlantilla') },
+      { label: 'Guardar la nota como plantilla…', click: () => enviar('guardarComoPlantilla') },
+      { type: 'separator' },
+      { label: 'Nuevo lienzo…', click: () => enviar('nuevoLienzo') },   // un lienzo de nodos en el contenedor de delante (1.1.58)
+      { type: 'separator' },
       { label: 'Renombrar proyecto…', click: () => enviar('renombrar') },   // el archivo se sigue llamando igual (18-09-2026)
       { type: 'separator' },
       /* Cmd+W cierra la pestaña de delante (con la última, el proyecto, como un navegador); cerrar el proyecto cierra su ventana */
@@ -204,9 +212,18 @@ function montarMenu() {
       { label: 'Rehacer', accelerator: 'CmdOrCtrl+Shift+Z', click: () => enviar('rehacer') },
       { type: 'separator' },
       { role: 'cut', label: 'Cortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Pegar' },
-      { role: 'selectAll', label: 'Seleccionar todo' } ] },
+      /* no el rol nativo: se comía Cmd+A antes de que llegara al lienzo (1.1.58); app.js lo reparte (campo, editor o lienzo) */
+      { label: 'Seleccionar todo', accelerator: 'CmdOrCtrl+A', click: () => enviar('elegirTodo') } ] },
     { label: 'Ver', submenu: [
-      { label: temaOscuro ? 'Modo claro' : 'Modo oscuro', accelerator: 'CmdOrCtrl+Shift+D', click: () => enviar('tema') } ] },
+      /* Tema (1.1.57): Claro y Oscuro, y los neón Synthwave y Vaporwave; Cmd+Shift+D pasa del claro al oscuro de su familia */
+      { label: 'Tema', submenu: [
+        ...[['claro', 'Claro'], ['oscuro', 'Oscuro'], ['synthwave', 'Synthwave'], ['vaporwave', 'Vaporwave']].map(([id, label]) =>
+          ({ label, type: 'radio', checked: temaActual === id, click: () => enviar('tema:' + id) })),
+        { type: 'separator' },
+        { label: 'Claro / oscuro', accelerator: 'CmdOrCtrl+Shift+D', click: () => enviar('tema') } ] },
+      { type: 'separator' },
+      { label: 'Plantillas', click: () => enviar('plantillas') },   // su biblioteca especial, como «Plantillas» al pie del menú (1.1.56)
+      { label: 'Fórmulas', click: () => enviar('formulas') } ] },   // la de las fórmulas, prompts para las operaciones de IA del lienzo (1.1.60)
     /* Claude (1.1.49, electron/claude.js): la conexión se puede apagar; apagada, Claude solo toca los proyectos cerrados */
     { label: 'Claude', submenu: [
       { label: 'Permitir que Claude acceda', type: 'checkbox', checked: !!(claude && claude.activo()), click: m => { if (claude) claude.alternar(m.checked); } },
@@ -216,6 +233,12 @@ function montarMenu() {
       { label: 'Ir al enlace copiado', click: () => enviar('irEnlace') },
       { type: 'separator' },
       { label: 'Historial de cambios…', click: () => enviar('historialClaude') },   // lo que ha hecho Claude, y revertirlo (1.1.50)
+      { label: 'Memoria de estilo…', click: () => enviar('memoriaEstilo') },   // lo que la IA aprende del tono y la forma de Leo (1.1.60)
+      { type: 'separator' },
+      /* otras IAs por API (1.1.59, electron/ia.js): el asistente de la página, que habla con DeepSeek por APIMart, y su configuración */
+      { label: 'Asistente con otra IA…', accelerator: 'CmdOrCtrl+Shift+I', click: () => enviar('asistente') },
+      { label: 'Configurar IA…', click: () => enviar('configurarIA') },
+      { label: 'Tutorial de la IA…', click: () => enviar('tutorialIA') },
       { label: 'Conectar con Claude…', click: () => { if (claude) claude.conectar(BrowserWindow.getFocusedWindow()); } } ] },
     { role: 'window', label: 'Ventana', submenu: [{ role: 'minimize', label: 'Minimizar' }, { role: 'zoom', label: 'Zoom' }, ...(mac ? [{ type: 'separator' }, { role: 'front', label: 'Traer todo al frente' }] : [{ role: 'close', label: 'Cerrar' }])] }
   ];
@@ -223,6 +246,10 @@ function montarMenu() {
 }
 
 app.whenReady().then(() => {
+  /* otras IAs por API (1.1.59): configuración, clave cifrada y llamadas; solo para las ventanas de la app */
+  require('./ia').iniciar({ app, ipcMain, safeStorage, shell, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
+  /* la memoria de estilo (1.1.60): la general y lo que escribió la IA, en los datos de la app */
+  require('./memoria').iniciar({ app, ipcMain, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
   claude = require('./claude')({ app, ipcMain, dialog, shell, clipboard, ventanas, enfocar, abrirRuta, alCambiar: () => montarMenu(), nuevaVentana: () => createWindow() });
   montarMenu();
   listo = true;

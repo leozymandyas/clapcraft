@@ -17,6 +17,8 @@
     { group: 'Bloques', id: 'quote', label: 'Cita', keys: 'cita quote', hint: '> ', run: () => Ed.md.toQuote(currentBlock()) },
     { group: 'Bloques', id: 'code', label: 'Bloque de código', keys: 'codigo code', hint: '```', run: () => Ed.cmd('formatBlock', 'pre') },
     { group: 'Bloques', id: 'table', label: 'Tabla', keys: 'tabla', hint: '', run: () => Ed.table.insert() },
+    /* una imagen desde un archivo (js/imagenes.js, 1.1.57); también en modo guion (referencias, storyboard) */
+    { group: 'Bloques', id: 'imagen', label: 'Imagen', keys: 'imagen foto image picture archivo', hint: 'archivo', siempre: true, run: () => Ed.imagenes && Ed.imagenes.elegirArchivo() },
     { group: 'Bloques', id: 'db', label: 'Base de datos', keys: 'int base datos database db tablero board kanban', hint: '/int', run: () => Ed.db.insert() },
     { group: 'Bloques', id: 'hr', label: 'Línea horizontal', keys: 'linea separador hr', hint: '---', run: () => Ed.cmd('insertHorizontalRule') },
     { group: 'Bloques', id: 'link', label: 'Enlace', keys: 'enlace link url', hint: 'Ctrl+K', run: () => Ed.actions.link() }
@@ -25,6 +27,19 @@
   /* el diálogo doble (js/doble.js), detrás del diálogo: junta dos diálogos seguidos, pone uno en blanco o lo separa */
   COMMANDS.splice(COMMANDS.findIndex(c => c.id === 'sp-dialogue') + 1, 0, { group: 'Guion', id: 'doble', label: 'Diálogo doble', keys: 'dialogo-doble dialogo doble dual simultaneo columnas', hint: 'dos columnas', run: () => Ed.doble && Ed.doble.alternar() });
   COMMANDS.push({ group: 'Guion', id: 'portada', label: 'Portada', keys: 'portada titulo cubierta', hint: 'formulario', run: () => Ed.portada && Ed.portada.editar() });
+  /* Los recuadros (js/recuadros.js, 1.1.57): el prompt y los avisos, también en modo guion (son material de trabajo). «/prompt» y
+     «/aviso» se ven siempre; cada tipo de aviso («/info», «/consejo»…), solo al buscarlo (`soloBuscando`), para no llenar el menú. */
+  const RC = () => Ed.recuadros;
+  COMMANDS.push({ group: 'Recuadros', id: 'rc-prompt', label: 'Prompt', keys: 'prompt ia claude seedance instrucciones recuadro', hint: '✦ con «Copiar»', siempre: true, run: () => RC() && RC().crear({ rc: 'prompt' }) });
+  COMMANDS.push({ group: 'Recuadros', id: 'rc-aviso', label: 'Aviso', keys: 'aviso callout recuadro nota', hint: '◆ nota', siempre: true, run: () => RC() && RC().crear({ rc: 'aviso', tipo: 'note' }) });
+  (Ed.recuadros ? Ed.recuadros.TIPOS.filter(t => t[0] !== 'note') : []).forEach(([id, nombre, glifo]) => {
+    const alias = Object.keys(Ed.recuadros.ALIAS_TIPO).filter(k => Ed.recuadros.ALIAS_TIPO[k] === id).join(' ');
+    COMMANDS.push({ group: 'Recuadros', id: 'rc-' + id, label: 'Aviso: ' + nombre, keys: norm(nombre) + ' ' + id + ' ' + alias, hint: glifo, siempre: true, soloBuscando: true,
+      run: () => RC() && RC().crear({ rc: 'aviso', tipo: id }) });
+  });
+  /* Órdenes que pone quien aloja el editor (ClapCraft, js/claquedraw/texto.js: «/plantilla», 1.1.56); index.html a solas no pone
+     ninguna. `siempre`: también en modo guion; `visible()`: si hoy se ofrece. */
+  S.agregar = function (c) { if (c && c.id && !COMMANDS.some(x => x.id === c.id)) COMMANDS.push(c); };
 
   let menu, anchorNode = null, anchorOffset = -1, items = [], index = 0;
 
@@ -54,8 +69,8 @@
   function render(q) {
     const nq = norm(q);
     /* en modo guion solo se ofrecen los elementos de guion */
-    const pool = Ed.page && Ed.page.state.script ? COMMANDS.filter(c => c.group === 'Guion') : COMMANDS;
-    items = pool.filter(c => !nq || norm(c.label).includes(nq) || c.keys.split(' ').some(k => k.startsWith(nq)));
+    const pool = (Ed.page && Ed.page.state.script ? COMMANDS.filter(c => c.group === 'Guion' || c.siempre) : COMMANDS).filter(c => !c.visible || c.visible());
+    items = pool.filter(c => (!nq && !c.soloBuscando) || (nq && (norm(c.label).includes(nq) || c.keys.split(' ').some(k => k.startsWith(nq)))));
     if (!items.length) { close(); return; }
     index = Math.min(index, items.length - 1);
     let html = '';

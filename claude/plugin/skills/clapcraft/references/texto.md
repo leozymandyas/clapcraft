@@ -48,6 +48,24 @@ BAGRE ^
 
 Títulos `#`, listas `-` y `1.`, citas `>`, tablas, `---`, código y lo de en línea. Un salto de línea dentro de un párrafo se queda como salto.
 
+## Recuadros: prompt y avisos (en los dos modos)
+
+Un bloque cercado con tres acentos graves, como en ClapBook; dentro, Markdown (párrafos, listas, formato):
+
+````
+```prompt Seedance · Toma 3 {.violeta}
+Visual Style: …
+```
+
+```aviso:question ¿Llueve aquí?
+El guion no lo dice.
+```
+````
+
+- `prompt`: un bloque de prompt (ClapCraft le pone «Copiar», que copia solo su texto, y realza los `[huecos]` entre corchetes).
+- `aviso:tipo`: un aviso con icono y color por tipo — `note` (sin tipo, también), `info`, `tip`, `success`, `question`, `warning`, `failure`, `danger`, `bug`, `example`, `quote`, `abstract`, `todo`; valen en español (nota, consejo, pregunta, advertencia, pendiente…).
+- Tras el tipo, un título opcional, y al final `{.color}` opcional (azul, verde, terracota, violeta, ámbar, rosa, teal, oliva, índigo, coral, ciruela, arena, cielo, lima, óxido, grafito).
+
 ## Etiquetas (en los dos modos)
 
 Un párrafo que empieza por `{tipo}` es de ese tipo: `{escena}`, `{subescena}`, `{accion}`, `{personaje}`, `{parentesis}`, `{dialogo}`, `{transicion}`, `{toma}`, `{acto}`, `{nota}`, `{montaje}`, `{parrafo}`, `{titulo1}`…`{titulo6}`, `{cita}`.

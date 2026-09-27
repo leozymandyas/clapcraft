@@ -17,8 +17,8 @@ La interfaz está en español; los comentarios del código también.
 ## Arquitectura
 
 - Todo cuelga del espacio global `window.Ed`. Cada módulo es un IIFE `(function (Ed) { ... })(window.Ed)`
-  cargado por `<script>` en `index.html`, en este orden: `utils`, `markdown`, `page`, `editor`, `table`,
-  `screenplay`, `database`, `blocks`, `fijos`, `doble`, `claquedraw/maquetar` (el maquetador del PDF, para el contador de
+  cargado por `<script>` en `index.html`, en este orden: `utils`, `mdvivo` (desde la 1.1.60, para `MdVivo.lista`), `markdown`, `page`, `editor`, `table`,
+  `screenplay`, `database`, `blocks`, `fijos`, `doble`, `recuadros`, `anotar`, `imagenes`, `claquedraw/maquetar` (el maquetador del PDF, para el contador de
   páginas), `paginas`, `slash`, `characters`, `formato`, `portada`, `vendor/typo`, `dict/es`, `dict/en`, `spell`.
 - `js/editor.js` es el núcleo: comandos de formato (execCommand), cinta, barra inferior, menús,
   buscar/reemplazar, autoguardado y **la API de documento** `Ed.document` (`get()`, `set(doc)`,
@@ -1358,6 +1358,49 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   `restaurarNota` / `restaurarPieza`, así que vuelve a su sitio con todo lo suyo. **Y tirar una nota pregunta antes** (Leo: «cuando
   se elimine una nota de segmentos, que aparezca dialog modal de confirmación»): `tirarNota` abre el modal; arrastrarla a la
   papelera no pregunta (es un gesto deliberado) y también trae su «Deshacer».
+- **Plantillas de nota** (1.1.56, de ClapBook; Leo: «Agrega la funcionalidad (junto con su lugar especial en el menú) de
+  plantillas de Clapbook a Clapcraft»; hecho con un equipo de agentes: modelo, gestor, app/editor/Claude, prueba en Electron y
+  revisión). **Son una biblioteca especial**: el contenedor oculto `plantillas` (`especial: 'plantillas'`, `C.ID_PLANTILLAS`) con
+  una sola biblioteca, `plantillas:biblioteca` (`C.ID_BIB_PLANTILLAS`, `C.NOMBRE_PLANTILLAS`), que se crea la primera vez que hace
+  falta (`asegurarPlantillas`; `normalizar` la conserva y la rehace si falta). Modelo (documentos.js): `esPlantilla`,
+  `bibliotecaPlantillas`, `plantillas()` (en el orden de su tablero), `esEspecial`, `notasNormales`, `guardarComoPlantilla(id,
+  etiquetaId)` (una copia: html, characters y color) y `crearDesdePlantilla(pid, subId, etiquetaId, { titulo, proyecto, arriba })`
+  → `{ nota, cursor }` (nunca en la de plantillas ni en la oculta de guiones; el título: `op.titulo` si se da —pasa por `_libre`
+  y es el que rellena `{{titulo}}`—, si no el de la plantilla rellenado si lleva variables, si no «Sin título»). **No cuentan**:
+  ni elenco, ni menciones ni apariciones (`_documentosTexto` las salta), ni Recientes (`estructura`), ni `contenedores()`,
+  `todasLasBibliotecas`, `primeraBiblioteca` (null) ni `primerElemento`; pero **renombrar o recolorear un personaje sí las
+  reescribe** (`_documentosTexto(…, conPlantillas)`, también las de la papelera), si no el nombre viejo volvía al usarlas. El
+  contenedor y su biblioteca no se renombran, mueven, colorean, duplican, agrupan, meten en carpeta ni eliminan (`no(…)`); sus
+  notas sí se tiran y vuelven a ella. `colocarContenedor` toma un `antesDe` oculto por «al final» y `moverContenedor` solo cuenta
+  vecinos visibles (el gestor calculaba «detrás del último» como el siguiente de `datos.contenedores`, que era `plantillas`, y
+  arrastrar un contenedor al final fallaba). `moverNota` entre plantillas y bibliotecas se permite, como en ClapBook.
+  **Las variables** (plantillas.js, como Obsidian): `{{titulo}}`, `{{fecha}}`, `{{hora}}`, `{{ayer}}`, `{{mañana}}` (con formato
+  tras «:»: `YYYY MMMM dddd DD HH mm` y `[literal]`), `{{proyecto}}` y `{{cursor}}`; una desconocida se queda. `rellenar(texto)`
+  para el título y **`rellenarHtml(html, op)`** para el documento: solo en los nodos de texto (analizador de `C.conversor`), escapa
+  lo que pone, una variable repartida entre etiquetas no se reconoce, `cursor` = `{ bloque, caracter }` (hijo de primer nivel y
+  desplazamiento en su texto, como `posLado`/`apuntar`) y con `op.marca` deja ese HTML donde decía `{{cursor}}`; un párrafo que
+  se queda sin texto lleva su `<br>`. `tieneVariables`, `usaTitulo`, `variables`.
+  **En el menú**: «Plantillas» en el pie, entre Personajes y Papelera (`filaPlantillas` en gestor.js, con su cuenta, su ⋯ y
+  destino de soltar una nota: la guarda como plantilla). Su tablero es el de una biblioteca (secciones, segmentos, buscar, filtrar,
+  ventana de nota) con el chip «Plantillas» sin contenedor, el aviso de uso y «Nueva plantilla». Una plantilla lleva «Usar» en su
+  tarjeta y en su ventana; el ⋯ de una nota, «Guardar como plantilla…» (bandeja o segmento de plantillas) o «Nueva nota con esta
+  plantilla»; una biblioteca normal, «Desde plantilla» en su cabecera (con «Administrar plantillas…»). `C.gestor.desdePlantilla(pid,
+  { subId, etiquetaId })` elige destino (el de `op`, la biblioteca de delante, la última normal vista, la primera), pregunta el
+  nombre si el texto usa `{{titulo}}` y el título no lleva variables, crea arriba y abre la nota en su ventana con el cursor en
+  `{{cursor}}` (sin él, al final; el nombre solo se elige si quedó «Sin título»). También `abrirPlantillas`, `elegirPlantilla(titulo,
+  fn, ancla)` (un `.gd-pop` con buscador si hay más de seis), `guardarComoPlantilla`, `insertarPlantilla` (en el campo de la ventana,
+  con `vistaLado` para que lo insertado vuelva al documento con sus clases de guion; también en su clic derecho) y `esPlantillas`.
+  **Atajos y menú**: Cmd/Ctrl+Alt+N nueva nota desde plantilla (también desde el marco; Cmd+N exige ya `!altKey`); Archivo › Nueva
+  nota desde plantilla…, Nueva nota con esta plantilla, Insertar plantilla…, Guardar la nota como plantilla…, y Ver › Plantillas.
+  **`/plantilla` en el editor**: `Ed.slash.agregar(cmd)` (slash.js; `index.html` solo no añade nada) lo registra desde texto.js, y
+  `C.texto.insertarHtml` lo pone en un solo `insertHTML` (bloque vacío: lo sustituye; un párrafo sin clase: en línea; si no,
+  detrás del bloque del cursor, porque Chrome fundía el primer y el último bloque con el párrafo y se perdían las clases de guion)
+  con el cursor en la marca. La pestaña del tablero es `{ tipo: 'sub', id: 'plantillas:biblioteca' }`, con su icono (letra «T» de
+  reserva, `LETRA_PLANTILLAS`). **Claude**: `ver_proyecto` lista PLANTILLAS; `leer_biblioteca`/`editar_biblioteca` con «Plantillas»
+  (por nombre gana una biblioteca normal que se llame así; con las dos, candidatos) o `plantillas:biblioteca`; `crear_nota
+  { plantilla }`; `editar_proyecto › guardar_como_plantilla`; `buscar` las marca; los enlaces dicen «Plantillas»; la skill lleva
+  `references/plantillas.md`. **Pruebas**: `test/plantillas-nota.test.js` y `npm run test:plantillas` (`pruebas/plantillas-electron.js`,
+  75 comprobaciones con ratón y teclado de verdad; ahí Deshacer va por el `click()` del menú, porque Cmd+Z es su acelerador).
 - **Personajes** (Leo, 14-09-2026). **La etiqueta lleva dos letras** (1.1.40, Leo: «en lugar de la letra P, las primeras dos letras
   del nombre, la segunda en minúscula —"Lestat" es "Le"—; con más de un nombre, las dos iniciales en mayúscula —"Pez Gota" es
   "PG"»): `C.iniciales(nombre)` en documentos.js (con su prueba) lo usan el chip del árbol, el de la papelera y el círculo del
@@ -1821,6 +1864,328 @@ tablero no tiene tira** (`o.sinTira` → `#texto.sin-tira`) y **el menú sigue e
   `claquedraw-web` en el 5174. No simular clics en nodos del tablero con `PointerEvent` sin
   coordenadas: el tablero los toma por arrastres y mueve nodos. Las capturas del panel llegan con
   retraso respecto a la acción: comprobar el estado por JavaScript y capturar después de esperar.
+
+## 1.1.57: recuadros, imágenes, conexiones y fragmentos, temas neón
+
+Leo, 27-09-2026: «Agrega también el bloque de prompt y notas en ClapCraft. También lo de las imágenes como lo manejamos en ClapBook
+que permite poner, redimensionar e incluso editar», «Anteriormente tenía la posibilidad de conectar esquemas con bibliotecas, varios
+a la vez […] a partir de un guion o esquema terminado con ayuda de la IA dividir el guion en fragmentos más pequeños que vivan en
+notas de segmentos, dentro de bloques prompt o notas […] con tiempos y todo, para que IAs como Seedance puedan generar mis guiones»
+y «Cambia el estilo de la aplicación a algo más neón que recuerde a synthwave o vaporwave», y luego: «que sean temas adicionales al
+modo claro y oscuro». Lo hizo un equipo de agentes (neón, recuadros, imágenes, conexiones; luego pruebas en Electron, revisión y
+correcciones). Lo que preguntó y eligió: los dos temas neón aparte; conexiones nuevas de muchos a muchos (los grupos siguen solo
+como organización); una nota por fragmento; «notas» = los avisos de ClapBook.
+
+- **Recuadros: el bloque de prompt y los avisos** (`js/recuadros.js`, `Ed.recuadros`, parte pura que carga en Node;
+  `css/recuadros.css`, cargado en index.html y en claquedraw.html). Un hijo de primer nivel de `#editor`:
+  `<div class="rc rc-prompt" data-rc="prompt" data-titulo data-color><p>…</p></div>` y
+  `<div class="rc rc-aviso" data-rc="aviso" data-tipo="note|info|tip|success|question|warning|failure|danger|bug|example|quote|abstract|todo" …>`.
+  `data-color` es el nombre sin acentos de uno de los 16 pares de `TONES` (azul, verde, terracota…; al leer vale también el índice,
+  los alias de ClapBook y los tipos en español); sin color, el del tipo, y un prompt, el acento. **La cabecera no es contenido**:
+  la pintan `::before`/`::after` desde los atributos (icono, título o el nombre del tipo, «Copiar»); un clic en ella —se reconoce
+  por la altura, encima del primer bloque— abre su menú (título, tipo, color, copiar, convertir, quitar); cambiar esos atributos no
+  entra en Deshacer (como la sangría). Crear, envolver y quitar van con un solo `insertHTML`; «Convertir en → Prompt / Aviso» del
+  asa envuelve cada tramo seguido de bloques envolvibles y deja en su sitio lo que no se envuelve (otro recuadro, `.db`, `hr`,
+  fijos). Enter en la última línea vacía sale; Retroceso en uno vacío lo quita y en los bordes no une; una selección que lo cruza
+  se borra por tramos; pegar dentro entra como texto; los `[huecos]` del prompt se realzan (Highlight API, `rc-hueco`; en la
+  ventana de una nota aún no); `normalizar` (MutationObserver) quita las `sp-*` de dentro, envuelve lo suelto y deja una línea
+  detrás del último, **sin contar como cambio** (si no, abrir una nota que acaba en recuadro la ensuciaba y chocaba al revertir lo
+  de Claude; por eso el conversor y lo que escribe notas ya dejan esa línea). «/prompt», «/aviso» y «/info», «/consejo»… (slash.js:
+  opción `soloBuscando`, los tipos solo salen al buscarlos; `siempre` los enseña también en modo guion); el corrector no entra en un
+  prompt. «Copiar» (`textoDe`) da el texto con los párrafos separados por una línea en blanco. En texto (Claude, Markdown):
+  ```` ```prompt Título {.color} ```` y ```` ```aviso:tipo Título {.color} ```` (```` ```aviso ```` es una nota), con Markdown
+  dentro (cada salto, un `<br>`; la valla crece si dentro hay otra; dentro no se reconocen vallas de recuadro; `{.x}` solo es color
+  si es uno de los 16, y `{.}` es «sin color», para un título que acaba así; `deTexto`/`deJson` devuelven `lineaFinal` y
+  `conLineaFinal(html)` pone la línea de detrás de un recuadro final); lo entienden `js/markdown.js` (`infoRecuadro`, `recuadroMd`) y `conversor.js` en los dos modos
+  (`C.conversor.RECUADROS`; `bloques` da `tipo: 'recuadro'`; un recuadro con una imagen u otra cosa que no es texto sale entero como
+  `{bloque N}`). Las tablas de tipos y colores están en recuadros.js, conversor.js y recuadros.css (test/recuadros.test.js compara
+  las dos primeras). **Guion y exportar**: se tratan como las notas de guion: maquetar los cuenta (`lineasRecuadro`: 2 renglones
+  más el texto a 54 caracteres) y no los parte; el PDF ocupa exactamente eso; Word, párrafos con borde; texto, entre `┌ │ └`; y
+  «Ocultar las notas y los recuadros» los quita. En la ventana de una nota (`recuadrosEnCampo`, `menuRecuadroLado`, una sección de
+  `menuFormato`) se ven y se editan igual. `limpiarHtml` (herramientas.js) deja pasar sus atributos.
+- **Imágenes** (`js/imagenes.js`, `Ed.imagenes`; `js/anotar.js`, `window.Anotar`, portado de ClapBook; `css/imagenes.css`). Siguen
+  siendo `<img src="data:…">`; lo nuevo va en atributos: `width` (px de la hoja, sin zoom), `alt` (la descripción: no hay pie
+  visible, que rompería el guion) y, solo si está marcada o recortada, `data-original` (la de antes, pasada por `imagenLigera`),
+  `data-anotaciones` y `data-recorte` (en coordenadas de la original). Un clic la elige (queda como rango; `html.img-elegida` quita
+  el tinte) y un marco fijo **fuera de `#editor`** (`.img-sel`) pone 6 asas y una barra (ver, Editar, tamaño original, descripción,
+  volver al original, ancho); arrastrar cambia el ancho con la proporción (centrada, cuenta doble), el doble clic en un asa
+  devuelve su tamaño; cada cambio sustituye la imagen con un solo `insertHTML` (un paso de Deshacer). Doble clic: el visor, y
+  «Editar»: mover, rectángulo, círculo, flecha, línea, texto, trazo libre, números, recortar con proporción, girar, colores,
+  grosores, relleno, deshacer/rehacer. En ClapCraft el visor es el de la app (`window.parent.Anotar`) y tapa toda la ventana;
+  **`historia()` de app.js le da Deshacer/Rehacer mientras está abierto** (si no, Cmd+Z deshacía el documento de debajo). En la
+  ventana de una nota, doble clic en la imagen la edita (`abrirImagenLado`); no se redimensiona. «/imagen» elige un archivo.
+  **Word lleva imágenes** desde la 1.1.57 (`mediosDocx`, `imagenDocx`, hasta 6 in). `limpiarHtml` deja `width`, `data-anotaciones`,
+  `data-recorte` y `data-original` solo si es `data:image/…`. Lo puro, en test/anotar.test.js.
+- **Conexiones esquema ↔ biblioteca** (documentos.js): `esquema.bibliotecas = [subId…]` (la clave solo si hay alguna), de muchos a
+  muchos con bibliotecas normales (`conectable`: no la oculta de guiones, ni la de plantillas, ni las de personaje); `conectar(eid,
+  subId, { pos })`, `desconectar` (devuelve `pos` para el Deshacer), `bibliotecasDe`, `esquemasConectados`, `conectado`;
+  `podarConexiones` al final de `normalizar` (lo que está en la papelera sigue conectado y vuelve con ello); duplicar conserva las
+  conexiones. **`enlace(id)` mira antes las conexiones que los grupos**, así «Ver biblioteca», «Ver esquema» y el chip del acto van
+  por ellas. Interfaz: «Conectar con biblioteca…» / «Conectar con esquema…» en el ⋯ del árbol (`menuConectar`, por contenedor, las
+  conectadas marcadas) y «Conectar» en las cabeceras; chips en la cabecera del esquema (`#conexionesEsq`, app.js) y de la biblioteca
+  (`chipsConexiones`), cuya × desconecta con «Deshacer» (`alternarConexion`). Un solo oyente de clic en captura en `document`
+  (gestor.js) atiende `[data-cx-*]` y `[data-gd-fragmento]`. Estilos `cx-*` en `css/conexiones.css`.
+- **Fragmentos**: `nota.fragmento = { eid, nodos: [puntoId…], segundos?, orden?, bloques?: [desde, hasta] }` (`fragmentoDe` lo
+  sanea; `fijarFragmento`, `fragmentosDe(eid)`, `estadoFragmento(id)` → nodos con título, `perdidos`, `huerfano`…); nunca en
+  plantillas ni guiones, y ni guardar como plantilla, ni usar una, ni duplicar una biblioteca copian la marca. La tarjeta, el
+  segmento expandido y la ventana llevan la etiqueta «Fragmento · 12 s · Esquema» (`fragmentoHtml`; discontinua si es huérfano) y
+  su clic va a los nodos (`irAFragmento`: el nodo, las columnas de sus nodos, el tramo del guion o el esquema).
+- **Claude y Seedance**: `ver_proyecto`, `leer_esquema` y `leer_biblioteca` dicen las conexiones y los fragmentos; `editar_proyecto`
+  › `conectar`/`desconectar`; `crear_nota`/`editar_nota` › `fragmento { esquema, nodos (ids, títulos o enlaces), segundos, orden,
+  bloques }` (`null` quita). **`preparar_fragmentos { esquema, segundos_max = 15, segundos_min = 4, fuente }`**, solo lectura: parte
+  el guion del esquema (o, sin guion, sus nodos) en tramos que no cruzan escenas, con su duración estimada (diálogo 2,5 palabras/s +
+  0,5 s por intervención; acción 1,1 s por renglón de maquetar, mínimo 1,5; transición 0,5; encabezados, notas y recuadros 0; un
+  nodo sin guion, 0,4 s por palabra entre 3 y 60), parte lo largo por oraciones (lo que no se puede, `largo`), une un final corto
+  al anterior, y asocia nodos por los enlaces y títulos que nombra el guion (o por orden si hay tantas escenas como nodos). La skill
+  nueva del plugin **`clapcraft-seedance`** (SKILL.md + references `nota.md`, `seedance.md`, `tiempos.md`) lleva el flujo: ver
+  conexiones → `preparar_fragmentos` → un segmento por acto o secuencia y una nota por fragmento con un aviso «Nota» (duración,
+  tramo, enlace a los nodos, personajes, continuidad) y el bloque de prompt para Seedance → regenerar uno cuando Leo lo pida.
+- **Temas Synthwave y Vaporwave** (además de Claro y Oscuro, que no cambian): `html[data-estilo="synthwave"]` va siempre con
+  `data-theme="dark"` y `vaporwave` con `light`, así todas las reglas de oscuro/claro siguen valiendo y el neón solo redefine
+  tokens y añade brillos (al final de `css/clapcraft.css` y de `css/clapcraft-editor.css`, todo con prefijo `html[data-estilo…]`;
+  en el marco, `html.clapcraft[data-estilo=…]`). Clave `guiones.claquedraw.estilo` (tramas.html no se entera); el script del
+  `<head>` de claquedraw.html lo aplica antes de pintar. app.js: `TEMAS`, `temaActual`, `aplicarTema`, `elegirTema`, el menú del
+  botón de tema de la franja (`menuTema`), órdenes `tema:claro|oscuro|synthwave|vaporwave`, y `alternarTema` (Cmd+Shift+D) se queda
+  en la familia (Vaporwave ↔ Synthwave). electron/main.js: Ver › Tema con cuatro radios y «Claro / oscuro»; `informarTema` manda el
+  nombre. texto.js copia `data-estilo` al marco. Tokens nuevos (solo con estilo): `--cian*`, `--sol-a/b/c`, `--sol` (el degradado del
+  sol: marca, pestaña activa, botón primario, rellenos), `--sol-tinta`, `--neon-brillo`, `--neon-texto`, `--rejilla-neon`… En
+  Synthwave los `--f-*` se oscurecen con `color-mix` (los pardos se veían turbios); las paletas de datos no cambian. Contraste AA
+  comprobado en 82 pares. **Logo**: la claqueta de Leo (`img/clapcraft-synthwave.svg`, `-vaporwave.svg`) solo en esos temas, por
+  CSS (`content: url()` sobre las `img` de `.logo`: para saber cuál se ve, `getComputedStyle(img).content`); Claro y Oscuro, el de
+  siempre. **El icono de la app** (`build/logo.svg` → `build/icon.icns`) es el clásico, el mismo dibujo que el logo del modo
+  claro (Leo, 1.1.60: «cambia el ícono que veo en macOS por el clásico»; en la 1.1.57–1.1.59 fue la claqueta sobre la noche
+  synthwave). Dentro de la app, los logos de cada tema siguen como están.
+- **Pruebas** (todas en Electron con ratón y teclado de verdad): `npm run test:recuadros` (66), `test:imagenes` (50),
+  `test:conexiones` (60, con el servidor MCP: conectar, `preparar_fragmentos`, notas de Claude, huérfanos, revertir, archivo),
+  `test:temas` (56). Con `sendInputEvent` los aceleradores del menú no saltan: se prueban con el `click()` de su entrada; el tema de
+  partida depende del sistema; `documentos.historialClaude` va del más viejo al más nuevo.
+
+## 1.1.58: lienzos de nodos (como los «Space» de Dreamina)
+
+Leo, 27-09-2026: «En páginas web (como Dreamina) hay una funcionalidad llamada "Space", que es un lienzo donde se conectan
+imágenes, textos y otros elementos para hacer un video, funciona por medio de nodos, donde se conectan cosas y se esperan salidas.
+Quiero algo similar en ClapCraft, un lienzo con nodos donde se conecten notas, notas con imágenes y esquemas; en lugar de generar
+videos, nosotros generamos guiones y también los partimos», y «También déjame incluir segmentos y personajes». Eligió: **ejecuta
+Claude desde Cowork/Claude Code** (la app no llama a ninguna IA: ▶ deja la operación pendiente y copia el encargo), **las salidas
+viven en ClapCraft de verdad** (el documento de un esquema, notas de una biblioteca), y todos los nodos. Equipo de agentes: modelo,
+interfaz, integración y Claude; luego pruebas en Electron, revisión y correcciones.
+
+- **La pieza** (documentos.js): `contenedor.lienzos = [{ id, nombre, color?, carpetaId?, creado, modificado, nodos, cables }]` (la
+  clave solo si hay alguno; nunca en Personajes ni Plantillas), con todo lo de un esquema en el árbol (`nivelArbol` da `tipo:
+  'lienzo'`, carpetas, grupos, orden, mover de contenedor, papelera `{ tipo: 'lienzo' }`, restaurar, duplicar —los pendientes dejan
+  de estarlo—, eliminar contenedor). `lienzosDe`, `lienzo(lid)`, `todosLosLienzos`, `crearLienzo(cid, nombre, { carpetaId, grupoId,
+  datos })`, `renombrarLienzo`, `colocarLienzo`, `modeloLienzo(lid)`, `guardarLienzo(lid, datos | C.Lienzo)` (solo si cambió; solo
+  toca `vista` si la clave viene), `eliminarLienzo`, `duplicarLienzo`, `resolverNodo(lid, nodo)` / `resolverEntrada(nodo)` (lo que
+  apunta una entrada, o `{ roto, motivo, enPapelera? }`; para una operación, su estado y lo que apunta su salida; **nunca** cambian
+  la entrada), `rotasDe`, `firmaEntrada(nodo)` y `firma()` (huellas del **contenido** de lo apuntado, para «desactualizada»).
+- **El modelo** (`js/claquedraw/lienzo-modelo.js`, `Claquedraw.Lienzo`, puro, test/lienzo.test.js). `TIPOS`: entradas `texto`,
+  `imagen`, `nota`, `segmento`, `biblioteca`, `esquema` (da `esquema` y `guion`), `personaje`; operaciones `generar` (puertos
+  `contexto` varios y `esquema` uno; da `guion`), `partir` (`guion` uno y obligatorio, `contexto`; da `fragmentos`), `escaleta`
+  (da `esquema`), `resumir`, `reescribir`, `traducir`, `prompt`. `CLASES` es lo que viaja por un cable (texto, imagen, nota,
+  segmento, biblioteca, esquema, guion, personaje, fragmentos), con su `tono`. Destinos `{ eid }`, `{ subId, etiquetaId? }`,
+  `{ nuevo: { cid?, nombre } }`, `{ enSitio: true }`; salidas `{ tipo: 'documento'|'fragmentos'|'esquema'|'nota', … }`. Conectar
+  valida tipos y ciclos, y **un puerto «uno» ocupado se reemplaza** (como ComfyUI; `puedeConectar`/`compatibles` dicen
+  `reemplaza`). `entradasDe` ordena por posición (arriba-abajo, izquierda-derecha). Estados `nuevo`/`pendiente`/`hecho`/`error`;
+  **«desactualizada» se calcula** (`desactualizado(id, firma)` → `instruccion`|`entradas`|`contenido`|`cadena`|null, con la huella
+  que guarda `completar`); mover o renombrar no cuenta. `pedir(id)` pide también las previas que falten y se niega sin un puerto
+  obligatorio (`faltan`); `pedirTodo` devuelve `saltadas`. Copiar y pegar dan operaciones nuevas, sin salida.
+- **La interfaz** (`js/claquedraw/lienzo.js`, `C.lienzoUI`: `montar(lid, ganchos)`, `desmontar`, `refrescar`, `ir`, `soltar(tipo,
+  id, x, y)`, `dentro(x, y)`, `elegidos`, `vista`, `volcar`, `deshacer`/`rehacer`/`activo`, `encajar`, `pedirTodo`; `css/lienzo.css`;
+  `<section id="lienzo">`). Lienzo infinito (`transform` de la vista `{x, y, zoom}`, fuera del archivo: `vista.lienzos[proyecto]
+  [lienzo]` de app.js), rejilla de puntos, pellizco/Ctrl+rueda anclado, «Encajar». Tarjetas con vista previa desde
+  `resolverEntrada`; cables bezier del color de su clase, que se arrastran de puerto a puerto (lo incompatible se apaga, se imanta;
+  soltar una salida en el vacío ofrece una operación); operaciones con instrucción, opciones, destino, estado y ▶ («Pedir a
+  Claude» copia el encargo con los enlaces de cada operación). Todo con el prefijo `data-lz-`; historial propio por lienzo
+  (`Tramas.Historial`). **Las teclas van en captura en `window`**, así que `activo()`/`onTecla` tienen que respetar lo que hay
+  encima (historial de Claude, comparación, diálogos, la ventana de una nota, el visor de imágenes, sus propios menús `.lz-menu`,
+  botones enfocados): un oyente en captura en `window` va antes que los de captura en `document`. El «Deshacer» del aviso escribe
+  en el lienzo en el que se hizo aunque ya se vea otro.
+- **En la app** (app.js y gestor.js): chip «L» en el árbol, «Nuevo lienzo…» en los ⋯ de contenedor, carpeta y grupo, en el «＋» y en
+  Archivo; su ⋯ (abrir, en pestaña, enlace, renombrar, duplicar, carpeta, color, agrupar, papelera con Deshacer). Vista `lienzo`
+  (`body.vista-lienzo`), que monta y desmonta `C.lienzoUI` (sus teclas solo con él delante); pestañas (`lienzo:<id>`, «L» con su
+  color), ‹ ›, vuelve al abrir la app; enlaces `clapcraft://…/lienzo/<lid>[/nodo/<id>]` (`{ tipo: 'lienzo', id, nodo? }`);
+  `historia()` le da Deshacer/Rehacer; `ponerAlDia` lo refresca tras un cambio de Claude; Cmd+Shift+C copia los nodos elegidos.
+  **Se arrastran al lienzo abierto** esquemas, bibliotecas y personajes desde el árbol (`paraLienzo`, `o.dentroLienzo`,
+  `o.soltarEnLienzo`); notas y segmentos, con «Añadir al lienzo…» de su ⋯ (la biblioteca y el lienzo no se ven a la vez), que
+  escribe aunque el lienzo no esté abierto. El segundo clic de un doble clic en una fila `.gd-sub` del árbol renombra (el primer
+  clic redibujaba y el `dblclick` no llegaba).
+- **Claude** (herramientas.js): `leer_lienzo` (pendientes en orden, desactualizadas, rotas), **`ejecutar_nodo`** (solo lectura: el
+  encargo con las entradas resueltas por puerto —notas y segmentos por el conversor, estructura y guion del esquema, hoja del
+  personaje, la salida de una operación anterior—, con topes de palabras, y **las imágenes como contenido de imagen de MCP**: `ejecutar`
+  devuelve `imagenes: [{ data, mimeType, nombre }]` y `claude/servidor.js` (`contenidoDe`) responde varias piezas; `claude/imagenes.js`
+  las reduce con `sips -Z 1024`, 8 como mucho, sin repetir la misma), `completar_nodo` (valida que la salida existe), `editar_lienzo`
+  (entero o nada; `conectar` sin puerto no reemplaza si hay otro libre, y dice lo que quitó) y en `editar_proyecto` `crear_lienzo`,
+  `renombrar_lienzo`, `duplicar_lienzo`, `mover_lienzo`, `tirar_lienzo`. Historial y revertir valen tal cual. La skill `clapcraft`
+  lleva `references/lienzo.md` («ejecuta el lienzo» = todas las pendientes en orden) y `clapcraft-seedance` explica el nodo
+  `partir`.
+- **Pruebas**: test/lienzo.test.js, test/lienzo-claude.test.js; en Electron `npm run test:lienzo` (la interfaz), `test:lienzo-app`
+  (la integración) y `test:lienzo-claude` (de punta a punta: armar con el ratón, ▶, Claude ejecuta generar —la imagen llega— y
+  partir por MCP en vivo, desactualizadas, revertir, reabrir, enlace, papelera, temas). **Copiar/Pegar se prueban con
+  `ClipboardEvent` sintéticos, nunca con el `role` del menú**: toca el portapapeles de verdad de Leo (pasó una vez en esta versión).
+  Un `<select>` nativo no se abre con el ratón simulado: se elige por la página.
+- **Detalles de la revisión**: la firma de una entrada es solo de contenido (`contenidoEsquema`: tramas, actos, nodos, saltos y notas,
+  más la huella del html del guion; notas por título, html y segmento), así que ensanchar una columna, cambiar el alto de un carril,
+  el color o la fecha de una nota no la desactualizan. `hojaPersonaje(pid)` (documentos.js) es la hoja que ven la interfaz, la firma y
+  Claude: toda la biblioteca del personaje con «Hoja de personaje» primero. **Edición › Seleccionar todo ya no es rol nativo**:
+  manda la orden `elegirTodo` y `elegirTodo()` de app.js la reparte (campo, editor, lienzo con `C.lienzoUI.elegirTodo()`, o
+  `selectAll`). El diálogo del «＋» de un contenedor tiene la tarjeta «Lienzo» (`pedirNombre` con `op.conLienzo`).
+
+## 1.1.59: el asistente con otra IA por API (DeepSeek por APIMart)
+
+Leo, 27-09-2026: «Implementa que pueda usar otras IAs en ClapCraft por medio de APIs para que funcionen igual que Claude Cowork,
+puedes usar mis créditos […] pero usa solo modelos de DeepSeek con el fin de que los costos no sean tan elevados
+https://apimart.ai/es/model?type=chat&providers=DeepSeek. No tengo nada configurado ni sé cómo hacerlo, así que agrega un tutorial
+en la aplicación para configurarlo.» Equipo de agentes: transporte, motor, interfaz e integración; luego prueba en vivo, revisión
+(centrada en la clave y el gasto) y correcciones. **Solo en la app de escritorio** (en el navegador el panel lo dice).
+
+- **APIMart, medido en vivo** (27-09-2026): `POST https://api.apimart.ai/v1/chat/completions`, compatible con OpenAI, `stream` por
+  defecto; **pasa `tools`/`tool_calls` con DeepSeek** en stream y sin stream, en forma plana (cada trozo lleva además `"code":0`; la
+  forma envuelta `{ code, data }` también se acepta); con herramientas, `content` llega como `"\n\n"`; el `usage` va en el trozo del
+  `finish_reason`; `completion_tokens` incluye razonamiento oculto (se cobra). **No aplica la caché de entrada**
+  (`prompt_cache_hit_tokens: 0` siempre) y **no respeta `max_tokens`** (con 5 devolvió 19): el gasto lo limitan los topes, no eso.
+  Precios en horario punta (18:00–8:00 en México; el resto, la mitad), USD por millón: `deepseek-v4-flash` 0,34 / 1,03 (el
+  recomendado y por defecto), `deepseek-v4.1-flash` 0,23 / 0,91, `deepseek-v4-pro` 1,03 / 3,09. Saldo y recargas:
+  `https://apimart.ai/billing`; claves: `https://apimart.ai/keys`. Una llamada del asistente manda ≈ 22 000 caracteres de sistema +
+  herramientas (≈ 6k tokens): ≈ 0,002–0,005 USD por llamada.
+- **Transporte** (`electron/ia.js`, núcleo sin Electron `crearTransporte`/`crearConfig`/`crearConversaciones` + `iniciar`;
+  `editorAPI.ia` en preload.js; test/ia-transporte.test.js): SSE tolerante (trozos partidos, UTF-8, herramientas por índice),
+  reintentos ante 429/5xx/red solo si no llegó nada, `Retry-After`, 10 min por llamada y 120 s sin datos, cancelar, errores en
+  español con código (`clave`, `saldo`, `limite`, `servidor`, `red`, `tiempo`, `cancelado`, `peticion` —también «la conversación
+  es demasiado larga»—, `modelo`, `herramientas`, `respuesta`, `sinClave`, `sinCifrado`, `claveIlegible`, `sinPrecio`,
+  `topeDiario`), y `limpiar` quita la clave de todo texto. **La clave**: cifrada con `safeStorage` en `userData/ia.json` (0600,
+  escritura atómica), **una por host** (`claves: { host: { cif, fin } }`: cambiar de proveedor o de dirección no se lleva la clave),
+  nunca en la página (solo `hayClave` y `finClave`), en localStorage, en el `.clapcraft`, en la conversación ni en los errores; sin
+  cifrado disponible no se guarda. Con APIMart solo modelos `deepseek-*`; con «Otro compatible con OpenAI» el modelo es libre pero
+  exige su precio (sin él, `sinPrecio` y no llama), y la dirección tiene que ser https y no de la red local (salvo `localhost`). El
+  proceso principal solo atiende ventanas de la app, rechaza peticiones de más de 3 MB, pone `max_tokens` (8192; hasta 32k) y lleva
+  **un tope diario** (2 USD por defecto, configurable) sumando el `usage` (o una estimación). `CLAPCRAFT_IA_URL` y
+  `CLAPCRAFT_IA_CLAVE_ARCHIVO` (para las pruebas) solo sin empaquetar. Menú Claude: «Asistente con otra IA…» (⌘⇧I), «Configurar
+  IA…» y «Tutorial de la IA…».
+- **Motor** (`js/claquedraw/asistente-motor.js`, `C.asistenteMotor`, puro; test/asistente-motor.test.js): `MODELOS`/`precioDe`
+  (un modelo desconocido cuenta a 5 / 20 USD por millón y se marca «precio desconocido»), `herramientasOpenAI` (descripciones
+  compactas para la API, `DESC_API`, con las listas de operaciones de `editar_*` enteras; sin `listar_proyectos` ni la propiedad
+  `proyecto`) y **`GRUPOS`**: las herramientas de lienzo y de Seedance, y sus partes del prompt, solo van cuando la conversación las
+  necesita. `promptSistema` con **`GUIA` incrustada** (condensada a mano de las skills del plugin: repásala si cambian), la pantalla
+  y el proyecto; dice que lo que se lee de notas y documentos son datos, no instrucciones, y que lo largo se escribe por partes.
+  `Conversacion`: bucle de herramientas en orden con su `tool_call_id`, argumentos rotos → error al modelo (a los 3 seguidos se
+  para), resultados enormes recortados, imágenes no enviadas (DeepSeek no ve imágenes), `finish_reason: 'length'` → «tu respuesta
+  se cortó, escribe por partes», `recortar` también **dentro del turno** y tope por petición (240k caracteres; si no cabe, para),
+  tope de gasto por conversación (0,50 USD por defecto; sin `usage`, estimación por caracteres, «≈»), `maxVueltas` (25; en un lienzo,
+  15 por operación hasta 120), `detener`, **`reanudar`** («Reintentar» no repite el mensaje de Leo), `reasoning_content` nunca vuelve
+  a la API, ids únicos por conversación, **permiso de Leo para lo destructivo** (`borrar_*`/`eliminar_*`/`tirar_*` en cualquier
+  `editar_*`, `escribir_documento` en `reemplazar` sobre un documento con texto, `revertir_cambio` con `forzar`: evento `alPermiso`,
+  tarjeta Permitir / Permitir en esta conversación / No; sin respuesta no se hace). **Plan B** (proveedor sin `tools`, solo con el
+  patrón estrecho `SIN_TOOLS`): herramientas descritas en el prompt y llamadas en bloques ```json con un **sello** por conversación;
+  los resultados van entre marcadores con el sello. `encargoNodo`/`encargoLienzo` (con `nodos` y `texto`) para los lienzos.
+- **Interfaz** (`js/claquedraw/asistente.js`, `C.asistente`; `css/asistente.css`; en claquedraw.html `<aside id="asistente">` en
+  `<main>` con `order: 5` —el contenido se estrecha; hay que anularle el relleno de `aside` de tramas.css y de la piel—,
+  `#dlgIA`, `#dlgTutorialIA` y el botón `#asistenteBtn`): panel redimensionable y plegable a un riel, respuestas en Markdown (MdVivo:
+  nada del modelo se ejecuta; enlaces `clapcraft://` como chips; los https que no son de APIMart piden confirmación antes de salir),
+  pasos plegables con Deshacer y Ver, Detener, Reintentar, coste en la cabecera, detección de una clave pegada en el chat (no se
+  manda). Configuración (proveedor, clave, modelos V4 a la vista y el resto plegado, precio para «Otro», temperatura, tope por
+  conversación y diario, «Probar conexión»). **Tutorial** de ocho pantallas (`tutorial(paso)`: que, cuenta, saldo, clave, pegar,
+  modelo, uso, fallos) con privacidad (lo que se pide y lo que la IA lee va a APIMart y DeepSeek), costes sin caché y qué hacer ante
+  cada error; se abre solo la primera vez sin clave. Preferencias de esta máquina en `guiones.claquedraw.asistente`.
+- **Integración** (app.js): `ejecutarEnVivo(nombre, args, { origen })` es el cuerpo de lo que era `atenderClaude` (Claude por MCP lo
+  sigue usando), así el asistente escribe en vivo, con `ponerAlDia` y el historial de Claude con `origen` («DeepSeek V4 Flash
+  (APIMart)»). Con el panel abierto no hay avisos (los pasos están en él); cerrado, uno por respuesta. **La conversación** vive en
+  `userData/asistente/<sha256>.json` por proyecto (canal `ia:conversacion`; 2 MB como mucho; `compactarGuardado` la deja en ≤ 300 KB)
+  y se muda al renombrar el archivo; lo que había en localStorage se migró. El asistente se detiene al cerrar el proyecto, al salir
+  y en `beforeunload`. «Mandar al asistente» en el clic derecho del botón de enlace de las cabeceras y del editor. En el lienzo,
+  «Ejecutar con IA» y «Ejecutar todo con IA» (la cabecera de la operación dice «IA ·»); ocupado, no deja nodos pendientes. Un
+  `keydown` sobre `#asistente` corta las teclas sin ⌘/Ctrl para que no lleguen al tablero, al gestor ni a la ventana de una nota.
+- **Pruebas**: test/ia-transporte.test.js, test/asistente-motor.test.js; `npm run test:asistente` (89, servidor falso con
+  `CLAPCRAFT_IA_URL`, Llavero sustituido; `ia:abrirWeb` se registra al arrancar, así que se sustituye después de `whenReady`) y
+  **`npm run test:asistente-vivo-GASTA`** (42, la API de verdad con la clave de `~/.clapcraft-apimart-clave` —que escribe Leo, 0600—,
+  solo `deepseek-v4-flash`, tope 0,20 USD por ejecución, la salida tapa la clave; ≈ 0,04 USD por ejecución). `pruebas/ia-vivo.js`:
+  sondeo mínimo del transporte. Gasto total de las pruebas en vivo de esta versión: ≈ 0,14 USD.
+
+## 1.1.60: Fórmulas, visión, saldo, memoria de estilo y la ventana de una nota
+
+Todo pedido por Leo el 27/28-09-2026 y hecho con equipos de agentes (modelo, interfaz, Claude, ventana, visión, memoria; luego
+depuración). El icono de macOS volvió al clásico (ver «1.1.57»).
+
+- **Fórmulas** (Leo: «una sección como Plantillas que se llame "Fórmulas" […] notas que solo tengan texto y sirvan como prompts
+  reutilizables en los bloques del lienzo que llaman a la IA […] parecido a las skills»; y «que también se puedan usar en el
+  asistente IA»). **Las dos bibliotecas especiales van por una tabla común**: `C.ESPECIALES = { plantillas, formulas }` (`clase`,
+  `id`, `bib`, `nombre`, `las`), `especialDe`, `esEspecial`, `noEspecial`… en documentos.js, herramientas.js, enlaces.js y
+  gestor.js (`ESPECIAL`, `cualEspecial`, `chipEspecial`); los avisos de plantillas no cambian. Contenedor oculto `formulas` con
+  `formulas:biblioteca` (`C.ID_FORMULAS`, `C.ID_BIB_FORMULAS`, `C.NOMBRE_FORMULAS`). **Una fórmula es texto plano**:
+  `guardarNota` la normaliza a párrafos simples (`htmlFormula`), `crearNota(…, { texto, markdown })` aplana, `textoFormula(id)`,
+  `escribirFormula`, `guardarComoFormula` (copia el texto, título y color), `resolverFormulas(ids)` (o `{ rota, motivo }`),
+  `instruccionCompuesta(nodo)`. Su ventana va en modo texto (`soloTexto`, `menuTextoPlano`, `vistaPlana`, nunca va al editor, sin
+  «/»). **`js/claquedraw/formulas.js`** (`C.formulas`, puro): `componer(formulas, instruccion)` → `{ texto, partes, rotas, hueco }`
+  (cada fórmula como «## Fórmula «Título»», `{{instruccion}}`/`{{instrucción}}` es el hueco de lo escrito; si no lo hay, va al
+  final como «## Instrucción de Leo»), `aplanar`, `htmlDeTexto`, `textoDeHtml`. **En el lienzo**: `datos.formulas` (ids, en
+  orden, 20 como mucho; la clave solo si hay; para quitar la última, `formulas: []` —`editarNodo` mezcla `datos`—); una fórmula
+  cuenta como instrucción en `faltan`; cambiar su texto o título deja la operación desactualizada (`huella.formulas`, motivo
+  `instruccion`); en la tarjeta, el botón «Fórmula» (lista con buscador por segmento, varias en orden, chips con ×, rotas) y
+  «Nueva fórmula desde lo escrito…». En el pie del menú, «Fórmulas» entre Plantillas y Papelera; Ver › Fórmulas; pestaña «F».
+  **Claude y el asistente**: `ejecutar_nodo` da «INSTRUCCIONES (fórmulas + lo escrito por Leo)» y avisa de las rotas («OJO»);
+  `editar_lienzo` acepta `formulas`; **`usar_formula`** (solo lectura, como una skill); en el asistente, **fórmulas activas** de
+  la conversación (botón «Fórmulas» o «/» al principio del mensaje; chips encima del campo; `conv.fijarFormulas(ids)`, con
+  `formulas`/`textoFormula`/`listaFormulas`; van enteras al sistema) y la lista corta de títulos para que las cargue solo
+  (`GRUPOS.formulas`, solo si el proyecto tiene fórmulas). De paso se arregló que escribir en «Qué escribir» y pulsar ▶ enseguida
+  perdía el clic (el `focusout` repintaba el nodo; `pulsandoNodo`).
+- **El campo del asistente** es un `div.as-editor` contenteditable (con `value`/`disabled`/`placeholder` como propiedades, así
+  el código de antes vale): los enlaces `clapcraft://` son **chips atómicos** (entran por «Mandar al asistente», `insertar`,
+  pegar y soltar; al mandar se serializan `[etiqueta](url)` en su sitio), las **citas** (`C.asistente.citar({ texto, enlace,
+  etiqueta, imagen? })` → chip; se manda como `> …` con `> — [etiqueta](url)`; ⌘⇧A o el clic derecho «Citar en el asistente» en
+  la ventana de una nota y en el editor —⌘⇧E ya centraba el párrafo—, y «Citar» al elegir texto de una respuesta) y las
+  **imágenes** adjuntas (pegar, soltar o el botón; chip con miniatura). **El panel convive con lo que se abre encima**: la
+  ventana de una nota empieza bajo la franja y, con el panel abierto, le deja su sitio (igual el historial de Claude y la
+  comparación); Esc en el panel no la cierra; ⌘⇧I desde el editor lo reenvía texto.js; el visor de imágenes y los diálogos
+  modales sí lo tapan. **Nunca ids a Leo**: los títulos de paso y la tarjeta de permiso resuelven el nombre (`op.nombreDe`,
+  `C.enlaces.indice`/`porId`/`nombre`), la guía lo pide (punto 9) y `chipsDeIds` cambia por un chip con su nombre cualquier id
+  real que se cuele en una respuesta (fuera de código y enlaces; los cortos del tablero solo tras «nodo», «trama»…).
+- **Visión delegada** (Leo: «implementa la solución más barata para que pueda enviar imágenes»). **Medido con su cuenta**:
+  `deepseek-v4-flash` y `v4-pro` no ven imágenes (las descartan). `qwen3.7-flash` (0,023 / 0,091 USD por millón; **con
+  `enable_thinking: false`**, si no gasta ~800 tokens pensando) ≈ 0,00009 USD por captura, pero confunde texto;
+  `gemini-2.5-flash-lite` (0,08 / 0,32) ≈ 0,00028 y lee bien el texto. `modeloVision` en la configuración (de serie qwen con
+  APIMart; `'ninguno'`); `ia:describir` (electron/ia.js: una llamada por imagen, reducida a 1024 px, prompt que describe y
+  **transcribe todo el texto**, caché en `userData/ia-imagenes.json` por sha256, tope diario) y en el motor
+  `conv.enviar(texto, { imagenes })` y las imágenes de `ejecutar_nodo` → «[Imagen «nombre»: …]» (caché por huella, 8 por
+  mensaje, `gasto.vision`). test/ia-vision.test.js; `npm run test:vision-vivo-GASTA`.
+- **Saldo de APIMart**: `GET /v1/user/balance` (Bearer) → `{ remain_balance, remain_credits, used_balance, used_credits,
+  success }` en USD (1 USD = 10 créditos) y `/v1/balance` el de la clave (`unlimited_quota`). `ia:saldo({ forzar })` (caché de
+  60 s; no cuenta en el tope) y el chip «Saldo 9,91 USD» en la cabecera del panel (ámbar < 1, rojo < 0,20), en «Probar
+  conexión» y en el tutorial.
+- **Memoria de estilo** (Leo: «una memoria que recuerde la forma de escribir y el tono […] conforme el usuario hace
+  correcciones»; «deben poder modificarse o eliminarse»). `js/claquedraw/memoria.js` (`C.memoria`, puro): reglas `{ id, texto,
+  origen: chat|correccion|manual, veces, ejemplo?, activa }` con topes (40 reglas, 2500 caracteres por ámbito; funde las
+  parecidas, nunca quita antes las escritas a mano), `textoPrompt` («ESTILO DE LEO», las fórmulas y lo que pida mandan), y los
+  **pares de corrección** por bloques (lo que escribió la IA frente a lo que dejó Leo; descarta puntuación, acentos, erratas y
+  cambios de nombres o números). **Dos ámbitos**: del proyecto en el archivo (`documentos.memoriaEstilo`, la clave solo si hay;
+  Claude la ve en `ver_proyecto`, `leer_documento`, `ejecutar_nodo`) y general en `userData/memoria-estilo.json`
+  (electron/memoria.js, canales `memoria:*`, 0600). Herramientas **`recordar_estilo`** y **`olvidar_estilo`** (el paso
+  «Aprendió: …» con Deshacer; los ids `mem:` los deshace app.js). Aprende sola con 5 correcciones (o «Aprender ahora») usando
+  `deepseek-v3.2` (≈ 0,0006 USD). Diálogo `C.memoriaUI` (js/claquedraw/memoria-ui.js, `#dlgMemoria`): editar, apagar, borrar,
+  pasar de ámbito, añadir a mano, el interruptor; desde Claude › «Memoria de estilo…» y el botón del panel. **El envío base del
+  asistente está en ~23 670 de un tope de 24 000 caracteres** (test): lo que se añada al prompt o a las herramientas tiene que
+  ganarse su sitio.
+- **La ventana de una nota** (`js/claquedraw/ventana.js`, `C.ventana.montar(capa, api)` desde `capaNota`; css/ventana.css): menú
+  **«/»** (texto, títulos, listas, cita, código, tabla, imagen, separador, plantilla, prompt, aviso y sus tipos; no en fórmulas,
+  código ni tablas; los recuadros entran con un solo `insertHTML` y vuelven al documento; tabla/imagen/línea por `api.vista` con el
+  renglón de detrás puesto a mano —con `vista + '<p><br></p>'` en el mismo `insertHTML` Chrome anidaba un `<p>`—), `[huecos]`
+  realzados también ahí, **zoom** (`vista.zoomTexto` 50–200, `vista.lineaLegible`; `--zoom-nota`, `--ancho-nota`; botones, ⌘+ ⌘− ⌘0
+  en captura en `window` y pellizco anclado, sin tocar el zoom del esquema ni del lienzo) y **typewriter** (`vista.typewriter`, de
+  serie sí, como ClapBook).
+- **Listas** (Leo: «cuando uso viñetas ya no puedo quitarlas»; «cuando le di Enter a un texto que pertenecía a una viñeta»). La
+  causa: el atajo en línea de MdVivo deja un `\u200B` detrás de lo convertido; con el cursor puesto con el ratón al final del
+  renglón quedaba antes de él y el Enter se lo llevaba a la viñeta nueva, que parecía vacía y no lo era (y Retroceso al principio
+  de una viñeta con texto la unía con la anterior en lugar de quitarle la viñeta). **`MdVivo.lista(raiz, e, op)`** (js/mdvivo.js)
+  lo atiende en la ventana de una nota (`vivo`), en el editor (js/editor.js, tras `Ed.slash.onKeydown`, con `{ cmd: Ed.cmd,
+  fusion: 'fusionando' }`; por eso index.html carga mdvivo.js) y en el panel flotante: Enter en una viñeta vacía (sin contar
+  `\u200B` ni espacios) sale de la lista o sube un nivel, Retroceso al principio la vuelve párrafo (o sube un nivel), Tab y
+  Mayús+Tab anidan sin perder el foco; todo por `execCommand`. En la ventana, Tab fuera de una lista se queda en el campo.
+- **Versiones en la ventana de una nota**: botón «Versiones» en el pie (ventana.js `data-vt-versiones`, gestor.js
+  `menuVersionesLado`/`pintarVersionLado`, con el menú y la comparación de versiones.js): guardar, cargar, renombrar, eliminar,
+  comparar; el botón lleva el nombre de la versión que coincide. Lo que la IA reemplaza en una nota deja antes la versión
+  **«Antes de Claude · fecha»** o **«Antes de DeepSeek · fecha»** (`versionPrevia` con `quienEscribe(ctx.origen)`; no se repite
+  del mismo autor en 20 minutos), y el paso del asistente lo dice con «Ver».
+- **Pruebas**: test/formulas.test.js, test/ia-vision.test.js, test/memoria.test.js; en Electron `npm run test:formulas` (83),
+  `test:ventana`, `test:memoria` (58) y `test:asistente` (138). Con `sendInputEvent` las flechas son `Down`/`Left`, `mouseWheel`
+  con `deltaY` positivo amplía, y un repintado entre `mousedown` y `mouseup` se come el clic.
 
 ## Claude: acceso desde Cowork y Claude Code (1.1.49)
 

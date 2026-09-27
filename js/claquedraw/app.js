@@ -39,7 +39,7 @@
   /* La vista la comparten todas las ventanas (1.1.33): lo general (anchos, escalas, tema del panel) lo escribe la última que
      cambia algo, pero lo que es de un proyecto (`archivos`, `pestanas` y la `pantallas` de antes, mapas por id) solo lo toca
      la ventana que lo lleva, y el resto se relee de lo guardado para no pisar lo de las otras. */
-  const PROPIAS = ['archivos', 'pestanas', 'pantallas'], idsPropios = new Set();
+  const PROPIAS = ['archivos', 'pestanas', 'pantallas', 'lienzos'], idsPropios = new Set();   // lienzos: la vista de cada lienzo (1.1.58)
   /* los filtros de las bibliotecas y los segmentos (1.1.54, `vista.filtros`): cada ventana escribe solo los que tocó, sobre lo que
      hayan guardado las otras (las claves son ids de biblioteca, que no cambian al volver a abrir el proyecto) */
   const filtrosTocados = new Set();
@@ -121,6 +121,7 @@
     if (abiertoId) programarEscritura(abiertoId);
     informarVentana();
     indicador(); renderPestanas(); renderChipEsquema();       // el título del esquema sigue a renombres y enlaces
+    { const a = asis(); if (a && a.repintarFormulas) a.repintarFormulas(); }   // los chips de las fórmulas activas siguen a sus nombres (1.1.60)
     if (esPersonajes(esquemaId) && C.gestor && enPersonajes()) C.gestor.render();   // el árbol de Personajes sigue al tablero
     recordarPantalla();                                        // y se apunta dónde estamos, para volver aquí al abrir
   }
@@ -130,10 +131,189 @@
   let abiertoId = null;                                        // guion montado en el tablero
   let esquemaId = null;                                        // el esquema montado en el tablero (id de un esquema de contenedor); null: ninguno
   let textoAntes = null;                                       // el esquema cuyo documento estaba en el editor al irse a Documentos (verVista)
+  let lienzoId = null;                                         // el lienzo de la vista «lienzo» (1.1.58; ver «lienzos de nodos»)
+  let lienzoMontado = null;                                    // el que tiene montado js/claquedraw/lienzo.js (solo con su vista delante)
   let temporizador = null;
   const modelo = new T.Modelo(datosDe(biblioteca.activo()));
   const docs = () => C.gestor.documentos();                    // el modelo de documentos del guion abierto
   const refEsquema = eid => { const d = docs(); return d && eid ? d.esquema(eid) : null; };   // { contenedor, esquema } o null
+
+  /* ---------- lienzos de nodos (1.1.58) ----------
+     Leo, 27-09-2026: «un lienzo con nodos donde se conecten notas, notas con imágenes y esquemas; en lugar de generar videos,
+     nosotros generamos guiones y también los partimos» (como los «Space» de Dreamina). Un lienzo es una pieza del árbol (gestor.js)
+     y se ve en su propia vista, «lienzo» (`body.vista-lienzo`, la sección `#lienzo`), que pinta js/claquedraw/lienzo.js
+     (`C.lienzoUI`). Aquí: montarlo y desmontarlo con su vista (desmontado, sus teclas no molestan en las demás), los ganchos que
+     necesita —guardar en los documentos, abrir lo que apunta un nodo, copiar enlaces y el encargo para Claude, recordar su vista—,
+     sus pestañas y su ‹ ›, sus enlaces, Deshacer del menú, y ponerlo al día cuando Claude lo cambia. La vista de cada lienzo
+     (desplazamiento y zoom) es de esta máquina: va en `vista.lienzos[proyecto][lienzo]`, no en el archivo. */
+  function refLienzo(lid) { const d = docs(); return d && lid && d.lienzo ? d.lienzo(lid) : null; }   // { contenedor, lienzo } o null
+  const conLienzoUI = () => !!(C.lienzoUI && C.lienzoUI.montar);
+  const vistaLienzo = lid => { const m = vista.lienzos && abiertoId && vista.lienzos[abiertoId]; return (m && m[lid]) || null; };
+  let vistaLienzoT = null;
+  function recordarVistaLienzo(lid, v) {
+    if (!abiertoId || !lid || !v) return;
+    const m = vista.lienzos || (vista.lienzos = {}), p = m[abiertoId] || (m[abiertoId] = {});
+    p[lid] = { x: +v.x || 0, y: +v.y || 0, zoom: +v.zoom || 1 };
+    clearTimeout(vistaLienzoT); vistaLienzoT = setTimeout(guardarVista, 400);   // desplazar y hacer zoom avisan a cada paso
+  }
+  function ganchosLienzo(lid) {
+    return {
+      guardar: datos => {
+        const d = docs(); if (!d || !d.guardarLienzo || !d.lienzo(lid)) return { ok: false, aviso: 'Ese lienzo ya no existe' };
+        const r = d.guardarLienzo(lid, datos);
+        if (r && r.ok && r.cambio !== false) { biblioteca.marcar(abiertoId); persistir(); C.gestor.render(); }
+        return r;
+      },
+      avisar: (msg, accion) => T.tablero.avisar(msg, accion),
+      docs: () => docs(),
+      abrir: ref => abrirDesdeLienzo(ref),
+      copiarEnlace: refs => copiarEnlaces(refs),
+      pedirAClaude: texto => pedirAClaude(texto),
+      /* «Nueva fórmula desde lo escrito…» (1.1.60): una fórmula con ese texto en la bandeja de «Fórmulas»; su id */
+      crearFormula: (titulo, texto) => (C.gestor.crearFormula ? C.gestor.crearFormula(titulo, texto) : null),
+      /* «Ejecutar con IA» (1.1.59): solo en la app de escritorio y con el asistente (lo de abajo, en «el asistente con otra IA») */
+      ejecutarConIA: C.asistente && C.asistente.iniciar && api && api.ia ? q => ejecutarConIA(q) : undefined,
+      enCursoIA: id => { try { return enCursoIA.get(id) || []; } catch (_) { return []; } },
+      listoIA: () => iaConClave(),                            // sin clave, el botón abre el asistente (su bienvenida) sin dejar nada pendiente
+      ocupadoIA: () => { const a = asis(); try { return !!(a && a.trabajando && a.trabajando()); } catch (_) { return false; } },   // ocupado: no se deja nada pendiente
+      verIA: () => { if (C.asistente && C.asistente.abrir) C.asistente.abrir(); },
+      proyecto: () => proyectoEnlace(),                       // el nombre de los enlaces del encargo
+      alVista: v => recordarVistaLienzo(lid, v),
+      vista: vistaLienzo(lid)                                  // con la que se dejó (también se le pasa tras montar)
+    };
+  }
+  function montarLienzo(lid) {
+    if (!lid || !refLienzo(lid)) { desmontarLienzo(); return false; }
+    if (lienzoMontado === lid) return true;
+    desmontarLienzo();
+    if (!conLienzoUI()) { T.tablero.avisar('Esta versión de ClapCraft aún no sabe pintar lienzos'); return false; }
+    C.lienzoUI.montar(lid, ganchosLienzo(lid));
+    lienzoMontado = lid;
+    const v = vistaLienzo(lid); if (v && C.lienzoUI.vista) C.lienzoUI.vista(v);
+    return true;
+  }
+  /* lo pendiente del lienzo (un campo a medio escribir, un arrastre), a sus datos, si la interfaz sabe hacerlo */
+  function volcarLienzo() { if (lienzoMontado && C.lienzoUI && C.lienzoUI.volcar) { try { C.lienzoUI.volcar(); } catch (_) {} } }
+  function desmontarLienzo() {
+    if (!lienzoMontado) return;
+    volcarLienzo();
+    try { if (C.lienzoUI && C.lienzoUI.desmontar) C.lienzoUI.desmontar(); } catch (_) {}
+    lienzoMontado = null;
+  }
+  /* abrir un lienzo en la pestaña de delante (y, si se dice, elegir y centrar uno de sus nodos) */
+  function abrirLienzo(lid, nodo) {
+    if (!refLienzo(lid)) return false;
+    /* ya delante: nada que abrir (sin redibujar el árbol, que se llevaría el doble clic de renombrar) */
+    if (vista.modo === 'lienzo' && lienzoMontado === lid && lienzoId === lid) { if (nodo && C.lienzoUI.ir) C.lienzoUI.ir(nodo); return true; }
+    if (temporizador) volcar();
+    volcarTexto();
+    vista.arbol = 'contenedores'; guardarVista();
+    const antes = lienzoId; lienzoId = lid;
+    verVista('lienzo');
+    if (vista.modo !== 'lienzo') { lienzoId = antes; return false; }
+    C.gestor.render();
+    if (nodo && C.lienzoUI && C.lienzoUI.ir) C.lienzoUI.ir(nodo);
+    return true;
+  }
+  /* Lo que apunta un nodo de entrada (doble clic en él, o sus chips de salida): una nota en su ventana, un esquema (y un nodo),
+     el documento de un esquema, una biblioteca, un segmento expandido, un personaje o un lienzo. Acepta las referencias de los
+     enlaces ({ tipo, id, esquema, biblioteca… }) y los datos de los nodos ({ notaId }, { eid }, { subId, etiquetaId }…). */
+  function abrirDesdeLienzo(ref) {
+    const d = docs(); if (!d || !ref) return false;
+    if (typeof ref === 'string') return irAEnlace(ref);
+    const t = ref.tipo, id = ref.id;
+    const nid = ref.notaId || (t === 'nota' ? id : null);
+    if (nid) {
+      const n = d.nota(nid); if (!n || d.enPapelera(nid)) { T.tablero.avisar(n ? 'Esa nota está en la papelera' : 'Esa nota ya no existe'); return false; }
+      const r = d.sub(n.subId);
+      if (r && r.sub.guionEid) return mostrarClaude({ nota: nid }).ok;   // el guion de un esquema: al editor
+      if (esFormulaNota(n) && C.gestor.abrirFormula) {          // una fórmula (1.1.60): en su ventana, encima de «Fórmulas»
+        volcarLienzo(); verVista('documentos'); return C.gestor.abrirFormula(nid);
+      }
+      volcarLienzo();
+      vista.arbol = r && r.contenedor && (r.contenedor.id === C.ID_PERSONAJES) ? 'personajes' : 'contenedores'; guardarVista();
+      verVista('documentos');
+      C.gestor.elegirNota(nid);                                // su ventana, encima de su biblioteca
+      C.gestor.abrirSub(n.subId);
+      return true;
+    }
+    const eid = ref.eid || (t === 'esquema' ? id : t === 'documento' ? ref.esquema : null);
+    if (eid) {
+      const x = mostrarClaude({ esquema: eid, documento: t === 'documento' || !!ref.documento, nodo: ref.nodo || null });
+      if (!x.ok) T.tablero.avisar(x.aviso); return x.ok;
+    }
+    const pid = ref.personajeId || (t === 'personaje' ? id : null);
+    if (pid) { if (!d.personaje(pid)) { T.tablero.avisar('Ese personaje ya no está en el elenco'); return false; } abrirPersonaje(pid); return true; }
+    if (t === 'lienzo' || ref.lienzo) return abrirLienzo(ref.lienzo || id, ref.nodo);
+    const subId = ref.subId || ref.biblioteca || (t === 'biblioteca' || t === 'sub' ? id : null);
+    if (subId && esEspecialId(subId) && !('etiquetaId' in ref) && t !== 'segmento' && C.gestor.abrirEspecial) {   // «Administrar fórmulas…» (1.1.60)
+      volcarLienzo(); verVista('documentos'); C.gestor.abrirEspecial(subId); return true;
+    }
+    if (subId) {
+      const r = d.sub(subId); if (!r) { T.tablero.avisar('Esa biblioteca ya no existe'); return false; }
+      const seg = t === 'segmento' || 'etiquetaId' in ref;
+      const etq = seg ? (ref.etiquetaId !== undefined ? ref.etiquetaId : id === 'bandeja' ? null : id) : undefined;
+      if (seg && etq && !d.etiqueta(etq)) { T.tablero.avisar('Ese segmento ya no existe'); return false; }
+      if (C.gestor.ventanaAbierta && C.gestor.ventanaAbierta()) C.gestor.cerrarVentana();
+      vista.arbol = r.sub.lineaId ? 'personajes' : 'contenedores'; guardarVista();
+      verVista('documentos');
+      if (seg) C.gestor.expandir(subId, etq ? 'etq:' + etq : 'bandeja'); else C.gestor.abrirSub(subId);
+      return true;
+    }
+    T.tablero.avisar('No sé abrir eso'); return false;
+  }
+  /* ▶ «Pedir a Claude» de una operación: el lienzo compone el encargo (su enlace y una frase) y aquí va al portapapeles */
+  async function pedirAClaude(texto) {
+    const t = String(texto || '').trim(); if (!t) return false;
+    ultimoCopiado = t;                                         // también para «Ir al enlace copiado»
+    if (sellarEnlaces(abiertoId)) { biblioteca.marcar(abiertoId); persistir(); }   // desde aquí hay enlaces (como `copiarEnlaces`)
+    const ok = await copiarTexto(t);
+    T.tablero.avisar(ok ? 'Encargo copiado. Pégalo en Claude (Cowork o Claude Code) y él lo ejecuta: lo verás aquí al momento.' : 'No se pudo copiar el encargo');
+    return ok;
+  }
+  /* Un nodo de entrada en un lienzo desde un ⋯ del gestor («Añadir al lienzo…»): con ese lienzo delante, donde se ve (en su
+     centro); si no, se escribe en sus datos **a la derecha de todo lo que tiene**, arriba (el ancho de un nodo se sabe —`w` o el
+     de su tipo—; el alto depende de lo que enseña y no se guarda), sin abrirlo, y el aviso lleva «Abrir». */
+  function anadirAlLienzo(lid, tipo, datos, op) {
+    const d = docs(), r = refLienzo(lid); if (!d || !r) return false;
+    const nombre = r.lienzo.nombre;
+    if (vista.modo === 'lienzo' && lienzoMontado === lid && C.lienzoUI.soltar) {
+      const L = $('lienzo'), b = L && L.getBoundingClientRect();
+      const x = b ? b.left + b.width / 2 : innerWidth / 2, y = b ? b.top + b.height / 2 : innerHeight / 2;
+      C.lienzoUI.soltar(tipo, idDeEntrada(tipo, datos), x, y);
+      if (!(op && op.yaAbierto)) T.tablero.avisar('Añadido al lienzo «' + nombre + '»');
+      return true;
+    }
+    if (!C.Lienzo || !d.guardarLienzo) { T.tablero.avisar('Esta versión de ClapCraft aún no sabe de lienzos'); return false; }
+    const m = d.modeloLienzo ? d.modeloLienzo(lid) : new C.Lienzo(JSON.parse(JSON.stringify(r.lienzo)));
+    if (!m) { T.tablero.avisar('Esta versión de ClapCraft aún no sabe de lienzos'); return false; }
+    const nodos = (m.toJSON().nodos || []);
+    const TL = C.Lienzo.TIPOS || {}, ancho = n => +n.w || ((TL[n.tipo] && TL[n.tipo].familia === 'operacion') ? 300 : 260);
+    const x0 = nodos.length ? Math.max(...nodos.map(n => (+n.x || 0) + ancho(n))) + 60 : 0;
+    const y0 = nodos.length ? Math.min(...nodos.map(n => +n.y || 0)) : 0;
+    const c = m.crearNodo(tipo, x0, y0, datos);
+    if (!c || !c.ok) { T.tablero.avisar((c && c.aviso) || 'No se pudo añadir al lienzo'); return false; }
+    const g = d.guardarLienzo(lid, m.toJSON()); if (!g || !g.ok) { T.tablero.avisar((g && g.aviso) || 'No se pudo guardar el lienzo'); return false; }
+    biblioteca.marcar(abiertoId); persistir(); C.gestor.render();
+    const nid = c.nodo && c.nodo.id;
+    T.tablero.avisar('Añadido al lienzo «' + nombre + '»', { texto: 'Abrir', fn: () => abrirLienzo(lid, nid) });
+    return true;
+  }
+  /* el id que `C.lienzoUI.soltar` recibe de cada clase de entrada (el segmento, «subId|etiquetaId», con «bandeja» sin segmento) */
+  const idDeEntrada = (tipo, x) => tipo === 'nota' ? x.notaId : tipo === 'esquema' ? x.eid : tipo === 'personaje' ? x.personajeId
+    : tipo === 'biblioteca' ? x.subId : tipo === 'segmento' ? x.subId + '|' + (x.etiquetaId || 'bandeja') : null;
+  /* Archivo › Nuevo lienzo…: en el contenedor de lo que se ve (el lienzo, el esquema o la biblioteca de delante), o en el primero */
+  function nuevoLienzoAqui() {
+    const d = docs(); if (!d || !C.gestor.nuevoLienzo) return;
+    const visibles = c => c && !c.oculto && !c.especial;
+    const a = C.gestor.subActual && C.gestor.subActual();
+    const cands = [vista.modo === 'lienzo' && refLienzo(lienzoId) && refLienzo(lienzoId).contenedor,
+      vista.modo === 'documentos' && a && a.cid && d.contenedor(a.cid),
+      refEsquema(esquemaId) && refEsquema(esquemaId).contenedor, d.datos.contenedores.find(visibles)];
+    const c = cands.find(visibles);
+    if (!c) { T.tablero.avisar('Crea antes un contenedor: los lienzos viven en uno'); return; }
+    C.gestor.nuevoLienzo(c.id);
+  }
 
   /* Escribe el tablero donde toca: en el guion (proyecto) o en el esquema del contenedor. */
   function volcar() {
@@ -207,7 +387,12 @@
       b.querySelector('[data-chip-esq]').textContent = r.esquema.nombre;
       chip.setAttribute('aria-label', 'Esquema «' + r.esquema.nombre + '»');   // cortado, sale el globo (texto.js)
     }
-    $('verDocumentos').hidden = !x;
+    /* sus bibliotecas conectadas (1.1.57), como chips junto a «Abrir documento»: llevan a cada una y su × desconecta; con alguna,
+       sobra «Ver biblioteca» */
+    let cx = $('conexionesEsq');
+    if (!cx) { cx = document.createElement('span'); cx.id = 'conexionesEsq'; cx.className = 'cx-cab'; $('verDocumentos').before(cx); }
+    cx.innerHTML = r && C.gestor.chipsConexiones ? C.gestor.chipsConexiones('esquema', esquemaId) : '';
+    $('verDocumentos').hidden = !x || !!(x && x.conectado);
     /* sin esquema montado no hay documento que abrir, y **un esquema de personaje no lleva documento** (Leo,
        16-09-2026: «quita de personajes el botón, estos esquemas no necesitan documento») */
     $('abrirDoc').hidden = !r || esPersonajes(esquemaId);
@@ -315,6 +500,7 @@
     if (repintarTablero) { clearTimeout(repintarTablero); repintarTablero = null; T.tablero.render(); alCambiar(); }
     if (temporizador) volcar();
     volcarTexto();
+    volcarLienzo();
   }
   function releerEditor(id) {
     const n = id && C.texto.clave() === id && docs().nota(id); if (!n) return;
@@ -513,6 +699,7 @@
     const sel = p.modo === 'documentos' && !p.nota && C.gestor.notaElegida && C.gestor.notaElegida();
     if (sel) p.sel = sel;                                       // la nota elegida, con su panel (1.1.34)
     if (p.modo === 'texto' && docId) p.doc = docId;
+    if (p.modo === 'lienzo') p.lienzo = lienzoId;
     return p;
   }
   function recordarPantalla() {
@@ -560,7 +747,7 @@
     document.querySelectorAll('.nav-hist [data-hist]').forEach(x => { x.disabled = x.dataset.hist === '-1' ? !a : !b; });
   }
   /* y detrás del título, el botón de enlace de lo que se ve (1.1.52, «Copiar enlace para Claude») */
-  const ENLACE_CAB = '<button type="button" class="icono enlace-cab" data-enlace-cab title="Copiar enlace para Claude (Cmd+Shift+C)" aria-label="Copiar enlace para Claude"><svg width="15" height="15" aria-hidden="true"><use href="#ic-link"></use></svg></button>';
+  const ENLACE_CAB = '<button type="button" class="icono enlace-cab" data-enlace-cab title="Copiar enlace para Claude (Cmd+Shift+C)' + (escritorio ? ' · clic derecho: mandarlo al asistente' : '') + '" aria-label="Copiar enlace para Claude"><svg width="15" height="15" aria-hidden="true"><use href="#ic-link"></use></svg></button>';
   const sinEnlaceCab = x => !(x.nextElementSibling && x.nextElementSibling.matches('[data-enlace-cab]'));
   function ponerHistoria() {
     document.querySelectorAll('.esq-titulo:not(.nav-hist + .esq-titulo)').forEach(x => x.insertAdjacentHTML('beforebegin', HISTORIA));
@@ -588,6 +775,7 @@
     if (eid !== esquemaId || !eid) montarEsquema(eid, { sinEditor: true });
     const d = docs();
     if (p.nota && d && d.nota(p.nota) && !d.enPapelera(p.nota)) { verVista('documentos'); C.gestor.abrirNota(p.nota); return; }
+    if (p.modo === 'lienzo' && refLienzo(p.lienzo)) { lienzoId = p.lienzo; verVista('lienzo'); C.gestor.render(); return; }   // un lienzo (1.1.58)
     /* el gestor recuerda la biblioteca aunque delante esté el esquema: solo se abre si era lo que se veía */
     if (p.modo === 'documentos') {
       if (p.papelera && C.gestor.abrirPapelera) { verVista('documentos'); C.gestor.abrirPapelera(); return; }
@@ -595,13 +783,19 @@
         verVista('documentos');
         const sel = p.sel && d.nota(p.sel) && !d.enPapelera(p.sel) ? p.sel : null;
         if (C.gestor.elegirNota) C.gestor.elegirNota(sel);    // la nota elegida de esta pestaña (y su panel), no la de la otra
-        if (p.seg && segmentoVivo(p)) C.gestor.expandir(p.sub, p.seg, sel); else C.gestor.abrirSub(p.sub);
+        if (p.seg && segmentoVivo(p)) C.gestor.expandir(p.sub, p.seg, sel);
+        else if (esEspecialId(p.sub)) C.gestor.abrirEspecial(p.sub);   // su tablero especial (1.1.56; las fórmulas, 1.1.60)
+        else C.gestor.abrirSub(p.sub);
         return;
       }
     }
     if (p.modo === 'texto' && esquemaId && !esPersonajes(esquemaId)) { abrirTexto(p.doc && d && d.nota(p.doc) ? p.doc : null); return; }
     verVista(p.modo === 'documentos' ? 'documentos' : 'esquema');
   }
+  /* las bibliotecas especiales (1.1.56 y 1.1.60): las plantillas y las fórmulas, fuera de los árboles */
+  const ID_BIB_FORMULAS = C.ID_BIB_FORMULAS || 'formulas:biblioteca', ID_FORMULAS = C.ID_FORMULAS || 'formulas';
+  const esEspecialId = id => !!id && (id === C.ID_BIB_PLANTILLAS || id === ID_BIB_FORMULAS);
+  const esFormulaNota = n => !!n && (n.subId === ID_BIB_FORMULAS || !!(docs() && docs().esFormula && docs().esFormula(n)));
   const segmentoVivo = p => { const d = docs(); if (!d || !p.seg) return false; const m = /^etq:(.+)$/.exec(p.seg); return m ? !!d.etiqueta(m[1]) : true; };
 
   /* ---------- pestañas: lo abierto del proyecto (1.1.33) ----------
@@ -616,7 +810,7 @@
   let pestanas = null;                                         // { lista: [{ id, p }], activa } del proyecto de la ventana
   const idPestana = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const pestanaActiva = () => (pestanas && pestanas.lista.find(t => t.id === pestanas.activa)) || null;
-  const claveDe = p => !p ? '' : p.nota ? 'nota:' + p.nota : p.modo === 'texto' ? 'texto:' + (p.esquema || '')
+  const claveDe = p => !p ? '' : p.nota ? 'nota:' + p.nota : p.modo === 'lienzo' ? 'lienzo:' + (p.lienzo || '') : p.modo === 'texto' ? 'texto:' + (p.esquema || '')
     : p.modo === 'documentos' ? (p.papelera ? 'papelera' : p.seg ? 'seg:' + p.sub + '|' + p.seg : 'sub:' + (p.sub || '')) : 'esquema:' + (p.esquema || '');
   function cargarPestanas(id) {
     const g = vista.pestanas && vista.pestanas[id];
@@ -643,7 +837,8 @@
      'nota' | 'papelera', id, clave } (lo que manda el ⋯ del gestor) */
   function pantallaDe(x) {
     const d = docs(); if (!d || !x) return null;
-    const arbolDe = cid => cid === C.ID_PERSONAJES || cid === C.ID_ESQUEMAS_PERSONAJE ? 'personajes' : 'contenedores';
+    /* las plantillas no son de ningún árbol: se queda el que se ve (1.1.56) */
+    const arbolDe = cid => cid === C.ID_PERSONAJES || cid === C.ID_ESQUEMAS_PERSONAJE || ((cid === C.ID_PLANTILLAS || cid === ID_FORMULAS) && enPersonajes()) ? 'personajes' : 'contenedores';
     const aqui = esquemaId || null;
     if (x.tipo === 'esquema' || x.tipo === 'documento') {
       const r = refEsquema(x.id); if (!r || (x.tipo === 'documento' && esPersonajes(x.id))) return null;
@@ -669,6 +864,7 @@
       return { modo: 'documentos', arbol: r ? arbolDe(r.contenedor.id) : 'contenedores', esquema: aqui, sub: n.subId, nota: n.id };
     }
     if (x.tipo === 'papelera') return { modo: 'documentos', arbol: enPersonajes() ? 'personajes' : 'contenedores', esquema: aqui, papelera: true };
+    if (x.tipo === 'lienzo') return refLienzo(x.id) ? { modo: 'lienzo', arbol: 'contenedores', esquema: aqui, lienzo: x.id } : null;   // 1.1.58
     return null;
   }
   function abrirEnPestana(x) {
@@ -686,7 +882,7 @@
   function primerElemento() {
     const d = docs(); if (!d) return null;
     const cs = d.contenedores();
-    for (const c of [...cs.fijados, ...cs.sueltos]) {
+    for (const c of [...cs.fijados, ...cs.sueltos].filter(c => !c.oculto && !c.especial)) {   // nunca las plantillas (1.1.56)
       const primero = (xs, cid) => {
         for (const x of xs) {
           if (x.tipo === 'esquema' || x.tipo === 'sub') return { tipo: x.tipo, id: x.id };
@@ -720,6 +916,7 @@
   function existe(p) {
     const d = docs(); if (!d || !p) return false;
     if (p.nota) return !!d.nota(p.nota) && !d.enPapelera(p.nota);
+    if (p.modo === 'lienzo') return !!refLienzo(p.lienzo);
     if (p.modo === 'texto') return !!refEsquema(p.esquema);
     if (p.modo === 'documentos') return !!p.papelera || !p.sub || (!!d.sub(p.sub) && (!p.seg || segmentoVivo(p)));
     return !p.esquema || !!refEsquema(p.esquema);
@@ -733,7 +930,16 @@
   function rotuloDe(p) {
     const d = docs(); if (!d) return { letra: '', nombre: '' };
     const conColor = (col, o) => { const t = col !== undefined && col !== null && C.PALETA_ETIQUETAS[col]; if (t) { o.chl = t[1]; o.chd = t[2]; } return o; };
-    if (p.nota) { const n = d.nota(p.nota); return { tipo: 'nota', letra: 'N', que: 'Nota', nombre: n ? n.titulo || 'Sin título' : 'Nota' }; }
+    if (p.nota) {
+      const n = d.nota(p.nota);
+      if (n && d.esPlantilla && d.esPlantilla(n)) return { tipo: 'plantilla', icono: 'plantilla', letra: LETRA_PLANTILLAS, que: 'Plantilla', nombre: n.titulo || 'Sin título' };
+      if (n && esFormulaNota(n)) return { tipo: 'formula', icono: 'formula', letra: 'F', que: 'Fórmula', nombre: n.titulo || 'Sin título' };   // 1.1.60
+      return { tipo: 'nota', letra: 'N', que: 'Nota', nombre: n ? n.titulo || 'Sin título' : 'Nota' };
+    }
+    if (p.modo === 'lienzo') {                                 // un lienzo de nodos (1.1.58): su «L», con su color
+      const r = refLienzo(p.lienzo);
+      return conColor(r && r.lienzo.color, { tipo: 'lienzo', letra: 'L', que: 'Lienzo', nombre: r ? r.lienzo.nombre : 'Lienzo' });
+    }
     if (p.modo === 'texto') {
       const r = refEsquema(p.esquema), doc = r && d.documentoEsquema(p.esquema);
       return conColor(r && r.esquema.color, { tipo: 'documento', letra: 'D', que: 'Documento', nombre: (doc && doc.titulo) || (r ? r.esquema.nombre : 'Documento') });
@@ -741,6 +947,16 @@
     if (p.modo === 'documentos') {
       if (p.papelera) return { tipo: 'papelera', letra: '', que: 'Papelera', nombre: 'Papelera' };
       const r = p.sub && d.sub(p.sub);
+      /* las plantillas (1.1.56): su icono, como la papelera (las dos son sitios del pie del menú); sin él, la «T» (de *template*: la
+         P ya es de los personajes) */
+      if (r && r.sub.id === C.ID_BIB_PLANTILLAS) {
+        const m = p.seg && /^etq:(.+)$/.exec(p.seg), e = m && d.etiqueta(m[1]);
+        return { tipo: 'plantillas', icono: 'plantilla', letra: LETRA_PLANTILLAS, que: p.seg ? 'Segmento de las plantillas' : 'Biblioteca especial', nombre: p.seg ? (e ? e.nombre : 'Sin segmento') : 'Plantillas' };
+      }
+      if (r && r.sub.id === ID_BIB_FORMULAS) {                // las fórmulas (1.1.60): su matraz (sin él, la «F»)
+        const m = p.seg && /^etq:(.+)$/.exec(p.seg), e = m && d.etiqueta(m[1]);
+        return { tipo: 'formulas', icono: 'formula', letra: 'F', que: p.seg ? 'Segmento de las fórmulas' : 'Biblioteca especial', nombre: p.seg ? (e ? e.nombre : 'Sin segmento') : 'Fórmulas' };
+      }
       if (p.seg) {
         const m = /^etq:(.+)$/.exec(p.seg), e = m && d.etiqueta(m[1]);
         const nombre = e ? e.nombre : p.seg === 'bandeja' ? 'Sin segmento' : p.seg === 'apariciones' ? 'Apariciones' : 'Segmento';
@@ -752,6 +968,7 @@
     const r = refEsquema(p.esquema);
     return conColor(r && r.esquema.color, { tipo: 'esquema', letra: 'E', que: 'Esquema', nombre: r ? r.esquema.nombre : 'Sin esquema' });
   }
+  const LETRA_PLANTILLAS = 'T';
   function montarPrimero() {
     const g = biblioteca.guion(abiertoId), d = g && docs(); if (!d) return;
     const r = d.migrarEsquema(g.datos, g.notas);
@@ -770,6 +987,7 @@
     C.texto.cerrar();
     C.gestor.reiniciar();                                      // la nota abierta del gestor se guarda y se cierra
     const g = biblioteca.guion(id);
+    desmontarLienzo(); lienzoId = null;                        // el lienzo abierto era del proyecto de antes
     abiertoId = g ? g.id : null; esquemaId = null;
     if (g) biblioteca.activar(g.id);
     pestanas = g ? cargarPestanas(g.id) : null;
@@ -781,6 +999,8 @@
     aplicarPantalla();
     if (g && estado(g.id).archivo) recordarReciente(g.id);
     if (g) setTimeout(() => { if (abiertoId === g.id && typeof avisarCambiosDeClaude === 'function') avisarCambiosDeClaude(); }, 900);   // lo que hizo Claude con el proyecto cerrado (1.1.50)
+    /* su conversación con el asistente (1.1.59), cuando ya se sabe su archivo (abrir uno lo vincula justo después de montarlo) */
+    if (typeof asistenteAlProyecto === 'function') setTimeout(() => { if (abiertoId === (g ? g.id : null)) asistenteAlProyecto(); }, 0);
   }
 
   /* Un guion recién creado que nadie ha tocado: se puede reutilizar para abrir un archivo. */
@@ -872,11 +1092,12 @@
         b.className = 'pestana' + (activa ? ' activa' : ''); b.dataset.id = t.id; b.dataset.tipo = r.tipo || '';
         b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(activa));
         b.title = (r.que ? r.que + ' · ' : '') + r.nombre;
-        b.innerHTML = (r.tipo === 'papelera' ? `<span class="pestana-tipo pestana-tipo--icono">${svg('trash', 12)}</span>` : `<span class="pestana-tipo pestana-tipo--${r.tipo}"></span>`)
+        const icono = r.tipo === 'papelera' ? 'trash' : r.icono && document.getElementById('ic-' + r.icono) ? r.icono : null;   // las plantillas, su icono si está en el sprite
+        b.innerHTML = (icono ? `<span class="pestana-tipo pestana-tipo--icono pestana-tipo--${r.tipo}">${svg(icono, 12)}</span>` : `<span class="pestana-tipo pestana-tipo--${r.tipo}"></span>`)
           + '<span class="pestana-nom"></span>'
           + (varias ? `<button type="button" class="pestana-cerrar" data-cerrar title="Cerrar la pestaña">${svg('close', 12)}</button>` : '');
         const tipo = b.querySelector('.pestana-tipo');
-        if (r.letra) tipo.textContent = r.letra;
+        if (r.letra && !icono) tipo.textContent = r.letra;
         if (r.chl) { tipo.classList.add('con-color'); tipo.style.setProperty('--chl', r.chl); tipo.style.setProperty('--chd', r.chd); }
         b.querySelector('.pestana-nom').textContent = r.nombre;
         barraPestanas.appendChild(b);
@@ -1077,9 +1298,12 @@
   /* Sin proyecto en la ventana: nada montado; se ve «Sin proyectos». */
   function quedarSinProyectos() {
     C.texto.cerrar(); C.gestor.reiniciar();
+    desmontarLienzo(); lienzoId = null;
+    if (vista.modo === 'lienzo') { vista.modo = 'esquema'; document.body.classList.remove('vista-lienzo'); }
     abiertoId = null; esquemaId = null; pestanas = null;
     T.tablero.cargar(T.inicial()); document.body.classList.add('sin-esquema');
     persistir(); aplicarPantalla();
+    if (typeof asistenteAlProyecto === 'function') asistenteAlProyecto();
   }
   /* Saca un proyecto de la ventana y de lo guardado en este equipo (su archivo, si tiene, no se toca). */
   function quitarDeLaVentana(id) {
@@ -1088,6 +1312,8 @@
     try { localStorage.removeItem(PREFIJO_PROYECTO + id); } catch (_) {}
     if (vista.pestanas) delete vista.pestanas[id];
     if (vista.pantallas) delete vista.pantallas[id];
+    if (vista.lienzos) delete vista.lienzos[id];
+    borrarConversacionIA('p:' + id);                           // la conversación de un proyecto sin archivo (la de uno con archivo sigue: va por su ruta)
     idsPropios.add(id); guardarVista();
     if (id === abiertoId) { abiertoId = null; pestanas = null; }
   }
@@ -1150,6 +1376,7 @@
     const forzar = !!(op && op.forzar), id = abiertoId, g = biblioteca.guion(id);
     if (!g) { if (pantalla === 'nuevo') C.proyectos.descartar(); await cerrarVentana(forzar); return; }
     const est = estado(id);
+    detenerAsistente();                                        // el asistente no sigue cambiando un proyecto que se cierra (1.1.59)
     volcarTodo();
     if (est.archivo) { if (!await escribirArchivo(id) && !await T.tablero.confirmar('No se pudo escribir en ' + est.archivo.nombre + '. ¿Cerrar «' + g.nombre + '» de todas formas? Se perderían los cambios.', 'Cerrar')) return; }
     else if (!esVirgen(g) && !await T.tablero.confirmar('¿Cerrar «' + g.nombre + '»? No está guardado en ningún archivo y se perderá.', 'Cerrar')) return;
@@ -1707,21 +1934,51 @@
   retomarArchivos();
 
   /* ---------- tema (igual que tramas.html: mismo atributo y misma clave) ---------- */
+  /* 1.1.57, los temas neón (Leo: «que sean temas adicionales al modo claro y oscuro»): Synthwave va sobre el oscuro y Vaporwave
+     sobre el claro. El base sigue en `data-theme` (así valen todas las reglas de oscuro y claro) y el neón en `data-estilo`, con su
+     clave; css/clapcraft.css y css/clapcraft-editor.css solo redefinen tokens y añaden los brillos. */
+  const CLAVE_ESTILO = 'guiones.claquedraw.estilo';
+  const TEMAS = [['claro', 'Claro'], ['oscuro', 'Oscuro'], ['synthwave', 'Synthwave'], ['vaporwave', 'Vaporwave']];
   const esOscuro = () => document.documentElement.dataset.theme === 'dark';
-  function aplicarTema(oscuro) {
-    document.documentElement.dataset.theme = oscuro ? 'dark' : 'light';
+  const temaActual = () => document.documentElement.dataset.estilo || (esOscuro() ? 'oscuro' : 'claro');
+  function aplicarTema(t) {
+    const h = document.documentElement;
+    if (typeof t === 'boolean') t = h.dataset.estilo ? (t ? 'synthwave' : 'vaporwave') : (t ? 'oscuro' : 'claro');   // oscuro o claro, dentro de su familia
+    const oscuro = t === 'oscuro' || t === 'synthwave';
+    h.dataset.theme = oscuro ? 'dark' : 'light';
+    if (t === 'synthwave' || t === 'vaporwave') h.dataset.estilo = t; else delete h.dataset.estilo;
     const b = $('temaBtn');
-    if (b) { b.title = oscuro ? 'Modo claro' : 'Modo oscuro'; b.classList.toggle('on', oscuro); }   // el icono (sol) va en el HTML
-    if (api && api.informarTema) api.informarTema(oscuro);    // el menú Ver dice «Modo claro» u «oscuro»
+    if (b) { b.title = 'Tema: ' + (TEMAS.find(x => x[0] === t) || TEMAS[0])[1]; b.classList.toggle('on', oscuro); }   // el icono (sol) va en el HTML
+    if (api && api.informarTema) api.informarTema(t);         // el menú Ver › Tema marca el que hay
   }
-  const guardarTema = () => { try { localStorage.setItem(CLAVE_TEMA, esOscuro() ? 'dark' : 'light'); } catch (_) {} };
-  function alternarTema() {
-    aplicarTema(!esOscuro());
-    C.texto.tema(esOscuro());                                  // el editor del marco va a la par
+  const guardarTema = () => {
+    try {
+      localStorage.setItem(CLAVE_TEMA, esOscuro() ? 'dark' : 'light');
+      const e = document.documentElement.dataset.estilo;
+      if (e) localStorage.setItem(CLAVE_ESTILO, e); else localStorage.removeItem(CLAVE_ESTILO);
+    } catch (_) {}
+  };
+  function elegirTema(t) {
+    aplicarTema(t);
+    C.texto.tema(esOscuro());                                  // el editor del marco va a la par (también el estilo)
     guardarTema();
   }
-  aplicarTema(esOscuro());
-  $('temaBtn').onclick = alternarTema;
+  /* Cmd+Shift+D: el claro y el oscuro de su familia (Claro ↔ Oscuro, Vaporwave ↔ Synthwave) */
+  function alternarTema() { elegirTema({ claro: 'oscuro', oscuro: 'claro', synthwave: 'vaporwave', vaporwave: 'synthwave' }[temaActual()]); }
+  /* el botón de la franja (en el navegador): un menú con los cuatro */
+  function menuTema(e) {
+    const f = document.createDocumentFragment(), ahora = temaActual();
+    TEMAS.forEach(([id, nombre]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'menuitemradio');
+      b.className = 'tema-opcion' + (id === ahora ? ' on' : ''); b.setAttribute('aria-checked', String(id === ahora));
+      b.innerHTML = `<span class="tema-muestra tema-muestra--${id}"></span><span>${nombre}</span>`;   // la marca de la elegida la pone .gd-pop button.on
+      b.addEventListener('click', () => { C.gestor.cerrarPop(); elegirTema(id); });
+      f.appendChild(b);
+    });
+    C.gestor.pop(e.currentTarget, f);
+  }
+  aplicarTema(temaActual());
+  $('temaBtn').onclick = menuTema;
 
   /* ---------- vistas: esquema de pasos / texto ----------
      La vista de texto (js/claquedraw/texto.js) mete index.html en un marco y enseña, encima de su
@@ -1744,11 +2001,17 @@
     modelo: () => modelo, guion: () => biblioteca.guion(abiertoId),
     guardar: persistir, alCambiarTablero: alCambiar, avisar: T.tablero.avisar, vista, guardarVista,
     alternar: () => verVista(vista.modo === 'texto' ? 'esquema' : 'texto'), alternarLado: () => alternarLado(), documentos: () => ordenes.documentos(),
+    desdePlantilla: () => ordenes.desdePlantilla(), insertarPlantilla: () => ordenes.insertarPlantilla(),   // Cmd+Alt+N y /plantilla en el editor (1.1.56)
+    asistente: () => alternarAsistente(),                     // Cmd+Shift+I con el foco en el editor (1.1.60; en Electron lo lleva el menú)
     volver: () => { C.gestor.contraer(); verVista('esquema'); },
     exportar: rect => exportarDesdeEditor(rect),
     versiones: rect => menuVersiones(rect),
     copiarEnlace: () => copiarLoElegido(), copiarTramo: t => copiarTramo(t), copiarEnlaceFlot: q => copiarEnlaces(refDeFlot(q)),   // enlaces (1.1.52)
-    alTema: oscuro => { if (oscuro !== esOscuro()) { aplicarTema(oscuro); guardarTema(); } }
+    mandarTramo: t => mandarTramo(t), hayAsistente: () => conAsistente(),   // «Mandar al asistente» en el clic derecho del editor (1.1.59)
+    citarTramo: (t, texto) => citarTramo(t, texto),           // «Citar en el asistente» (clic derecho o Cmd+Shift+A) en el editor (1.1.60)
+    /* el editor cambió su tema desde dentro: la página va detrás (dentro de su familia) y el marco recibe el `data-estilo` que
+       toca (Synthwave ↔ Vaporwave, o ninguno); sin eso se quedaba con el neón de antes sobre el otro modo */
+    alTema: oscuro => { if (oscuro !== esOscuro()) { aplicarTema(oscuro); guardarTema(); C.texto.tema(esOscuro()); } }
   });
 
   const nombreProyecto = () => { const g = biblioteca.guion(abiertoId); return g ? g.nombre : ''; };
@@ -1839,8 +2102,11 @@
     alNavegar: () => recordarPantalla(),                       // lo abierto en el gestor entra en la última pantalla
     abrirEnPestana: x => abrirEnPestana(x),                    // «Abrir en pestaña» de los ⋯ (1.1.33)
     copiarEnlace: ref => copiarEnlaces(ref),                   // «Copiar enlace para Claude» de los ⋯ (1.1.52)
+    irAFragmento: id => irAFragmento(id), alConectar: () => renderChipEsquema(),   // fragmentos y conexiones esquema ↔ biblioteca (1.1.57)
     irAEnlace: t => irAEnlace(t),                              // Cmd+clic en un clapcraft:// de la ventana de una nota (1.1.54)
+    citar: (ref, texto) => citarEnAsistente(ref, texto),       // «Citar en el asistente» en la ventana de una nota (1.1.60)
     filtro: k => ((vista.filtros || {})[k]) || {}, ponerFiltro: ponerFiltroVista,   // los filtros de bibliotecas y segmentos (1.1.54)
+    nombreProyecto,                                            // la variable {{proyecto}} de las plantillas de nota (1.1.56)
     guion: () => biblioteca.guion(abiertoId), texto: C.texto, vista, guardarVista,
     biblioteca, alCambiarTablero: alCambiar,
     /* el modelo de un esquema: el montado si es ese, si no uno de solo lectura sobre sus datos */
@@ -1875,6 +2141,14 @@
     /* un nodo ya no tiene documento propio (Leo, 16-09-2026): lleva a su sitio en el esquema */
     abrirNodo: (eid, id) => { if (!refEsquema(eid)) return; if (eid !== esquemaId) montarEsquema(eid); verVista('esquema'); if (id) seleccionarEnTablero(id); },
     esquemaMontado: () => esquemaId, modo: () => vista.modo, abrirTexto,
+    /* los lienzos de nodos (1.1.58): el de delante, abrir uno, lo que se suelta en él desde el árbol y lo que se añade desde un ⋯ */
+    lienzoMontado: () => lienzoId, abrirLienzo: lid => abrirLienzo(lid),
+    lienzoVisible: () => vista.modo === 'lienzo' && !!lienzoMontado && !!(C.lienzoUI && C.lienzoUI.soltar),
+    dentroLienzo: (x, y) => !!(lienzoMontado && C.lienzoUI && C.lienzoUI.dentro && C.lienzoUI.dentro(x, y)),
+    soltarEnLienzo: (tipo, id, x, y) => { if (lienzoMontado && C.lienzoUI.soltar) C.lienzoUI.soltar(tipo, id, x, y); },
+    anadirAlLienzo: (lid, tipo, datos, op) => anadirAlLienzo(lid, tipo, datos, op),
+    lienzoEliminado: lid => { if (lienzoId !== lid) return; desmontarLienzo(); lienzoId = null; if (vista.modo === 'lienzo') verVista('esquema'); },
+    lienzoRenombrado: lid => { if (lid === lienzoMontado && C.lienzoUI.refrescar) C.lienzoUI.refrescar(); renderPestanas(); },
     crearEsquemaDatos: () => T.inicial(),
     /* **al volver a un esquema cuyo documento se dejó abierto, vuelve su editor** (Leo, 18-09-2026: «si abro el editor del
        esquema y luego me paso a un editor de un segmento, al regresar al editor del esquema me aparece en su lugar el esquema») */
@@ -1887,7 +2161,7 @@
        como «documentos» pero la página aún no la ha puesto: se veía el esquema detrás) */
     mostrarTablero: () => { if (vista.modo !== 'documentos' || !document.body.classList.contains('vista-documentos')) verVista('documentos'); },
     alternarLado: () => alternarLado(),
-    volcar: () => { volcar(); volcarTexto(); },             // antes de duplicar o tirar: el tablero y el editor, a sus datos
+    volcar: () => { volcar(); volcarTexto(); volcarLienzo(); },   // antes de duplicar o tirar: el tablero, el editor y el lienzo, a sus datos
     /* lo restaurado de la papelera: un personaje recupera sus carriles también en el esquema montado; un esquema, sin ninguno
        montado, se monta */
     restaurado: alRestaurar,
@@ -1968,8 +2242,10 @@
   /* Tres vistas: esquema (el tablero), texto (el editor con la tira) y documentos (el gestor, con su
      barra lateral solo ahí; una nota abierta usa el mismo editor). */
   function verVista(modo) {
-    modo = ['texto', 'documentos'].includes(modo) ? modo : 'esquema';
+    modo = ['texto', 'documentos', 'lienzo'].includes(modo) ? modo : 'esquema';
+    if (modo === 'lienzo' && !(refLienzo(lienzoId) && conLienzoUI())) modo = 'esquema';   // sin lienzo (o sin su interfaz), el esquema
     const anterior = vista.modo, cambia = modo !== anterior;
+    if (modo !== 'lienzo') desmontarLienzo();                  // fuera de su vista, el lienzo no escucha (1.1.58)
     if (cambia && anterior === 'texto' && modo === 'documentos') textoAntes = esquemaId;   // al pulsar ese esquema, se vuelve a su editor
     else if (modo !== 'documentos') textoAntes = null;
     vista.modo = modo; guardarVista();
@@ -1979,6 +2255,7 @@
 
     document.body.classList.toggle('vista-texto', modo === 'texto');
     document.body.classList.toggle('vista-documentos', modo === 'documentos');
+    document.body.classList.toggle('vista-lienzo', modo === 'lienzo');
     /* el editor de nodos (texto) es parte del esquema: en la cabecera se ve como Esquema */
     const cabecera = modo === 'texto' ? 'esquema' : modo;
     document.querySelectorAll('[data-vista]').forEach(b => {
@@ -1989,6 +2266,8 @@
       if (abiertoId) abrirEnEditor();
     } else if (modo === 'documentos') {
       C.gestor.mostrar();
+    } else if (modo === 'lienzo') {
+      montarLienzo(lienzoId);
     } else if (cambia) {
       T.tablero.render();
     }
@@ -2080,14 +2359,32 @@
      panel de una nota, un nombre), el suyo, y el tablero, el suyo. En Electron el menú se lleva Cmd+Z antes de que llegue a la
      página (1.1.32: hasta entonces, escribiendo en un campo, deshacía el tablero; y en Documentos, el esquema escondido). */
   function historia(accion, tablero) {
+    /* con el visor de una imagen abierto, Deshacer y Rehacer son suyos (si no, deshacían el documento o el tablero de debajo) */
+    if (window.Anotar && Anotar.abierto()) { if (Anotar.editando()) Anotar[accion === 'undo' ? 'deshacer' : 'rehacer'](); return; }
     const marco = $('editorMarco'), a = document.activeElement;
     const enCampo = a && a !== document.body && a !== marco && (a.matches('input, textarea') || a.isContentEditable);
     if (a === marco || (!enCampo && (vista.modo === 'texto' || document.body.classList.contains('nota-abierta')))) { const d = marco.contentDocument; if (d) d.execCommand(accion); }
     else if (enCampo) document.execCommand(accion);
+    else if (vista.modo === 'lienzo') { if (lienzoMontado && C.lienzoUI && (!C.lienzoUI.activo || C.lienzoUI.activo())) C.lienzoUI[accion === 'undo' ? 'deshacer' : 'rehacer'](); }   // su historial (1.1.58)
     else if (vista.modo === 'esquema') tablero();
   }
   const deshacer = () => historia('undo', () => T.tablero.deshacer());
   const rehacer = () => historia('redo', () => T.tablero.rehacer());
+  /* Edición › Seleccionar todo (Cmd+A) en Electron (1.1.58): el rol nativo se comía la tecla antes de que llegara al lienzo. Se
+     reparte como `historia`: un campo de la página (un nombre, la descripción, una nota en su ventana) o el editor seleccionan su
+     texto; con el lienzo delante, se eligen todos sus nodos; si no, lo de siempre. */
+  function elegirTodo() {
+    const marco = $('editorMarco'), a = document.activeElement;
+    const enCampo = a && a !== document.body && a !== marco && (a.matches('input, textarea') || a.isContentEditable);
+    const todoEn = (doc, el) => { if (el && el.matches && el.matches('input, textarea') && el.select) el.select(); else doc.execCommand('selectAll'); };
+    if (enCampo) { todoEn(document, a); return; }
+    if (window.Anotar && Anotar.abierto && Anotar.abierto()) return;   // el visor de una imagen: nada que seleccionar
+    if (a === marco || vista.modo === 'texto' || document.body.classList.contains('nota-abierta')) {
+      const d = marco && marco.contentDocument; if (d) todoEn(d, d.activeElement); return;
+    }
+    if (vista.modo === 'lienzo' && lienzoMontado && C.lienzoUI && C.lienzoUI.elegirTodo && (!C.lienzoUI.activo || C.lienzoUI.activo())) { C.lienzoUI.elegirTodo(); return; }
+    document.execCommand('selectAll');
+  }
 
   $('btnGuardar').onclick = guardar;
   $('btnGuardarComo').onclick = guardarComo;
@@ -2095,18 +2392,103 @@
   $('btnNuevo').onclick = nuevo;
   $('estadoGuardado').onclick = guardar;
 
+  /* ---------- las plantillas de nota (1.1.56, de ClapBook) ----------
+     Leo: «Agrega la funcionalidad (junto con su lugar especial en el menú) de plantillas de Clapbook a Clapcraft». Viven en su
+     biblioteca especial, «Plantillas», al pie del menú (documentos.js y gestor.js). Aquí van las órdenes del menú —Archivo › Nueva
+     nota desde plantilla (Cmd+Alt+N), Insertar plantilla y Guardar la nota como plantilla, y Ver › Plantillas— e «Insertar
+     plantilla» en el editor (/plantilla en su menú «/», js/claquedraw/texto.js): pone la elegida donde está el cursor con sus
+     variables rellenas ({{titulo}} es el del documento abierto; {{proyecto}}, el del proyecto) y deja el cursor donde decía
+     {{cursor}}. Crear una nota desde una plantilla lo hace el gestor (`C.gestor.desdePlantilla`), en la biblioteca de delante. */
+  const conProyecto = () => !!abiertoId && pantalla === 'proyecto' && !!docs();
+  const editorDelante = () => C.texto.enDocumento() && (vista.modo === 'texto' || document.body.classList.contains('nota-abierta'));
+  /* la nota de delante: la del editor (una de biblioteca o el guion de un esquema) o la de su ventana */
+  function notaDeDelante() {
+    const d = docs(); if (!d) return null;
+    if (editorDelante()) return notaAbiertaEnEditor();
+    const v = vista.modo === 'documentos' && C.gestor.notaElegida && C.gestor.notaElegida();
+    return (v && d.nota(v)) || null;
+  }
+  /* dónde nace la nota: la biblioteca de delante y, si hay un segmento expandido, en él (el gestor, si no hay, elige) */
+  function dondePlantilla() {
+    const s = vista.modo === 'documentos' && C.gestor.subActual && C.gestor.subActual();
+    if (!s || s.tipo !== 'sub' || s.id === C.ID_BIB_PLANTILLAS) return {};
+    const x = C.gestor.expandidoActual && C.gestor.expandidoActual();
+    return { subId: s.id, etiquetaId: x && x.subId === s.id && /^etq:/.test(x.clave) ? x.clave.slice(4) : null };
+  }
+  function desdePlantilla(pid) {
+    if (!conProyecto() || !C.gestor.desdePlantilla) return;
+    if (temporizador) volcar();
+    volcarTexto();
+    C.gestor.desdePlantilla(pid || null, dondePlantilla());
+  }
+  /* el marcador que la plantilla pone donde decía {{cursor}}: el editor deja ahí el cursor y lo quita */
+  const MARCA_CURSOR = '<span data-cursor-plantilla></span>';
+  function insertarPlantilla() {
+    if (!conProyecto()) return;
+    /* una nota en su ventana va delante de todo (también del editor): la plantilla, en su campo (gestor.js) */
+    if (C.gestor.ventanaAbierta && C.gestor.ventanaAbierta() && C.gestor.insertarPlantilla) { C.gestor.insertarPlantilla(); return; }
+    if (!editorDelante()) { T.tablero.avisar('Abre un documento o una nota (en el editor o en su ventana) para insertar una plantilla'); return; }
+    if (!C.gestor.elegirPlantilla || !C.plantillas || !C.plantillas.rellenarHtml) return;
+    volcarTexto();
+    const pos = C.texto.cursorGuardado();                      // elegir en la página se lleva el foco del editor: dónde estaba
+    const r = C.texto.rectCursor();
+    C.gestor.elegirPlantilla('Insertar plantilla', pid => {
+      const d = docs(), p = d && d.nota(pid); if (!p) return;
+      const x = C.plantillas.rellenarHtml(p.html || '', { titulo: C.texto.titulo(), proyecto: nombreProyecto(), marca: MARCA_CURSOR });
+      if (!C.texto.insertarHtml(x.html, pos)) { T.tablero.avisar('El editor ya no tiene abierto ese documento'); return; }
+      T.tablero.avisar('Plantilla «' + (p.titulo || 'Sin título') + '» insertada');
+    }, r ? disparadorEn(r) : undefined);
+  }
+  function guardarComoPlantilla() {
+    if (!conProyecto() || !C.gestor.guardarComoPlantilla) return;
+    const d = docs(), n = notaDeDelante();
+    if (!n) { T.tablero.avisar('Abre una nota (en el editor o en su ventana) para guardarla como plantilla'); return; }
+    if (d.esPlantilla(n)) { T.tablero.avisar('Esta nota ya es una plantilla'); return; }
+    if (temporizador) volcar();
+    volcarTexto();
+    C.gestor.guardarComoPlantilla(n.id);
+  }
+  function usarPlantilla() {
+    if (!conProyecto()) return;
+    const d = docs(), n = notaDeDelante();
+    if (!n || !d.esPlantilla(n)) { T.tablero.avisar('Abre una plantilla para crear una nota con ella'); return; }
+    desdePlantilla(n.id);
+  }
+  function verPlantillas() {
+    if (!conProyecto() || !C.gestor.abrirPlantillas) return;
+    if (temporizador) volcar();
+    volcarTexto();
+    C.gestor.abrirPlantillas();
+  }
+  /* Ver › Fórmulas (1.1.60): su biblioteca especial, como «Fórmulas» al pie del menú */
+  function verFormulas() {
+    if (!conProyecto() || !C.gestor.abrirFormulas) return;
+    if (temporizador) volcar();
+    volcarTexto();
+    C.gestor.abrirFormulas();
+  }
+
   /* Órdenes del menú de la aplicación (Electron): Archivo, Edición y Ver. `cerrarVentana` llega del botón rojo de la ventana. */
   const ordenes = {
     nuevo, abrir: abrirArchivo, guardar, guardarComo,
     cerrar: () => cerrarProyecto(), cerrarPestana: cerrarLoDeDelante, cerrarVentana: () => cerrarProyecto({ forzar: true }),
     tema: alternarTema, vista: () => verVista(vista.modo === 'texto' ? 'esquema' : 'texto'),
+    'tema:claro': () => elegirTema('claro'), 'tema:oscuro': () => elegirTema('oscuro'),       // Ver › Tema (1.1.57)
+    'tema:synthwave': () => elegirTema('synthwave'), 'tema:vaporwave': () => elegirTema('vaporwave'),
     documentos: () => verVista(vista.modo === 'documentos' ? 'esquema' : 'documentos'),
-    lado: () => alternarLado(), deshacer, rehacer,
+    lado: () => alternarLado(), deshacer, rehacer, elegirTodo,
     renombrar: () => { if (abiertoId && pantalla !== 'nuevo') editarNombrePestana(abiertoId); },
     nuevaPestana: () => nuevaPestana(), atras: () => irHistoria(-1), adelante: () => irHistoria(1),
     historialClaude: () => abrirHistorialClaude(),
+    memoriaEstilo: () => { if (C.memoriaUI && C.memoriaUI.abrir) C.memoriaUI.abrir(); },   // Claude › Memoria de estilo… (1.1.60)
+    asistente: () => alternarAsistente(), configurarIA: () => configurarIA(),   // Claude › Asistente con otra IA… / Configurar IA… (1.1.59)
+    tutorialIA: () => { if (C.asistente && C.asistente.tutorial) C.asistente.tutorial(); else configurarIA(); },
+    nuevoLienzo: () => { if (conProyecto()) nuevoLienzoAqui(); },   // Archivo › Nuevo lienzo… (1.1.58)
     copiarEnlace: () => copiarLoElegido(), irEnlace: () => irAlEnlaceCopiado(),   // Claude › Copiar enlace / Ir al enlace copiado (1.1.52)
-    pestanaSig: () => pasarPestana(1), pestanaAnt: () => pasarPestana(-1)
+    pestanaSig: () => pasarPestana(1), pestanaAnt: () => pasarPestana(-1),
+    /* las plantillas de nota (1.1.56) */
+    desdePlantilla: () => desdePlantilla(), insertarPlantilla, guardarComoPlantilla, usarPlantilla, plantillas: verPlantillas,
+    formulas: verFormulas                                      // Ver › Fórmulas (1.1.60)
   };
   if (api && api.onMenu) api.onMenu(accion => {
     const fn = ordenes[accion]; if (fn) fn();
@@ -2117,12 +2499,15 @@
     const cmd = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
     if (cmd && k === 's') { e.preventDefault(); e.shiftKey ? guardarComo() : guardar(); }
     if (cmd && k === 'o') { e.preventDefault(); abrirArchivo(); }
-    if (cmd && !e.shiftKey && k === 'n') { e.preventDefault(); nuevo(); }   // donde el navegador lo deje (Electron lo lleva el menú)
+    /* con Alt, por el código de la tecla (en el Mac, Alt+N escribe «˜») y antes que Cmd+N: nueva nota desde plantilla (1.1.56) */
+    if (cmd && e.altKey && !e.shiftKey && e.code === 'KeyN') { e.preventDefault(); ordenes.desdePlantilla(); return; }
+    if (cmd && !e.shiftKey && !e.altKey && k === 'n') { e.preventDefault(); nuevo(); }   // donde el navegador lo deje (Electron lo lleva el menú)
     if (cmd && e.shiftKey && k === 'g') { e.preventDefault(); ordenes.vista(); }
     if (cmd && e.shiftKey && k === 'f') { e.preventDefault(); ordenes.documentos(); }
     if (cmd && !e.shiftKey && !e.altKey && k === 'f' && vista.modo === 'documentos' && C.gestor.buscarEnVista && C.gestor.buscarEnVista()) e.preventDefault();   // buscar en la biblioteca (1.1.54)
     if (cmd && e.shiftKey && k === 'b') { e.preventDefault(); ordenes.lado(); }
     if (cmd && e.shiftKey && k === 'c' && !escritorio) { e.preventDefault(); copiarLoElegido(); }   // en Electron lo lleva el menú Claude
+    if (cmd && e.shiftKey && !e.altKey && (e.code === 'KeyI' || k === 'i')) { e.preventDefault(); alternarAsistente(); }   // el asistente con otra IA (1.1.59; en Electron, el menú Claude)
     if (e.ctrlKey && e.key === 'Tab') { e.preventDefault(); pasarPestana(e.shiftKey ? -1 : 1); }
     if (cmd && !e.shiftKey && k === 'w' && !escritorio) { e.preventDefault(); cerrarLoDeDelante(); }
     if (cmd && !e.shiftKey && k === 't' && !escritorio) { e.preventDefault(); nuevaPestana(); }
@@ -2174,14 +2559,36 @@
       s = p ? 'el nodo ' + p.id + ' «' + (p.titulo || 'sin título') + '»' : l ? 'la trama ' + l.id + ' «' + l.nombre + '»' : a ? 'el acto ' + a.id + ' «' + a.nombre + '»'
         : sel.tipo === 'salto' ? 'el salto ' + sel.id : sel.tipo === 'nota' ? 'la nota ' + sel.id : sel.tipo === 'enlace' ? 'el enlace que sale de ' + sel.id : null;
     }
-    return { vista: enVentana ? 'Documentos (una nota en su ventana)' : { esquema: 'Esquema', texto: 'Texto (el editor)', documentos: 'Documentos' }[vista.modo] || vista.modo,
-             esquema: r ? { id: esquemaId, nombre: r.esquema.nombre } : null, documento: n ? { id: n.id, titulo: n.titulo } : null, seleccion: s };
+    /* las plantillas (1.1.56): su tablero, o una de ellas en su ventana o en el editor */
+    const sa = vista.modo === 'documentos' && C.gestor.subActual && C.gestor.subActual(), enPlantillas = !!(sa && sa.tipo === 'sub' && sa.id === C.ID_BIB_PLANTILLAS);
+    const enFormulas = !!(sa && sa.tipo === 'sub' && sa.id === ID_BIB_FORMULAS), esFx = esFormulaNota(n);   // y las fórmulas (1.1.60)
+    const esPl = !!(n && d.esPlantilla && d.esPlantilla(n));
+    return { vista: enVentana ? 'Documentos (una ' + (esPl ? 'plantilla' : esFx ? 'fórmula' : 'nota') + ' en su ventana' + (enPlantillas ? ', en las plantillas' : enFormulas ? ', en las fórmulas' : '') + ')'
+               : enPlantillas && !C.gestor.notaAbierta() ? 'Documentos (las plantillas)'
+               : enFormulas && !C.gestor.notaAbierta() ? 'Documentos (las fórmulas)'
+               : ({ esquema: 'Esquema', texto: 'Texto (el editor)', documentos: 'Documentos', lienzo: 'Lienzo' }[vista.modo] || vista.modo) + (esPl ? ' (una plantilla en el editor)' : ''),
+             esquema: r ? { id: esquemaId, nombre: r.esquema.nombre } : null, documento: n ? { id: n.id, titulo: n.titulo } : null,
+             seleccion: vista.modo === 'lienzo' ? seleccionLienzo() : s,
+             /* el lienzo de delante (1.1.58) */
+             ...(vista.modo === 'lienzo' && refLienzo(lienzoId) ? { lienzo: { id: lienzoId, nombre: refLienzo(lienzoId).lienzo.nombre } } : {}) };
   }
-  /* mostrar_en_clapcraft: lleva la ventana a un esquema (y un nodo, o su documento) o a una nota */
+  /* los nodos elegidos en el lienzo de delante, en palabras (para Claude) */
+  function seleccionLienzo() {
+    const ids = lienzoMontado && C.lienzoUI && C.lienzoUI.elegidos ? C.lienzoUI.elegidos() : [];
+    if (!ids.length) return null;
+    const l = (refLienzo(lienzoMontado) || {}).lienzo, nodos = (l && l.nodos) || [];
+    return ids.map(id => { const n = nodos.find(x => x.id === id); return 'el nodo ' + id + (n && n.titulo ? ' «' + n.titulo + '»' : n ? ' (' + n.tipo + ')' : ''); }).join(', ');
+  }
+  /* mostrar_en_clapcraft: lleva la ventana a un esquema (y un nodo, o su documento), a una nota o a un lienzo (y un nodo) */
   function mostrarClaude(que) {
     const d = docs(); if (!d) return { ok: false, aviso: 'No hay proyecto' };
     if (que.enlace) { const x = C.enlaces.leer(que.enlace); return x ? mostrarEnlace(x) : { ok: false, aviso: 'Ese enlace no se entiende' }; }   // 1.1.52
     if (pantalla === 'nuevo') { pantalla = 'proyecto'; aplicarPantalla(); }
+    if (que.lienzo) {                                          // 1.1.58
+      const r = refLienzo(que.lienzo); if (!r) return { ok: false, aviso: 'Ese lienzo ya no existe' };
+      if (!abrirLienzo(que.lienzo, que.nodo || null)) return { ok: false, aviso: 'No se pudo abrir el lienzo «' + r.lienzo.nombre + '»' };
+      return { ok: true, aviso: 'A la vista: el lienzo «' + r.lienzo.nombre + '»' + (que.nodo ? ', con el nodo elegido' : '') };
+    }
     if (que.nota) {
       const n = d.nota(que.nota); if (!n) return { ok: false, aviso: 'Esa nota ya no existe' };
       const r = d.sub(n.subId), eid = r && r.sub.guionEid;
@@ -2198,9 +2605,15 @@
     return { ok: true, aviso: 'A la vista: el esquema «' + r.esquema.nombre + '»' + (que.nodo ? ', con el nodo elegido' : '') };
   }
   /* tras un cambio de Claude (o al deshacerlo): el tablero montado y el editor abierto, al día; y a guardar */
-  function ponerAlDia(antesTablero, notaEd, antesNota) {
+  function ponerAlDia(antesTablero, notaEd, antesNota, antesLienzo) {
     biblioteca.marcar(abiertoId);
     const d = docs();
+    /* el lienzo de delante (1.1.58): si ya no está, al esquema; si cambió (o no se sabe cómo estaba), se repinta */
+    if (lienzoMontado) {
+      const rl = refLienzo(lienzoMontado);
+      if (!rl) { desmontarLienzo(); lienzoId = null; if (vista.modo === 'lienzo') verVista('esquema'); }
+      else if ((antesLienzo === undefined || JSON.stringify(rl.lienzo) !== antesLienzo) && C.lienzoUI.refrescar) C.lienzoUI.refrescar();
+    }
     if (esquemaId && !refEsquema(esquemaId)) montarEsquema(primerEsquema());
     else if (esquemaId) {
       const ahora = JSON.stringify(refEsquema(esquemaId).esquema.datos);
@@ -2209,32 +2622,55 @@
     const n = notaEd && d && d.nota(notaEd);
     if (n && n.html !== antesNota) C.texto.recargar({ titulo: n.titulo, html: n.html, characters: n.characters });
     persistir(); renderChipEsquema(); C.gestor.render(); pintarVersion();
+    if (C.memoriaUI && C.memoriaUI.refrescar) C.memoriaUI.refrescar();   // la memoria de estilo del proyecto, si su diálogo está abierto (1.1.60)
   }
   function fotoClaude() {
     const d = docs(), r = refEsquema(esquemaId), notaEd = C.texto.clave(), n = notaEd && d && d.nota(notaEd);
-    return { tablero: r ? JSON.stringify(r.esquema.datos) : null, notaEd, nota: n ? n.html : null };
+    volcarLienzo();
+    const rl = lienzoMontado && refLienzo(lienzoMontado);
+    return { tablero: r ? JSON.stringify(r.esquema.datos) : null, notaEd, nota: n ? n.html : null, lienzo: rl ? JSON.stringify(rl.lienzo) : null };
   }
   async function atenderClaude(p) {
     if (p.nombre === '_recientes') return recientes().map(r => ({ nombre: r.nombre, ruta: r.ruta || null }));
+    return ejecutarEnVivo(p.nombre, p.args, { origen: p.origen || 'Claude' });
+  }
+  /* Una herramienta sobre el proyecto de esta ventana, en vivo (1.1.59: lo que hacía `atenderClaude`, para que el asistente con otra
+     IA lo haga igual sin pasar por el socket): se vuelca lo del tablero y del editor, se ejecuta con el contexto de la ventana y, si
+     cambió algo, el tablero, el lienzo y el editor se ponen al día y el cambio queda en el historial de Claude con su `origen`.
+     `op`: { origen, quien (el nombre del aviso: «Claude», «DeepSeek»), avisar (false: sin aviso; una función: la llama con la
+     entrada del historial en lugar de avisar) }. Devuelve lo de `C.herramientas.ejecutar` más `cambio`. */
+  function ejecutarEnVivo(nombre, args, op) {
+    op = op || {};
     const g = biblioteca.guion(abiertoId), d = g && docs();
     if (!g || !d) return { ok: false, error: 'Esa ventana de ClapCraft no tiene el proyecto abierto' };
     if (!C.herramientas) return { ok: false, error: 'Esta versión de ClapCraft no trae las herramientas para Claude' };
     if (temporizador) volcar();
     volcarTexto();
-    const foto = fotoClaude(), a = estado(abiertoId).archivo;
+    const foto = fotoClaude(), a = estado(abiertoId).archivo, quien = op.quien || 'Claude';
     let cambio = false;
-    const ctx = { docs: d, proyecto: { nombre: g.nombre, ruta: a ? (a.ruta || a.nombre) : null, vivo: true }, origen: p.origen || 'Claude',
+    const ctx = { docs: d, proyecto: { nombre: g.nombre, ruta: a ? (a.ruta || a.nombre) : null, vivo: true }, origen: op.origen || 'Claude',
+      /* la memoria de estilo (1.1.60, js/claquedraw/memoria-ui.js): la general, de este equipo; el asistente ya la lleva en su prompt */
+      memoriaGeneral: C.memoriaUI && C.memoriaUI.ctxGeneral ? C.memoriaUI.ctxGeneral() : null, memoriaEnPrompt: !!op.memoriaEnPrompt,
       cambio: () => { cambio = true; }, estado: estadoEnPantalla, mostrar: mostrarClaude, ponerNombre: ponerNombreProyecto,
       renombrarProyecto: n => (renombrarProyecto(abiertoId, n) ? { ok: true, aviso: 'Proyecto «' + n + '» (su archivo se sigue llamando igual)' } : { ok: false, aviso: 'No se pudo renombrar el proyecto' }) };
-    const r = C.herramientas.ejecutar(ctx, p.nombre, p.args || {});
+    /* lo que escribe la IA se apunta para aprender de lo que Leo le corrija después (la memoria de estilo, 1.1.60) */
+    let fotoMem = null; try { fotoMem = C.memoriaUI && C.memoriaUI.antesDeIA ? C.memoriaUI.antesDeIA(nombre) : null; } catch (_) {}
+    const r = C.herramientas.ejecutar(ctx, nombre, args && typeof args === 'object' ? args : {});
+    if (fotoMem && cambio) { try { C.memoriaUI.despuesDeIA(fotoMem, { origen: ctx.origen }); } catch (_) {} }
+    /* lo que cambió solo la memoria general (no va en el historial): su aviso con su «Deshacer» */
+    if (!cambio && r && r.entrada && /^mem:/.test(r.entrada.id) && op.avisar === undefined && C.memoriaUI)
+      T.tablero.avisar(quien + ': ' + r.entrada.titulo.charAt(0).toLowerCase() + r.entrada.titulo.slice(1), { texto: 'Deshacer', fn: () => { const z = C.memoriaUI.deshacer(r.entrada.id); if (!z.ok) T.tablero.avisar(z.aviso); } });
     if (cambio) {
-      ponerAlDia(foto.tablero, foto.notaEd, foto.nota);
+      ponerAlDia(foto.tablero, foto.notaEd, foto.nota, foto.lienzo);
       const e = r.historial && C.historial.entrada(d, r.historial);
-      if (e) T.tablero.avisar('Claude: ' + e.titulo.charAt(0).toLowerCase() + e.titulo.slice(1), [{ texto: 'Deshacer', fn: () => revertirClaude(e.id) }, { texto: 'Historial', fn: abrirHistorialClaude }]);
-      else if (p.nombre === 'revertir_cambio') T.tablero.avisar('Claude revirtió un cambio suyo', [{ texto: 'Historial', fn: abrirHistorialClaude }]);
+      if (typeof op.avisar === 'function') op.avisar(e || null, nombre);
+      else if (op.avisar !== false) {
+        if (e) T.tablero.avisar(quien + ': ' + e.titulo.charAt(0).toLowerCase() + e.titulo.slice(1), [{ texto: 'Deshacer', fn: () => revertirClaude(e.id) }, { texto: 'Historial', fn: abrirHistorialClaude }]);
+        else if (nombre === 'revertir_cambio') T.tablero.avisar(quien + ' revirtió un cambio suyo', [{ texto: 'Historial', fn: abrirHistorialClaude }]);
+      }
       if (C.historial.abierto && C.historial.abierto()) C.historial.repintarPanel();
     }
-    return r;
+    return op.conCambio ? Object.assign({}, r, { cambio }) : r;
   }
 
   /* ---------- el historial de Claude (1.1.50) ----------
@@ -2266,7 +2702,7 @@
     const r = C.historial.revertirEntrada(d, id, { forzar, ahora: Date.now(), por: 'ClapCraft' });
     if (!r.ok) { T.tablero.avisar(r.aviso || 'No se pudo revertir'); return false; }
     if (r.nombreProyecto) ponerNombreProyecto(r.nombreProyecto);
-    ponerAlDia(foto.tablero, foto.notaEd, foto.nota);
+    ponerAlDia(foto.tablero, foto.notaEd, foto.nota, foto.lienzo);
     if (C.historial.abierto()) C.historial.repintarPanel();
     const nombreAhora = (biblioteca.guion(abiertoId) || {}).nombre;
     T.tablero.avisar('Revertido: ' + e.titulo + (r.avisos.length ? ' · ' + r.avisos[0] : ''), { texto: 'Deshacer', fn: () => {
@@ -2275,7 +2711,7 @@
       const f = fotoClaude();
       C.historial.reponer(dd, r.antes, id);
       if (e.nombreProyecto && nombreAhora !== e.nombreProyecto.b) ponerNombreProyecto(e.nombreProyecto.b);
-      ponerAlDia(f.tablero, f.notaEd, f.nota);
+      ponerAlDia(f.tablero, f.notaEd, f.nota, f.lienzo);
       if (C.historial.abierto()) C.historial.repintarPanel();
       T.tablero.avisar('Vuelto a como lo dejó Claude');
     } });
@@ -2286,6 +2722,7 @@
     if (x.tipo === 'esquema' && d.esquema(x.id)) mostrarClaude({ esquema: x.id });
     else if (x.tipo === 'nota' && d.nota(x.id)) mostrarClaude({ nota: x.id });
     else if (x.tipo === 'biblioteca' && d.sub(x.id)) { if (C.gestor.cerrarVentana) C.gestor.cerrarVentana(); verVista('documentos'); C.gestor.abrirSub(x.id); }
+    else if (x.tipo === 'lienzo' && d.lienzo && d.lienzo(x.id)) mostrarEnlace({ tipo: 'lienzo', id: x.id });   // editar_lienzo, completar_nodo (1.1.58)
     else T.tablero.avisar('Eso ya no está en el proyecto');
   }
   function verCambio(e) {
@@ -2324,6 +2761,261 @@
       .catch(e => ({ ok: false, error: 'Error de ClapCraft: ' + ((e && e.message) || e) }))
       .then(r => api.responderClaude(p.id, r));
   });
+
+  /* ---------- el asistente con otra IA (1.1.59) ----------
+     Leo, 27-09-2026: «Implementa que pueda usar otras IAs en ClapCraft por medio de APIs para que funcionen igual que Claude
+     Cowork… usa solo modelos de DeepSeek». El panel del chat, la configuración y el tutorial son de js/claquedraw/asistente.js; el
+     bucle con el modelo, de js/claquedraw/asistente-motor.js; la llamada (con la clave, que la página nunca ve), del proceso
+     principal (electron/ia.js, `editorAPI.ia`). Aquí se engancha a la ventana: sus herramientas son las de Claude y van **en vivo**
+     por `ejecutarEnVivo` (lo mismo que `atenderClaude`: el tablero, el lienzo y el editor al día y el historial de Claude con su
+     `origen`, «DeepSeek · deepseek-v4-flash»), y el panel sabe qué hay en pantalla, abre enlaces, deshace y enseña un cambio del
+     historial y guarda la conversación **en este equipo**, por proyecto (su archivo), no en el .clapcraft. Los avisos: con el panel
+     abierto, ninguno (cada paso sale en él); cerrado, uno por respuesta (se juntan los cambios seguidos). */
+  const PREFIJO_ASISTENTE = 'guiones.claquedraw.asistente.';
+  /* (con `function` y `var`: `montar` los llama al arrancar, antes de que el código llegue hasta aquí) */
+  var asistenteIniciado = false;
+  function asis() { return asistenteIniciado && C.asistente && C.asistente.iniciar ? C.asistente : null; }
+  function asisAbierto() { const a = asis(); try { return !!(a && a.abierto && a.abierto()); } catch (_) { return false; } }
+  let cfgIA = null;                                            // la configuración (sin la clave): para el origen del historial
+  function leerCfgIA() {
+    if (!api || !api.ia || !api.ia.config) return Promise.resolve(null);
+    return Promise.resolve(api.ia.config()).then(c => (cfgIA = c || null)).catch(() => null);
+  }
+  /* quién hizo el cambio, para el historial: «DeepSeek · deepseek-v4-flash» (con otro proveedor que no es DeepSeek, su modelo) */
+  function origenIA(modelo) {
+    const mo = String(modelo || (cfgIA && cfgIA.modelo) || '').trim();
+    return (/deepseek/i.test(mo) || !mo ? 'DeepSeek' : 'IA') + (mo ? ' · ' + mo : '');
+  }
+  /* el nombre corto del aviso: «DeepSeek» (el origen de asistente.js es «DeepSeek V4 Flash (APIMart)») */
+  const quienIA = origen => (/deepseek/i.test(String(origen || '')) || !origen ? 'DeepSeek' : String(origen).replace(/\s*\(.*\)$/, '').split(' · ')[0]);
+  /* los avisos de un mensaje del asistente, juntos: uno por respuesta, 1,2 s después del último cambio */
+  const avisoIA = { n: 0, ultima: null, t: null, quien: 'DeepSeek' };
+  function avisarCambioIA(e, quien) {
+    if (asisAbierto()) return;                                 // el panel ya lo enseña, paso a paso, con su «Deshacer»
+    avisoIA.n++; avisoIA.ultima = e || null; avisoIA.quien = quien || 'DeepSeek';
+    clearTimeout(avisoIA.t);
+    avisoIA.t = setTimeout(() => {
+      const n = avisoIA.n, e1 = avisoIA.ultima, q = avisoIA.quien; avisoIA.n = 0; avisoIA.ultima = null;
+      if (!n || asisAbierto()) return;
+      const verPanel = { texto: 'Ver', fn: () => { const a = asis(); if (a && a.abrir) a.abrir(); } };
+      if (n === 1 && e1) T.tablero.avisar(q + ': ' + e1.titulo.charAt(0).toLowerCase() + e1.titulo.slice(1), [{ texto: 'Deshacer', fn: () => revertirClaude(e1.id) }, verPanel]);
+      else T.tablero.avisar(q + ' hizo ' + n + ' cambios en el proyecto', [verPanel, { texto: 'Historial', fn: abrirHistorialClaude }]);
+    }, 1200);
+  }
+  /* una herramienta del asistente: en vivo, con su origen; sin aviso propio (el panel, o el aviso junto) */
+  function ejecutarIA(nombre, args, op) {
+    op = op || {};
+    const origen = op.origen || origenIA(op.modelo), quien = quienIA(origen);
+    const r = ejecutarEnVivo(nombre, args, { origen, quien, conCambio: true, memoriaEnPrompt: true, avisar: e => avisarCambioIA(e, quien) });
+    /* lo que el panel enseña de un cambio: su entrada del historial (para «Deshacer» y «Ver») */
+    if (r && r.historial && docs()) { const e = C.historial.entrada(docs(), r.historial); if (e) r.entrada = { id: e.id, titulo: e.titulo, origen: e.origen }; }
+    return r;
+  }
+  /* la conversación, por proyecto: la clave es la de su archivo (al reabrirlo desde recientes el proyecto estrena id, como en
+     `marcarHistorialVisto`); sin archivo, la del proyecto */
+  function claveConversacion(id) {
+    const g = biblioteca.guion(id || abiertoId); if (!g) return null;
+    /* el archivo retomado o, al arrancar (antes de retomarlo), el que apunta la vista */
+    const a = estado(g.id).archivo, v = vista.archivos && vista.archivos[g.id];
+    const k = a ? (a.ruta || 'h:' + a.nombre) : v ? (v.ruta || (v.nombre ? 'h:' + v.nombre : null)) : null;
+    return PREFIJO_ASISTENTE + (k || 'p:' + g.id);
+  }
+  /* si no cabe, sin los resultados largos de las herramientas (el modelo los vuelve a pedir si le hacen falta) */
+  function recortarConversacion(x) {
+    const c = JSON.parse(JSON.stringify(x)), corta = s => (typeof s === 'string' && s.length > 1500 ? s.slice(0, 1500) + '… (recortado al guardar)' : s);
+    const recorrer = o => {
+      if (Array.isArray(o)) { o.forEach(recorrer); return; }
+      if (!o || typeof o !== 'object') return;
+      if (o.role === 'tool' && typeof o.content === 'string') o.content = corta(o.content);
+      Object.keys(o).forEach(k => { if (k === 'resultado' || k === 'detalle') o[k] = corta(o[k]); else if (o[k] && typeof o[k] === 'object') recorrer(o[k]); });
+    };
+    recorrer(c);
+    return c;
+  }
+  /* Revisión: la conversación va en los datos de la app de este equipo (electron/ia.js, `ia:conversacion`: un archivo por proyecto),
+     no en el localStorage de la ventana; lo que hubiera ahí se muda la primera vez. En el navegador, el localStorage (con los mismos
+     topes: los pone asistente.js al guardar). La clave es la de siempre (sin el prefijo): su archivo o `p:<id>`. */
+  const iaConv = () => (api && api.ia && typeof api.ia.conversacion === 'function' ? api.ia.conversacion : null);
+  const claveCorta = k => (k && k.startsWith(PREFIJO_ASISTENTE) ? k.slice(PREFIJO_ASISTENTE.length) : k);
+  function borrarConversacionIA(corta) {
+    try { localStorage.removeItem(PREFIJO_ASISTENTE + corta); } catch (_) {}
+    const f = iaConv(); if (f) Promise.resolve(f({ accion: 'borrar', clave: corta })).catch(() => {});
+  }
+  /* lo que quedara en el localStorage de antes, a los datos de la app (y fuera de aquí) */
+  async function mudarConversacionesIA() {
+    const f = iaConv(); if (!f) return;
+    let ks = [];
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(PREFIJO_ASISTENTE)) ks.push(k); } } catch (_) { ks = []; }
+    for (const k of ks) {
+      const x = leerJSON(k);
+      if (!x) { try { localStorage.removeItem(k); } catch (_) {} continue; }
+      try {
+        const ya = await f({ accion: 'leer', clave: claveCorta(k) });
+        const r = ya ? { ok: true } : await f({ accion: 'escribir', clave: claveCorta(k), datos: x });
+        if (r && r.ok) localStorage.removeItem(k);
+      } catch (_) {}
+    }
+  }
+  function guardarConversacion(json) {
+    const k = claveConversacion(); if (!k) return false;
+    const kp = PREFIJO_ASISTENTE + 'p:' + abiertoId;
+    const vacia = !json || (Array.isArray(json.mensajes) && !json.mensajes.length && !(json.pasos && json.pasos.length));
+    const f = iaConv();
+    if (f) {
+      if (vacia) { borrarConversacionIA(claveCorta(k)); if (k !== kp) borrarConversacionIA(claveCorta(kp)); return true; }
+      return Promise.resolve(f({ accion: 'escribir', clave: claveCorta(k), datos: json })).then(r => {
+        if (r && r.ok && k !== kp) borrarConversacionIA(claveCorta(kp));   // ya tiene archivo: la de sin archivo sobra
+        return !!(r && r.ok);
+      }).catch(() => false);
+    }
+    if (vacia) { try { localStorage.removeItem(k); if (k !== kp) localStorage.removeItem(kp); } catch (_) {} return true; }
+    const ok = escribirJSON(k, json) || escribirJSON(k, recortarConversacion(json));
+    if (ok && k !== kp) { try { localStorage.removeItem(kp); } catch (_) {} }   // ya tiene archivo: la de sin archivo sobra
+    return ok;
+  }
+  async function cargarConversacion() {
+    const k = claveConversacion(); if (!k) return null;
+    const f = iaConv();
+    if (f) {
+      await mudarConversacionesIA();
+      try {
+        const x = await f({ accion: 'leer', clave: claveCorta(k) });
+        return x || (abiertoId ? await f({ accion: 'leer', clave: 'p:' + abiertoId }) : null);
+      } catch (_) { return null; }
+    }
+    return leerJSON(k) || (abiertoId ? leerJSON(PREFIJO_ASISTENTE + 'p:' + abiertoId) : null);
+  }
+  /* el archivo se renombró: la conversación va con él */
+  function migrarConversacion(antes, ahora) {
+    const f = iaConv();
+    if (f) { Promise.resolve(f({ accion: 'mover', clave: antes, a: ahora })).catch(() => {}); return; }
+    const x = leerJSON(PREFIJO_ASISTENTE + antes); if (!x) return;
+    if (escribirJSON(PREFIJO_ASISTENTE + ahora, x)) { try { localStorage.removeItem(PREFIJO_ASISTENTE + antes); } catch (_) {} }
+  }
+  /* parar lo que el asistente esté haciendo: al cerrar el proyecto, al salir y al recargar la ventana */
+  function detenerAsistente() {
+    const a = typeof asis === 'function' ? asis() : null;
+    try { if (a && a.trabajando && a.trabajando() && a.detener) a.detener(); } catch (_) {}
+  }
+  /* Deshacer y «Ver» de un paso del panel: los del historial de Claude (llega su id, o la entrada con su id) */
+  const idEntrada = x => (x && typeof x === 'object' ? x.id : x) || null;
+  async function deshacerIA(x) {
+    const id = idEntrada(x), d = docs(), e = id && d && C.historial.entrada(d, id);
+    if (id && /^mem:/.test(id) && C.memoriaUI) return C.memoriaUI.deshacer(id);   // la memoria de estilo general (1.1.60)
+    if (!e) return { ok: false, aviso: 'Ese cambio ya no está en el historial' };
+    if (e.revertido) return { ok: true, aviso: 'Ya estaba deshecho' };
+    const ok = await revertirClaude(id);
+    return ok ? { ok: true } : { ok: false, aviso: 'No se deshizo' };
+  }
+  function verCambioIA(x) {
+    const id = idEntrada(x), d = docs(), e = id && d && C.historial.entrada(d, id);
+    if (!e) { T.tablero.avisar('Ese cambio ya no está en el historial'); return false; }
+    verCambio(e); return true;
+  }
+  function abrirWebIA(url) {
+    if (api && api.ia && api.ia.abrirWeb) return api.ia.abrirWeb(url);
+    if (/^https:\/\//i.test(String(url || ''))) { window.open(url, '_blank', 'noopener'); return Promise.resolve(true); }
+    return Promise.resolve(false);
+  }
+  /* el proyecto de la ventana, para el prompt del asistente */
+  function proyectoIA() {
+    const g = biblioteca.guion(abiertoId); if (!g || !docs()) return null;
+    const a = estado(g.id).archivo;
+    return { id: g.id, nombre: g.nombre, archivo: a ? a.nombre : null, enlace: C.enlaces ? proyectoEnlace() : null };
+  }
+  /* «Ejecutar con IA» de un lienzo (el gancho de lienzo.js): el lienzo ya dejó pendientes las operaciones (con sus previas); aquí
+     se le pasan al asistente —una, o el lienzo entero— y, mientras, esos nodos dicen «Con IA…» */
+  var enCursoIA = new Map();                                   // lienzo → [nodos que la IA está haciendo]
+  function estadosLienzo() { if (lienzoMontado && C.lienzoUI && C.lienzoUI.estados) { try { C.lienzoUI.estados(); } catch (_) {} } }
+  /* ¿hay clave? (la configuración que leyó el asistente; sin saberlo aún, sí: `mandar` lo vuelve a mirar) */
+  function iaConClave() {
+    const a = asis(); let c = null;
+    try { c = (a && a._estado && a._estado().cfg) || cfgIA; } catch (_) { c = cfgIA; }
+    return !c || !!c.hayClave;
+  }
+  async function ejecutarConIA(q) {
+    const a = asis(); if (!a || !q || !q.lienzo) { T.tablero.avisar('Esta versión de ClapCraft no trae el asistente'); return false; }
+    if (q.sinClave) { if (a.abrir) a.abrir(); return false; }   // su bienvenida dice cómo configurarlo (y el tutorial)
+    if ((enCursoIA.get(q.lienzo) || []).length) { T.tablero.avisar('El asistente ya está trabajando en este lienzo'); if (a.abrir) a.abrir(); return false; }
+    if (a.trabajando && a.trabajando()) { T.tablero.avisar('El asistente está con otra cosa: espera a que termine (o detenlo) y vuelve a pulsar'); if (a.abrir) a.abrir(); return false; }
+    enCursoIA.set(q.lienzo, (q.nodos || []).slice());
+    estadosLienzo();
+    try {
+      const alPaso = () => estadosLienzo();                   // el pie de sus nodos, al día paso a paso
+      /* más herramientas cuantas más operaciones (unas 15 por cada una, hasta 120); el tope de gasto sigue mandando */
+      const maxVueltas = Math.min(120, Math.max(25, 15 * ((q.nodos || []).length || 1)));
+      if (q.todo || (q.nodos || []).length !== 1) {
+        /* todo el lienzo, o varios elegidos (con sus previas): los pendientes, con su encargo (los enlaces de cada una) */
+        await a.ejecutarLienzo(q.lienzo, Object.assign({ alPaso, maxVueltas, nodos: q.todo ? null : q.nodos }, q.texto ? { texto: q.texto } : {}, q.todo ? {} : { visible: 'Ejecuta ' + q.nodos.length + ' operaciones del lienzo' }));
+      } else await a.ejecutarNodo(q.lienzo, q.nodos[0], Object.assign({ alPaso, maxVueltas }, q.texto ? { texto: q.texto } : {}));
+      return true;
+    } catch (e) {
+      T.tablero.avisar('El asistente no pudo: ' + ((e && e.message) || e));
+      return false;
+    } finally {
+      enCursoIA.delete(q.lienzo);
+      estadosLienzo();
+    }
+  }
+  /* «Mandar al asistente»: el enlace de lo que se ve (el botón de enlace de las cabeceras) o de un tramo del editor, en la caja de
+     escribir del panel (sin mandarlo: Leo escribe lo que quiere) */
+  function mandarAlAsistente(refs, extra) {
+    const a = asis(), d = docs(); if (!a || !d || !C.enlaces) return false;
+    if (sellarEnlaces(abiertoId)) { biblioteca.marcar(abiertoId); persistir(); }
+    const P = proyectoEnlace(), lista = (Array.isArray(refs) ? refs : [refs]).filter(Boolean);
+    const md = lista.map(r => C.enlaces.markdown(d, P, r, opEnlace(extra))).filter(Boolean).join('\n');
+    if (!md) { T.tablero.avisar('Aquí no hay nada con enlace'); return false; }
+    if (a.insertar) a.insertar(md + ' '); else if (a.abrir) { a.abrir(); if (a.mandar) a.mandar(md); }
+    return true;
+  }
+  function alternarAsistente() {
+    const a = asis(); if (!a) { T.tablero.avisar('Esta versión de ClapCraft no trae el asistente'); return; }
+    if (asisAbierto()) { if (a.cerrar) a.cerrar(); } else if (a.abrir) a.abrir();
+  }
+  function configurarIA() {
+    const a = asis(); if (!a) return;
+    if (a.configurar) a.configurar(); else if (a.abrir) a.abrir();
+  }
+  function iniciarAsistente() {
+    const a = C.asistente && C.asistente.iniciar ? C.asistente : null; if (!a || asistenteIniciado) return;
+    asistenteIniciado = true;
+    /* lo que se teclea en el panel es del panel: las teclas sin Cmd/Ctrl (Esc, Supr, las flechas, Enter) no siguen hasta el
+       tablero, el gestor o la ventana de una nota (Supr borraría el nodo elegido; Esc soltaría lo elegido o cerraría la nota). El
+       lienzo las oye antes, en captura: su `fuera` ya cuenta el panel. Los atajos con Cmd/Ctrl siguen (Guardar, Cmd+Shift+I…). */
+    const panel = $('asistente');
+    if (panel) panel.addEventListener('keydown', e => { if (!e.metaKey && !e.ctrlKey) e.stopPropagation(); });
+    leerCfgIA();
+    a.iniciar({
+      transporte: api && api.ia ? api.ia : null,              // null en el navegador: el panel dice que es de la app de escritorio
+      motor: C.asistenteMotor || null,
+      ejecutar: (nombre, args, op) => ejecutarIA(nombre, args, op),
+      /* lo que hay en pantalla y el proyecto (el motor lo pone en el prompt de sistema en cada vuelta) */
+      estado: () => { if (!abiertoId || !docs()) return null; const p = proyectoIA(); return Object.assign(estadoEnPantalla(), p ? { proyecto: '«' + p.nombre + '»' + (p.archivo ? ' (archivo ' + p.archivo + ')' : ' (sin archivo)') } : {}); },
+      proyecto: proyectoIA,
+      docs: () => docs(),
+      irAEnlace: t => irAEnlace(t),
+      deshacer: id => deshacerIA(id),
+      verCambio: id => verCambioIA(id),
+      historial: () => abrirHistorialClaude(),
+      guardarConversacion, cargarConversacion,
+      abrirWeb: abrirWebIA,
+      avisar: (msg, accion) => T.tablero.avisar(msg, accion),
+      confirmar: (msg, si) => T.tablero.confirmar(msg, si),
+      abrirFuera: url => { if (/^https:\/\//i.test(String(url || ''))) window.open(url, '_blank', 'noopener'); },   // al navegador del sistema (setWindowOpenHandler)
+      /* las fórmulas (1.1.60): un chip abre la suya en su ventana; «Administrar fórmulas…», su tablero */
+      abrirFormula: id => { if (!conProyecto() || !C.gestor.abrirFormula) return; volcarLienzo(); volcarTexto(); verVista('documentos'); C.gestor.abrirFormula(id); },
+      abrirFormulas: () => verFormulas(),
+      memoria: () => (C.memoriaUI && C.memoriaUI.paraPrompt ? C.memoriaUI.paraPrompt() : null),   // la memoria de estilo (1.1.60)
+      origen: modelo => origenIA(modelo)
+    });
+  }
+  /* otro proyecto en la ventana (o ninguno): el panel pasa a su conversación */
+  function asistenteAlProyecto() {
+    if (C.memoriaUI && C.memoriaUI.alProyecto) { try { C.memoriaUI.alProyecto(); } catch (_) {} }   // la memoria de estilo (1.1.60)
+    const a = asis(); if (!a) return;
+    if (enCursoIA) enCursoIA.clear();
+    try { if (a.recargar) a.recargar(); } catch (_) {}      // detiene lo que estuviera haciendo y carga la del proyecto nuevo
+  }
 
   /* ---------- enlaces (1.1.52) ----------
      Leo, 25-09-2026: «Pon unos "puntos" o "links" a bibliotecas, segmentos, notas, personajes, esquemas, etc. Para facilitar el
@@ -2375,7 +3067,7 @@
     const r = C.enlaces.renombrar(d, ahora);
     if (!r.cambio) return false;
     biblioteca.marcar(id);
-    if (foto) ponerAlDia(foto.tablero, foto.notaEd, foto.nota); else persistir();
+    if (foto) ponerAlDia(foto.tablero, foto.notaEd, foto.nota, foto.lienzo); else persistir();
     informarVentana();
     T.tablero.avisar((a ? 'El archivo ahora se llama «' + a.nombre + '»' : 'El proyecto ahora se llama «' + g.nombre + '»') + ': sus enlaces pasan a decir «' + ahora + '»'
       + (r.corregidos ? ' (' + r.corregidos + (r.corregidos === 1 ? ' corregido' : ' corregidos') + ' dentro del proyecto)' : '') + ' y los que ya habías copiado siguen llevando aquí');
@@ -2394,6 +3086,7 @@
     a.ruta = ahora; a.nombre = baseDe(ahora);
     const v = vista.archivos[id]; if (v) { v.ruta = ahora; v.nombre = a.nombre; guardarVista(); }
     migrarVisto(antes, ahora);
+    migrarConversacion(antes, ahora);                          // la del asistente (1.1.59)
     olvidarReciente(antes); recordarReciente(id);
     indicador(); renderPestanas(); informarVentana();
     comprobarEnlaces(id, { renombrado: true });
@@ -2477,6 +3170,7 @@
   /* lo que se ve: la nota o el documento abiertos, el segmento expandido, la biblioteca (o el personaje), el esquema */
   function refDeLoQueSeVe() {
     const d = docs(); if (!d || pantalla === 'nuevo') return null;
+    if (vista.modo === 'lienzo' && refLienzo(lienzoId)) return { tipo: 'lienzo', id: lienzoId };   // 1.1.58
     const nid = C.gestor.notaAbierta() || (vista.modo === 'documentos' && C.gestor.notaElegida && C.gestor.notaElegida()); if (nid) return refDeNota(nid);   // también la de su ventana
     if (vista.modo === 'texto' && C.texto.clave()) return refDeNota(C.texto.clave()) || (esquemaId ? { tipo: 'documento', esquema: esquemaId } : null);
     if (vista.modo === 'documentos') {
@@ -2497,10 +3191,40 @@
     const r = C.texto.clave() && refDeNota(C.texto.clave()); if (!r || !t) return false;
     return copiarEnlaces(Object.assign(r, { bloques: t.bloques }, t.huella ? { huella: t.huella } : {}), { extracto: t.extracto });
   }
+  /* un tramo del editor, al asistente (1.1.59) */
+  function mandarTramo(t) {
+    const r = C.texto.clave() && refDeNota(C.texto.clave()); if (!r || !t) return false;
+    return mandarAlAsistente(Object.assign(r, { bloques: t.bloques }, t.huella ? { huella: t.huella } : {}), { extracto: t.extracto });
+  }
+  /* «Citar en el asistente» (1.1.60, Leo: «poder citar textos para mandarlos al asistente»): el texto elegido en el editor o en la
+     ventana de una nota, con el enlace de su tramo (la nota o el guion, y sus bloques). Lo pone en el panel `C.asistente.citar`; si
+     esta versión del asistente no lo tiene, el texto va como cita de Markdown con su enlace debajo, en la caja de escribir. */
+  function citarEnAsistente(ref, texto) {
+    const a = asis(), d = docs();
+    if (!a || !d) { T.tablero.avisar(conAsistente() ? 'Abre un proyecto para citar' : 'Esta versión de ClapCraft no trae el asistente'); return false; }
+    const t = String(texto || '').replace(/\u200B/g, '').trim(); if (!t) { T.tablero.avisar('Elige el texto que quieres citar'); return false; }
+    if (sellarEnlaces(abiertoId)) { biblioteca.marcar(abiertoId); persistir(); }
+    const base = ref && ref.tipo === 'nota' ? Object.assign(refDeNota(ref.id) || { tipo: 'nota', id: ref.id }, ref.bloques ? { bloques: ref.bloques } : {}, ref.huella ? { huella: ref.huella } : {}) : ref;
+    const P = proyectoEnlace(), extra = opEnlace({ extracto: t });
+    const enlace = base && C.enlaces ? C.enlaces.crear(P, base) : null, etiqueta = base && C.enlaces ? C.enlaces.etiqueta(d, base, extra) : '';
+    if (typeof a.citar === 'function') { a.citar({ texto: t, enlace, etiqueta }); return true; }
+    const md = enlace ? C.enlaces.markdown(d, P, base, extra) : '';
+    if (a.insertar) a.insertar(t.split('\n').map(l => '> ' + l).join('\n') + (md ? '\n' + md : '') + '\n');
+    return true;
+  }
+  function citarTramo(t, texto) {
+    const r = C.texto.clave() && refDeNota(C.texto.clave()); if (!r) return false;
+    return citarEnAsistente(Object.assign(r, t && t.bloques ? { bloques: t.bloques } : {}, t && t.huella ? { huella: t.huella } : {}), texto);
+  }
   /* **Cmd+Shift+C**: lo elegido o, sin nada elegido, lo que se ve */
   function copiarLoElegido() {
     if (!docs()) { T.tablero.avisar('Abre un proyecto para copiar enlaces'); return; }
     const conNota = document.body.classList.contains('nota-abierta');
+    /* en el lienzo: sus nodos elegidos (1.1.58) */
+    if (vista.modo === 'lienzo' && lienzoMontado) {
+      const ids = C.lienzoUI && C.lienzoUI.elegidos ? C.lienzoUI.elegidos() : [];
+      if (ids.length) { copiarEnlaces(ids.map(nodo => ({ tipo: 'lienzo', id: lienzoMontado, nodo }))); return; }
+    }
     if (C.texto.enDocumento() && (vista.modo === 'texto' || conNota)) { const t = C.texto.tramo(); if (t) { copiarTramo(t); return; } }
     if (vista.modo === 'esquema' && esquemaId && !conNota) {
       const e = T.tablero.elegidos(), s = T.tablero.seleccion();
@@ -2524,12 +3248,55 @@
       titulo: 'Copiar ' + (varios ? 'sus enlaces' : 'su enlace') + ' para Claude (Cmd+Shift+C)', fn: () => copiarEnlaces(refs) }];
   });
   /* el botón de enlace de cada cabecera: lo que se ve */
+  /* Con el asistente con otra IA (1.1.59), su menú: «Copiar enlace para Claude» y «Mandar al asistente» (el enlace, a la caja de
+     escribir del panel). El clic sigue copiando mientras el panel está cerrado (lo de siempre) y abre el menú con el panel abierto;
+     el clic derecho lo abre siempre. */
+  function menuEnlaceCab(b) {
+    const r = refDeLoQueSeVe();
+    if (!r) { T.tablero.avisar('Aquí no hay nada con enlace'); return; }
+    const f = document.createDocumentFragment();
+    const op = (texto, atajo, fn) => {
+      const x = document.createElement('button'); x.type = 'button'; x.setAttribute('role', 'menuitem'); x.textContent = texto;
+      if (atajo) { const k = document.createElement('kbd'); k.className = 'gd-pop-atajo'; k.textContent = atajo; x.appendChild(k); }
+      x.addEventListener('click', () => { C.gestor.cerrarPop(); fn(); });
+      f.appendChild(x);
+    };
+    op('Copiar enlace para Claude', 'Cmd+Shift+C', () => copiarEnlaces(r));
+    op('Mandar al asistente', null, () => mandarAlAsistente(r));
+    C.gestor.pop(b, f);
+  }
+  const conAsistente = () => !!(C.asistente && C.asistente.iniciar && api && api.ia);
   document.addEventListener('click', e => {
-    const b = e.target.closest && e.target.closest('[data-enlace-cab]'); if (!b) return;
+    const b = e.target.closest && e.target.closest('[data-enlace-cab]');
+    /* el de la ventana de una nota (1.1.60), igual con el panel abierto: el menú (sin él, lo suyo, que es copiar) */
+    const v = !b && e.target.closest && e.target.closest('.gd-modal-capa [data-gd-lado-enlace]');
+    if (v && conAsistente() && asisAbierto()) { e.stopPropagation(); e.preventDefault(); menuEnlaceCab(v); return; }
+    if (!b) return;
     e.stopPropagation(); e.preventDefault();
+    if (conAsistente() && asisAbierto()) { menuEnlaceCab(b); return; }
     const r = refDeLoQueSeVe();
     if (r) copiarEnlaces(r); else T.tablero.avisar('Aquí no hay nada con enlace');
   }, true);
+  document.addEventListener('contextmenu', e => {
+    const b = e.target.closest && e.target.closest('[data-enlace-cab], .gd-modal-capa [data-gd-lado-enlace]'); if (!b || !conAsistente()) return;
+    e.stopPropagation(); e.preventDefault();
+    menuEnlaceCab(b);
+  }, true);
+
+  /* **Un fragmento, a sus nodos** (1.1.57): la etiqueta «Fragmento · 12 s · Piloto» de una nota lleva al esquema con su nodo elegido
+     (varios: las columnas que ocupan); sin nodos, al tramo del guion o al esquema. Si se quedó huérfano, lo dice. */
+  function irAFragmento(id) {
+    const d = docs(), x = d && d.estadoFragmento(id); if (!x) return;
+    if (!x.esquema) { T.tablero.avisar(x.enPapelera ? 'Su esquema, «' + x.nombre + '», está en la papelera' : 'El esquema de este fragmento ya no existe'); return; }
+    const cols = x.nodos.map(n => n.col + 1);
+    const r = x.nodos.length === 1 ? mostrarEnlace({ tipo: 'nodo', esquema: x.eid, id: x.nodos[0].id })
+      : x.nodos.length ? mostrarEnlace({ tipo: 'columnas', esquema: x.eid, desde: Math.min(...cols), hasta: Math.max(...cols) })
+      : x.bloques ? mostrarEnlace({ tipo: 'documento', esquema: x.eid, bloques: x.bloques })
+      : mostrarClaude({ esquema: x.eid });
+    if (!r.ok) { T.tablero.avisar(r.aviso); return; }
+    if (x.perdidos.length) T.tablero.avisar(x.nodos.length ? 'Algunos de sus nodos ya no están en el esquema' : 'Sus nodos ya no están en el esquema: este es su esquema');
+    else if (/ oculta/.test(r.aviso || '')) T.tablero.avisar(r.aviso);
+  }
 
   /* ---------- abrir un enlace: a su sitio ---------- */
   function mostrarEnlace(x) {
@@ -2539,7 +3306,7 @@
     const R = C.enlaces.resolver(d, x, opEnlace());
     if (!R.ok) return { ok: false, aviso: R.aviso };
     /* ir a una biblioteca, un segmento, una sección o una pieza del árbol: la ventana de una nota lo taparía (1.1.54) */
-    if (['contenedor', 'carpeta', 'grupo', 'personaje', 'biblioteca', 'seccion', 'segmento'].includes(x.tipo) && C.gestor.ventanaAbierta && C.gestor.ventanaAbierta()) C.gestor.cerrarVentana();
+    if (['contenedor', 'carpeta', 'grupo', 'personaje', 'biblioteca', 'seccion', 'segmento', 'lienzo'].includes(x.tipo) && C.gestor.ventanaAbierta && C.gestor.ventanaAbierta()) C.gestor.cerrarVentana();
     if (pantalla === 'nuevo') { pantalla = 'proyecto'; aplicarPantalla(); }
     const listo = aviso => ({ ok: true, aviso: 'A la vista: ' + (aviso || R.etiqueta) });
     const aTramo = (n, eid) => {
@@ -2553,11 +3320,21 @@
         if (vista.modo === 'documentos' && !C.gestor.subActual()) verVista('esquema');
         C.gestor.revelar(x.tipo, x.id); return listo();
       case 'personaje': abrirPersonaje(x.id); return listo();
+      case 'lienzo': {                                         // un lienzo de nodos y uno de sus nodos (1.1.58)
+        if (!abrirLienzo(x.id)) return { ok: false, aviso: 'No se pudo abrir ese lienzo' };
+        if (x.nodo) {
+          const l = refLienzo(x.id).lienzo;
+          if (!(l.nodos || []).some(n => n.id === x.nodo)) return { ok: true, aviso: 'Ese nodo ya no está en el lienzo «' + l.nombre + '»: este es su lienzo' };
+          if (C.lienzoUI.ir) C.lienzoUI.ir(x.nodo);
+        }
+        return listo();
+      }
       case 'biblioteca': case 'seccion': case 'segmento': {
         if (R.personaje) { vista.arbol = 'personajes'; guardarVista(); } else if (R.contenedor && !R.contenedor.oculto) { vista.arbol = 'contenedores'; guardarVista(); }
         if (C.gestor.notaAbierta()) C.gestor.cerrarNota();
         verVista('documentos');
         if (x.tipo === 'segmento') C.gestor.expandir(x.biblioteca, x.id === 'bandeja' ? 'bandeja' : 'etq:' + x.id);
+        else if (esEspecialId(R.sub.id)) C.gestor.abrirEspecial(R.sub.id);   // su tablero especial (1.1.56; las fórmulas, 1.1.60)
         else C.gestor.abrirSub(R.sub.id);
         if (x.tipo === 'seccion') setTimeout(() => C.gestor.verSeccion(x.id), 60);
         return listo();
@@ -2619,18 +3396,34 @@
   if (api && api.onEnlace) api.onEnlace(u => irAEnlace(u, { deFuera: true }));
 
   window.addEventListener('beforeunload', () => {
+    detenerAsistente();                                        // lo que el asistente estuviera haciendo, parado (1.1.59)
     volcarTodo();
     biblioteca.datos.guiones.forEach(g => { if (sucio(g.id)) escribirArchivo(g.id); });   // lo que dé tiempo
   });
   /* **Salir de la app espera a que se escriba todo** (1.1.55): Electron pregunta a cada ventana antes de salir (Cmd+Q, apagar el
      equipo) y sale cuando todas contestan; antes salía a mitad de la escritura y un proyecto grande quedaba cortado. */
-  if (api && api.onVaciar) api.onVaciar(async () => { try { return await escribirTodo(); } catch (_) { return false; } });
+  if (api && api.onVaciar) api.onVaciar(async () => { detenerAsistente(); try { return await escribirTodo(); } catch (_) { return false; } });
+
+  /* el asistente con otra IA (1.1.59), ya con todo lo de la ventana a punto */
+  try { iniciarAsistente(); } catch (e) { console.error('El asistente no arrancó:', e); }
+  /* la memoria de estilo (1.1.60, js/claquedraw/memoria-ui.js): la general y lo que escribió la IA, en los datos de la app */
+  try {
+    if (C.memoriaUI && C.memoriaUI.iniciar) C.memoriaUI.iniciar({
+      api: api || null, docs: () => (abiertoId ? docs() : null),
+      proyecto: () => { const g = abiertoId && biblioteca.guion(abiertoId); if (!g || !docs()) return null; return { id: g.id, nombre: g.nombre, clave: claveCorta(claveConversacion(g.id)) }; },
+      cambio: () => { if (abiertoId) { biblioteca.marcar(abiertoId); persistir(); } },
+      avisar: (msg, acc) => T.tablero.avisar(msg, acc), confirmar: (msg, si) => T.tablero.confirmar(msg, si),
+      motor: () => C.asistenteMotor || null, nombres: () => (docs() ? docs().elenco().map(p => p.nombre) : []),
+      volcar: () => { if (temporizador) volcar(); volcarTexto(); }
+    });
+  } catch (e) { console.error('La memoria de estilo no arrancó:', e); }
 
   /* API para el gestor de documentos que venga después: la biblioteca, el guion abierto y la vista. */
   C.biblioteca = biblioteca;
   C.app = { abrir: montar, nuevo, crearProyecto, cancelarProyecto, cerrar: cerrarProyecto, abrirReciente, recientes, guardar, guardarComo, abrirArchivo, montarEsquema, esquemaMontado: () => esquemaId,
-    abrirEnPestana, cambiarPestana, cerrarPestana: cerrarPestanaElemento, nuevaPestana, historia: irHistoria, pestanas: () => pestanas && JSON.parse(JSON.stringify(pestanas)), abrirRuta,
+    abrirEnPestana, cambiarPestana, cerrarPestana: cerrarPestanaElemento, nuevaPestana, abrirLienzo, lienzoMontado: () => lienzoMontado, anadirAlLienzo, historia: irHistoria, pestanas: () => pestanas && JSON.parse(JSON.stringify(pestanas)), abrirRuta,
     renombrar: renombrarProyecto, editarNombre: editarNombrePestana,
             archivo: id => { const a = estado(id || abiertoId).archivo; return a && { nombre: a.nombre, ruta: a.ruta || null, permiso: a.permiso }; },
-            sucio: id => sucio(id || abiertoId), abiertoId: () => abiertoId, vista: verVista, modo: () => vista.modo };
+            sucio: id => sucio(id || abiertoId), abiertoId: () => abiertoId, vista: verVista, modo: () => vista.modo,
+            ejecutarEnVivo, origenIA };                        // 1.1.59: una herramienta en vivo (como Claude), para el asistente y las pruebas
 })(window.Claquedraw, window.Tramas);

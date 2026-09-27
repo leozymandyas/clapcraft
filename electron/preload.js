@@ -25,8 +25,8 @@ contextBridge.exposeInMainWorld('editorAPI', {
   buscarRuta: (ruta, enfocarla) => ipcRenderer.invoke('ventana:buscarRuta', { ruta, enfocarla }),
   cerrarVentana: op => ipcRenderer.invoke('ventana:cerrar', op || {}),
   ventanaProyecto: info => ipcRenderer.send('ventana:proyecto', info),
-  /* el tema actual, para que el menú Ver diga «Modo claro» u «oscuro» según toque */
-  informarTema: oscuro => ipcRenderer.send('tema', !!oscuro),
+  /* el tema actual ('claro', 'oscuro', 'synthwave' o 'vaporwave'), para que el menú Ver › Tema lo marque */
+  informarTema: t => ipcRenderer.send('tema', typeof t === 'string' ? t : (t ? 'oscuro' : 'claro')),
   /* Claude (1.1.49, electron/claude.js): las peticiones del servidor MCP para el proyecto de esta ventana ({ id, nombre, args }),
      su respuesta, y el aviso de que su archivo cambió fuera de la app */
   onClaude: cb => ipcRenderer.on('claude:peticion', (_e, p) => cb(p)),
@@ -46,6 +46,37 @@ contextBridge.exposeInMainWorld('editorAPI', {
   onArchivoRenombrado: cb => ipcRenderer.on('archivo:renombrado', (_e, x) => cb(x)),
   /* el archivo de esta ventana ya no está en su sitio y no se encontró renombrado (1.1.55): se vuelve a crear al guardar */
   onArchivoPerdido: cb => ipcRenderer.on('archivo:perdido', (_e, ruta) => cb(ruta)),
+  /* otras IAs por API (1.1.59, electron/ia.js): la configuración (la clave se guarda cifrada en el proceso principal y aquí nunca
+     llega: solo `hayClave` y `finClave`), probar la conexión, una llamada con stream (los trozos llegan por `alTrozo`, con el `id`
+     de la llamada) y cancelarla; `abrirWeb` abre en el navegador del sistema las páginas de APIMart del tutorial; `conversacion`
+     guarda la conversación del asistente de un proyecto en este equipo ({ accion: leer | escribir | borrar | mover, clave, datos, a }) */
+  ia: {
+    config: () => ipcRenderer.invoke('ia:config'),
+    guardarConfig: parcial => ipcRenderer.invoke('ia:guardarConfig', parcial || {}),
+    guardarClave: clave => ipcRenderer.invoke('ia:guardarClave', String(clave || '')),
+    borrarClave: host => ipcRenderer.invoke('ia:borrarClave', host ? String(host) : null),
+    probar: op => ipcRenderer.invoke('ia:probar', op || {}),
+    chat: op => ipcRenderer.invoke('ia:chat', op || {}),
+    cancelar: id => ipcRenderer.invoke('ia:cancelar', String(id)),
+    alTrozo: fn => {
+      const f = (_e, x) => fn(x);
+      ipcRenderer.on('ia:trozo', f);
+      return () => ipcRenderer.removeListener('ia:trozo', f);
+    },
+    abrirWeb: url => ipcRenderer.invoke('ia:abrirWeb', String(url || '')),
+    conversacion: q => ipcRenderer.invoke('ia:conversacion', q || {}),
+    /* 1.1.60: describir imágenes con el modelo de visión ({ id?, imagenes: [{ data, mimeType, nombre }], contexto } → { ok, modelo,
+       descripciones: [{ nombre, ok, texto | error }], usage, coste, gastoHoy }) y el saldo de APIMart ({ forzar? } → { ok, saldo,
+       usado, moneda, creditos, limiteClave? }) */
+    describir: op => ipcRenderer.invoke('ia:describir', op || {}),
+    saldo: op => ipcRenderer.invoke('ia:saldo', op || {})
+  },
+  /* la memoria de estilo (1.1.60, electron/memoria.js): 'estilo' (la general, opciones y pares pendientes) y 'escritos' (lo que
+     escribió la IA en cada documento), en los datos de la app de este equipo */
+  memoria: {
+    leer: nombre => ipcRenderer.invoke('memoria:leer', String(nombre || '')),
+    escribir: (nombre, datos) => ipcRenderer.invoke('memoria:escribir', String(nombre || ''), datos)
+  },
   /* salir de la app (1.1.55): Electron pide a la ventana que escriba lo pendiente y espera su respuesta */
   onVaciar: cb => ipcRenderer.on('app:vaciar', async (_e, n) => {
     let ok = false; try { ok = await cb(); } catch (_) {}

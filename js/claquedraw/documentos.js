@@ -26,6 +26,20 @@
    Renombrar o recolorear un personaje reescribe todas las notas (sus bloques de personaje y sus
    registros) y los carriles del tablero de Personajes que lo llevan (`linea.personaje`); no se elimina
    mientras alguna nota lo nombre (`menciones`).
+   **Plantillas** (1.1.56, de ClapBook): un tercer contenedor oculto, `plantillas` (`especial: 'plantillas'`), con una sola
+   biblioteca, `plantillas:biblioteca`, que nace la primera vez que hace falta (`asegurarPlantillas`). Sus notas son las
+   plantillas de nota: se copian a ella (`guardarComoPlantilla`) y de ellas salen notas nuevas con sus variables rellenas
+   (`crearDesdePlantilla`, plantillas.js). No cuentan como notas del proyecto (ni para el elenco ni para las menciones) y su
+   contenedor y su biblioteca no se renombran, mueven, colorean, duplican, agrupan, meten en carpetas ni tiran.
+   **Fórmulas** (1.1.60): la misma idea para los prompts reutilizables del lienzo: el contenedor oculto `formulas` (`especial:
+   'formulas'`) con `formulas:biblioteca` (`asegurarFormulas`); sus notas son texto plano (`textoFormula`, `guardarComoFormula`) y
+   una operación del lienzo las elige (`resolverFormulas`, `instruccionCompuesta`; su texto cuenta en la firma). Lo común a las dos
+   especiales va por `ESPECIALES`.
+   **Lienzos de nodos** (1.1.58, como los «Space» de Dreamina): una tercera clase de pieza del árbol, `contenedor.lienzos`
+   (la clave solo existe si hay alguno), con nombre, color de etiqueta, carpeta, grupo, orden, papelera y duplicar como un
+   esquema. Dentro, nodos y cables (js/claquedraw/lienzo-modelo.js, `C.Lienzo`); aquí se guardan (`guardarLienzo`) y se
+   resuelve lo que apunta cada entrada (`resolverNodo`: la nota, el segmento, la biblioteca, el esquema o el personaje, o
+   `{ roto: true }`; borrar lo apuntado no toca la entrada). No van en los contenedores ocultos.
    No hay nada especial: cualquier contenedor, esquema o subcontenedor se renombra, se ordena y se
    elimina. `migrado` recuerda que el esquema del proyecto (que vivía en el guion) ya pasó aquí.
    Una nota vive en un subcontenedor y lleva como mucho una etiqueta suya; sin etiqueta está en la
@@ -53,6 +67,33 @@
   const DIAS_PAPELERA = 30;
   const ID_PERSONAJES = 'personajes';                          // el contenedor oculto con la biblioteca de cada personaje
   const ID_ESQUEMAS = 'personajes:esquemas';                    // el contenedor oculto con los esquemas de personaje
+  /* **Las bibliotecas especiales**: un contenedor oculto con una sola biblioteca, de ids fijos (como en ClapBook), fuera del
+     árbol. Las plantillas de nota (1.1.56) y las **fórmulas** (1.1.60: prompts reutilizables de texto plano para las operaciones
+     de IA del lienzo, js/claquedraw/formulas.js). Lo que vale para una vale para las dos: no se renombran, mueven, colorean,
+     duplican, agrupan, meten en carpetas ni tiran (sus notas sí), no cuentan para el elenco ni las menciones, no salen en el
+     árbol ni en Recientes. `las`: cómo se nombran en un aviso. */
+  const ESPECIALES = {
+    plantillas: { clase: 'plantillas', id: 'plantillas', bib: 'plantillas:biblioteca', nombre: 'Plantillas', las: 'las plantillas' },
+    formulas: { clase: 'formulas', id: 'formulas', bib: 'formulas:biblioteca', nombre: 'Fórmulas', las: 'las fórmulas' }
+  };
+  const CLASES_ESPECIALES = Object.keys(ESPECIALES);
+  const ID_PLANTILLAS = ESPECIALES.plantillas.id, ID_BIB_PLANTILLAS = ESPECIALES.plantillas.bib, NOMBRE_PLANTILLAS = ESPECIALES.plantillas.nombre;
+  const ID_FORMULAS = ESPECIALES.formulas.id, ID_BIB_FORMULAS = ESPECIALES.formulas.bib, NOMBRE_FORMULAS = ESPECIALES.formulas.nombre;
+  /* la clase ('plantillas' | 'formulas') del contenedor o de la biblioteca especial de esa id, o null */
+  const especialDe = id => CLASES_ESPECIALES.find(k => ESPECIALES[k].id === id || ESPECIALES[k].bib === id) || null;
+  /* la clase de la biblioteca especial de esa id (solo bibliotecas), o null */
+  const especialDeBib = subId => CLASES_ESPECIALES.find(k => ESPECIALES[k].bib === subId) || null;
+  const esDeEspecial = id => !!especialDe(id);
+  const mayus = s => s.charAt(0).toUpperCase() + s.slice(1);
+  /* el aviso de lo que no se hace con una especial: de la primera id que lo sea (si ninguna, las plantillas, como antes) */
+  const claseDe = ids => ids.map(x => especialDe(x == null ? '' : String(x))).find(Boolean) || 'plantillas';
+  const noEspecial = (que, ...ids) => ({ ok: false, aviso: 'La biblioteca de ' + ESPECIALES[claseDe(ids)].las + ' no se ' + que });
+  /* el contenedor de una especial, recién hecho (con las claves en el orden de `normalizar`) */
+  const contenedorEspecial = (k, t) => ({ id: ESPECIALES[k].id, nombre: ESPECIALES[k].nombre, fijado: false, plegado: false, creado: t, modificado: t, carpetas: [], esquemas: [],
+    subs: [{ id: ESPECIALES[k].bib, nombre: ESPECIALES[k].nombre, creado: t, modificado: t }], oculto: true, especial: k });
+  /* el texto plano de las fórmulas (js/claquedraw/formulas.js: en la página va detrás de este archivo; en Node se pide aquí) */
+  const Fm = () => C.formulas || (typeof require === 'function' ? require('./formulas.js').formulas : null);
+  const Me = () => C.memoria || (typeof require === 'function' ? (() => { try { return require('./memoria.js').memoria; } catch (_) { return null; } })() : null);
   /* Carpetas (Leo, 15-09-2026): dentro de un contenedor anidan sin límite y de cualquier nivel cuelgan esquemas y
      bibliotecas (`carpetaId`); en Personajes agrupan el elenco (`datos.carpetasElenco`, `personaje.carpetaId`).
      Su color es uno de los de las tramas (`var(--t-…)`). */
@@ -92,7 +133,7 @@
 
   const clonar = d => JSON.parse(JSON.stringify(d));
   /* el nombre de lo que hay en la papelera: una nota, un esquema, una biblioteca o un personaje */
-  const nombreEnPapelera = x => (x.nota ? x.nota.titulo : x.tipo === 'esquema' ? x.esquema.nombre : x.tipo === 'personaje' ? x.personaje.nombre : x.sub.nombre);
+  const nombreEnPapelera = x => (x.nota ? x.nota.titulo : x.tipo === 'esquema' ? x.esquema.nombre : x.tipo === 'personaje' ? x.personaje.nombre : x.tipo === 'lienzo' ? x.lienzo.nombre : x.sub.nombre);
   const no = aviso => ({ ok: false, aviso });
   const si = extra => Object.assign({ ok: true }, extra || {});
   const plano = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -162,6 +203,21 @@
     return lista.length ? { versiones: lista } : {};
   }
   /* `eid` null: un documento creado a mano en la sección de guiones (no sale de un esquema, no se regenera) */
+  /* **Fragmentos** (1.1.57, Leo: «a partir de un guion o esquema terminado con ayuda de la IA dividir el guion en fragmentos más
+     pequeños que vivan en notas de segmentos… con tiempos y todo, para que IAs como Seedance puedan generar mis guiones»): una nota
+     de biblioteca puede decir de qué tramo de un esquema sale, `nota.fragmento = { eid, nodos: [puntoId…], segundos?, orden?,
+     bloques?: [desde, hasta] }` —el esquema, sus nodos en el orden del tiempo, la duración estimada en segundos (con un decimal), su
+     puesto en la serie (desde 1) y, si salió del guion, sus bloques del documento (los de leer_documento, desde 1)—. Solo es una
+     marca: borrar el esquema o sus nodos no la toca (se queda **huérfana** y se dice: `estadoFragmento`). */
+  function fragmentoDe(f) {
+    if (!f || typeof f !== 'object' || typeof f.eid !== 'string' || !f.eid) return null;
+    const x = { eid: f.eid, nodos: claves(f.nodos) };
+    const s = Math.round((+f.segundos || 0) * 10) / 10; if (s > 0) x.segundos = s;
+    const o = Math.round(+f.orden || 0); if (o >= 1) x.orden = o;
+    const b = Array.isArray(f.bloques) ? f.bloques.map(v => Math.round(+v)).filter(v => v >= 1) : [];
+    if (b.length) x.bloques = [Math.min(...b.slice(0, 2)), Math.max(...b.slice(0, 2))];
+    return x;
+  }
   const guionDe = g => g && typeof g === 'object'
     ? { guion: { eid: g.eid ? String(g.eid) : null, generado: +g.generado || 0, ...(g.principal ? { principal: true } : {}) } } : {};
 
@@ -172,7 +228,42 @@
     if (e.notas && typeof e.notas === 'object') Object.keys(e.notas).forEach(k => { const n = docDe(e.notas[k]); if (n) notas[k] = n; });
     return { id, nombre: texto(nombre, 'Esquema'), datos: clonar(e.datos), notas, notaActual: typeof e.notaActual === 'string' ? e.notaActual : null,
              ...(typeof e.subId === 'string' && e.subId ? { subId: e.subId } : {}),   // forma antigua: `agruparEnlaces` lo convierte en grupo y lo borra
-             ...(sanearGuion(e.guion) ? { guion: sanearGuion(e.guion) } : {}) };
+             ...(sanearGuion(e.guion) ? { guion: sanearGuion(e.guion) } : {}),
+             ...(claves(e.bibliotecas).length ? { bibliotecas: claves(e.bibliotecas) } : {}) };   // sus conexiones (1.1.57): se podan al final de `normalizar`
+  }
+
+  /* **Un lienzo de nodos** (1.1.58): sus nodos y cables los sanea el modelo del lienzo (js/claquedraw/lienzo-modelo.js, que en la
+     página se carga detrás de este archivo y en Node se pide aquí). La carpeta la pone quien lo llama. */
+  const Lz = () => C.Lienzo || (typeof require === 'function' ? require('./lienzo-modelo.js').Lienzo : null);
+  /* ---------- firmas del contenido de lo que apunta una entrada de un lienzo (`firmaEntrada`) ---------- */
+  const huella = x => { const L = Lz(); return L && L.huellaDe ? L.huellaDe(x) : JSON.stringify(x); };
+  const huellaTexto = html => huella(String(html || ''));
+  /* lo que se lee de un esquema, sin su maquetación (anchos, altos, tramas ocultas, colores) ni el orden de sus claves; un
+     tablero guardado en la forma de antes (nodos por acto y celda) pasa antes por el modelo de Tramas, que le da columnas */
+  function contenidoEsquema(datos) {
+    let x = datos || {};
+    const raiz = typeof window !== 'undefined' ? window : globalThis, Tm = raiz.Tramas;
+    if (Tm && Tm.Modelo && (!Array.isArray(x.puntos) || x.puntos.some(p => p && p.col === undefined))) { try { x = new Tm.Modelo(clonar(x)).datos; } catch (_) {} }
+    const lista = v => (Array.isArray(v) ? v.filter(Boolean) : []), porId = (a, b) => (String(a[0]) < String(b[0]) ? -1 : String(a[0]) > String(b[0]) ? 1 : 0);
+    const txt = v => String(v ?? '');
+    return {
+      tramas: lista(x.lineas).map(l => [l.id, txt(l.nombre), l.tipo || null, !!l.cortada]),
+      actos: lista(x.actos).map(a => [a.id, txt(a.nombre), +a.desde || 0, +a.celdas || 0]).sort((a, b) => a[2] - b[2]),
+      nodos: lista(x.puntos).map(p => [p.id, txt(p.titulo), txt(p.descripcion ?? p.nota), +p.col || 0, p.lineaId || null, !!p.cortado]).sort(porId),
+      saltos: lista(x.saltos).map(q => [q.id, q.deId, q.aId, q.tipo || null]).sort(porId),
+      notas: lista(x.notas).map(q => [q.id, txt(q.texto), q.deId || null, q.aId || null, !!q.abierta, q.abierta ? q.lineaId || null : null, q.abierta ? +q.col || 0 : null]).sort(porId)
+    };
+  }
+  /* «su biblioteca «X»» / «el esquema «X»» / «el personaje «X»»: lo que se llevó una nota a la papelera */
+  const nombrePieza = x => (x.tipo === 'esquema' ? 'el esquema «' + x.esquema.nombre + '»' : x.tipo === 'personaje' ? 'el personaje «' + x.personaje.nombre + '»'
+    : x.tipo === 'sub' ? 'su biblioteca «' + x.sub.nombre + '»' : '«' + nombreEnPapelera(x) + '»');
+
+  function sanearLienzo(l, id, nombre) {
+    if (!l || typeof l !== 'object') return null;
+    const L = Lz(), x = L ? L.sanear(l) : { nodos: Array.isArray(l.nodos) ? clonar(l.nodos) : [], cables: Array.isArray(l.cables) ? clonar(l.cables) : [] };
+    const creado = +l.creado || 0;
+    return Object.assign({ id, nombre: texto(nombre, 'Lienzo'), creado, modificado: +l.modificado || creado }, tono(l),
+      { nodos: x.nodos, cables: x.cables }, x.vista ? { vista: x.vista } : {});
   }
 
   /* Sanea lo que venga guardado: ids repetidos y huérfanos se descartan, una nota cuya etiqueta ya no
@@ -225,6 +316,12 @@
         const s = sanearEsquema(e, eid, e.nombre || ('Esquema' + (i ? ' ' + (i + 1) : ''))); if (!s) return;
         ids.add(eid); esquemas.push(Object.assign(s, enCarpeta(e), tono(e)));
       });
+      const lienzos = [];                                      // los lienzos de nodos (1.1.58): la clave solo existe si hay alguno
+      (Array.isArray(c.lienzos) ? c.lienzos : []).forEach(l => {
+        const lid = l && String(l.id || ''); if (!lid || ids.has(lid)) return;
+        const x = sanearLienzo(l, lid, l.nombre); if (!x) return;
+        ids.add(lid); lienzos.push(Object.assign(x, enCarpeta(l)));
+      });
       const subs = [];
       (Array.isArray(c.subs) ? c.subs : []).forEach(s => {
         const sid = s && String(s.id || ''); if (!sid || ids.has(sid)) return; ids.add(sid);
@@ -249,10 +346,26 @@
          molestan (al aplicarlo se ignoran) y no se podan: así lo abierto es idéntico a lo guardado */
       const ordenArbol = Array.isArray(c.ordenArbol) ? c.ordenArbol.filter(x => typeof x === 'string' && x) : [];
       /* grupos del árbol (Leo, 16-09-2026): juntan piezas y otros grupos, sin más sentido que agruparlos */
-      const dentro = new Set([...esquemas.map(e => e.id), ...subs.filter(x => !x.guionEid).map(x => x.id)]);
+      const dentro = new Set([...esquemas.map(e => e.id), ...subs.filter(x => !x.guionEid).map(x => x.id), ...lienzos.map(l => l.id)]);
       const grupos = sanearGrupos(c.grupos, dentro, carpetas.map(k => k.id), ids);
+      /* el de una especial (las plantillas, las fórmulas): siempre oculto, y con su biblioteca (un archivo que la haya perdido la
+         recupera, vacía); `especial` solo vale en el contenedor de su id */
+      const especial = ESPECIALES[c.especial] && ESPECIALES[c.especial].id === id ? c.especial : null, E = especial && ESPECIALES[especial];
+      if (E && !subs.some(x => x.id === E.bib) && !ids.has(E.bib)) {
+        ids.add(E.bib); subDe.set(E.bib, id);
+        subs.unshift({ id: E.bib, nombre: E.nombre, creado, modificado: creado });
+      }
       d.contenedores.push({ id, nombre: texto(c.nombre, 'Contenedor'), fijado: !!c.fijado, plegado: !!c.plegado, creado, modificado: +c.modificado || creado, carpetas, esquemas, subs,
-                            ...(grupos.length ? { grupos } : {}), ...(ordenArbol.length ? { ordenArbol } : {}), ...(c.oculto ? { oculto: true } : {}) });
+                            ...(lienzos.length ? { lienzos } : {}), ...(grupos.length ? { grupos } : {}), ...(ordenArbol.length ? { ordenArbol } : {}), ...(c.oculto || especial ? { oculto: true } : {}),
+                            ...(especial ? { especial } : {}) });
+    });
+    /* notas de una especial sin su contenedor (no debería pasar): se rehace, para no perderlas */
+    CLASES_ESPECIALES.forEach(k => {
+      const E = ESPECIALES[k];
+      if (d.contenedores.some(c => c.especial === k) || ids.has(E.id) || ids.has(E.bib)) return;
+      if (!(Array.isArray(src.notas) ? src.notas : []).some(n => n && n.subId === E.bib)) return;
+      ids.add(E.id); ids.add(E.bib); subDe.set(E.bib, E.id);
+      d.contenedores.push(contenedorEspecial(k, 0));
     });
     /* lo antiguo colgaba del contenedor: un «Documentos» por contenedor que lo necesite */
     const conts = new Map(d.contenedores.map(c => [c.id, c]));
@@ -277,7 +390,8 @@
     const nota = (n, creado, subId) => ({ id: String(n.id), subId, etiquetaId: null,
       titulo: texto(n.titulo, 'Sin título'), html: typeof n.html === 'string' ? n.html : '',
       characters: n.characters && typeof n.characters === 'object' ? clonar(n.characters) : {}, creado, modificado: +n.modificado || creado,
-      ...(TONOS.includes(n.color) ? { color: n.color } : {}), ...guionDe(n.guion), ...versionesDe(n.versiones, ids) });
+      ...(TONOS.includes(n.color) ? { color: n.color } : {}), ...guionDe(n.guion), ...versionesDe(n.versiones, ids),
+      ...(fragmentoDe(n.fragmento) ? { fragmento: fragmentoDe(n.fragmento) } : {}) });
     (Array.isArray(src.notas) ? src.notas : []).forEach(n => {
       const id = n && String(n.id || ''); if (!id || ids.has(id)) return;
       const subId = subPara(n); if (!subId) return; ids.add(id);
@@ -307,6 +421,11 @@
         return Object.assign(base, { esquema: Object.assign(e, tono(x.esquema)) }, g ? { guiones: g } : {});
       }
       if (x.tipo === 'sub') { const sid = x.sub && String(x.sub.id || ''); if (!sid || ids.has(sid)) return null; ids.add(sid); return conBib(base, x); }
+      if (x.tipo === 'lienzo') {                               // un lienzo de nodos (1.1.58), sin su carpeta (va en la pieza)
+        const lid = x.lienzo && String(x.lienzo.id || ''); if (!lid || ids.has(lid)) return null;
+        const l = sanearLienzo(x.lienzo, lid, x.lienzo.nombre); if (!l) return null;
+        ids.add(lid); return Object.assign(base, { lienzo: l });
+      }
       if (x.tipo === 'personaje') {
         const pj = x.personaje, pid = pj && String(pj.id || ''); if (!pid || ids.has(pid)) return null; ids.add(pid);
         Object.assign(base, { personaje: { id: pid, nombre: texto(pj.nombre, 'Personaje'), color: color(pj.color), ...(pj.carpetaId ? { carpetaId: String(pj.carpetaId) } : {}) },
@@ -334,7 +453,7 @@
       const k = r && clavePersonaje(r.name); if (!k || claves.has(k)) return;
       claves.add(k); d.elenco.push({ id: 'pj:' + k, nombre: sinSufijo(r.name), color: color(r.color), auto: true });
     });
-    d.notas.forEach(n => deRegistro(n.characters));
+    d.notas.forEach(n => { if (!especialDeBib(n.subId)) deRegistro(n.characters); });   // las plantillas y las fórmulas no cuentan
     d.contenedores.forEach(c => c.esquemas.forEach(e => Object.values(e.notas).forEach(n => deRegistro(n.characters))));
     const gruposElenco = sanearGrupos(src.gruposElenco, new Set(d.elenco.map(p => p.id)), d.carpetasElenco.map(k => k.id), ids);
     if (gruposElenco.length) d.gruposElenco = gruposElenco;
@@ -344,6 +463,7 @@
     agruparEnlaces(d);
     mudarEsquemasPersonaje(d);
     versionarGuiones(d);
+    podarConexiones(d);
     /* **el historial de Claude** (js/claquedraw/historial.js, 1.1.50): viaja con el proyecto; solo se guarda si lo hay (así un
        proyecto sin cambios de Claude se abre idéntico a como se guardó) */
     if (Array.isArray(src.historialClaude) && src.historialClaude.length) {
@@ -357,7 +477,27 @@
       const antes = (Array.isArray(en.antes) ? en.antes : []).filter((x, i, l) => typeof x === 'string' && x.trim() && x !== en.proyecto && l.indexOf(x) === i).slice(0, 20);
       d.enlace = Object.assign({ proyecto: en.proyecto.trim() }, antes.length ? { antes } : {});
     }
+    /* la memoria de estilo del proyecto (1.1.60, js/claquedraw/memoria.js): solo si hay alguna regla */
+    if (Array.isArray(src.memoriaEstilo) && src.memoriaEstilo.length) {
+      const me = Me() ? Me().sanear(src.memoriaEstilo) : clonar(src.memoriaEstilo);
+      if (me.length) d.memoriaEstilo = me;
+    }
     return d;
+  }
+
+  /* **Conexiones esquema ↔ biblioteca** (1.1.57, Leo: «tenía la posibilidad de conectar esquemas con bibliotecas, varios a la vez»):
+     de muchos a muchos y aparte de los grupos del árbol (que siguen siendo solo orden). Viven en el esquema, `esquema.bibliotecas =
+     [subId…]`, y valen las bibliotecas normales: ni la oculta de los guiones de un esquema, ni la de las plantillas, ni la de un
+     personaje. Una biblioteca en la papelera **sigue conectada** (al restaurarla vuelve con su conexión; mientras, no se ve); lo que
+     ya no está en ningún sitio se poda aquí. También las de los esquemas tirados (vuelven con ellos). */
+  const esConectable = (c, s) => !!s && !s.guionEid && !s.lineaId && !especialDeBib(s.id) && c.id !== ID_PERSONAJES && !c.especial;
+  function podarConexiones(d) {
+    const vivas = new Set();
+    d.contenedores.forEach(c => c.subs.forEach(s => { if (esConectable(c, s)) vivas.add(s.id); }));
+    d.papelera.forEach(x => { if (x.tipo === 'sub' && x.sub) vivas.add(x.sub.id); });
+    const podar = e => { if (!e.bibliotecas) return; e.bibliotecas = e.bibliotecas.filter(id => vivas.has(id)); if (!e.bibliotecas.length) delete e.bibliotecas; };
+    d.contenedores.forEach(c => c.esquemas.forEach(podar));
+    d.papelera.forEach(x => { if (x.tipo === 'esquema' && x.esquema) podar(x.esquema); });
   }
 
   /* Hasta la 1.0.60 un esquema podía tener varios documentos en su biblioteca de guiones (la pestaña GUIONES, que Leo
@@ -420,7 +560,7 @@
       });
       /* lo de un grupo vive donde él: manda la carpeta de la primera pieza */
       (c.grupos || []).forEach(g => {
-        const pieza = x => c.esquemas.find(e => e.id === x) || c.subs.find(s => s.id === x);
+        const pieza = x => c.esquemas.find(e => e.id === x) || c.subs.find(s => s.id === x) || (c.lienzos || []).find(l => l.id === x);
         const k = g.carpetaId || (pieza(g.items[0]) || {}).carpetaId || null;
         if (k) g.carpetaId = k; else delete g.carpetaId;
         g.items.forEach(x => { const p = pieza(x); if (!p) return; if (k) p.carpetaId = k; else delete p.carpetaId; });
@@ -482,7 +622,7 @@
     papelera() { return this.datos.papelera.slice(); }
     enPapelera(id) { return this.datos.papelera.find(x => x.nota && x.nota.id === id) || null; }
     /* un esquema, una biblioteca o un personaje tirados enteros */
-    piezaEnPapelera(id) { return this.datos.papelera.find(x => (x.tipo === 'esquema' && x.esquema.id === id) || (x.tipo === 'sub' && x.sub.id === id) || (x.tipo === 'personaje' && x.personaje.id === id)) || null; }
+    piezaEnPapelera(id) { return this.datos.papelera.find(x => (x.tipo === 'esquema' && x.esquema.id === id) || (x.tipo === 'sub' && x.sub.id === id) || (x.tipo === 'personaje' && x.personaje.id === id) || (x.tipo === 'lienzo' && x.lienzo.id === id)) || null; }
     /* Un subcontenedor con su contenedor, o null. */
     sub(id) {
       for (const c of this.datos.contenedores) { const s = c.subs.find(x => x.id === id); if (s) return { contenedor: c, sub: s }; }
@@ -507,7 +647,8 @@
        puede ser la oculta de los guiones de un esquema (ahí se abría una biblioteca invisible y una nota restaurada se
        quedaba escondida). */
     primeraBiblioteca(cid) {
-      if (!this.contenedor(cid)) return null;
+      const c = this.contenedor(cid);
+      if (!c || c.especial) return null;                        // la de las plantillas (o las fórmulas) no es «la primera» de nada
       return this._bibliotecasArbol(cid)[0] || this.subsDe(cid)[0] || null;
     }
     /* Todas las bibliotecas a la vista, [{ contenedor, sub }], en el orden del menú: los contenedores fijados primero y,
@@ -553,6 +694,7 @@
       if ((this.datos.gruposElenco || []).some(g => g.id === id)) return ELENCO;
       const e = this.esquema(id); if (e) return e.contenedor.id;
       const s = this.sub(id); if (s && !s.sub.guionEid) return s.contenedor.id;
+      const l = this.lienzo(id); if (l) return l.contenedor.id;
       for (const c of this.datos.contenedores) if ((c.grupos || []).some(g => g.id === id)) return c.id;
       return null;
     }
@@ -585,9 +727,11 @@
     _piezaDe(c, id) {
       const e = c.esquemas.find(x => x.id === id); if (e) return { tipo: 'esquema', obj: e };
       const s = c.subs.find(x => x.id === id && !x.guionEid); if (s) return { tipo: 'sub', obj: s };
+      const l = (c.lienzos || []).find(x => x.id === id); if (l) return { tipo: 'lienzo', obj: l };
       return null;
     }
     crearGrupo(ambito, ids, nombre, col, op) {
+      if (esDeEspecial(ambito) || (ids || []).some(x => esDeEspecial(String(x)))) return noEspecial('agrupa', ambito, ...(ids || []));
       const gs = this._gruposMut(ambito);
       const todos = [...new Set((ids || []).map(String))];
       const piezas = todos.filter(x => this._pieza(ambito, x));
@@ -626,6 +770,7 @@
     aGrupo(gid, id) {
       const r = this.grupo(gid); if (!r) return no('Ese grupo ya no existe');
       if (id === gid) return no('Un grupo no va dentro de sí mismo');
+      if (esDeEspecial(id)) return noEspecial('agrupa', id);
       const esGrupo = this._grupos(r.ambito).some(g => g.id === id);
       if (!esGrupo && !this._pieza(r.ambito, id)) return no('Eso no está aquí');
       if (esGrupo) {
@@ -682,12 +827,96 @@
     }
     /* El «enlace» de antes, ahora deducido del grupo: el primer esquema y la primera biblioteca que lo comparten.
        Lo usan «Ver biblioteca», «Ver esquema» y el chip del acto en la cabecera del editor. */
+    /* **Las conexiones mandan** (1.1.57): un esquema conectado va a su primera biblioteca conectada, y una biblioteca, a su primer
+       esquema conectado (`conectado: true`); sin conexiones, el grupo como antes. */
     enlace(id) {
+      const bs = this.bibliotecasDe(id);
+      if (bs.length) { const e = this.esquema(id); return { contenedor: e.contenedor, esquema: e.esquema, sub: bs[0].sub, grupo: null, conectado: true }; }
+      const es = this.esquemasConectados(id);
+      if (es.length) { const s = this.sub(id); return { contenedor: s.contenedor, esquema: es[0].esquema, sub: s.sub, grupo: null, conectado: true }; }
       const r = this.grupoDe(id); if (!r) return null;
       const esquema = r.contenedor.esquemas.find(e => r.grupo.items.includes(e.id));
       const sub = r.contenedor.subs.find(x => r.grupo.items.includes(x.id));
       return esquema && sub ? { contenedor: r.contenedor, esquema, sub, grupo: r.grupo } : null;
     }
+    /* ---------- conexiones esquema ↔ biblioteca (1.1.57) ----------
+       De muchos a muchos, aparte de los grupos: dicen qué bibliotecas trabajan con un esquema (Claude deja ahí los fragmentos del
+       guion, un segmento por acto o secuencia y una nota por fragmento). Se guardan en el esquema (`bibliotecas`). */
+    /* ¿se puede conectar esta biblioteca? una normal: ni la de los guiones de un esquema, ni la de las plantillas, ni la de un personaje */
+    conectable(subId) { const r = this.sub(subId); return !!r && esConectable(r.contenedor, r.sub); }
+    /* Las bibliotecas conectadas a un esquema, [{ contenedor, sub }] en el orden en que se conectaron (las de la papelera no salen). */
+    bibliotecasDe(eid) {
+      const r = this.esquema(eid); if (!r || !r.esquema.bibliotecas) return [];
+      return r.esquema.bibliotecas.map(id => this.sub(id)).filter(Boolean);
+    }
+    /* Los esquemas conectados a una biblioteca, [{ contenedor, esquema }] en el orden del proyecto. */
+    esquemasConectados(subId) {
+      const res = [];
+      this.datos.contenedores.forEach(c => c.esquemas.forEach(e => { if ((e.bibliotecas || []).includes(subId)) res.push({ contenedor: c, esquema: e }); }));
+      return res;
+    }
+    conectado(eid, subId) { const r = this.esquema(eid); return !!(r && (r.esquema.bibliotecas || []).includes(subId)); }
+    /* `op.pos`: su sitio en la lista del esquema (para el «Deshacer» de desconectar); sin él, al final */
+    conectar(eid, subId, op) {
+      const r = this.esquema(eid); if (!r) return no('Ese esquema ya no existe');
+      const b = this.sub(subId); if (!b) return no('Esa biblioteca ya no existe');
+      if (!esConectable(b.contenedor, b.sub)) return no(especialDeBib(b.sub.id) ? 'La biblioteca de ' + ESPECIALES[especialDeBib(b.sub.id)].las + ' no se conecta con esquemas' : 'Esa biblioteca no se conecta con esquemas');
+      if ((r.esquema.bibliotecas || []).includes(subId)) return si({ esquema: r.esquema, sub: b.sub, cambio: false, aviso: '«' + r.esquema.nombre + '» ya estaba conectado con «' + b.sub.nombre + '»' });
+      const l = r.esquema.bibliotecas = r.esquema.bibliotecas || [], pos = op && Number.isInteger(op.pos) ? Math.max(0, Math.min(l.length, op.pos)) : l.length;
+      l.splice(pos, 0, subId);
+      this._tocar(r.contenedor);
+      return si({ esquema: r.esquema, sub: b.sub, cambio: true, aviso: '«' + r.esquema.nombre + '» conectado con la biblioteca «' + b.sub.nombre + '»' });
+    }
+    desconectar(eid, subId) {
+      const r = this.esquema(eid); if (!r) return no('Ese esquema ya no existe');
+      const l = r.esquema.bibliotecas || [];
+      if (!l.includes(subId)) return si({ esquema: r.esquema, cambio: false, aviso: 'No estaban conectados' });
+      const pos = l.indexOf(subId);
+      r.esquema.bibliotecas = l.filter(x => x !== subId);
+      if (!r.esquema.bibliotecas.length) delete r.esquema.bibliotecas;
+      this._tocar(r.contenedor);
+      const b = this.sub(subId) || (this.piezaEnPapelera(subId) || {});
+      return si({ esquema: r.esquema, cambio: true, pos, aviso: '«' + r.esquema.nombre + '» ya no está conectado con «' + ((b.sub || {}).nombre || 'la biblioteca') + '»' });
+    }
+    /* Quita de todos los esquemas (vivos y tirados) las conexiones a lo que ya no está en ningún sitio. */
+    _podarConexiones() { podarConexiones(this.datos); }
+
+    /* ---------- fragmentos (1.1.57): notas que dicen de qué tramo de un esquema salen ---------- */
+    /* Marca una nota como fragmento de un esquema (o se la quita, con null). `f = { eid, nodos, segundos, orden, bloques }`. */
+    fijarFragmento(id, f) {
+      const n = this.nota(id); if (!n) return no('Esa nota ya no existe');
+      if (especialDeBib(n.subId) || this.esGuiones(n.subId)) return no('Esa nota no puede ser un fragmento');
+      if (f === null || f === undefined) {
+        if (!n.fragmento) return si({ nota: n, cambio: false });
+        delete n.fragmento; this._tocarSub(n.subId);
+        return si({ nota: n, cambio: true });
+      }
+      const x = fragmentoDe(f); if (!x) return no('Un fragmento necesita su esquema');
+      if (!this.esquema(x.eid) && !this.piezaEnPapelera(x.eid)) return no('Ese esquema no existe');
+      if (JSON.stringify(n.fragmento || null) === JSON.stringify(x)) return si({ nota: n, cambio: false });
+      n.fragmento = x; this._tocarSub(n.subId);
+      return si({ nota: n, cambio: true });
+    }
+    /* Las notas que son fragmentos de un esquema (sin la papelera), por su puesto (`orden`) y, a igualdad, por su sitio. */
+    fragmentosDe(eid) {
+      const ns = this.notasNormales().filter(n => n.fragmento && n.fragmento.eid === eid);
+      return ns.map((n, i) => [n, i]).sort((a, b) => (a[0].fragmento.orden || 1e9) - (b[0].fragmento.orden || 1e9) || a[1] - b[1]).map(p => p[0]);
+    }
+    /* Cómo está un fragmento: su esquema (o null si ya no está; `enPapelera` si está tirado), sus nodos con su título y su columna
+       (desde 0), los que ya no están, y si se quedó **huérfano** (sin esquema, o con nodos y ninguno vivo). null si no es fragmento. */
+    estadoFragmento(id) {
+      const n = typeof id === 'string' ? this.nota(id) : id; if (!n || !n.fragmento) return null;
+      const f = n.fragmento, r = this.esquema(f.eid), tirado = !r && this.piezaEnPapelera(f.eid);
+      const datos = r ? r.esquema.datos : tirado ? tirado.esquema.datos : null;
+      const puntos = new Map(((datos && datos.puntos) || []).map(p => [p.id, p]));
+      const colDe = p => Math.max(0, Math.round(+p.col || 0));
+      const nodos = f.nodos.filter(x => puntos.has(x)).map(x => { const p = puntos.get(x); return { id: x, titulo: p.titulo || '', lineaId: p.lineaId, col: colDe(p) }; });
+      const perdidos = f.nodos.filter(x => !puntos.has(x));
+      return { eid: f.eid, esquema: r ? r.esquema : null, contenedor: r ? r.contenedor : null, enPapelera: !!tirado, nombre: r ? r.esquema.nombre : tirado ? tirado.esquema.nombre : '',
+               nodos, perdidos, segundos: f.segundos || 0, orden: f.orden || null, bloques: f.bloques || null,
+               huerfano: !r || (f.nodos.length > 0 && !nodos.length) };
+    }
+
     /* ---------- secciones de una biblioteca (Leo, 16-09-2026: en lugar de «Guiones generados», las que se quieran) ----------
        Cada sección agrupa segmentos; la de partida no se guarda (`seccionId` vacío) y es la que lleva la bandeja. */
     seccionesDe(subId) { const r = this.sub(subId); return r && Array.isArray(r.sub.secciones) ? r.sub.secciones.slice() : []; }
@@ -755,9 +984,10 @@
       const o = opciones || {}, q = plano(o.texto);
       const cmp = { az: (a, b) => comparar(a.nombre, b.nombre), za: (a, b) => comparar(b.nombre, a.nombre), modificado: (a, b) => b.modificado - a.modificado }[o.orden];
       const pasa = c => !q || plano(c.nombre).includes(q) || c.subs.some(s => plano(s.nombre).includes(q)) || this.notasContenedor(c.id).some(n => plano(n.titulo).includes(q))
-        || c.esquemas.some(e => plano(e.nombre).includes(q) || Object.values(e.notas).some(n => plano(n.title).includes(q)));
+        || c.esquemas.some(e => plano(e.nombre).includes(q) || Object.values(e.notas).some(n => plano(n.title).includes(q)))
+        || (c.lienzos || []).some(l => plano(l.nombre).includes(q));
       const preparar = xs => { const f = xs.filter(pasa); return cmp ? f.sort(cmp) : f; };
-      const visibles = this.datos.contenedores.filter(c => !c.oculto);   // el de Personajes no sale en el árbol
+      const visibles = this.datos.contenedores.filter(c => !c.oculto && !c.especial);   // ni Personajes ni las especiales (plantillas, fórmulas) salen en el árbol
       return { fijados: preparar(visibles.filter(c => c.fijado)), sueltos: preparar(visibles.filter(c => !c.fijado)),
                total: visibles.length };
     }
@@ -777,7 +1007,7 @@
     /* Estrena una biblioteca («Biblioteca»), salvo con `{ vacio: true }`. */
     crearContenedor(nombre, opciones) {
       const t = this.ahora();
-      const c = { id: this.idNuevo(), nombre: this._libre(texto(nombre, 'Contenedor'), this.datos.contenedores.map(x => x.nombre)),
+      const c = { id: this.idNuevo(), nombre: this._libre(texto(nombre, 'Contenedor'), this.datos.contenedores.filter(x => !x.especial).map(x => x.nombre)),
                   fijado: false, plegado: false, creado: t, modificado: t, carpetas: [], esquemas: [], subs: [] };
       this.datos.contenedores.push(c);
       if (!(opciones && opciones.vacio)) c.subs.push({ id: this.idNuevo(), nombre: NOMBRE_SUB, creado: t, modificado: t });
@@ -798,20 +1028,23 @@
        proyecto, la cabecera no cambiaba porque su contenedor nunca se llamó exactamente igual). */
     contenedoresLlamados(nombres) {
       const buscados = new Set([].concat(nombres || []).map(sinSeparadores).filter(Boolean));
-      return this.datos.contenedores.filter(c => !c.oculto && buscados.has(sinSeparadores(c.nombre)));
+      return this.datos.contenedores.filter(c => !c.oculto && !c.especial && buscados.has(sinSeparadores(c.nombre)));
     }
     renombrarContenedor(id, nombre) {
       const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe');
+      if (c.especial) return noEspecial('renombra', c.id);
       const n = texto(nombre, ''); if (!n) return no('El nombre no puede quedar vacío');
-      if (this.datos.contenedores.some(x => x !== c && plano(x.nombre) === plano(n))) return no('Ya hay un contenedor con ese nombre');
+      if (this.datos.contenedores.some(x => x !== c && !x.especial && plano(x.nombre) === plano(n))) return no('Ya hay un contenedor con ese nombre');
       c.nombre = n; this._tocar(c);
       return si({ contenedor: c });
     }
-    fijarContenedor(id, fijado) { const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe'); c.fijado = !!fijado; return si({ contenedor: c }); }
+    fijarContenedor(id, fijado) { const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe'); if (c.especial) return noEspecial('fija', c.id); c.fijado = !!fijado; return si({ contenedor: c }); }
     plegarContenedor(id, plegado) { const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe'); c.plegado = plegado === undefined ? !c.plegado : !!plegado; return si({ contenedor: c }); }
     moverContenedor(id, salto) {
       const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe');
-      const todos = this.datos.contenedores, grupo = todos.filter(x => x.fijado === c.fijado);
+      if (c.especial) return noEspecial('mueve', c.id);
+      /* sus vecinos son los que se ven: con uno oculto (Personajes, las plantillas) se cambiaba de sitio sin que se notara */
+      const todos = this.datos.contenedores, grupo = todos.filter(x => x.fijado === c.fijado && (x === c || (!x.oculto && !x.especial)));
       const i = grupo.indexOf(c), j = i + (salto < 0 ? -1 : 1);
       if (j < 0 || j >= grupo.length) return no('Ya está en el extremo');
       const a = todos.indexOf(c), b = todos.indexOf(grupo[j]); todos[a] = grupo[j]; todos[b] = c;
@@ -821,7 +1054,11 @@
        final de su grupo. */
     colocarContenedor(id, antesDe) {
       const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe');
-      const ref = antesDe && antesDe !== id ? this.contenedor(antesDe) : null;
+      if (c.especial) return noEspecial('mueve', c.id);
+      /* delante de uno oculto (Personajes, las plantillas) no se ve nada: cuenta como «al final» (el gestor, al soltar detrás
+         del último del árbol, podía dar el siguiente de la lista, que era uno de esos) */
+      const r0 = antesDe && antesDe !== id ? this.contenedor(antesDe) : null;
+      const ref = r0 && !r0.oculto && !r0.especial ? r0 : null;
       const resto = this.datos.contenedores.filter(x => x !== c);
       if (ref) { c.fijado = ref.fijado; resto.splice(resto.indexOf(ref), 0, c); }
       else { const grupo = resto.filter(x => x.fijado === c.fijado); resto.splice(grupo.length ? resto.indexOf(grupo[grupo.length - 1]) + 1 : resto.length, 0, c); }
@@ -832,16 +1069,20 @@
     /* Sus esquemas y sus bibliotecas van a la papelera, cada uno con lo suyo (se restauran en un contenedor con su nombre). */
     eliminarContenedor(id) {
       const c = this.contenedor(id); if (!c) return no('Ese contenedor ya no existe');
-      const notas = this.notasContenedor(id).length, esquemas = c.esquemas.length;
+      if (c.especial) return noEspecial('elimina', c.id);
+      const notas = this.notasContenedor(id).length, esquemas = c.esquemas.length, lienzos = (c.lienzos || []).length;
       const bibs = c.subs.filter(s => !s.guionEid);
       c.esquemas.slice().forEach(e => this.eliminarEsquema(e.id));
       bibs.forEach(s => this.eliminarSub(s.id));
+      (c.lienzos || []).slice().forEach(l => this.eliminarLienzo(l.id));
       const subs = new Set(c.subs.map(s => s.id));
       this.datos.contenedores = this.datos.contenedores.filter(x => x !== c);
       this.datos.etiquetas = this.datos.etiquetas.filter(e => !subs.has(e.subId));
       this.datos.notas = this.datos.notas.filter(n => !subs.has(n.subId));
-      const n = esquemas + bibs.length;
-      return si({ contenedor: c, notas, esquemas, aviso: '«' + c.nombre + '» eliminado' + (n ? ' · ' + (esquemas ? esquemas + (esquemas === 1 ? ' esquema' : ' esquemas') : '') + (esquemas && bibs.length ? ' y ' : '') + (bibs.length ? bibs.length + (bibs.length === 1 ? ' biblioteca' : ' bibliotecas') : '') + ' a la papelera' : '') });
+      const partes = [[esquemas, ' esquema', ' esquemas'], [bibs.length, ' biblioteca', ' bibliotecas'], [lienzos, ' lienzo', ' lienzos']]
+        .filter(x => x[0]).map(x => x[0] + (x[0] === 1 ? x[1] : x[2]));
+      const lista = partes.length > 1 ? partes.slice(0, -1).join(', ') + ' y ' + partes[partes.length - 1] : partes.join('');
+      return si({ contenedor: c, notas, esquemas, lienzos, aviso: '«' + c.nombre + '» eliminado' + (lista ? ' · ' + lista + ' a la papelera' : '') });
     }
 
     /* ---------- carpetas ---------- */
@@ -866,7 +1107,7 @@
       const r = this.carpeta(id); if (!r) return 0;
       const set = this._descendientes(r.ambito, id), dentro = x => x.carpetaId && set.has(x.carpetaId);
       if (!r.contenedor) return this.datos.elenco.filter(dentro).length;
-      return r.contenedor.esquemas.filter(dentro).length + r.contenedor.subs.filter(x => dentro(x) && !x.guionEid).length;
+      return r.contenedor.esquemas.filter(dentro).length + r.contenedor.subs.filter(x => dentro(x) && !x.guionEid).length + (r.contenedor.lienzos || []).filter(dentro).length;
     }
     /* Pone un esquema o una biblioteca en una carpeta de su contenedor (null: la raíz); si está en un grupo, sus
        compañeras van con él (un grupo vive en un solo nivel). */
@@ -886,6 +1127,7 @@
     crearCarpeta(ambito, nombre, col, padreId) {
       const c = ambito === ELENCO ? null : this.contenedor(ambito);   // en Personajes las carpetas vuelven (Leo, 16-09-2026)
       if (ambito !== ELENCO && !c) return no('Ese contenedor ya no existe');
+      if (c && c.especial) return no('En ' + ESPECIALES[c.especial].las + ' no hay carpetas');
       const lista = this.carpetasDe(ambito);
       if (padreId && !lista.some(k => k.id === padreId)) return no('Esa carpeta ya no existe');
       const k = { id: this.idNuevo(), nombre: this._libre(texto(nombre, 'Carpeta'), this.hijasDe(ambito, padreId).map(x => x.nombre)),
@@ -918,7 +1160,7 @@
       const arriba = r.carpeta.padreId || null;
       const subir = x => { if (x.carpetaId !== id) return; if (arriba) x.carpetaId = arriba; else delete x.carpetaId; };
       this.carpetasDe(r.ambito).forEach(k => { if (k.padreId === id) k.padreId = arriba; });
-      if (r.contenedor) { r.contenedor.esquemas.forEach(subir); r.contenedor.subs.forEach(subir); } else this.datos.elenco.forEach(subir);
+      if (r.contenedor) { r.contenedor.esquemas.forEach(subir); r.contenedor.subs.forEach(subir); (r.contenedor.lienzos || []).forEach(subir); } else this.datos.elenco.forEach(subir);
       if (r.contenedor) r.contenedor.carpetas = r.contenedor.carpetas.filter(k => k !== r.carpeta); else this.datos.carpetasElenco = this.datos.carpetasElenco.filter(k => k !== r.carpeta);
       this._tocar(r.contenedor);
       return si(Object.assign({ aviso: 'Carpeta «' + r.carpeta.nombre + '» eliminada' }, r));
@@ -929,6 +1171,7 @@
     moverACarpeta(tipo, id, carpetaId, cid) {
       const dest = carpetaId ? this.carpeta(carpetaId) : null;
       if (carpetaId && !dest) return no('Esa carpeta ya no existe');
+      if (esDeEspecial(id) || esDeEspecial(cid) || (dest && dest.contenedor && dest.contenedor.especial)) return noEspecial('mete en carpetas', id, cid, dest && dest.contenedor && dest.contenedor.id);
       if (tipo === 'personaje') {
         const p = this.personaje(id); if (!p) return no('Ese personaje ya no existe');
         if (dest && dest.ambito !== ELENCO) return no('Un personaje solo va en una carpeta de Personajes');
@@ -957,7 +1200,7 @@
           if (!destino2) return no('Ese contenedor ya no existe');
           this._piezasGrupo(g.ambito, id).forEach(x => {
             const p = this._piezaDe(origen, x); if (!p) return;
-            if (p.tipo === 'esquema') this.colocarEsquema(x, null, ambito); else this.colocarSub(x, null, ambito);
+            if (p.tipo === 'esquema') this.colocarEsquema(x, null, ambito); else if (p.tipo === 'lienzo') this.colocarLienzo(x, null, ambito); else this.colocarSub(x, null, ambito);
           });
           const mios = this._grupos(g.ambito).filter(x => x.id === id || this._dentroDe(g.ambito, x.id, id));
           if (g.ambito !== ELENCO) { origen.grupos = (origen.grupos || []).filter(x => !mios.includes(x)); if (!origen.grupos.length) delete origen.grupos; }
@@ -970,12 +1213,16 @@
         this._tocarAmbito(ambito);
         return si({ grupo: g2.grupo });
       }
-      const r = tipo === 'esquema' ? this.esquema(id) : this.sub(id); if (!r) return no(tipo === 'esquema' ? 'Ese esquema ya no existe' : 'Esa biblioteca ya no existe');
+      const r = tipo === 'esquema' ? this.esquema(id) : tipo === 'lienzo' ? this.lienzo(id) : this.sub(id);
+      if (!r) return no(tipo === 'esquema' ? 'Ese esquema ya no existe' : tipo === 'lienzo' ? 'Ese lienzo ya no existe' : 'Esa biblioteca ya no existe');
       if (dest && dest.ambito === ELENCO) return no('Ahí solo van personajes');
       const destino = dest ? dest.contenedor : (cid ? this.contenedor(cid) : r.contenedor);
       if (!destino) return no('Ese contenedor ya no existe');
-      if (destino !== r.contenedor) { const x = tipo === 'esquema' ? this.colocarEsquema(id, null, destino.id) : this.colocarSub(id, null, destino.id); if (!x.ok) return x; }
-      const item = tipo === 'esquema' ? this.esquema(id).esquema : this.sub(id).sub;
+      if (destino !== r.contenedor) {
+        const x = tipo === 'esquema' ? this.colocarEsquema(id, null, destino.id) : tipo === 'lienzo' ? this.colocarLienzo(id, null, destino.id) : this.colocarSub(id, null, destino.id);
+        if (!x.ok) return x;
+      }
+      const item = tipo === 'esquema' ? this.esquema(id).esquema : tipo === 'lienzo' ? this.lienzo(id).lienzo : this.sub(id).sub;
       this._enCarpeta(destino, item, carpetaId || null); this._tocar(destino);
       return si({ contenedor: destino });
     }
@@ -988,13 +1235,13 @@
       const gs = this._grupos(ambito).map(g => g.id);
       if (ambito === ELENCO) return [...this.datos.carpetasElenco.map(k => k.id), ...gs, ...this.datos.elenco.map(p => p.id)];
       const c = this.contenedor(ambito); if (!c) return [];
-      return [...c.carpetas.map(k => k.id), ...gs, ...c.esquemas.map(e => e.id), ...c.subs.filter(x => !x.guionEid).map(x => x.id)];
+      return [...c.carpetas.map(k => k.id), ...gs, ...c.esquemas.map(e => e.id), ...c.subs.filter(x => !x.guionEid).map(x => x.id), ...(c.lienzos || []).map(l => l.id)];
     }
     _ordenArbol(ambito) {
       const guardado = ambito === ELENCO ? this.datos.ordenElenco : (this.contenedor(ambito) || {}).ordenArbol;
       return aplicarOrden(this._miembrosArbol(ambito), guardado);
     }
-    /* Lo de un nivel en su orden: [{ tipo: 'carpeta' | 'grupo' | 'esquema' | 'sub' | 'personaje', id, obj }]. Lo que está
+    /* Lo de un nivel en su orden: [{ tipo: 'carpeta' | 'grupo' | 'esquema' | 'sub' | 'lienzo' | 'personaje', id, obj }]. Lo que está
        dentro de un grupo no sale aquí: sale en `nivelGrupo(gid)`. */
     nivelArbol(ambito, carpetaId) {
       const k = carpetaId || null, orden = this._ordenArbol(ambito);
@@ -1006,7 +1253,8 @@
       if (ambito === ELENCO) xs.push(...this.datos.elenco.filter(aqui).map(obj => ({ tipo: 'personaje', id: obj.id, obj })));
       else {
         const c = this.contenedor(ambito); if (!c) return [];
-        xs.push(...c.esquemas.filter(aqui).map(obj => ({ tipo: 'esquema', id: obj.id, obj })), ...c.subs.filter(x => aqui(x) && !x.guionEid).map(obj => ({ tipo: 'sub', id: obj.id, obj })));
+        xs.push(...c.esquemas.filter(aqui).map(obj => ({ tipo: 'esquema', id: obj.id, obj })), ...c.subs.filter(x => aqui(x) && !x.guionEid).map(obj => ({ tipo: 'sub', id: obj.id, obj })),
+          ...(c.lienzos || []).filter(aqui).map(obj => ({ tipo: 'lienzo', id: obj.id, obj })));
       }
       return xs.sort((a, b) => orden.indexOf(a.id) - orden.indexOf(b.id));
     }
@@ -1019,11 +1267,13 @@
       const p = this.personaje(id); if (p) return { tipo: 'personaje', id, ambito: ELENCO, carpetaId: p.carpetaId || null, grupoId: gid };
       const e = this.esquema(id); if (e) return { tipo: 'esquema', id, ambito: e.contenedor.id, carpetaId: e.esquema.carpetaId || null, grupoId: gid };
       const s = this.sub(id); if (s && !s.sub.guionEid) return { tipo: 'sub', id, ambito: s.contenedor.id, carpetaId: s.sub.carpetaId || null, grupoId: gid };
+      const l = this.lienzo(id); if (l) return { tipo: 'lienzo', id, ambito: l.contenedor.id, carpetaId: l.lienzo.carpetaId || null, grupoId: gid };
       return null;
     }
     /* Pone una pieza (o un grupo) del árbol delante (o, con `despues`, detrás) de otra: **va a donde vive esa otra**, o
        sea a su carpeta y a su grupo. Así se mete y se saca de un grupo con solo arrastrar (Leo, 16-09-2026). */
     colocarEnArbol(id, refId, despues) {
+      if (esDeEspecial(id) || esDeEspecial(refId)) return noEspecial('mueve', id, refId);
       const yo = this._piezaArbol(id), ref = this._piezaArbol(refId);
       if (!yo || !ref) return no('Eso ya no existe');
       if (yo.id === ref.id) return si({});
@@ -1065,6 +1315,7 @@
       const dentro = x => x.carpetaId && set.has(x.carpetaId);
       origen.esquemas.filter(dentro).forEach(e => { const k = e.carpetaId; this.colocarEsquema(e.id, null, destino.id); this._enCarpeta(destino, e, k); });
       origen.subs.filter(dentro).forEach(s => { const k = s.carpetaId; if (destino.subs.includes(s)) return; this.colocarSub(s.id, null, destino.id); this._enCarpeta(destino, s, k); });
+      (origen.lienzos || []).filter(dentro).forEach(l => { const k = l.carpetaId; this.colocarLienzo(l.id, null, destino.id); this._enCarpeta(destino, l, k); });
       this._tocar(origen); this._tocar(destino);
       return si({});
     }
@@ -1127,6 +1378,7 @@
     /* ---------- subcontenedores ---------- */
     crearSub(cid, nombre) {
       const c = this.contenedor(cid); if (!c) return no('Ese contenedor ya no existe');
+      if (c.especial) return no(mayus(ESPECIALES[c.especial].las) + ' tienen una sola biblioteca');
       const t = this.ahora();
       const s = { id: this.idNuevo(), nombre: this._libre(texto(nombre, NOMBRE_SUB), c.subs.map(x => x.nombre)), creado: t, modificado: t };
       c.subs.push(s); this._tocar(c);
@@ -1134,6 +1386,7 @@
     }
     renombrarSub(id, nombre) {
       const r = this.sub(id); if (!r) return no('Esa biblioteca ya no existe');
+      if (esDeEspecial(id)) return noEspecial('renombra', id);
       const n = texto(nombre, ''); if (!n) return no('El nombre no puede quedar vacío');
       if (r.contenedor.subs.some(x => x !== r.sub && plano(x.nombre) === plano(n))) return no('Ya hay una biblioteca con ese nombre');
       r.sub.nombre = n; this._tocarSub(id);
@@ -1143,6 +1396,7 @@
        ese contenedor) o al final de `cid` (o del suyo). */
     colocarSub(id, antesDe, cid) {
       const r = this.sub(id); if (!r) return no('Esa biblioteca ya no existe');
+      if (esDeEspecial(id) || esDeEspecial(antesDe) || esDeEspecial(cid)) return noEspecial('mueve', id, antesDe, cid);
       const ref = antesDe && antesDe !== id ? this.sub(antesDe) : null;
       if (antesDe && antesDe !== id && !ref) return no('Esa biblioteca ya no existe');
       const destino = ref ? ref.contenedor : (cid ? this.contenedor(cid) : r.contenedor);
@@ -1163,7 +1417,7 @@
       const g = (origen.grupos || []).find(x => x.items.includes(id)); if (!g) return;
       g.items.filter(x => x !== id).forEach(x => {
         const p = this._piezaDe(origen, x); if (!p) return;
-        this._llevar(origen, destino, p.tipo === 'esquema' ? 'esquemas' : 'subs', p.obj, null);
+        this._llevar(origen, destino, p.tipo === 'esquema' ? 'esquemas' : p.tipo === 'lienzo' ? 'lienzos' : 'subs', p.obj, null);
         if (p.tipo === 'esquema') { const gs = origen.subs.find(y => y.guionEid === x); if (gs) this._llevar(origen, destino, 'subs', gs, null); }
       });
       origen.grupos = (origen.grupos || []).filter(x => x !== g);
@@ -1173,11 +1427,13 @@
     /* Pasa `x` de la lista `clave` de un contenedor a la del otro (delante de `antesDe` o al final),
        renombrándolo si choca con otro de su clase allí. */
     _llevar(origen, destino, clave, x, antesDe) {
-      if (destino !== origen && destino[clave].some(y => y !== x && plano(y.nombre) === plano(x.nombre))) x.nombre = this._libre(x.nombre, destino[clave].filter(y => y !== x).map(y => y.nombre));
-      origen[clave] = origen[clave].filter(y => y !== x);
-      const lista = destino[clave].filter(y => y !== x);
+      const alli = destino[clave] || [];                        // `lienzos` puede no existir
+      if (destino !== origen && alli.some(y => y !== x && plano(y.nombre) === plano(x.nombre))) x.nombre = this._libre(x.nombre, alli.filter(y => y !== x).map(y => y.nombre));
+      origen[clave] = (origen[clave] || []).filter(y => y !== x);
+      const lista = (destino[clave] || []).filter(y => y !== x);
       lista.splice(antesDe ? Math.max(0, lista.indexOf(antesDe)) : lista.length, 0, x);
       destino[clave] = lista;
+      if (clave === 'lienzos' && origen.lienzos && !origen.lienzos.length) delete origen.lienzos;
     }
     /* En la vista de una biblioteca enlazada, qué sección va arriba: la cronología (por defecto) o los segmentos. */
     /* ---------- orden propio de actos y documentos en una biblioteca (cronología, momentos) ---------- */
@@ -1225,6 +1481,7 @@
     /* A la papelera entera, con sus segmentos y sus notas (Leo, 18-09-2026); desde ahí se restaura. */
     eliminarSub(id) {
       const r = this.sub(id); if (!r) return no('Esa biblioteca ya no existe');
+      if (esDeEspecial(id)) return noEspecial('tira: sus ' + ESPECIALES[especialDe(id)].nombre.toLowerCase() + ' sí, una a una', id);
       const g = this.grupoDe(id);
       this.sacarDeGrupo(id);                                     // si estaba en un grupo, sale de él (y vuelve a él al restaurarla)
       const b = this._sacarBiblioteca(r.contenedor, r.sub);
@@ -1266,11 +1523,15 @@
     }
     duplicarSub(id) {
       const r = this.sub(id); if (!r) return no('Esa biblioteca ya no existe');
-      if (r.sub.guionEid || r.sub.lineaId) return no('Esa biblioteca no se puede duplicar');
+      if (r.sub.guionEid || r.sub.lineaId || esDeEspecial(id)) return no('Esa biblioteca no se puede duplicar');
       const c = r.contenedor, t = this.ahora();
       const s = Object.assign(clonar(r.sub), { id: this.idNuevo(), nombre: this._libre(r.sub.nombre + ' (copia)', c.subs.map(x => x.nombre)), creado: t, modificado: t });
       c.subs.splice(c.subs.indexOf(r.sub) + 1, 0, s);
       const notas = this._copiarContenido(id, s);
+      /* las copias no son fragmentos: con la biblioteca conectada a los mismos esquemas, cada fragmento contaría dos veces
+         (`fragmentosDe`, preparar_fragmentos); su texto se queda, la marca no */
+      notas.forEach(n => { delete n.fragmento; });
+      this.esquemasConectados(id).forEach(x => x.esquema.bibliotecas.push(s.id));   // y conectada con los mismos esquemas (1.1.57)
       this.colocarEnArbol(s.id, id, true);                         // detrás del original, en su carpeta y en su grupo
       this._tocar(c);
       return si({ contenedor: c, sub: s, aviso: 'Biblioteca duplicada: «' + s.nombre + '»' + (notas.length ? ' · ' + notas.length + (notas.length === 1 ? ' nota' : ' notas') : '') });
@@ -1302,6 +1563,7 @@
        agrupa, y «Ver biblioteca» sigue saliendo por el grupo). */
     crearEsquema(cid, datos, nombre, notas) {
       const c = this.contenedor(cid); if (!c) return no('Ese contenedor ya no existe');
+      if (c.especial) return no('En ' + ESPECIALES[c.especial].las + ' no van esquemas');
       const e = sanearEsquema({ datos, notas: notas && typeof notas === 'object' ? notas : {} }, this.idNuevo(), this._libre(texto(nombre, 'Esquema'), c.esquemas.map(x => x.nombre)));
       if (!e) return no('Eso no es un esquema de pasos válido');
       c.esquemas.push(e); this._tocar(c);
@@ -1310,8 +1572,9 @@
     /* El color de la etiqueta de un esquema o de una biblioteca (uno de los 16 pares, como los personajes; null: el de
        siempre). Leo, 16-09-2026: «dejame cambiar los colores, igual que lo haces en personajes». */
     colorearHijo(id, col) {
-      const r = this.esquema(id) || this.sub(id); if (!r) return no('Eso ya no existe');
-      const x = r.esquema || r.sub;
+      if (esDeEspecial(id)) return noEspecial('colorea', id);
+      const r = this.esquema(id) || this.sub(id) || this.lienzo(id); if (!r) return no('Eso ya no existe');
+      const x = r.esquema || r.sub || r.lienzo;
       if (col === null || col === undefined || col === '') delete x.color; else x.color = color(col);
       this._tocar(r.contenedor);
       return si({ hijo: x });
@@ -1331,6 +1594,7 @@
       if (antesDe && antesDe !== eid && !ref) return no('Ese esquema ya no existe');
       const destino = ref ? ref.contenedor : (cid ? this.contenedor(cid) : r.contenedor);
       if (!destino) return no('Ese contenedor ya no existe');
+      if (destino.especial) return no('En ' + ESPECIALES[destino.especial].las + ' no van esquemas');
       if (destino !== r.contenedor && destino.esquemas.some(x => plano(x.nombre) === plano(r.esquema.nombre))) r.esquema.nombre = this._libre(r.esquema.nombre, destino.esquemas.map(x => x.nombre));
       r.contenedor.esquemas = r.contenedor.esquemas.filter(x => x !== r.esquema);
       const lista = destino.esquemas.filter(x => x !== r.esquema);
@@ -1399,6 +1663,245 @@
       if (podadas) this._tocar(r.contenedor);
       return si({ podadas });
     }
+
+    /* ---------- lienzos de nodos (1.1.58) ----------
+       Una pieza del árbol como un esquema: vive en un contenedor (`contenedor.lienzos`, que solo existe si hay alguno), con su
+       carpeta, su grupo y su sitio en el orden del árbol, y va a la papelera entera. Sus nodos y cables los maneja C.Lienzo
+       (`modeloLienzo`) y se guardan con `guardarLienzo`. */
+    lienzosDe(cid) { const c = this.contenedor(cid); return c && c.lienzos ? c.lienzos.slice() : []; }
+    lienzo(lid) {
+      for (const c of this.datos.contenedores) { const l = (c.lienzos || []).find(x => x.id === lid); if (l) return { contenedor: c, lienzo: l }; }
+      return null;
+    }
+    /* Todos los lienzos a la vista, [{ contenedor, lienzo }], en el orden del menú (fijados primero y el orden del árbol). */
+    todosLosLienzos() {
+      const L = this.contenedores(), res = [];
+      [...L.fijados, ...L.sueltos].forEach(c => {
+        const ir = xs => xs.forEach(x => {
+          if (x.tipo === 'lienzo') res.push({ contenedor: c, lienzo: x.obj });
+          else if (x.tipo === 'carpeta') ir(this.nivelArbol(c.id, x.id));
+          else if (x.tipo === 'grupo') ir(this.nivelGrupo(x.id));
+        });
+        ir(this.nivelArbol(c.id, null));
+      });
+      return res;
+    }
+    /* `op`: { carpetaId, grupoId, datos } (datos: { nodos, cables } con que nace; si no, vacío). No en los contenedores ocultos
+       (Personajes, las plantillas). */
+    crearLienzo(cid, nombre, op) {
+      const o = op || {}, c = this.contenedor(cid); if (!c) return no('Ese contenedor ya no existe');
+      if (c.oculto || c.especial) return no('Ahí no van lienzos');
+      const t = this.ahora();
+      const l = sanearLienzo(Object.assign({}, o.datos && typeof o.datos === 'object' ? o.datos : {}, { creado: t, modificado: t }), this.idNuevo(),
+        this._libre(texto(nombre, 'Lienzo'), (c.lienzos || []).map(x => x.nombre)));
+      (c.lienzos = c.lienzos || []).push(l);
+      if (o.carpetaId && c.carpetas.some(k => k.id === o.carpetaId)) this._aCarpeta(c.id, l, o.carpetaId);
+      if (o.grupoId) { const g = this.grupo(o.grupoId); if (g && g.ambito === c.id) this.aGrupo(o.grupoId, l.id); }
+      this._tocar(c);
+      return si({ contenedor: c, lienzo: l, aviso: 'Lienzo «' + l.nombre + '» creado en «' + c.nombre + '»' });
+    }
+    renombrarLienzo(lid, nombre) {
+      const r = this.lienzo(lid); if (!r) return no('Ese lienzo ya no existe');
+      const n = texto(nombre, ''); if (!n) return no('El nombre no puede quedar vacío');
+      if (r.contenedor.lienzos.some(x => x !== r.lienzo && plano(x.nombre) === plano(n))) return no('Ya hay un lienzo con ese nombre');
+      if (r.lienzo.nombre !== n) { r.lienzo.nombre = n; r.lienzo.modificado = this.ahora(); this._tocar(r.contenedor); }
+      return si(r);
+    }
+    /* Soltar tras arrastrar: delante de `antesDe` (un lienzo de cualquier contenedor: se va a ese contenedor) o al final de `cid`
+       (o del suyo); se lleva su grupo, como un esquema. */
+    colocarLienzo(lid, antesDe, cid) {
+      const r = this.lienzo(lid); if (!r) return no('Ese lienzo ya no existe');
+      const ref = antesDe && antesDe !== lid ? this.lienzo(antesDe) : null;
+      if (antesDe && antesDe !== lid && !ref) return no('Ese lienzo ya no existe');
+      const destino = ref ? ref.contenedor : (cid ? this.contenedor(cid) : r.contenedor);
+      if (!destino) return no('Ese contenedor ya no existe');
+      if (destino.oculto || destino.especial) return no('Ahí no van lienzos');
+      this._llevar(r.contenedor, destino, 'lienzos', r.lienzo, ref ? ref.lienzo : null);
+      this._tocar(r.contenedor); this._tocar(destino);
+      if (destino !== r.contenedor) this._llevarGrupo(r.contenedor, destino, lid);
+      if (ref) this._enCarpeta(destino, r.lienzo, ref.lienzo.carpetaId); else if (cid || destino !== r.contenedor) this._enCarpeta(destino, r.lienzo, null);
+      return si({ contenedor: destino, lienzo: r.lienzo, movido: destino !== r.contenedor });
+    }
+    /* El modelo de un lienzo (C.Lienzo) sobre una copia de sus datos; lo cambiado se guarda con `guardarLienzo(lid, m.toJSON())`. */
+    modeloLienzo(lid) {
+      const r = this.lienzo(lid), L = Lz(); if (!r || !L) return null;
+      return new L(r.lienzo, { ahora: this.ahora, idNuevo: () => this.idNuevo() });
+    }
+    /* `datos`: { nodos, cables, vista? } (o un C.Lienzo). Solo cuenta si cambió; `vista` solo se toca si viene la clave. */
+    guardarLienzo(lid, datos) {
+      const r = this.lienzo(lid); if (!r) return no('Ese lienzo ya no existe');
+      const d = datos && typeof datos.toJSON === 'function' ? datos.toJSON() : datos;
+      if (!d || typeof d !== 'object' || !Array.isArray(d.nodos)) return no('Eso no es un lienzo válido');
+      const L = Lz(), x = L ? L.sanear(d) : { nodos: clonar(d.nodos), cables: clonar(d.cables || []) }, l = r.lienzo;
+      const conVista = Object.prototype.hasOwnProperty.call(d, 'vista');
+      const ahora = JSON.stringify([l.nodos, l.cables, conVista ? l.vista || null : null]);
+      if (ahora === JSON.stringify([x.nodos, x.cables, conVista ? x.vista || null : null])) return si(Object.assign({ cambio: false }, r));
+      l.nodos = x.nodos; l.cables = x.cables;
+      if (conVista) { if (x.vista) l.vista = x.vista; else delete l.vista; }
+      l.modificado = this.ahora(); this._tocar(r.contenedor);
+      return si(Object.assign({ cambio: true }, r));
+    }
+    /* A la papelera entero, con su carpeta y su grupo aparte (como un esquema). */
+    eliminarLienzo(lid) {
+      const r = this.lienzo(lid); if (!r) return no('Ese lienzo ya no existe');
+      const c = r.contenedor, l = r.lienzo, g = this.grupoDe(lid);
+      this.sacarDeGrupo(lid);
+      c.lienzos = c.lienzos.filter(x => x !== l); if (!c.lienzos.length) delete c.lienzos;
+      this._tocar(c);
+      const guardado = Object.assign({}, l); delete guardado.carpetaId;
+      this.datos.papelera.push(Object.assign({ tipo: 'lienzo', lienzo: guardado, origenId: c.id, origenNombre: c.nombre, eliminadoEn: this.ahora() },
+        l.carpetaId ? { carpetaId: l.carpetaId } : {}, g ? { grupoId: g.grupo.id } : {}));
+      return si(Object.assign({ aviso: 'El lienzo «' + l.nombre + '» va a la papelera' }, r));
+    }
+    /* Con sus nodos, cables, estados y salidas (la copia recuerda lo que hizo el original); lo pendiente deja de estarlo (si no,
+       «ejecuta el lienzo» lo haría dos veces). Detrás del original, en su carpeta y su grupo. */
+    duplicarLienzo(lid) {
+      const r = this.lienzo(lid); if (!r) return no('Ese lienzo ya no existe');
+      const c = r.contenedor, t = this.ahora();
+      const l = Object.assign(clonar(r.lienzo), { id: this.idNuevo(), nombre: this._libre(r.lienzo.nombre + ' (copia)', c.lienzos.map(x => x.nombre)), creado: t, modificado: t });
+      l.nodos.forEach(n => { if (n.estado === 'pendiente') { n.estado = n.salida ? 'hecho' : 'nuevo'; delete n.pedido; if (!n.salida) delete n.hecho; } });
+      c.lienzos.splice(c.lienzos.indexOf(r.lienzo) + 1, 0, l);
+      this.colocarEnArbol(l.id, lid, true);
+      this._tocar(c);
+      return si({ contenedor: c, lienzo: l, aviso: 'Lienzo duplicado: «' + l.nombre + '»' });
+    }
+    /* **Lo que apunta un nodo** (una entrada) o lo que dio (una operación hecha). `nodo`: su id o el nodo mismo.
+       · texto → { tipo: 'texto', md } · imagen → { tipo: 'imagen', src, alt }
+       · nota → { tipo: 'nota', nota, sub, contenedor, etiqueta }
+       · segmento → { tipo: 'segmento', sub, contenedor, etiqueta (null: la bandeja), bandeja, nombre, notas }
+       · biblioteca → { tipo: 'biblioteca', sub, contenedor, secciones, etiquetas, notas }
+       · esquema → { tipo: 'esquema', esquema, contenedor, documento (su guion, o null) }
+       · personaje → { tipo: 'personaje', personaje, biblioteca (su hoja, o null), notas, apariciones, esquemas }
+       · una operación → { tipo, operacion: true, estado, salida, sinSalida? } y, según su salida, lo de 'documento'
+         ({ esquema, contenedor, documento, version? }), 'esquema', 'nota' o 'fragmentos' ({ sub, contenedor, notas, perdidas }).
+       Siempre con `nodo`. Si lo apuntado ya no está: { roto: true, motivo, enPapelera? } (la entrada no se toca). */
+    resolverNodo(lid, nodo) {
+      const r = this.lienzo(lid);
+      if (!r) return { roto: true, motivo: this.piezaEnPapelera(lid) ? 'Ese lienzo está en la papelera' : 'Ese lienzo ya no existe' };
+      const n = nodo && typeof nodo === 'object' ? nodo : r.lienzo.nodos.find(x => x.id === nodo);
+      if (!n) return { roto: true, motivo: 'Ese nodo ya no está en el lienzo' };
+      return this.resolverEntrada(n);
+    }
+    resolverEntrada(n) {
+      const d = n.datos || {}, base = { nodo: n, tipo: n.tipo };
+      const roto = (motivo, enPap) => Object.assign({ roto: true, motivo }, base, enPap ? { enPapelera: true } : {});
+      const bib = subId => {                                    // { contenedor, sub } o el motivo de que no esté
+        if (!subId) return { falta: roto('Sin biblioteca elegida') };
+        const s = this.sub(subId);
+        if (s && !s.sub.guionEid) return s;
+        return { falta: this.piezaEnPapelera(subId) ? roto('Esa biblioteca está en la papelera', true) : roto('Esa biblioteca ya no existe') };
+      };
+      const nota = id => {
+        const x = id && this.nota(id);
+        if (x) { const s = this.sub(x.subId); return { nota: x, sub: s ? s.sub : null, contenedor: s ? s.contenedor : null, etiqueta: x.etiquetaId ? this.etiqueta(x.etiquetaId) : null }; }
+        if (!id) return { falta: roto('Sin nota elegida') };
+        if (this.enPapelera(id)) return { falta: roto('Esa nota está en la papelera', true) };
+        const pz = this.piezaConNota(id);                      // se fue con su biblioteca, su esquema, su personaje o su contenedor
+        if (pz) return { falta: roto('Esa nota está en la papelera, con ' + nombrePieza(pz), true) };
+        return { falta: roto('Esa nota ya no existe') };
+      };
+      const esquema = eid => {
+        const e = eid && this.esquema(eid);
+        if (e) return { esquema: e.esquema, contenedor: e.contenedor, documento: this.documentoEsquema(eid) };
+        return { falta: !eid ? roto('Sin esquema elegido') : this.piezaEnPapelera(eid) ? roto('Ese esquema está en la papelera', true) : roto('Ese esquema ya no existe') };
+      };
+      const hecho = (x, extra) => (x.falta ? x.falta : Object.assign({}, base, extra, x));
+      switch (n.tipo) {
+        case 'texto': return Object.assign({}, base, { md: d.md || '' });
+        case 'imagen': return d.src ? Object.assign({}, base, { src: d.src, alt: d.alt || '' }) : roto('La imagen está vacía');
+        case 'nota': return hecho(nota(d.notaId));
+        case 'segmento': {
+          const s = bib(d.subId); if (s.falta) return s.falta;
+          const e = d.etiquetaId ? this.etiqueta(d.etiquetaId) : null;
+          if (d.etiquetaId && (!e || e.subId !== d.subId)) return roto('Ese segmento ya no existe');
+          return Object.assign({}, base, { sub: s.sub, contenedor: s.contenedor, etiqueta: e, bandeja: !e, nombre: e ? e.nombre : 'Bandeja', notas: this.notasDe(d.subId, e ? e.id : null) });
+        }
+        case 'biblioteca': {
+          const s = bib(d.subId); if (s.falta) return s.falta;
+          return Object.assign({}, base, { sub: s.sub, contenedor: s.contenedor, secciones: this.seccionesDe(d.subId), etiquetas: this.etiquetasDe(d.subId), notas: this.notasDe(d.subId) });
+        }
+        case 'esquema': return hecho(esquema(d.eid));
+        case 'personaje': {
+          const id = d.personajeId, p = id && this.personaje(id);
+          if (!p) return !id ? roto('Sin personaje elegido') : this.piezaEnPapelera(id) ? roto('Ese personaje está en la papelera', true) : roto('Ese personaje ya no existe');
+          const h = this.hojaPersonaje(id);                      // su biblioteca, sin crearla
+          return Object.assign({}, base, { personaje: p, biblioteca: h.biblioteca, notas: h.notas, apariciones: this.menciones(id), esquemas: this.esquemasDePersonaje(id) });
+        }
+      }
+      /* una operación: lo que dio */
+      const op = Object.assign({}, base, { operacion: true, estado: n.estado || 'nuevo', salida: n.salida || null });
+      const s = n.salida; if (!s) return Object.assign(op, { sinSalida: true });
+      if (s.tipo === 'documento' || s.tipo === 'esquema') {
+        const e = esquema(s.eid); if (e.falta) return Object.assign(e.falta, { operacion: true, estado: op.estado, salida: s });
+        return Object.assign(op, e, s.versionId && e.documento ? { version: (e.documento.versiones || []).find(v => v.id === s.versionId) || null } : {});
+      }
+      if (s.tipo === 'nota') { const x = nota(s.notaId); return x.falta ? Object.assign(x.falta, { operacion: true, estado: op.estado, salida: s }) : Object.assign(op, x); }
+      if (s.tipo === 'fragmentos') {
+        const b = bib(s.subId); if (b.falta) return Object.assign(b.falta, { operacion: true, estado: op.estado, salida: s });
+        const notas = s.notas.map(id => this.nota(id)).filter(Boolean);
+        return Object.assign(op, { sub: b.sub, contenedor: b.contenedor, notas, perdidas: s.notas.length - notas.length });
+      }
+      return op;
+    }
+    /* Los nodos rotos de un lienzo: [{ id, motivo, enPapelera? }] (entradas cuyo destino ya no está y operaciones cuya salida
+       tampoco). */
+    rotasDe(lid) {
+      const r = this.lienzo(lid); if (!r) return [];
+      return r.lienzo.nodos.map(n => [n, this.resolverEntrada(n)]).filter(p => p[1].roto)
+        .map(([n, x]) => Object.assign({ id: n.id, motivo: x.motivo }, x.enPapelera ? { enPapelera: true } : {}));
+    }
+    /* **La hoja de un personaje** (1.1.58): lo que se sabe de él es **su biblioteca entera** —las notas del segmento «Hoja de
+       personaje» primero (en el orden de su tarjeta) y después las demás, en el suyo—, la misma para la interfaz del lienzo, para
+       Claude (`ejecutar_nodo`) y para la firma. Sin crearla: { biblioteca (el sub, o null), hoja (el segmento, o null), notas }. */
+    hojaPersonaje(personajeId) {
+      const b = this.contenedor(ID_PERSONAJES), s = b && b.subs.find(x => x.lineaId === personajeId);
+      if (!s) return { biblioteca: null, hoja: null, notas: [] };
+      const hoja = this.etiquetasDe(s.id).find(e => plano(e.nombre) === plano(HOJA_PERSONAJE)) || null;
+      const primero = hoja ? this.notasDe(s.id, hoja.id) : [], ya = new Set(primero.map(n => n.id));
+      return { biblioteca: s, hoja, notas: primero.concat(this.notasDe(s.id).filter(n => !ya.has(n.id))) };
+    }
+    /* la pieza de la papelera que se llevó esa nota con ella (una biblioteca, un esquema con su guion, un personaje), o null */
+    piezaConNota(id) {
+      return this.datos.papelera.find(x => !x.nota && [].concat(x.notas || [], (x.guiones && x.guiones.notas) || []).some(n => n && n.id === id)) || null;
+    }
+    /* La firma del **contenido** de lo que apunta una entrada (para la huella de C.Lienzo: una operación hecha se ve desactualizada
+       si cambia). Solo lo que se lee —títulos, textos, nombres, la estructura de un esquema—, nunca fechas de modificación ni la
+       maquetación (el ancho de una columna, el alto de un carril, una trama oculta, el orden de las claves que deja T.Modelo): con
+       eso, abrir un esquema en el tablero o ensanchar una columna la marcaban desactualizada y «Pedir todo» la repetía. Una huella
+       (FNV-1a de las claves ordenadas, la de C.Lienzo). null en las que llevan el contenido dentro (texto, imagen) y en las
+       operaciones (esas ya cuentan en la huella), salvo en una operación con fórmulas: ahí, la de sus fórmulas (1.1.60). Se pasa como `firma` a `completar`, `desactualizado`… : `n => d.firmaEntrada(n)`. */
+    firmaEntrada(n) {
+      const d = (n && n.datos) || {};
+      const nota = x => [x.id, x.etiquetaId || null, String(x.titulo || ''), huellaTexto(x.html)];
+      switch (n && n.tipo) {
+        case 'nota': { const x = this.nota(d.notaId); return x ? huella(['n', x.subId || null, nota(x)]) : 'roto'; }
+        case 'segmento': {
+          if (!this.sub(d.subId)) return 'roto';
+          const e = d.etiquetaId ? this.etiqueta(d.etiquetaId) : null;
+          if (d.etiquetaId && !e) return 'roto';
+          return huella(['s', e ? e.nombre : '', this.notasDe(d.subId, d.etiquetaId || null).map(nota)]);
+        }
+        case 'biblioteca': {
+          if (!this.sub(d.subId)) return 'roto';
+          return huella(['b', this.etiquetasDe(d.subId).map(e => [e.id, e.nombre]), this.notasDe(d.subId).map(nota)]);
+        }
+        case 'esquema': {
+          const e = this.esquema(d.eid); if (!e) return 'roto';
+          const doc = this.documentoEsquema(d.eid);
+          return huella(['e', contenidoEsquema(e.esquema.datos), doc ? huellaTexto(doc.html) : null]);
+        }
+        case 'personaje': {
+          const p = this.personaje(d.personajeId); if (!p) return 'roto';
+          return huella(['p', p.nombre, p.color, this.hojaPersonaje(p.id).notas.map(nota)]);
+        }
+        /* una operación con fórmulas (1.1.60): el título y el texto de cada una, en su orden (C.Lienzo la guarda aparte, `huella.
+           formulas`, y si cambia la operación se ve desactualizada por su instrucción) */
+        default: return Array.isArray(d.formulas) && d.formulas.length
+          ? huella(['f', this.resolverFormulas(d.formulas).map(f => (f.rota ? [f.id, 'roto'] : [f.id, f.titulo, f.texto]))]) : null;
+      }
+    }
+    /* La firma de este proyecto, lista para C.Lienzo: `m.desactualizadas(d.firma())`. */
+    firma() { return n => this.firmaEntrada(n); }
 
     /* ---------- etiquetas (los segmentos de un subcontenedor) ---------- */
     /* `op.seccionId`: la sección de la biblioteca donde entra (sin ella, la de partida). */
@@ -1471,16 +1974,21 @@
 
     /* ---------- notas ---------- */
     /* En la biblioteca de guiones de un esquema, la nota nueva es un documento de guion hecho a mano. */
+    /* `op.arriba`: la primera de su bandeja o de su segmento (si no, al final). `op.texto`: nace con ese texto plano, un párrafo
+       por renglón (lo que se escribe en una fórmula; en la de las fórmulas, el Markdown se aplana: `op.markdown`). */
     crearNota(subId, etiquetaId, titulo, op) {
       const r = this.sub(subId); if (!r) return no('Esa biblioteca ya no existe');
       const e = etiquetaId ? this.etiqueta(etiquetaId) : null;
       if (etiquetaId && (!e || e.subId !== subId)) return no('Ese segmento no es de esta biblioteca');
       const guiones = !!r.sub.guionEid;
-      const t = this.ahora();
+      const t = this.ahora(), F = op && typeof op.texto === 'string' ? Fm() : null;
+      const html = F ? F.htmlDeTexto(op.markdown ? F.aplanar(op.texto) : op.texto) : '';
       const n = { id: this.idNuevo(), subId, etiquetaId: etiquetaId || null,
-                  titulo: this._libre(texto(titulo, 'Sin título'), this.notasDe(subId).map(x => x.titulo)), html: '', characters: {}, creado: t, modificado: t,
+                  titulo: this._libre(texto(titulo, 'Sin título'), this.notasDe(subId).map(x => x.titulo)), html, characters: {}, creado: t, modificado: t,
                   ...(guiones ? { guion: { eid: null, generado: 0 } } : {}) };
-      this.datos.notas.push(n); this._tocarSub(subId);
+      const primera = op && op.arriba ? this.datos.notas.findIndex(x => x.subId === subId && (x.etiquetaId || null) === n.etiquetaId) : -1;
+      if (primera >= 0) this.datos.notas.splice(primera, 0, n); else this.datos.notas.push(n);
+      this._tocarSub(subId);
       return si({ nota: n });
     }
     renombrarNota(id, titulo) {
@@ -1614,6 +2122,12 @@
       const ref = antesDe && antesDe !== id ? resto.find(x => x.id === antesDe && x.subId === destino && x.etiquetaId === n.etiquetaId) : null;
       resto.splice(ref ? resto.indexOf(ref) : resto.length, 0, n); this.datos.notas = resto;
       this._tocarSub(destino); if (origen !== destino) this._tocarSub(origen);   // la biblioteca de la que sale también cambia
+      /* entre una especial (las plantillas, las fórmulas) y una biblioteca normal se mueve como cualquier nota (como en ClapBook),
+         pero sus personajes entran en el elenco al salir de ahí y dejan de contar al entrar; y una nota que entra en las fórmulas
+         se queda en texto plano (una fórmula no lleva formato) */
+      if (destino === ID_BIB_FORMULAS && origen !== ID_BIB_FORMULAS) this._aTextoPlano(n);
+      if (especialDeBib(origen) && !especialDeBib(destino)) this.sincronizarElenco(n.characters);
+      else if (especialDeBib(destino) && !especialDeBib(origen)) this.podarElenco();
       return si({ nota: n });
     }
     /* ---------- papelera ---------- */
@@ -1632,7 +2146,8 @@
       const sig = sigP ? sigP.nota : notas.slice(i + 1).find(aqui), ant = antP ? antP.nota : notas.slice(0, i).reverse().find(aqui);
       this.datos.notas = notas.filter(x => x !== n);
       n.etiquetaId = null;
-      this.datos.papelera.push(Object.assign({ nota: n, origenId: n.subId, origenNombre: r ? r.contenedor.nombre + ' › ' + r.sub.nombre : '', eliminadoEn: this.ahora() },
+      const origenNombre = !r ? '' : r.contenedor.especial ? ESPECIALES[r.contenedor.especial].nombre : r.contenedor.nombre + ' › ' + r.sub.nombre;
+      this.datos.papelera.push(Object.assign({ nota: n, origenId: n.subId, origenNombre, eliminadoEn: this.ahora() },
         etiquetaId ? { etiquetaId } : {}, sig ? { antesDe: sig.id } : {}, ant ? { despuesDe: ant.id } : {}));
       if (r) this._tocarSub(n.subId);
       return si({ nota: n, aviso: '«' + n.titulo + '» va a la papelera' });
@@ -1643,6 +2158,7 @@
        biblioteca del árbol (`primeraBiblioteca`, nunca la oculta de los guiones). */
     restaurarNota(id, subId) {
       const x = this.enPapelera(id); if (!x) return no('Esa nota no está en la papelera');
+      if (especialDeBib(x.origenId) && !subId) this.asegurarEspecial(especialDeBib(x.origenId));   // una plantilla vuelve a las plantillas; una fórmula, a las fórmulas
       const c = subId && this.contenedor(subId), pb = c && this.primeraBiblioteca(c.id);
       let destino = (subId && this.sub(subId)) || (pb && this.sub(pb.id)) || this.sub(x.origenId) || null;
       if (!destino) { const b = this.todasLasBibliotecas()[0]; destino = b ? this.sub(b.sub.id) : null; }
@@ -1675,14 +2191,16 @@
         if (detras.length) pos = Math.min(...detras); else if (delante.length) pos = Math.max(...delante) + 1;
       }
       this.datos.notas.splice(pos, 0, x.nota); this._tocarSub(destino.sub.id);
-      return si({ nota: x.nota, sub: destino.sub, contenedor: destino.contenedor, aviso: '«' + x.nota.titulo + '» vuelve a «' + destino.contenedor.nombre + ' › ' + destino.sub.nombre + '»' });
+      if (destino.sub.id === ID_BIB_FORMULAS && x.origenId !== ID_BIB_FORMULAS) this._aTextoPlano(x.nota);   // pedida ahí a mano: sin formato
+      return si({ nota: x.nota, sub: destino.sub, contenedor: destino.contenedor, aviso: '«' + x.nota.titulo + '» vuelve a «' + (destino.contenedor.especial ? ESPECIALES[destino.contenedor.especial].nombre : destino.contenedor.nombre + ' › ' + destino.sub.nombre) + '»' });
     }
     eliminarDefinitivo(id) {
       const x = this.enPapelera(id) || this.piezaEnPapelera(id); if (!x) return no('Eso no está en la papelera');
       this.datos.papelera = this.datos.papelera.filter(y => y !== x);
+      if (x.tipo === 'sub') this._podarConexiones();              // sus conexiones se van con ella
       return si({ nota: x.nota, aviso: '«' + nombreEnPapelera(x) + '» eliminado del todo' });
     }
-    vaciarPapelera() { const n = this.datos.papelera.length; this.datos.papelera = []; return si({ eliminadas: n, aviso: n ? 'Papelera vaciada · ' + n + (n === 1 ? ' elemento' : ' elementos') : 'La papelera ya estaba vacía' }); }
+    vaciarPapelera() { const n = this.datos.papelera.length; this.datos.papelera = []; this._podarConexiones(); return si({ eliminadas: n, aviso: n ? 'Papelera vaciada · ' + n + (n === 1 ? ' elemento' : ' elementos') : 'La papelera ya estaba vacía' }); }
     /* Un esquema, una biblioteca o un personaje vuelven de la papelera: a su contenedor (si ya no está, a uno con su nombre),
        a su carpeta y a su grupo si siguen ahí, con un nombre libre. Un personaje recupera los carriles que sigan sin
        personaje (`carriles`: los que vuelven a ser suyos). */
@@ -1714,6 +2232,9 @@
         pieza = Object.assign(x.esquema, { nombre: this._libre(x.esquema.nombre, c.esquemas.map(e => e.nombre)) });
         c.esquemas.push(pieza);
         if (x.guiones) this._meterBiblioteca(c, Object.assign(x.guiones, { sub: Object.assign(x.guiones.sub, { guionEid: pieza.id }) }));
+      } else if (x.tipo === 'lienzo') {
+        pieza = Object.assign(x.lienzo, { nombre: this._libre(x.lienzo.nombre, (c.lienzos || []).map(l => l.nombre)) });
+        (c.lienzos = c.lienzos || []).push(pieza);
       } else {
         pieza = Object.assign(x.sub, { nombre: this._libre(x.sub.nombre, c.subs.map(q => q.nombre)) });
         this._meterBiblioteca(c, x);
@@ -1722,13 +2243,14 @@
       if (x.grupoId) { const g = this.grupo(x.grupoId); if (g && g.ambito === c.id) this.aGrupo(x.grupoId, pieza.id); }
       this.datos.papelera = this.datos.papelera.filter(y => y !== x);
       this._tocar(c);
-      return si({ contenedor: c, tipo: x.tipo, [x.tipo === 'esquema' ? 'esquema' : 'sub']: pieza, aviso: '«' + pieza.nombre + '» vuelve a «' + c.nombre + '»' });
+      return si({ contenedor: c, tipo: x.tipo, [x.tipo === 'esquema' ? 'esquema' : x.tipo === 'lienzo' ? 'lienzo' : 'sub']: pieza, aviso: '«' + pieza.nombre + '» vuelve a «' + c.nombre + '»' });
     }
     /* Tira las notas que lleven más de `dias` en la papelera. Se llama una vez al arrancar. */
     purgarPapelera(dias) {
       const limite = this.ahora() - (dias || DIAS_PAPELERA) * 864e5;
       const antes = this.datos.papelera.length;
       this.datos.papelera = this.datos.papelera.filter(x => x.eliminadoEn >= limite);
+      if (antes !== this.datos.papelera.length) this._podarConexiones();
       return si({ purgadas: antes - this.datos.papelera.length });
     }
     eliminarNota(id) {
@@ -1737,27 +2259,160 @@
       return si({ nota: n, aviso: '«' + n.titulo + '» eliminada' });
     }
     /* Lo que devuelve Ed.document.get(): { title, html, characters }. Solo cuenta si cambió. */
+    /* Una fórmula se guarda siempre en texto plano: lo que llegue pasa a párrafos simples (`C.formulas.htmlFormula`) y sin
+       personajes; así el HTML que se compara es el mismo que se guarda y dos guardados iguales no cuentan como cambio. */
     guardarNota(id, doc) {
       const n = this.nota(id); if (!n) return no('Esa nota ya no existe');
       if (!doc || typeof doc.html !== 'string') return no('Eso no es un documento válido');
-      const titulo = texto(doc.title, n.titulo), characters = doc.characters && typeof doc.characters === 'object' ? doc.characters : {};
-      const cambio = titulo !== n.titulo || doc.html !== n.html || JSON.stringify(characters) !== JSON.stringify(n.characters);
+      const formula = n.subId === ID_BIB_FORMULAS;
+      const titulo = texto(doc.title, n.titulo), characters = !formula && doc.characters && typeof doc.characters === 'object' ? doc.characters : {};
+      const html = formula ? Fm().htmlFormula(doc.html) : doc.html;
+      const cambio = titulo !== n.titulo || html !== n.html || JSON.stringify(characters) !== JSON.stringify(n.characters);
       if (!cambio) return si({ nota: n, cambio: false });
-      n.titulo = titulo; n.html = doc.html; n.characters = clonar(characters); n.modificado = this.ahora();
+      n.titulo = titulo; n.html = html; n.characters = clonar(characters); n.modificado = this.ahora();
       this._tocarSub(n.subId);
-      this.sincronizarElenco(n.characters);
+      if (!especialDeBib(n.subId)) this.sincronizarElenco(n.characters);   // los personajes de una plantilla no son del guion
       return si({ nota: n, cambio: true });
+    }
+
+    /* ---------- las bibliotecas especiales: plantillas (1.1.56, de ClapBook) y fórmulas (1.1.60) ---------- */
+    /* Las notas de verdad: sin las de las bibliotecas especiales (plantillas y fórmulas). */
+    notasNormales() { return this.datos.notas.filter(n => !especialDeBib(n.subId)); }
+    /* ¿es una biblioteca especial (la de las plantillas o la de las fórmulas)? */
+    esEspecial(subId) { return !!especialDeBib(subId); }
+    /* la clase de la especial de esa id (su contenedor o su biblioteca): 'plantillas', 'formulas' o null */
+    especialDe(id) { return especialDe(id); }
+    esPlantilla(n) { const x = typeof n === 'string' ? this.nota(n) : n; return !!x && x.subId === ID_BIB_PLANTILLAS; }
+    esFormula(n) { const x = typeof n === 'string' ? this.nota(n) : n; return !!x && x.subId === ID_BIB_FORMULAS; }
+    /* la biblioteca de una especial ({ contenedor, sub }), o null si aún no se creó */
+    bibliotecaEspecial(k) { const E = ESPECIALES[k]; if (!E) return null; const r = this.sub(E.bib); return r && r.contenedor.especial === k ? r : null; }
+    bibliotecaPlantillas() { return this.bibliotecaEspecial('plantillas'); }
+    bibliotecaFormulas() { return this.bibliotecaEspecial('formulas'); }
+    /* la crea si no está (el contenedor, al final; o la biblioteca, si el contenedor se quedó sin ella) */
+    asegurarEspecial(k) {
+      const E = ESPECIALES[k]; if (!E) return null;
+      if (this.bibliotecaEspecial(k)) return this.bibliotecaEspecial(k);
+      const t = this.ahora();
+      const c = this.contenedor(E.id);
+      if (c && c.especial === k) c.subs.unshift(contenedorEspecial(k, t).subs[0]);
+      else if (!c) this.datos.contenedores.push(contenedorEspecial(k, t));
+      return this.bibliotecaEspecial(k);
+    }
+    asegurarPlantillas() { return this.asegurarEspecial('plantillas'); }
+    asegurarFormulas() { return this.asegurarEspecial('formulas'); }
+    /* Las notas de una especial, en el orden de su tablero (la sección de partida con la bandeja y sus segmentos en su orden, y
+       luego las demás secciones con los suyos). */
+    notasEspecial(k) {
+      const r = this.bibliotecaEspecial(k); if (!r) return [];
+      const sid = r.sub.id, deP = this.etiquetasDe(sid, null);
+      const claves = this.ordenSegmentos(sid, ['bandeja', ...deP.map(e => 'etq:' + e.id)]).map(k2 => (k2 === 'bandeja' ? null : k2.slice(4)));
+      this.seccionesDe(sid).forEach(q => this.etiquetasDe(sid, q.id).forEach(e => claves.push(e.id)));
+      this.etiquetasDe(sid).forEach(e => { if (!claves.includes(e.id)) claves.push(e.id); });   // uno con una sección que ya no está
+      return claves.flatMap(q => this.notasDe(sid, q));
+    }
+    plantillas() { return this.notasEspecial('plantillas'); }
+    formulas() { return this.notasEspecial('formulas'); }
+    /* Guarda una copia de una nota como plantilla (en la bandeja de las plantillas o en su segmento `etiquetaId`), con su texto,
+       sus personajes (`characters`) y su color. La nota no se toca. */
+    guardarComoPlantilla(id, etiquetaId) {
+      const n = this.nota(id); if (!n) return no('Esa nota ya no existe');
+      const r = this.asegurarPlantillas();
+      const x = this.crearNota(r.sub.id, etiquetaId || null, n.titulo); if (!x.ok) return x;
+      x.nota.html = n.html; x.nota.characters = clonar(n.characters || {});
+      if (n.color) x.nota.color = n.color;
+      return si({ nota: x.nota, aviso: 'Plantilla «' + x.nota.titulo + '» guardada' });
+    }
+    /* Una nota nueva a partir de una plantilla, en `subId` (su bandeja o el segmento `etiquetaId`; nunca en la de las plantillas):
+       su HTML con las variables rellenas ({{titulo}}, {{fecha}}, {{proyecto}}…; plantillas.js), sus personajes y su color. El
+       título: `op.titulo` si se da, siempre (también sobre un título de plantilla con variables); si no, el de la plantilla con
+       sus variables rellenas si lleva alguna («Reunión {{fecha}}»); si no, «Sin título». Sin repetir el de otra nota de la
+       biblioteca (`_libre`, en `crearNota`), y ese título final es el que rellena {{titulo}} en el texto.
+       `op = { titulo, proyecto, arriba }`. Devuelve también dónde se queda el cursor ({{cursor}}: { bloque, caracter }), o null. */
+    crearDesdePlantilla(pid, subId, etiquetaId, op) {
+      op = op || {};
+      const p = this.nota(pid); if (!p || !this.esPlantilla(p)) return no('Esa plantilla ya no existe');
+      if (!subId || this.esEspecial(subId)) return no('Una nota nueva no va en la biblioteca de las plantillas');
+      if (!this.sub(subId)) return no('Esa biblioteca ya no existe');
+      if (this.esGuiones(subId)) return no('Ahí solo van los guiones de ese esquema');
+      const P = C.plantillas || require('./plantillas.js').plantillas, ahora = new Date(this.ahora());
+      const pedido = texto(op.titulo, '');
+      const base = pedido || (P.tieneVariables(p.titulo) ? P.rellenar(p.titulo, { ahora, titulo: '', proyecto: op.proyecto }).texto : 'Sin título');
+      const r = this.crearNota(subId, etiquetaId || null, base, { arriba: !!op.arriba }); if (!r.ok) return r;
+      const x = P.rellenarHtml(p.html, { ahora, titulo: r.nota.titulo, proyecto: op.proyecto });
+      /* detrás de un recuadro final, la línea vacía que pondría el editor al abrirla (si no, abrirla ya sería un cambio) */
+      r.nota.html = C.conversor && C.conversor.conLineaFinal ? C.conversor.conLineaFinal(x.html) : x.html; r.nota.characters = clonar(p.characters || {});
+      if (p.color) r.nota.color = p.color;
+      this.sincronizarElenco(r.nota.characters);               // ahora sí son personajes del guion
+      return si({ nota: r.nota, cursor: x.cursor, plantilla: p });
+    }
+
+    /* ---------- fórmulas (1.1.60): prompts reutilizables para las operaciones de IA del lienzo ----------
+       Leo: «que se puedan agregar notas que solo tengan texto y sirvan como prompts reutilizables en los bloques del lienzo que
+       llaman a la IA… algo parecido a las skills». Son las notas de la biblioteca especial «Fórmulas» (`formulas:biblioteca`), en
+       **texto plano**: su HTML son párrafos simples (`guardarNota` lo deja así). Una operación del lienzo las elige en
+       `nodo.datos.formulas = [notaId…]` (js/claquedraw/lienzo-modelo.js) y se combinan con lo escrito con `C.formulas.componer`. */
+    /* deja una nota en texto plano (una que entra en las fórmulas) */
+    _aTextoPlano(n) { n.html = Fm().htmlFormula(n.html); n.characters = {}; }
+    /* El texto plano de una fórmula, o null si esa nota no existe o no es una fórmula. */
+    textoFormula(id) { const n = this.nota(id); return n && this.esFormula(n) ? Fm().textoDeHtml(n.html) : null; }
+    /* **La memoria de estilo del proyecto** (1.1.60, js/claquedraw/memoria.js): las reglas de tono y forma que la IA aprende de Leo en
+       este proyecto (las generales van en los datos de la app, no aquí). La clave solo existe si hay alguna. */
+    memoriaEstilo() { return Array.isArray(this.datos.memoriaEstilo) ? this.datos.memoriaEstilo : []; }
+    /* la deja como `lista` (saneada, con sus topes); → true si cambió */
+    fijarMemoriaEstilo(lista) {
+      const l = Me() ? Me().sanear(lista) : (Array.isArray(lista) ? lista : []);
+      const antes = JSON.stringify(this.memoriaEstilo());
+      if (JSON.stringify(l) === antes) return false;
+      if (l.length) this.datos.memoriaEstilo = l; else delete this.datos.memoriaEstilo;
+      return true;
+    }
+    /* Guarda como fórmula (en la bandeja de las fórmulas o en su segmento `etiquetaId`) **el texto plano** de una nota, con su
+       título y su color. La nota no se toca. `op.arriba`: la primera de su sitio. */
+    guardarComoFormula(id, etiquetaId, op) {
+      const n = this.nota(id); if (!n) return no('Esa nota ya no existe');
+      const r = this.asegurarFormulas();
+      const x = this.crearNota(r.sub.id, etiquetaId || null, n.titulo, { texto: Fm().textoDeHtml(n.html), arriba: !!(op && op.arriba) }); if (!x.ok) return x;
+      if (n.color) x.nota.color = n.color;
+      return si({ nota: x.nota, aviso: 'Fórmula «' + x.nota.titulo + '» guardada' });
+    }
+    /* Reescribe el texto de una fórmula (texto plano; con `op.markdown`, lo que venga en Markdown se aplana) y, si se da, su título. */
+    escribirFormula(id, textoPlano, op) {
+      const n = this.nota(id); if (!n) return no('Esa fórmula ya no existe');
+      if (!this.esFormula(n)) return no('«' + n.titulo + '» no es una fórmula');
+      const F = Fm(), t = op && op.markdown ? F.aplanar(textoPlano) : textoPlano;
+      return this.guardarNota(id, { title: op && op.titulo !== undefined ? op.titulo : n.titulo, html: F.htmlDeTexto(t), characters: {} });
+    }
+    /* Lo que son unas ids de fórmulas, en su orden: { id, titulo, texto, etiquetaId } o, si ya no está, { id, rota: true, motivo,
+       titulo?, enPapelera? } (lo que espera `C.formulas.componer`). Nunca cambia la lista. */
+    resolverFormulas(ids) {
+      return (Array.isArray(ids) ? ids : []).map(v => {
+        const id = String(v ?? ''), n = id && this.nota(id);
+        if (n && this.esFormula(n)) return { id, titulo: n.titulo, texto: Fm().textoDeHtml(n.html), etiquetaId: n.etiquetaId || null };
+        const p = id && this.enPapelera(id);
+        if (p && p.origenId === ID_BIB_FORMULAS) return { id, rota: true, titulo: p.nota.titulo, motivo: 'La fórmula «' + p.nota.titulo + '» está en la papelera', enPapelera: true };
+        if (n) return { id, rota: true, titulo: n.titulo, motivo: '«' + n.titulo + '» ya no es una fórmula' };
+        return { id, rota: true, motivo: 'Esa fórmula ya no existe' };
+      });
+    }
+    /* La instrucción de una operación del lienzo con sus fórmulas (`nodo` o sus `datos`): lo de `C.formulas.componer` —{ texto,
+       partes, rotas, hueco }— más `formulas`, lo resuelto. Sin fórmulas, `texto` es la instrucción tal cual. */
+    instruccionCompuesta(nodo) {
+      const d = (nodo && (nodo.datos || nodo)) || {}, formulas = this.resolverFormulas(d.formulas);
+      return Object.assign(Fm().componer(formulas, d.instruccion), { formulas });
     }
 
     /* ---------- elenco: los personajes del guion ---------- */
     elenco() { return this.datos.elenco.slice(); }
     personaje(id) { return this.datos.elenco.find(p => p.id === id) || null; }
-    /* Cada documento con texto del guion: las notas de las bibliotecas (y de la papelera) y las de los nodos. */
-    _documentosTexto(conPapelera) {
+    /* Cada documento con texto del guion: las notas de las bibliotecas (y de la papelera) y las de los nodos.
+       Las plantillas no son documentos del guion: para contar (menciones, apariciones, elenco) no entran, ni las tiradas.
+       Pero lo que se **reescribe** (renombrar o recolorear un personaje) sí las lleva, `conPlantillas`, vivas y en la
+       papelera: si no, una plantilla con MARA resucitaba el nombre viejo al usarla después de renombrarlo a MARÍA. */
+    _documentosTexto(conPapelera, conPlantillas) {
       const lista = [];
-      this.datos.notas.forEach(n => lista.push({ doc: n, tipo: 'nota', id: n.id, titulo: n.titulo, modificado: n.modificado || null, ruta: () => { const r = this.sub(n.subId); return r ? r.contenedor.nombre + ' › ' + r.sub.nombre : ''; } }));
+      (conPlantillas ? this.datos.notas : this.notasNormales()).forEach(n => lista.push({ doc: n, tipo: 'nota', id: n.id, titulo: n.titulo, modificado: n.modificado || null, ruta: () => { const r = this.sub(n.subId); return r ? r.contenedor.nombre + ' › ' + r.sub.nombre : ''; } }));
       if (conPapelera) this.datos.papelera.forEach(x => {
-        if (x.nota) lista.push({ doc: x.nota, tipo: 'papelera', id: x.nota.id });
+        if (x.nota && (conPlantillas || !especialDeBib(x.nota.subId))) lista.push({ doc: x.nota, tipo: 'papelera', id: x.nota.id });
         [].concat(x.notas || [], (x.guiones && x.guiones.notas) || []).forEach(n => lista.push({ doc: n, tipo: 'papelera', id: n.id }));   // las de un esquema, una biblioteca o un personaje tirados
       });
       this.datos.contenedores.forEach(c => c.esquemas.forEach(e => Object.keys(e.notas).forEach(pid => {
@@ -1831,7 +2486,7 @@
       if (!k) return no('El nombre no puede quedar vacío');
       if (this.datos.elenco.some(x => x !== p && clavePersonaje(x.nombre) === k)) return no('Ya hay un personaje llamado «' + n + '»');
       let notas = 0;
-      this._documentosTexto(true).forEach(x => {
+      this._documentosTexto(true, true).forEach(x => {
         const d = x.doc, html = renombrarEn(d.html, antes, n), reg = d.characters || {};
         const tenia = Object.keys(reg).find(c => clavePersonaje(reg[c].name) === antes);
         if (html === d.html && !tenia) return;
@@ -1847,7 +2502,7 @@
       const p = this.personaje(id); if (!p) return no('Ese personaje ya no existe');
       p.color = color(col); delete p.auto;
       const k = clavePersonaje(p.nombre);
-      this._documentosTexto(true).forEach(x => Object.values(x.doc.characters || {}).forEach(r => { if (clavePersonaje(r.name) === k) r.color = p.color; }));
+      this._documentosTexto(true, true).forEach(x => Object.values(x.doc.characters || {}).forEach(r => { if (clavePersonaje(r.name) === k) r.color = p.color; }));
       return si({ personaje: p });
     }
     /* No se elimina si alguna nota lo nombra. Sus carriles en los esquemas quedan sin personaje y su
@@ -1870,6 +2525,6 @@
     }
   }
 
-  Object.assign(C, { Documentos, nombreEnPapelera, iniciales, ID_PERSONAJES, ID_ESQUEMAS_PERSONAJE: ID_ESQUEMAS, COLORES_CARPETA, HOJA_PERSONAJE, TONOS_NOTA: TONOS, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
+  Object.assign(C, { Documentos, nombreEnPapelera, iniciales, ID_PERSONAJES, ID_ESQUEMAS_PERSONAJE: ID_ESQUEMAS, ID_PLANTILLAS, ID_BIB_PLANTILLAS, NOMBRE_PLANTILLAS, ID_FORMULAS, ID_BIB_FORMULAS, NOMBRE_FORMULAS, ESPECIALES, especialDe, COLORES_CARPETA, HOJA_PERSONAJE, TONOS_NOTA: TONOS, ELENCO_CARPETAS: ELENCO, clavePersonaje, normalizarDocumentos: normalizar, PALETA_ETIQUETAS: PALETA, ORDENES_DOCUMENTOS: ORDENES, NOMBRE_GLOBAL, NOMBRE_SUB, DIAS_PAPELERA });
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

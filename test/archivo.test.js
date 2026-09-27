@@ -117,6 +117,31 @@ function guionCompleto() {
   const vamp = d.crearCarpeta(C.ELENCO_CARPETAS, 'Vampiros', 'violeta').carpeta;   // en Personajes hay carpetas y grupos
   d.crearGrupo(C.ELENCO_CARPETAS, [lestat.id, louis.id], 'Los dos', 'ambar');
   d.moverACarpeta('personaje', lestat.id, vamp.id);
+  /* conexiones esquema ↔ biblioteca (1.1.57): con su biblioteca y con la de otro contenedor, y una nota que es fragmento suyo */
+  d.conectar(esquema.id, sub.id); d.conectar(esquema.id, sInv.id);
+  d.fijarFragmento(n1.id, { eid: esquema.id, nodos: nodos.slice(0, 2), segundos: 12.5, orden: 1, bloques: [1, 3] });
+  /* lienzos de nodos (1.1.58): uno en la carpeta del esquema, con color y en un grupo, con entradas, operaciones hechas (con
+     huella), pendientes y con error, cables y su vista; y otro en la papelera */
+  const lz = d.crearLienzo(cap.id, 'Del piloto al corte', { carpetaId: temp.id }).lienzo;
+  d.colorearHijo(lz.id, 6); d.crearGrupo(cap.id, [lz.id], 'Lienzos', 'violeta');
+  const ml = d.modeloLienzo(lz.id);
+  const lt = ml.crearNodo('texto', 0, 0, { md: 'Una comedia de **oficina**' }).nodo;
+  const ln = ml.crearNodo('nota', 0, 160, { notaId: n1.id }, { titulo: 'La casa' }).nodo;
+  const le = ml.crearNodo('esquema', 0, 320, { eid: esquema.id }).nodo;
+  ml.crearNodo('personaje', 0, 480, { personajeId: louis.id });
+  ml.crearNodo('imagen', 0, 640, { src: 'data:image/png;base64,iVBORw0KGgo=', alt: 'El puerto' });
+  const lg = ml.crearNodo('generar', 360, 0, { instruccion: 'Tono seco', modo: 'guion', destino: { eid: esquema.id } }).nodo;
+  const lp = ml.crearNodo('partir', 720, 0, { segundos_max: 12, destino: { nuevo: { cid: cap.id, nombre: 'Fragmentos' } } }).nodo;
+  const lr = ml.crearNodo('traducir', 720, 300, { idioma: 'inglés', destino: { enSitio: true } }).nodo;
+  ml.conectar(lt.id, lg.id, 'contexto'); ml.conectar(ln.id, lg.id, 'contexto'); ml.conectar(le.id, lg.id, 'esquema');
+  ml.conectar(lg.id, lp.id, 'guion'); ml.conectar(lg.id, lr.id, 'fuente');
+  ml.completar(lg.id, { tipo: 'documento', eid: esquema.id, mensaje: 'Primer borrador' }, { firma: d.firma() });
+  ml.pedir(lp.id); ml.fallar(lr.id, 'Falta el guion');
+  d.guardarLienzo(lz.id, Object.assign(ml.toJSON(), { vista: { x: -40, y: 12, zoom: 0.8 } }));
+  d.eliminarLienzo(d.crearLienzo(inv.id, 'Borrador de lienzo').lienzo.id);
+  /* la memoria de estilo del proyecto (1.1.60): reglas con su origen, veces, ejemplo y una apagada */
+  d.fijarMemoriaEstilo([{ texto: 'Diálogos secos, sin muletillas', origen: 'correccion', veces: 3, ejemplo: { antes: 'Bueno, pues, no sé.', despues: 'No sé.' }, creado: 1, modificado: 2 },
+    { texto: 'Acotaciones en presente', origen: 'manual', creado: 3, modificado: 3 }, { texto: 'Lestat habla con ironía', apagada: true, creado: 4, modificado: 5 }]);
   return d;
 }
 
@@ -136,6 +161,16 @@ test('archivo: un guion completo vuelve igual tras JSON + gzip, y guardarlo otra
   const texto2 = serializar('Mi guion', d2.toJSON());
   assert.equal(serializar('Mi guion', new C.Documentos(JSON.parse(texto2).documentos).toJSON()), texto2);
   assert.equal(serializar('Mi guion', C.normalizarDocumentos(JSON.parse(texto).documentos)), texto2);
+});
+test('archivo: la memoria de estilo (1.1.60) viaja con el proyecto y un proyecto sin ella no lleva la clave', async () => {
+  const d = guionCompleto(), leido = JSON.parse(await desempaquetar(await empaquetar(serializar('M', d.toJSON()))));
+  assert.deepEqual(leido.documentos.memoriaEstilo.map(r => [r.texto, r.origen, r.veces, !!r.apagada]),
+    [['Diálogos secos, sin muletillas', 'correccion', 3, false], ['Acotaciones en presente', 'manual', 1, false], ['Lestat habla con ironía', 'chat', 1, true]]);
+  assert.equal(new C.Documentos(leido.documentos).memoriaEstilo()[0].ejemplo.despues, 'No sé.');
+  const vacio = new C.Documentos(null);
+  assert.ok(!('memoriaEstilo' in vacio.toJSON()));
+  vacio.fijarMemoriaEstilo([{ texto: 'x' }]); vacio.fijarMemoriaEstilo([]);
+  assert.ok(!('memoriaEstilo' in vacio.toJSON()), 'vaciada, sin la clave');
 });
 
 test('archivo: se conserva lo nuevo (orden de segmentos, actos y documentos, personajes, papelera)', async () => {
@@ -182,8 +217,9 @@ test('archivo: se conserva lo nuevo (orden de segmentos, actos y documentos, per
   assert.ok(temp && temp.plegada && epi.padreId === temp.id && e.carpetaId === epi.id && sub.carpetaId === epi.id, 'las carpetas y lo que hay dentro');
   const vamp = d2.carpetasDe(C.ELENCO_CARPETAS).find(k => k.nombre === 'Vampiros');   // en Personajes hay carpetas y grupos
   assert.ok(vamp && vg.carpetaId === vamp.id, 'la carpeta de Personajes y el grupo que vive en ella')
-  assert.equal(d2.papelera().length, 1); assert.equal(d2.papelera()[0].nota.titulo, 'Borrador viejo');
-  const tirada = d2.papelera()[0], sInv = d2.subsDe(inv.id)[0];
+  const notasTiradas = d2.papelera().filter(x => x.nota);                 // (también hay un lienzo tirado, 1.1.58)
+  assert.equal(notasTiradas.length, 1); assert.equal(notasTiradas[0].nota.titulo, 'Borrador viejo');
+  const tirada = notasTiradas[0], sInv = d2.subsDe(inv.id)[0];
   assert.equal(d2.etiqueta(tirada.etiquetaId).nombre, 'Borradores', 'la papelera guarda el segmento de la nota');
   assert.equal(d2.nota(tirada.antesDe).titulo, 'Borrador nuevo', 'y la nota que la seguía');
   d2.restaurarNota(tirada.nota.id);
@@ -260,4 +296,60 @@ test('archivo: el tablero de un esquema vuelve igual por el modelo de Tramas (ca
   const datos = clonar(m.toJSON());
   const m2 = new T.Modelo(JSON.parse(JSON.stringify(datos)));
   assert.deepEqual(clonar(m2.toJSON()), datos);
+});
+
+test('archivo: los lienzos de nodos viajan enteros (1.1.58): nodos, cables, estados, huella, vista, carpeta, grupo y papelera', async () => {
+  const d = guionCompleto();
+  const leido = JSON.parse(await desempaquetar(await empaquetar(serializar('Mi guion', d.toJSON()))));
+  const d2 = new C.Documentos(leido.documentos);
+  const cap = d2.contenedores().sueltos.find(c => c.nombre === 'Capítulo I');
+  const [lz] = d2.lienzosDe(cap.id);
+  assert.equal(lz.nombre, 'Del piloto al corte'); assert.equal(lz.color, 6);
+  assert.equal(d2.carpeta(lz.carpetaId).carpeta.nombre, 'Temporada 1');
+  assert.equal(d2.grupoDe(lz.id).grupo.nombre, 'Lienzos');
+  assert.deepEqual(lz.nodos.map(n => n.tipo), ['texto', 'nota', 'esquema', 'personaje', 'imagen', 'generar', 'partir', 'traducir']);
+  assert.equal(lz.cables.length, 5); assert.deepEqual(lz.vista, { x: -40, y: 12, zoom: 0.8 });
+  const m = d2.modeloLienzo(lz.id), g = lz.nodos.find(n => n.tipo === 'generar');
+  assert.deepEqual([g.estado, g.salida.mensaje], ['hecho', 'Primer borrador']);
+  assert.deepEqual(m.pendientes().map(id => m.nodo(id).tipo), ['partir']);
+  assert.equal(lz.nodos.find(n => n.tipo === 'traducir').error, 'Falta el guion');
+  assert.equal(m.desactualizado(g.id, d2.firma()), null, 'la huella viaja y sigue casando');
+  assert.equal(d2.resolverNodo(lz.id, lz.nodos[1].id).nota.titulo, 'Casa del padre');
+  const tirado = d2.papelera().find(x => x.tipo === 'lienzo');
+  assert.equal(tirado.lienzo.nombre, 'Borrador de lienzo');
+  assert.equal(d2.restaurarPieza(tirado.lienzo.id).contenedor.nombre, 'Investigación');
+  /* y un proyecto sin lienzos no lleva la clave */
+  const sin = new C.Documentos(undefined); sin.crearContenedor('Solo');
+  assert.ok(!serializar('x', sin.toJSON()).includes('lienzos'));
+});
+
+test('archivo: las fórmulas (1.1.60) viajan enteras y un proyecto sin ellas sale exactamente igual que antes', async () => {
+  const d0 = guionCompleto();
+  const sin = serializar('Mi guion', d0.toJSON());
+  assert.ok(!sin.includes('formulas') && !sin.includes('Fórmulas'), 'sin fórmulas no hay ni contenedor ni clave');
+  /* con ellas: la biblioteca con un segmento, una fórmula tirada y una operación del lienzo que las elige, hecha con su firma */
+  const d = guionCompleto();
+  require('../js/claquedraw/formulas.js');
+  const fs = d.asegurarFormulas().sub.id, seg = d.crearEtiqueta(fs, 'Tonos').etiqueta;
+  const noir = d.crearNota(fs, seg.id, 'Noir', { texto: 'Tono seco.\n\n{{instruccion}}' }).nota;
+  d.tirarNota(d.crearNota(fs, null, 'Vieja', { texto: 'Nada' }).nota.id);
+  const cap = d.contenedores().sueltos.find(c => c.nombre === 'Capítulo I'), [lz] = d.lienzosDe(cap.id);
+  const m = d.modeloLienzo(lz.id), g = m.nodos().find(n => n.tipo === 'generar');
+  m.editarNodo(g.id, { datos: { formulas: [noir.id] } });
+  m.completar(g.id, g.salida, { firma: d.firma() });
+  d.guardarLienzo(lz.id, m);
+  const texto = serializar('Mi guion', d.toJSON());
+  const leido = await desempaquetar(await empaquetar(texto));
+  assert.equal(leido, texto);
+  const d2 = new C.Documentos(JSON.parse(leido).documentos);
+  assert.deepEqual(d2.toJSON(), d.toJSON());
+  const texto2 = serializar('Mi guion', d2.toJSON());
+  assert.equal(serializar('Mi guion', new C.Documentos(JSON.parse(texto2).documentos).toJSON()), texto2, 'guardarlo otra vez da el mismo texto');
+  assert.deepEqual(d2.formulas().map(f => f.titulo), ['Noir']);
+  assert.equal(d2.textoFormula(noir.id), 'Tono seco.\n\n{{instruccion}}');
+  const g2 = d2.lienzo(lz.id).lienzo.nodos.find(n => n.id === g.id);
+  assert.deepEqual(g2.datos.formulas, [noir.id]);
+  assert.equal(d2.modeloLienzo(lz.id).desactualizado(g.id, d2.firma()), null, 'la huella de sus fórmulas viaja y sigue casando');
+  d2.escribirFormula(noir.id, 'Tono seco y con humor.');
+  assert.equal(d2.modeloLienzo(lz.id).desactualizado(g.id, d2.firma()), 'instruccion');
 });

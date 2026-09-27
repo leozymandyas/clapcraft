@@ -1,0 +1,330 @@
+/* ===== Lienzo de nodos (1.1.58) =====
+   Leo, 27-09-2026: «un lienzo con nodos donde se conecten notas, notas con imágenes y esquemas; en lugar de generar videos,
+   nosotros generamos guiones y también los partimos», como los «Space» de Dreamina. La vista #lienzo (claquedraw.html) la pinta
+   js/claquedraw/lienzo.js: un lienzo infinito con cuadrícula de puntos, tarjetas de nodo (entradas y operaciones que ejecuta
+   Claude), puertos con nombre y cables en SVG. Todo va con los tokens de la piel (css/clapcraft.css), así Claro, Oscuro,
+   Synthwave y Vaporwave lo alcanzan; los temas neón añaden la rejilla y el brillo de los cables al final.
+   Colores por clase de nodo: `--lz-c` (el de su tipo, lo pone lienzo.js) en la cabecera, el icono y el cable que sale de él. */
+
+/* ---------- la vista ---------- */
+#lienzo { flex: 1; min-width: 0; display: none; flex-direction: column; background: var(--lienzo); }
+body.vista-lienzo #lienzo { display: flex; }
+body.vista-lienzo :is(#esquema, #texto, #documentos) { display: none !important; }
+body.vista-lienzo .solo-esquema { display: none; }
+.lz-cab { gap: 10px; border-bottom: 1px solid var(--regla); }
+.lz-cab .esq-titulo { flex: 0 1 auto; overflow: hidden; }
+.lz-cab .esq-cont { flex: none; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.lz-cab .btn { flex: none; white-space: nowrap; }
+.lz-cuenta { flex: none; font: 400 11px var(--mono); letter-spacing: .04em; color: var(--palido); white-space: nowrap; }
+.lz-cuenta b { font-weight: 500; color: var(--foco); }
+/* la etiqueta «Lienzo» de la cabecera y la «L» del árbol: `.gd-chip--lienzo`, en css/conexiones.css (una sola regla, con sus temas) */
+/* el diálogo del «＋» de un contenedor ofrece también «Lienzo» (la tercera tarjeta, solo donde caben lienzos) */
+.dlg-tipo[hidden] { display: none; }
+.dlg-tipos-grid:has(> [data-dlg-tipo="lienzo"]:not([hidden])) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* ---------- el lienzo infinito: la cuadrícula de puntos se mueve con la vista (--lz-paso, --lz-px, --lz-py) ---------- */
+.lz-cuerpo { position: relative; flex: 1; min-height: 0; overflow: hidden; outline: none; cursor: grab; touch-action: none; user-select: none;
+  --lz-punto: color-mix(in srgb, var(--tinta) 17%, transparent);
+  background-color: var(--lienzo);
+  background-image: radial-gradient(circle at center, var(--lz-punto) 0 1px, transparent 1.4px);
+  background-size: var(--lz-paso, 24px) var(--lz-paso, 24px);
+  background-position: var(--lz-px, 0) var(--lz-py, 0); }
+.lz-cuerpo:focus, .lz-cuerpo:focus-visible { outline: none; }
+.lz-cuerpo.moviendo, .lz-cuerpo.moviendo * { cursor: grabbing !important; }
+.lz-cuerpo.espacio { cursor: grab; }
+.lz-cuerpo.eligiendo { cursor: crosshair; }
+.lz-mundo { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.lz-cables { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; z-index: 1; }
+.lz-nodos { position: absolute; left: 0; top: 0; z-index: 2; }
+.lz-marq { position: absolute; z-index: 5; border: 1px solid var(--foco); background: var(--foco-banda); border-radius: 2px; pointer-events: none; }
+
+/* ---------- cables ---------- */
+.lz-cable { fill: none; stroke: var(--lz-cc, var(--borde-fuerte)); stroke-width: 2.2; stroke-linecap: round; opacity: .9; transition: stroke-width .12s, opacity .12s; }
+.lz-cable-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.lz-cable-g:hover .lz-cable { stroke-width: 3; opacity: 1; }
+.lz-cable-g.sel .lz-cable { stroke-width: 3.6; opacity: 1; filter: drop-shadow(0 0 3px var(--foco-halo)); }
+.lz-cable-g.sel .lz-cable-fin { fill: var(--lz-cc); }
+.lz-cable-fin { fill: var(--lz-cc, var(--borde-fuerte)); }
+/* lo que entra en una operación pendiente corre hacia ella */
+.lz-cable-g.fluye .lz-cable { stroke-dasharray: 7 6; animation: lz-flujo .9s linear infinite; }
+@keyframes lz-flujo { to { stroke-dashoffset: -13; } }
+.lz-cable-g.roto .lz-cable { stroke: var(--peligro); stroke-dasharray: 3 5; opacity: .7; }
+.lz-cable.provisional { stroke: var(--lz-cc, var(--foco)); stroke-dasharray: 6 5; opacity: 1; stroke-width: 2.4; }
+.lz-cable.provisional.cae { stroke-dasharray: none; stroke-width: 3; }
+
+/* ---------- nodos ---------- */
+.lz-nodo { position: absolute; width: 260px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--papel);
+  border: 1px solid var(--borde); border-radius: 8px; box-shadow: 0 1px 2px var(--sombra-suave), 0 6px 18px var(--sombra-suave); color: var(--tinta);
+  font-size: 12.5px; user-select: none; --lz-c: var(--foco); transition: box-shadow .14s, border-color .14s, opacity .14s; }
+.lz-nodo:hover { border-color: var(--borde-fuerte); }
+.lz-ent { --lz-f: var(--t-cielo); } .lz-op { --lz-f: var(--foco); }
+.lz-nodo.sel { border-color: var(--lz-f); box-shadow: 0 0 0 2px color-mix(in srgb, var(--lz-f) 55%, transparent), var(--sombra-alta); z-index: 3; }
+.lz-nodo.arrastrado { box-shadow: 0 0 0 2px color-mix(in srgb, var(--lz-f) 55%, transparent), 0 18px 40px var(--sombra-dura); z-index: 4; }
+.lz-nodo.aparece { animation: lz-aparece .22s ease-out; }
+@keyframes lz-aparece { from { opacity: 0; transform: scale(.94); } }
+/* cabecera: icono, clase y título; la de una entrada lleva su color, la de una operación el acento (las hace Claude) */
+.lz-ncab { position: relative; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 6px 0 9px; border-bottom: 1px solid var(--regla);
+  border-radius: 7px 7px 0 0; background: color-mix(in srgb, var(--lz-f) 7%, var(--papel)); cursor: grab; }
+.lz-ncab::before { content: ''; position: absolute; left: -1px; right: -1px; top: -1px; height: 3px; border-radius: 8px 8px 0 0; background: var(--lz-f); opacity: .85; }
+.lz-ic { flex: none; width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--lz-c); background: color-mix(in srgb, var(--lz-c) 14%, var(--papel)); border: 1px solid color-mix(in srgb, var(--lz-c) 28%, transparent); }
+.lz-op .lz-ic { color: var(--foco-sobre); background: var(--lz-c); border-color: transparent; }
+.lz-ntxt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 5px 0; }
+.lz-clase { font: 500 9px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: color-mix(in srgb, var(--lz-f) 70%, var(--palido)); white-space: nowrap; }
+.lz-tit { font: 600 13px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--tinta); }
+.lz-tit.vacio { color: var(--palido); font-weight: 500; }
+input.lz-tit-edit { font: 600 13px var(--sans); color: var(--tinta); width: 100%; box-sizing: border-box; padding: 1px 4px; margin: -2px -4px; border: 1px solid var(--lz-c);
+  border-radius: 4px; background: var(--papel); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--lz-c) 22%, transparent); user-select: text; }
+.lz-ncab .icono { width: 24px; height: 24px; flex: none; color: var(--palido); }
+.lz-ncab .icono:hover { color: var(--tinta); }
+
+/* puertos de entrada: una fila por puerto con su nombre; el punto, en el borde izquierdo */
+.lz-ins { display: flex; flex-direction: column; padding: 5px 0 3px; border-bottom: 1px solid var(--regla); }
+.lz-puerto { position: relative; display: flex; align-items: center; gap: 6px; }
+.lz-in { height: 22px; padding: 0 12px 0 15px; font: 500 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--tenue); }
+.lz-in small { font: 400 9.5px var(--mono); letter-spacing: .03em; text-transform: none; color: var(--palido); }
+.lz-in .lz-cuantos { margin-left: auto; font: 400 10px var(--mono); color: var(--palido); text-transform: none; }
+.lz-dot { position: absolute; top: 50%; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%; transform: translateY(-50%);
+  background: var(--papel); border: 2px solid var(--lz-pc, var(--borde-fuerte)); cursor: crosshair; transition: transform .12s, box-shadow .12s, background .12s; z-index: 2; }
+.lz-dot::after { content: ''; position: absolute; inset: -7px; border-radius: 50%; }   /* se acierta con más facilidad */
+.lz-in .lz-dot { left: -7px; }
+.lz-puerto.lleno .lz-dot { background: var(--lz-pc, var(--borde-fuerte)); }
+.lz-puerto:hover .lz-dot, .lz-puerto.posible.cerca .lz-dot { transform: translateY(-50%) scale(1.3); box-shadow: 0 0 0 4px color-mix(in srgb, var(--lz-pc, var(--foco)) 22%, transparent); }
+/* mientras se arrastra un cable: lo compatible se enciende y lo demás se apaga */
+.lz-cuerpo.cableando .lz-puerto.posible .lz-dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--lz-pc, var(--foco)) 25%, transparent); animation: lz-latido 1s ease-in-out infinite; }
+.lz-cuerpo.cableando .lz-puerto.posible { color: var(--tinta); }
+.lz-cuerpo.cableando .lz-puerto.apagado { opacity: .28; }
+.lz-cuerpo.cableando .lz-nodo.apagado { opacity: .5; }
+@keyframes lz-latido { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--lz-pc, var(--foco)) 12%, transparent); } }
+
+/* cuerpo: la vista previa de una entrada o las opciones de una operación */
+.lz-ncuerpo { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 11px; min-width: 0; }
+.lz-ncuerpo:empty { display: none; }
+.lz-ruta { font: 400 10px var(--mono); letter-spacing: .03em; color: var(--palido); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lz-extracto { font-size: 12px; line-height: 1.45; color: var(--tenue); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.lz-extracto.vacio { color: var(--palido); font-style: italic; }
+.lz-minis { display: flex; gap: 5px; flex-wrap: wrap; }
+.lz-minis img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; border: 1px solid var(--regla); background: var(--lienzo); }
+.lz-minis .mas { width: 46px; height: 46px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font: 500 11px var(--mono);
+  color: var(--tenue); background: var(--lienzo); border: 1px dashed var(--borde); }
+.lz-fila { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; }
+.lz-fila > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-meta { font: 400 10.5px var(--mono); color: var(--palido); letter-spacing: .02em; }
+.lz-meta b { font-weight: 500; color: var(--tenue); }
+.lz-punto { flex: none; width: 9px; height: 9px; border-radius: 3px; background: var(--c, var(--palido)); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .1); }
+.lz-lista { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.lz-lista li { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; color: var(--tenue); }
+.lz-lista li > span:nth-child(2) { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-lista li > small { flex: none; font: 400 10px var(--mono); color: var(--palido); }
+/* el segmento: una banda de su color con el nombre y la cuenta */
+.lz-seg { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 5px; background: var(--chl, var(--lienzo)); color: var(--chd, var(--tinta)); font-weight: 600; font-size: 12.5px; }
+html[data-theme="dark"] .lz-seg { background: var(--chd, var(--lienzo)); color: var(--chl, var(--tinta)); }
+.lz-punto.par { background: var(--chd); } html[data-theme="dark"] .lz-punto.par { background: var(--chl); }
+.lz-seg span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-seg small { flex: none; font: 500 10.5px var(--mono); opacity: .8; }
+.lz-seg.bandeja { background: var(--lienzo); color: var(--tenue); border: 1px dashed var(--borde); }
+/* el esquema en miniatura: los actos arriba y cada trama con sus nodos */
+.lz-mini-esq { display: block; width: 100%; height: auto; border-radius: 5px; background: var(--lienzo); border: 1px solid var(--regla); }
+.lz-guion { display: inline-flex; align-items: center; gap: 6px; font: 400 10.5px var(--mono); color: var(--tenue); }
+.lz-guion svg { color: var(--t-violeta); }
+.lz-guion.sin { color: var(--palido); }
+.lz-guion.sin svg { color: var(--palido); }
+/* el personaje: su chip de dos letras */
+.lz-per { display: flex; align-items: center; gap: 10px; }
+.lz-per .gd-chip { width: 34px; min-width: 34px; max-width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font: 600 13px var(--sans); flex: 0 0 34px; box-sizing: border-box; }
+.lz-per b { font-size: 14px; font-weight: 600; }
+/* la imagen */
+.lz-img { display: block; width: 100%; max-height: 260px; object-fit: contain; border-radius: 5px; background: var(--lienzo); border: 1px solid var(--regla); }
+input.lz-alt { width: 100%; box-sizing: border-box; height: 26px; padding: 0 8px; font: 400 11.5px var(--sans); color: var(--tenue); border: 1px solid transparent; border-radius: 4px; background: none; user-select: text; }
+input.lz-alt:hover { border-color: var(--regla); }
+input.lz-alt:focus { border-color: var(--foco-linea); background: var(--papel); outline: none; color: var(--tinta); }
+/* el texto: un campo con Markdown vivo */
+.lz-md { min-height: 64px; max-height: 320px; overflow-y: auto; padding: 7px 9px; font: 400 12.5px/1.5 var(--sans); color: var(--tinta); border: 1px solid var(--regla);
+  border-radius: 5px; background: var(--lienzo); outline: none; cursor: text; user-select: text; }
+.lz-md:focus { border-color: var(--foco-linea); background: var(--papel); box-shadow: 0 0 0 3px var(--foco-halo); }
+.lz-md:empty::before { content: attr(data-vacio); color: var(--palido); }
+.lz-md > :first-child { margin-top: 0; } .lz-md > :last-child { margin-bottom: 0; }
+.lz-md p { margin: 0 0 .4em; } .lz-md h1, .lz-md h2, .lz-md h3 { margin: .3em 0 .3em; font-size: 14px; }
+.lz-md ul, .lz-md ol { margin: 0 0 .4em; padding-left: 1.3em; } .lz-md blockquote { margin: 0 0 .4em; padding-left: 8px; border-left: 2px solid var(--borde); color: var(--tenue); }
+.lz-md code { font: 400 11.5px var(--mono); background: var(--hover); padding: 0 3px; border-radius: 3px; }
+/* elegir a qué apunta (una entrada nueva o rota) */
+.lz-elegir { display: flex; align-items: center; justify-content: center; gap: 7px; height: 34px; border: 1px dashed var(--borde-fuerte); border-radius: 5px;
+  background: none; color: var(--tenue); font: 500 12px var(--sans); cursor: pointer; }
+.lz-elegir:hover { border-color: var(--lz-c); color: var(--lz-c); background: color-mix(in srgb, var(--lz-c) 6%, transparent); }
+/* una entrada rota: lo que apuntaba ya no está (no se borra nada: se dice) */
+.lz-nodo.roto { border-color: color-mix(in srgb, var(--peligro) 60%, var(--borde)); border-style: dashed; }
+.lz-nodo.roto .lz-ncab { background: var(--peligro-bg); }
+.lz-nodo.roto .lz-ncab::before { background: var(--peligro); }
+.lz-roto { display: flex; gap: 7px; align-items: flex-start; font-size: 12px; line-height: 1.4; color: var(--peligro); }
+.lz-roto svg { margin-top: 1px; }
+
+/* operación: la instrucción y sus opciones */
+textarea.lz-instr { width: 100%; box-sizing: border-box; min-height: 58px; max-height: 240px; resize: none; padding: 7px 9px; font: 400 12.5px/1.45 var(--sans); color: var(--tinta);
+  border: 1px solid var(--regla); border-radius: 5px; background: var(--lienzo); outline: none; field-sizing: content; user-select: text; }
+textarea.lz-instr:focus { border-color: var(--foco-linea); background: var(--papel); box-shadow: 0 0 0 3px var(--foco-halo); }
+textarea.lz-instr::placeholder { color: var(--palido); }
+.lz-opts { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px 10px; }
+.lz-opts > label { font: 500 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); white-space: nowrap; }
+.lz-opts select, .lz-opts input { width: 100%; min-width: 0; box-sizing: border-box; height: 26px; padding: 0 7px; font: 400 12px var(--sans); color: var(--tinta);
+  border: 1px solid var(--regla); border-radius: 4px; background: var(--papel); outline: none; user-select: text; }
+.lz-opts select:focus, .lz-opts input:focus { border-color: var(--foco-linea); box-shadow: 0 0 0 3px var(--foco-halo); }
+.lz-opts .lz-nuevo { grid-column: 2; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 5px; }
+.lz-seg-ctl { display: inline-flex; border: 1px solid var(--regla); border-radius: 4px; overflow: hidden; width: max-content; }
+.lz-seg-ctl button { height: 24px; padding: 0 10px; border: 0; background: var(--papel); color: var(--tenue); font: 500 11.5px var(--sans); cursor: pointer; }
+.lz-seg-ctl button + button { border-left: 1px solid var(--regla); }
+.lz-seg-ctl button.on { background: var(--foco-suave); color: var(--foco); }
+
+/* pie: el estado y, a la derecha, la salida (con su punto en el borde) */
+.lz-npie { position: relative; display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 5px 16px 5px 10px; border-top: 1px solid var(--regla); flex-wrap: wrap; }
+.lz-ncuerpo:empty + .lz-npie, .lz-ins + .lz-npie { border-top: 0; }
+.lz-out { position: static; margin-left: auto; font: 500 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); white-space: nowrap; }
+.lz-out .lz-dot { right: -7px; top: 17px; }
+.lz-estado { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px 0 7px; border-radius: 11px; font: 500 11px var(--sans); white-space: nowrap;
+  color: var(--tenue); background: var(--lienzo); border: 1px solid var(--regla); }
+.lz-estado i { width: 7px; height: 7px; border-radius: 50%; background: var(--palido); }
+.lz-estado.pendiente { color: var(--foco); background: var(--foco-suave); border-color: var(--foco-linea); }
+.lz-estado.pendiente i { background: var(--foco); animation: lz-pulso 1.3s ease-out infinite; }
+@keyframes lz-pulso { 0% { box-shadow: 0 0 0 0 var(--foco-linea); } 80%, 100% { box-shadow: 0 0 0 7px transparent; } }
+.lz-estado.hecho { color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--papel)); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.lz-estado.hecho i { display: none; }
+.lz-estado.error { color: var(--peligro); background: var(--peligro-bg); border-color: color-mix(in srgb, var(--peligro) 40%, transparent); }
+.lz-estado.error i { background: var(--peligro); }
+.lz-estado.viejo { color: var(--t-ambar); background: color-mix(in srgb, var(--t-ambar) 12%, var(--papel)); border-color: color-mix(in srgb, var(--t-ambar) 40%, transparent); }
+.lz-estado.viejo i { background: var(--t-ambar); }
+.lz-pedir { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px 0 8px; border-radius: 12px; border: 1px solid var(--foco); background: var(--foco);
+  color: var(--foco-sobre); font: 500 11.5px var(--sans); cursor: pointer; white-space: nowrap; }
+.lz-pedir:hover { filter: brightness(1.08); }
+.lz-pedir.otra { background: var(--papel); color: var(--foco); }
+.lz-pedir.otra:hover { background: var(--foco-suave); filter: none; }
+.lz-error { flex-basis: 100%; font-size: 11.5px; line-height: 1.4; color: var(--peligro); }
+.lz-cuando { font: 400 10px var(--mono); color: var(--palido); white-space: nowrap; }
+/* la salida de una operación hecha: fichas que llevan a lo creado */
+.lz-salidas { display: flex; flex-wrap: wrap; gap: 5px; flex-basis: 100%; }
+.lz-sal { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 24px; padding: 0 9px 0 7px; border-radius: 5px; border: 1px solid color-mix(in srgb, var(--sc, var(--foco)) 35%, transparent);
+  background: color-mix(in srgb, var(--sc, var(--foco)) 10%, var(--papel)); color: color-mix(in srgb, var(--sc, var(--foco)) 75%, var(--tinta)); font: 500 11.5px var(--sans); cursor: pointer; }
+.lz-sal span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-sal:hover { background: color-mix(in srgb, var(--sc, var(--foco)) 18%, var(--papel)); }
+.lz-sal.roto { text-decoration: line-through; opacity: .65; cursor: default; }
+.lz-falta { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; line-height: 1.4; color: color-mix(in srgb, var(--t-ambar) 80%, var(--tinta)); }
+.lz-falta svg { margin-top: 1px; flex: none; }
+.lz-mensaje { flex-basis: 100%; font-size: 11.5px; line-height: 1.4; color: var(--tenue); font-style: italic; }
+.lz-nodo.destello { animation: lz-destello 1s ease-out; }
+@keyframes lz-destello { 0%, 40% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--lz-f) 40%, transparent), var(--sombra-alta); } }
+.lz-nodo.tiembla { animation: lz-tiembla .35s; }
+@keyframes lz-tiembla { 20%, 60% { translate: -4px 0; } 40%, 80% { translate: 4px 0; } }
+body.lz-arrastrando, body.lz-arrastrando * { user-select: none !important; }
+body.lz-arrastrando .lz-nodo.arrastrado, body.lz-arrastrando .lz-nodo.arrastrado * { cursor: grabbing !important; }
+/* el asa para cambiar el ancho, en la esquina de abajo a la derecha */
+.lz-asa-ancho { position: absolute; right: -1px; bottom: -1px; width: 14px; height: 14px; cursor: ew-resize; opacity: 0; transition: opacity .12s; z-index: 3;
+  background: linear-gradient(135deg, transparent 50%, var(--borde-fuerte) 50% 58%, transparent 58% 70%, var(--borde-fuerte) 70% 78%, transparent 78%); border-radius: 0 0 8px 0; }
+.lz-nodo:hover .lz-asa-ancho, .lz-nodo.sel .lz-asa-ancho { opacity: 1; }
+
+/* ---------- lienzo vacío ---------- */
+.lz-vacio { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 3; }
+.lz-vacio[hidden] { display: none; }
+.lz-vacio-caja { pointer-events: auto; max-width: 440px; padding: 22px 24px; border: 1px dashed var(--borde-fuerte); border-radius: 10px; background: color-mix(in srgb, var(--papel) 88%, transparent);
+  text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; box-shadow: var(--sombra); }
+.lz-vacio-caja b { font-size: 15px; }
+.lz-vacio-caja p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--tenue); }
+.lz-vacio-caja .lz-vacio-acc { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 4px; }
+.lz-vacio-caja .btn svg { color: var(--foco); }
+
+/* ---------- el pie ---------- */
+.lz-pie .zoom-vista { margin-left: 0; padding-left: 0; border-left: 0; }
+.lz-pie .zoom-vista .icono { color: var(--bb-fg); }
+.lz-pie .zoom-pct { color: var(--bb-fg); }
+.lz-pista { font: 400 10.5px var(--mono); color: var(--bb-muted); letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lz-pedir-todo { flex: none; gap: 7px; }
+.lz-pedir-todo svg { color: currentColor !important; }
+@container (max-width: 760px) { .lz-pista { display: none; } }
+.lz-pie { container-type: inline-size; }
+
+/* ---------- menús del lienzo (con el aspecto de los del gestor: .gd-pop) ---------- */
+.gd-pop.lz-menu { z-index: 85; min-width: 230px; }
+.gd-pop.lz-menu button svg { color: var(--palido); }
+.gd-pop.lz-menu button:hover svg { color: var(--foco); }
+.gd-pop.lz-menu button small { margin-left: auto; padding-left: 14px; font: 400 10px var(--mono); color: var(--palido); }
+.gd-pop.lz-menu .lz-ic-m { width: 20px; height: 20px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
+.gd-pop.lz-menu .lz-ic-m.op { color: var(--foco-sobre); background: var(--c); }
+.gd-pop.lz-menu button:hover .lz-ic-m svg { color: inherit; }
+.lz-elige { width: 320px; max-height: min(460px, calc(100vh - 40px)); display: flex; flex-direction: column; }
+.lz-elige input[type=search] { height: 30px; margin: 2px 2px 6px; padding: 0 9px; border: 1px solid var(--borde); border-radius: 4px; font: 400 12.5px var(--sans); color: var(--tinta); background: var(--papel); outline: none; }
+.lz-elige input[type=search]:focus { border-color: var(--foco-linea); box-shadow: 0 0 0 3px var(--foco-halo); }
+.lz-elige-lista { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.gd-pop .lz-elige-lista button { height: auto; min-height: 30px; padding: 5px 9px; align-items: center; }
+.lz-elige-lista button > span:nth-child(2) { display: flex; flex-direction: column; min-width: 0; }
+.lz-elige-lista b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-elige-lista em { font: normal 400 10px var(--mono); color: var(--palido); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-elige-lista .gd-pop-sub { padding: 6px 9px 2px; font: 500 9.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--palido); }
+
+/* ---------- las fórmulas de una operación (1.1.60): el botón «Fórmula» y un chip por cada una, bajo «Qué escribir» ---------- */
+.lz-fx { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.lz-fx-boton { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 7px 0 8px; border: 1px dashed var(--borde-fuerte); border-radius: 12px;
+  background: var(--papel); color: var(--tenue); font: 500 11.5px var(--sans); cursor: pointer; white-space: nowrap; }
+.lz-fx-boton:hover, .lz-fx-boton:focus-visible { border-color: var(--foco-linea); color: var(--foco); background: var(--foco-suave); outline: none; }
+.lz-fx-boton.con { border-style: solid; border-color: var(--foco-linea); color: var(--foco); }
+.lz-fx-boton svg:last-child { opacity: .7; }
+.lz-fx-chip { display: inline-flex; align-items: center; max-width: 100%; height: 24px; border-radius: 12px; border: 1px solid var(--foco-linea);
+  background: var(--foco-suave); color: var(--foco); overflow: hidden; }
+.lz-fx-nom { display: inline-flex; align-items: center; gap: 5px; min-width: 0; height: 100%; padding: 0 3px 0 8px; border: 0; background: none; color: inherit;
+  font: 500 11.5px var(--sans); cursor: pointer; }
+.lz-fx-nom span { min-width: 0; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-fx-nom:hover span { text-decoration: underline; text-underline-offset: 2px; }
+.lz-fx-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 100%; padding: 0 3px 0 0; border: 0; background: none;
+  color: inherit; opacity: .6; cursor: pointer; }
+.lz-fx-x:hover { opacity: 1; }
+.lz-fx-chip.roto { border-style: dashed; border-color: color-mix(in srgb, var(--peligro) 50%, transparent); background: var(--peligro-bg); color: var(--peligro); }
+.lz-fx-chip.roto .lz-fx-nom { cursor: default; }
+.lz-fx-chip.roto .lz-fx-nom span { text-decoration: line-through; }
+/* la lista: cada fórmula con su casilla y, elegida, su puesto en el orden */
+.lz-fx-menu .lz-fx-check { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 1px solid var(--borde-fuerte);
+  border-radius: 4px; background: var(--papel); }
+.lz-fx-menu .lz-fx-check svg { visibility: hidden; }
+.gd-pop.lz-menu.lz-fx-menu button.on .lz-fx-check { background: var(--foco); border-color: var(--foco); }
+.gd-pop.lz-menu.lz-fx-menu button.on .lz-fx-check svg { visibility: visible; color: var(--foco-sobre); }
+.gd-pop.lz-menu.lz-fx-menu button.on small { color: var(--foco); font-weight: 500; }
+.lz-fx-menu .gd-pop-sub { display: flex; align-items: center; gap: 6px; }
+.lz-fx-menu .gd-pop-sub[hidden], .lz-fx-menu button[hidden] { display: none; }
+/* «Nueva fórmula desde lo escrito…»: su nombre y lo que se guarda */
+.lz-fx-nueva { width: 320px; display: flex; flex-direction: column; gap: 8px; padding: 2px 4px 4px; }
+.lz-fx-campo { display: flex; flex-direction: column; gap: 4px; }
+.lz-fx-campo span { font: 500 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); }
+.lz-fx-campo input { height: 30px; padding: 0 9px; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel); color: var(--tinta); font: 400 12.5px var(--sans); outline: none; }
+.lz-fx-campo input:focus { border-color: var(--foco-linea); box-shadow: 0 0 0 3px var(--foco-halo); }
+.lz-fx-campo input.tiembla { animation: lz-tiembla .35s; border-color: var(--peligro); }
+.lz-fx-vista { max-height: 110px; overflow: auto; padding: 7px 9px; border: 1px dashed var(--regla); border-radius: 5px; background: var(--lienzo);
+  font: 400 11.5px/1.45 var(--sans); color: var(--tenue); white-space: pre-wrap; }
+.lz-fx-acc { display: flex; justify-content: flex-end; gap: 6px; }
+.gd-pop .lz-fx-acc .btn { height: 28px; width: auto; padding: 0 12px; justify-content: center; }
+.gd-pop .lz-fx-acc .btn.primario { background: var(--foco); border-color: var(--foco); color: var(--foco-sobre); }
+html[data-estilo="synthwave"] .lz-fx-chip:not(.roto) { box-shadow: 0 0 6px color-mix(in srgb, var(--foco) 35%, transparent); }
+
+/* ---------- temas neón (1.1.57): rejilla de neón y cables con brillo ---------- */
+html[data-estilo] .lz-cuerpo {
+  --lz-punto: color-mix(in srgb, var(--rejilla-neon) 70%, transparent);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--rejilla-neon) calc(var(--rejilla-opacidad) * 60%), transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--rejilla-neon) calc(var(--rejilla-opacidad) * 60%), transparent) 1px, transparent 1px),
+    radial-gradient(circle at center, var(--lz-punto) 0 1px, transparent 1.5px);
+  background-size: calc(var(--lz-paso, 24px) * 4) calc(var(--lz-paso, 24px) * 4), calc(var(--lz-paso, 24px) * 4) calc(var(--lz-paso, 24px) * 4), var(--lz-paso, 24px) var(--lz-paso, 24px);
+  background-position: var(--lz-px, 0) var(--lz-py, 0); }
+html[data-estilo="synthwave"] .lz-cuerpo::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(120% 60% at 50% 115%, rgba(255, 95, 210, .16), transparent 60%), radial-gradient(80% 50% at 50% -20%, rgba(62, 232, 255, .08), transparent 60%); }
+html[data-estilo="vaporwave"] .lz-cuerpo::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(120% 60% at 50% 115%, rgba(214, 38, 170, .08), transparent 60%); }
+html[data-estilo] .lz-cable { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--lz-cc, var(--foco)) 70%, transparent)); }
+html[data-estilo="synthwave"] .lz-cable { stroke-width: 2.4; filter: drop-shadow(0 0 2px var(--lz-cc, var(--foco))) drop-shadow(0 0 7px color-mix(in srgb, var(--lz-cc, var(--foco)) 60%, transparent)); }
+html[data-estilo] .lz-nodo { box-shadow: 0 1px 2px var(--sombra-suave), 0 8px 22px var(--sombra-suave), 0 0 0 1px color-mix(in srgb, var(--lz-c) 18%, transparent); }
+html[data-estilo] .lz-ent { --lz-f: var(--cian); }
+html[data-estilo="synthwave"] .lz-nodo.sel { box-shadow: 0 0 0 2px var(--lz-f), 0 0 18px color-mix(in srgb, var(--lz-f) 45%, transparent), var(--sombra-alta); }
+html[data-estilo] .lz-op .lz-ncab::before { background: var(--sol); opacity: 1; }
+html[data-estilo] .lz-op .lz-ic { background: var(--sol); color: var(--sol-tinta); }
+html[data-estilo] .lz-pedir { background: var(--sol); border-color: transparent; color: var(--sol-tinta); }
+html[data-estilo] .lz-pedir.otra { background: var(--papel); border-color: var(--foco); color: var(--foco); }
+html[data-estilo="synthwave"] .lz-estado.pendiente { box-shadow: var(--neon-brillo); }
+html[data-estilo="synthwave"] .lz-dot { box-shadow: 0 0 6px color-mix(in srgb, var(--lz-pc, var(--foco)) 55%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lz-cable-g.fluye .lz-cable, .lz-estado.pendiente i, .lz-cuerpo.cableando .lz-puerto.posible .lz-dot, .lz-nodo.aparece { animation: none; }
+}
