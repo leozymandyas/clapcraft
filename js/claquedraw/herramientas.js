@@ -32,6 +32,17 @@
   const entero = (v, que) => { const n = Math.round(+v); if (!Number.isFinite(n)) falla((que || 'Ese número') + ' no es un número: ' + JSON.stringify(v)); return n; };
   const lista = v => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]);
   const ahoraDe = ctx => (ctx.ahora ? ctx.ahora() : Date.now());
+  /* **El nombre de una operación de un lote** tal como lo entiende su herramienta: `op` (o `operacion`) sin mayúsculas ni acentos,
+     los espacios como «_», y en editar_lienzo sus alias. Lo usan los cuatro lotes y el permiso del asistente (asistente-motor.js,
+     `destructivo`): antes cada lote leía `op` a su manera y el permiso miraba `op` tal cual, así que «Tirar Nota» o
+     { operacion: "borrar" } se hacían sin preguntar a Leo (revisión del port a ClapBook). */
+  const ALIAS_LIENZO = { borrar_nodo: 'borrar', borrar_nodos: 'borrar', mover_nodo: 'mover', mover_nodos: 'mover' };
+  const opCruda = o => (o && (o.op !== undefined && o.op !== null && o.op !== '' ? o.op : o.operacion)) || '';
+  function nombreOperacion(herramienta, o) {
+    if (!o || typeof o !== 'object') return '';
+    const k = plano(opCruda(o)).replace(/\s+/g, '_');
+    return herramienta === 'editar_lienzo' ? ALIAS_LIENZO[k] || k : k;
+  }
   /* Deshace un cambio a medias dejando el mismo objeto (en la app, el gestor sigue teniendo la misma referencia) */
   function reponerEnSitio(obj, json) {
     const x = JSON.parse(json);
@@ -561,13 +572,13 @@
     const m = modeloDe(docs, { esquema: { id: eid, datos: clonar(r.esquema.datos) } });
     const refs = new Map(), hechos = [];
     ops.forEach((o, i) => {
-      const nombre = o && plano(o.op || o.operacion || '').replace(/\s+/g, '_');
+      const nombre = nombreOperacion('editar_esquema', o);
       const fn = OPS_ESQUEMA[nombre];
       try {
-        if (!fn) falla('no conozco la operación ' + comillas(o && (o.op || o.operacion)) + '. Operaciones: ' + Object.keys(OPS_ESQUEMA).join(', '));
+        if (!fn) falla('no conozco la operación ' + comillas(opCruda(o)) + '. Operaciones: ' + Object.keys(OPS_ESQUEMA).join(', '));
         hechos.push((i + 1) + '. ' + fn(m, o, refs));
       } catch (e) {
-        if (e instanceof Falla) falla('La operación ' + (i + 1) + ' (' + ((o && o.op) || '?') + ') no se pudo: ' + e.message + '. No se cambió nada del esquema.');
+        if (e instanceof Falla) falla('La operación ' + (i + 1) + ' (' + (opCruda(o) || '?') + ') no se pudo: ' + e.message + '. No se cambió nada del esquema.');
         throw e;
       }
     });
@@ -902,7 +913,7 @@
     try {
       ops.forEach((o, i) => {
         try { hechos.push((i + 1) + '. ' + fn(o, refs)); }
-        catch (e) { if (e instanceof Falla) falla('La operación ' + (i + 1) + ' (' + ((o && o.op) || '?') + ') no se pudo: ' + e.message + '. No se cambió nada.'); throw e; }
+        catch (e) { if (e instanceof Falla) falla('La operación ' + (i + 1) + ' (' + (opCruda(o) || '?') + ') no se pudo: ' + e.message + '. No se cambió nada.'); throw e; }
       });
     } catch (e) { reponerEnSitio(docs.datos, antes); throw e; }
     const cambio = JSON.stringify(docs.datos) !== antes;
@@ -917,8 +928,8 @@
     let s = nace ? null : bibliotecaDe(docs, args.biblioteca).sub;
     const r = lote(ctx, args.operaciones, (o, refs) => {
       if (!s) s = docs[E.asegurar]().sub;
-      const nombre = o && plano(o.op || '').replace(/\s+/g, '_'), fn = OPS_BIBLIOTECA[nombre];
-      if (!fn) falla('no conozco la operación ' + comillas(o && o.op) + '. Operaciones: ' + Object.keys(OPS_BIBLIOTECA).join(', '));
+      const nombre = nombreOperacion('editar_biblioteca', o), fn = OPS_BIBLIOTECA[nombre];
+      if (!fn) falla('no conozco la operación ' + comillas(opCruda(o)) + '. Operaciones: ' + Object.keys(OPS_BIBLIOTECA).join(', '));
       return fn(docs, s, o, refs, ctx);
     });
     return { texto: (especialDe(s) ? especialDe(s).nombre : 'Biblioteca ' + comillas(s.nombre)) + ':\n' + r.hechos.join('\n') + (r.creados.length ? '\nCreados: ' + r.creados.join(', ') : '') + (r.cambio ? '' : '\n(nada cambió)'),
@@ -927,6 +938,174 @@
 
   /* **usar_formula** (1.1.60): el texto de una fórmula, para seguirla en lo que Leo pide (como una skill: el asistente y Claude
      ven la lista de títulos y cargan la que venga a cuento). Solo lectura. */
+  /* **Los mods del teatro de duendes** (1.1.63, js/claquedraw/teatro-mods.js): escenarios, vestuarios, objetos de utilería, máscaras
+     y músicas que el teatro no trae, para que la obra se parezca al guion. **Solo Claude** (Cowork o Claude Code): el asistente de la
+     app no las tiene (`soloClaude`) y, si le llegara, se niega. Son datos que el teatro valida y dibuja; nunca código. */
+  const Tm = () => C.teatroMods || (typeof require === 'function' ? (() => { try { return require('./teatro-mods.js').teatroMods; } catch (_) { return null; } })() : null);
+  /* el asistente de la app (una IA por API) marca `ctx.ia`: su `origen` es el nombre del modelo, que puede decir «claude» (un modelo
+     de Anthropic en OpenRouter) sin ser Claude con el guion leído */
+  const esClaude = ctx => !ctx.ia && (!ctx.origen || /claude|cowork/i.test(String(ctx.origen)));
+  /* **Los mods son de todos los proyectos** (1.1.64): `ctx.teatroGlobal` ({ leer, escribir }) los da (la app, su copia; el servidor,
+     teatro-mods.json en los datos de la app). Sin él (pruebas, el navegador sin app), en el proyecto como en la 1.1.63. Lo que un
+     proyecto de la 1.1.63 guardaba dentro se muda a los de todos (`mudarMods`). */
+  const globalDe = ctx => ctx.teatroGlobal || { leer: () => Tm().soloMods(ctx.docs.teatro()), escribir: t => { ctx.docs.fijarTeatro(Object.assign(Tm().soloProyecto(ctx.docs.teatro()), Tm().soloMods(t))); ctx.cambio({ proyecto: true }); } };
+  function mudarMods(ctx) {
+    if (!ctx.teatroGlobal) return;
+    const t = ctx.docs.teatro(); if (!Tm().tieneMods(t)) return;
+    ctx.teatroGlobal.escribir(Tm().mezclar(ctx.teatroGlobal.leer(), t));
+    if (ctx.docs.fijarTeatro(Tm().soloProyecto(t))) ctx.cambio({ proyecto: true });
+  }
+  const modsDe = ctx => Tm().mezclar(globalDe(ctx).leer(), ctx.docs.teatro());
+  function leerTeatro(ctx) {
+    if (!Tm()) falla('Esta versión de ClapCraft no trae los mods del teatro');
+    const t = ctx.docs.teatro(), du = t.duendes || {};
+    const L = ['TEATRO DE DUENDES (el botón «Teatro» del editor). Los MODS son de todos los proyectos de Leo: reutilízalos.', '', Tm().resumen(modsDe(ctx))];
+    const pjs = ctx.docs.elenco().filter(p => du[p.id]);
+    L.push('', 'DUENDES DE LOS PERSONAJES de este proyecto: ' + (pjs.length ? pjs.map(p => p.nombre + ' (' + p.id + ')' + ({ humano: ', humano', nino: ', niño' }[du[p.id].cuerpo] || '') + (du[p.id].descripcion ? ': ' + corto(du[p.id].descripcion, 120) : '')).join('; ') : '(ninguno; se hacen con duende_personaje)'));
+    if (Tm().resumenRasgos) L.push('', 'RASGOS DEL DUENDE DE UN PERSONAJE (duende_personaje; por defecto un duende, o cuerpo humano/niño):', Tm().resumenRasgos(modsDe(ctx)));
+    const conAjustes = Object.entries(t.obras || {}).filter(([, o]) => o && o.ajustes && Object.keys(o.ajustes.escenas || {}).length);
+    if (conAjustes.length) L.push('', 'AJUSTES DE LEO (escenarios que eligió a mano en el teatro; mandan sobre la dirección y preparar_obra los detalla): '
+      + conAjustes.map(([id, o]) => comillas(o.titulo || (ctx.docs.nota(id) || {}).titulo || id) + ' (' + plural(Object.keys(o.ajustes.escenas).length, 'escena', 'escenas') + ')').join(', '));
+    return { texto: L.join('\n'), datos: { mods: modsDe(ctx), duendes: clonar(du) } };
+  }
+  function editarTeatro(ctx, args) {
+    if (!esClaude(ctx)) falla('Los mods del teatro solo los hace Claude (Cowork o Claude Code)');
+    if (!Tm()) falla('Esta versión de ClapCraft no trae los mods del teatro');
+    mudarMods(ctx);
+    const G = globalDe(ctx), r = Tm().editar(G.leer(), args.operaciones);
+    if (!r.ok) falla(r.error);
+    G.escribir(r.teatro);
+    return { texto: r.hechos.join('\n') + '\nSon de todos los proyectos de Leo (no van en el historial de este proyecto: para deshacer, quítalos o cámbialos con editar_teatro). Se verán la próxima vez que se abra el teatro.' };
+  }
+  /* **El duende de un personaje** (1.1.64): cómo es en el teatro, siempre que sale en una obra. Solo Claude, a partir de su descripción
+     (y preguntando lo que falte). **Versión 2** (1.1.67): cuerpo de duende (por defecto), humano o niño, y muchos más rasgos
+     (C.teatroMods.RASGOS); `ver` da la hoja, el duende de ahora, los rasgos y las imágenes de su biblioteca (y la de `imagen`) como
+     contenido de imagen de MCP, para hacerlo a partir de una foto o un dibujo. Leo también lo hace a mano en el creador de duendes. */
+  const META_DUENDE = ['nombre', 'fecha', 'fuente'];
+  function verDuende(ctx, p, args) {
+    const docs = ctx.docs, du = (ctx.docs.teatro().duendes || {})[p.id], imgs = { lista: [], fuera: 0 }, L = [];
+    L.push('EL DUENDE DE ' + comillas(p.nombre) + ' (personaje ' + p.id + ')');
+    if (du) {
+      const x = Object.fromEntries(Object.entries(du).filter(([k]) => !META_DUENDE.includes(k)));
+      L.push('Ahora: ' + JSON.stringify(x) + (du.fecha ? ' · hecho el ' + fecha(du.fecha) : '') + (du.fuente && docs.nota(du.fuente) ? ' · a partir de ' + comillas(docs.nota(du.fuente).titulo) : ''));
+    } else L.push('Aún no tiene duende: en las obras sale con el vestuario que elija la dirección.');
+    const h = docs.hojaPersonaje(p.id);
+    L.push('');
+    if (h.notas.length) {
+      L.push('HOJA DE PERSONAJE (su biblioteca' + (h.hoja ? ', «' + h.hoja.nombre + '» primero' : '') + '):');
+      notasConTope(docs, h.notas, imgs, '  ', { conImagenes: true }).forEach(x => L.push(x));
+    } else L.push('Sin hoja de personaje escrita (no inventes cómo es: pregúntaselo a Leo o pídele una imagen).');
+    if (args.imagen) {
+      const n = notaDe(docs, args.imagen);
+      L.push('', 'LA IMAGEN QUE DIO LEO (nota ' + comillas(n.titulo) + ', ' + n.id + '):');
+      const im = recogerImagenes(n.html, 'nota ' + comillas(corto(n.titulo, 40)), imgs);
+      if (im.length) im.forEach(t => L.push('  ' + t)); else L.push('  (esa nota no tiene ninguna imagen)');
+    }
+    L.push('', 'RASGOS (duende_personaje { personaje, duende: { … } }; los ids tal cual, colores #rrggbb):', Tm().resumenRasgos(modsDe(ctx)));
+    L.push('', 'CÓMO: por defecto es un DUENDE (cuerpo: "duende"). Si Leo da una imagen de una persona o lo pide, cuerpo: "humano" (o "nino") con sus rasgos '
+      + 'característicos: peinado y hairCol, vello y beardCol, lentes, complexion, altura, la ropa que suele llevar (prenda y cloth/cloth2, bajo y pants, calzado y shoes), '
+      + 'marcas y accesorios. Un animal: animal (su cara) y cola, o el vestuario de ese animal. Lo que no se vea en la imagen ni diga la hoja, pregúntaselo a Leo.');
+    if (imgs.lista.length) L.push('', (imgs.lista.length === 1 ? 'Va adjunta 1 imagen' : 'Van adjuntas ' + imgs.lista.length + ' imágenes') + ' (reducidas a 1024 px de lado largo como mucho)'
+      + (imgs.fuera ? '; ' + plural(imgs.fuera, 'otra no va', 'otras no van') + ' (tope de ' + MAX_IMAGENES + ')' : '') + '.');
+    return { texto: L.join('\n'), imagenes: imgs.lista };
+  }
+  function duendePersonaje(ctx, args) {
+    if (!esClaude(ctx)) falla('Los duendes de los personajes solo los hace Claude (Cowork o Claude Code)');
+    if (!Tm()) falla('Esta versión de ClapCraft no trae el teatro');
+    const p = personajeDe(ctx.docs, args.personaje);
+    const ver = args.ver === true || /^ver$/i.test(String(args.operacion || args.op || '')) || (args.imagen && !args.duende && args.quitar !== true);
+    if (ver) return verDuende(ctx, p, args);
+    mudarMods(ctx);
+    const t = ctx.docs.teatro(), du = Object.assign({}, t.duendes || {});
+    if (args.quitar === true) {
+      if (!du[p.id]) return { texto: comillas(p.nombre) + ' no tenía duende.' };
+      delete du[p.id];
+      if (ctx.docs.fijarTeatro(Object.assign({}, t, { duendes: du }))) ctx.cambio({ proyecto: true });
+      return { texto: 'Quitado el duende de ' + comillas(p.nombre) + ': en las obras vuelve a elegirse su vestuario.' };
+    }
+    if (!args.duende || typeof args.duende !== 'object') falla('Falta el duende: { rasgos y piezas } (para mirar su hoja y sus imágenes antes: ver: true)');
+    const mods = modsDe(ctx), r = Tm().validarDuende(Object.assign({}, args.cambiar === true && du[p.id] ? du[p.id] : {}, args.duende),
+      { mascaras: (mods.mascaras || []).map(m => m.id), vestuarios: (mods.vestuarios || []).map(v => v.id) });
+    if (!r.ok) falla(r.error);
+    const fuente = args.fuente ? notaDe(ctx.docs, args.fuente).id : args.imagen ? notaDe(ctx.docs, args.imagen).id : (du[p.id] && du[p.id].fuente) || null;
+    du[p.id] = Object.assign(r.dato, { nombre: p.nombre, fecha: ahoraDe(ctx) }, fuente ? { fuente } : {});
+    if (ctx.docs.fijarTeatro(Object.assign({}, t, { duendes: du }))) ctx.cambio({ proyecto: true });
+    const cuerpo = { humano: ' (cuerpo humano)', nino: ' (cuerpo de niño)' }[r.dato.cuerpo] || '';
+    return { texto: (args.cambiar ? 'Cambiado' : 'Hecho') + ' el duende de ' + comillas(p.nombre) + cuerpo + '. Leo lo ve en su personaje (Personajes › ' + p.nombre + ', tarjeta «Duende», donde también puede retocarlo en el creador) y sale así en todas las obras.' };
+  }
+  /* **Las obras del teatro** (1.1.63): Claude lee el guion con preparar_obra y guarda su puesta en escena con dirigir_obra. */
+  const Dn = () => C.duendes || (typeof require === 'function' ? (() => { try { return require('./duendes.js').duendes; } catch (_) { return null; } })() : null);
+  function obraDe(ctx, args) {
+    if (!Dn() || !Tm()) falla('Esta versión de ClapCraft no trae el teatro');
+    const x = documentoDe(ctx, args, false);
+    if (!x.nota) falla('Ese esquema aún no tiene guion');
+    const n = x.nota, d = ctx.docs;
+    const elenco = d.elenco().map(p => ({ nombre: p.nombre, color: p.color })).concat(Object.values(n.characters || {}).map(r => ({ nombre: r && r.name, color: r && r.color })));
+    const g = Dn().guionDe(n.html, { elenco });
+    if (!g.guion) falla(comillas(n.titulo) + ' no es un guion (no tiene escenas ni diálogos): el teatro lo lee tal cual, sin dirección');
+    mudarMods(ctx);
+    const t = d.teatro(), cat = Dn().catalogoDe(modsDe(ctx));
+    const resumen = { personajes: g.hablan.map(q => ({ clave: Dn().claveTeatro(q), nombre: q })), eventos: g.eventos };
+    return { n, g, t, cat, resumen };
+  }
+  /* los ajustes de Leo de una obra, en palabras: «escena 3 «INT. COCINA» → escenario «playa» (Playa al atardecer), de noche» */
+  function ajustesTexto(o, g, cat) {
+    const es = (o && o.ajustes && o.ajustes.escenas) || {}, L = [];
+    for (const [firma, a] of Object.entries(es)) {
+      const e = g.eventos.find(x => x.firma === firma), bd = a.bd && cat.escenarios.find(x => x.id === a.bd);
+      const que = [a.bd ? 'escenario ' + comillas(a.bd) + (bd && bd.n !== a.bd ? ' (' + bd.n + ')' : bd ? '' : ' (ya no existe)') : '', a.noche === true ? 'de noche' : a.noche === false ? 'de día' : ''].filter(Boolean).join(', ');
+      /* `scene||`: lo de antes del primer encabezado (una obra que empieza sin escena) */
+      const antesDe = firma === 'scene||';
+      L.push('- ' + (e ? 'escena ' + e.i + ' ' + comillas(e.texto) : antesDe ? 'el principio (lo de antes del primer encabezado de escena)' : 'una escena que ya no está en el guion (' + corto(firma.split('|').pop(), 50) + ')') + ' → ' + que);
+    }
+    return L;
+  }
+  function prepararObra(ctx, args) {
+    if (!esClaude(ctx)) falla('Las obras del teatro solo las dirige Claude (Cowork o Claude Code)');
+    const { n, g, t, cat } = obraDe(ctx, args), o = (t.obras || {})[n.id];
+    const lista = l => l.map(x => x.id === x.n ? x.id : x.id + ' = ' + x.n).join('; ');
+    const L = ['OBRA: ' + comillas(n.titulo) + ' · nota ' + n.id + ' · ' + plural(g.eventos.length, 'evento', 'eventos'),
+      o && o.fecha ? 'Ya la dirigiste el ' + fecha(o.fecha) + (o.huella === g.huella ? ' (el guion no ha cambiado).' : ' y el guion CAMBIÓ desde entonces: vuelve a dirigirla.') : 'Aún no está dirigida.',
+      '', 'CÓMO DIRIGIR', Dn().REGLAS, '',
+      'ESCENARIOS: ' + lista(cat.escenarios), 'VESTUARIOS: ' + lista(cat.vestuarios), 'MÁSCARAS: ' + lista(cat.mascaras),
+      'MÚSICAS: ' + lista(cat.musicas), 'OBJETOS (utilería): ' + (cat.objetos.length ? lista(cat.objetos) : '(ninguno; créalos con editar_teatro solo si son clave)'),
+      'GESTOS: ' + lista(cat.gestos), '',
+      'PERSONAJES QUE HABLAN: ' + (g.hablan.join(', ') || '(ninguno)'),
+      'PERSONAJES CON DUENDE PROPIO (sale siempre así: no les elijas vestuario ni máscara; sí gestos, tamaño si hace falta y dónde están): ' + (ctx.docs.elenco().filter(p => (t.duendes || {})[p.id]).map(p => p.nombre).join(', ') || '(ninguno)'),
+      'GESTOS CLAVE: si un momento clave necesita una acción que no está en GESTOS (arrancar algo con los dientes, cargar a alguien), créala con editar_teatro { tipo: "gesto" } y úsala.'];
+    const aj = ajustesTexto(o, g, cat);
+    if (aj.length) L.push('', 'AJUSTES DE LEO — respétalos (los eligió él en el teatro y mandan sobre tu dirección; no los cambies salvo que te lo pida):', ...aj);
+    L.push('', 'EVENTOS:');
+    for (const e of g.eventos) {
+      if (e.tipo === 'escena') L.push(e.i + ' ESCENA: ' + e.texto);
+      else if (e.tipo === 'linea') L.push(e.i + ' LÍNEA ' + e.quien + (e.paren ? ' (' + e.paren + ')' : '') + ': ' + e.texto);
+      else L.push(e.i + ' ACOTACIÓN: ' + e.texto);
+    }
+    L.push('', 'Cuando lo tengas: dirigir_obra { nota o esquema (el mismo de aquí), plan: { escenas: [{ i, escenario, noche, musica, presentes, objetos, cartel }], personajes: [{ nombre, vestuario, mascara, tamano, voz }], lineas: [{ i, gesto }], acotaciones: [{ i, quienes, movimiento, gesto, objetos, cartel }] } }.');
+    return { texto: L.join('\n') };
+  }
+  function dirigirObra(ctx, args) {
+    if (!esClaude(ctx)) falla('Las obras del teatro solo las dirige Claude (Cowork o Claude Code)');
+    const { n, g, t, cat, resumen } = obraDe(ctx, args);
+    if (!args.plan || typeof args.plan !== 'object') falla('Falta el plan: { escenas, personajes, lineas, acotaciones }');
+    const r = Dn().leerDireccion(args.plan, resumen, cat);
+    if (!r.ok) falla(r.error);
+    /* lo que no se pudo usar, para que Claude lo corrija (ids que no existen, números de evento que no son de ese tipo) */
+    const avisos = [], ids = k => new Set(cat[k].map(x => x.id)), pl = args.plan;
+    const mirar = (l, campo, k, que) => (Array.isArray(l) ? l : []).forEach(x => { const v = x && x[campo]; if (v && !ids(k).has(String(v).toLowerCase()) && !cat[k].some(y => y.n === v)) avisos.push(que + ' «' + v + '» no existe (usa uno del catálogo o créalo con editar_teatro)'); });
+    mirar(pl.escenas, 'escenario', 'escenarios', 'El escenario'); mirar(pl.escenas, 'musica', 'musicas', 'La música');
+    mirar(pl.personajes, 'vestuario', 'vestuarios', 'El vestuario'); mirar(pl.personajes, 'mascara', 'mascaras', 'La máscara');
+    const obras = Object.assign({}, t.obras || {});
+    const antes = obras[n.id];                                     // los ajustes de Leo (el escenario que eligió a mano) se quedan
+    obras[n.id] = Object.assign({ huella: g.huella, fecha: ahoraDe(ctx), titulo: n.titulo, plan: Dn().aFirmas(r.plan, g.eventos) }, antes && antes.ajustes ? { ajustes: clonar(antes.ajustes) } : {});
+    if (ctx.docs.fijarTeatro(Object.assign({}, t, { obras }))) ctx.cambio({ proyecto: true });
+    const c = r.cuenta;
+    return { texto: 'Obra ' + comillas(n.titulo) + ' dirigida: ' + [plural(c.escenas, 'escenario', 'escenarios'), plural(c.vestuarios, 'vestuario', 'vestuarios'),
+      plural(c.gestos, 'gesto', 'gestos'), plural(c.extras, 'personaje que no habla', 'personajes que no hablan'), plural(c.carteles, 'cartel', 'carteles')].join(', ') + '.'
+      + (avisos.length ? '\nNO SE USÓ: ' + [...new Set(avisos)].slice(0, 12).join('; ') + '.' : '')
+      + (antes && antes.ajustes ? '\nLos ajustes de Leo (' + plural(Object.keys(antes.ajustes.escenas || {}).length, 'escena', 'escenas') + ' con el escenario que eligió él) se conservan y mandan sobre esta dirección.' : '')
+      + '\nLeo la verá con el botón «Teatro» del editor.' };
+  }
   function usarFormula(ctx, args) {
     const docs = ctx.docs, fs = formulasTodas(docs);
     if (!fs.length) falla('Este proyecto aún no tiene fórmulas (viven en la biblioteca «Fórmulas»; se crean con editar_biblioteca { biblioteca: "Fórmulas" } › crear_nota)');
@@ -1014,6 +1193,8 @@
     /* el nombre del proyecto no vive en los documentos: se apunta y se pone al final, si el lote entero salió bien */
     renombrar_proyecto(ctx, o, refs) {
       const n = texto(o.nombre).trim(); if (!n) falla('El nombre no puede quedar vacío');
+      /* el mismo nombre no es un fallo (revisión: la app lo daba por fallido con lo demás del lote ya hecho, y la IA lo repetía) */
+      if (ctx.proyecto && n === ctx.proyecto.nombre) { delete refs.nombreProyecto; return 'proyecto ' + comillas(n) + ' (ya se llamaba así)'; }
       refs.nombreProyecto = n;
       return 'proyecto ' + comillas(n) + ' (el archivo se sigue llamando igual)';
     },
@@ -1143,14 +1324,18 @@
     return encontrar(todas.map(k => ({ id: k.id, nombre: k.nombre, obj: k })), v, 'la carpeta');
   }
   function editarProyecto(ctx, args) {
+    const antes = JSON.stringify(ctx.docs.datos);
     const r = lote(ctx, args.operaciones, (o, refs) => {
-      const nombre = o && plano(o.op || '').replace(/\s+/g, '_'), fn = OPS_PROYECTO[nombre];
-      if (!fn) falla('no conozco la operación ' + comillas(o && o.op) + '. Operaciones: ' + Object.keys(OPS_PROYECTO).join(', '));
+      const nombre = nombreOperacion('editar_proyecto', o), fn = OPS_PROYECTO[nombre];
+      if (!fn) falla('no conozco la operación ' + comillas(opCruda(o)) + '. Operaciones: ' + Object.keys(OPS_PROYECTO).join(', '));
       return fn(ctx, o, refs);
     });
     const nombre = r.refs.nombreProyecto;
     if (nombre) {
-      if (ctx.renombrarProyecto) ok(ctx.renombrarProyecto(nombre));
+      /* el nombre va al final, fuera del lote: si no se puede (otro proyecto abierto ya se llama así), se deshace el lote entero
+         (revisión: fallaba con lo demás ya hecho, y la IA lo reintentaba y lo duplicaba) */
+      const rn = ctx.renombrarProyecto ? ctx.renombrarProyecto(nombre) : { ok: true };
+      if (!rn || !rn.ok) { reponerEnSitio(ctx.docs.datos, antes); falla(((rn && rn.aviso) || 'No se pudo renombrar el proyecto') + '. No se cambió nada.'); }
       if (ctx.proyecto) ctx.proyecto.nombre = nombre;
       ctx.cambio({ proyecto: true });
     }
@@ -1829,15 +2014,17 @@
   const MAX_PALABRAS_BIB = 8000;                                 // una biblioteca más larga entra resumida (cada nota, un extracto)
   /* unas notas (un segmento, la bandeja, la hoja de un personaje, los fragmentos de un `partir`) con el mismo tope que una
      biblioteca: si juntas pasan de MAX_PALABRAS_BIB, cada una entra con un extracto (y sin sus imágenes) y se dice */
-  function notasConTope(docs, notas, imgs, pre) {
+  function notasConTope(docs, notas, imgs, pre, op) {
+    const conImg = !!(op && op.conImagenes);          // la hoja de un personaje (duende_personaje › ver): sus imágenes van siempre
     const L = [], total = notas.reduce((k, x) => k + V().palabras(x.html), 0), enteras = total <= MAX_PALABRAS_BIB;
     notas.forEach(x => {
       L.push(pre + 'NOTA ' + x.id + ' ' + comillas(x.titulo) + fragmentoTexto(docs, x));
       if (enteras) { textoNotaL(docs, x, imgs, pre + '  ').forEach(y => L.push(y)); return; }
       const t = V().aTexto(x.html, { modo: V().esGuion(x.html) ? 'guion' : 'prosa' }).replace(/\s+/g, ' ').trim();
       L.push(pre + '  Extracto (' + miles(V().palabras(x.html)) + ' palabras): ' + (t ? corto(t, 280) : '(vacía)'));
+      if (conImg) recogerImagenes(x.html, 'nota ' + comillas(corto(x.titulo, 40)), imgs).forEach(y => L.push(pre + '    ' + y));
     });
-    if (!enteras) L.push(pre + '(Juntas tienen ' + miles(total) + ' palabras: van resumidas, cada nota un extracto y sin sus imágenes. La que haga falta entera: leer_documento { nota }.)');
+    if (!enteras) L.push(pre + '(Juntas tienen ' + miles(total) + ' palabras: van resumidas, cada nota un extracto' + (conImg ? '' : ' y sin sus imágenes') + '. La que haga falta entera: leer_documento { nota }.)');
     return L;
   }
   /* el contenido de lo que entra por un cable */
@@ -1975,6 +2162,51 @@
   }
 
   /* ---------- completar_nodo ---------- */
+  /* una nota de la salida: por su id, su enlace o su título exacto (revisión del port a ClapBook: con los «parecidos» de `encontrar`,
+     «Esc» se llevaba cualquier nota que lo contuviera: una plantilla, una fórmula, el guion de un esquema, lo que entra en el nodo) */
+  function notaExacta(docs, v, subId) {
+    const c = docs.datos.notas.filter(n => !subId || n.subId === subId).map(n => ({ id: n.id, nombre: n.titulo, obj: n }));
+    if (v !== undefined && v !== null && v !== '' && !esEnlace(v)) {
+      const s = String(v).trim();
+      if (!c.some(x => x.id === s || plano(x.nombre) === plano(s))) falla('No hay ninguna nota que se llame exactamente ' + comillas(s) + (subId ? ' en esa biblioteca' : '') + ': di su id (el que dio la herramienta al crearla) o su enlace');
+    }
+    return encontrar(c, v, 'la nota');
+  }
+  /* **Lo que se entrega tiene que ser la salida de esa operación** (revisión del port a ClapBook: no se comparaba con su destino): el
+     esquema de su destino; «en su sitio», el guion (o la nota) de la fuente; una biblioteca (y su segmento), notas de ahí. Una nota,
+     nunca de las especiales (plantillas, fórmulas) ni el guion de un esquema (eso es { tipo: "documento" }), ni una de las que entran
+     en la operación (las que ya estaban cuando se pidió: lo creado después, en un segmento que también entra, sí vale). */
+  function comprobarSalida(docs, m, n, s) {
+    const dest = (n.datos || {}).destino || {}, desde = +n.pedido || 0, entran = new Set(), fuente = { notas: new Set(), eid: null };
+    const enSitio = !!(dest.enSitio || dest.sitio || dest.en_sitio), esFuente = p => p.id === 'fuente' || p.id === 'guion';
+    entradasL(m, n).forEach(p => p.nodos.forEach(x => {
+      let R = null; try { R = docs.resolverEntrada ? docs.resolverEntrada(x) : null; } catch (_) { R = null; }
+      if (!R || R.roto) return;
+      /* de un segmento, una biblioteca o un personaje, solo con la fecha del pedido (sin ella, lo nuevo parecería de la entrada) */
+      const ns = R.nota ? [R.nota] : desde && Array.isArray(R.notas) ? R.notas : [];
+      ns.forEach(y => { if (!y || (desde && +y.creado >= desde)) return; entran.add(y.id); if (esFuente(p)) fuente.notas.add(y.id); });
+      if (esFuente(p) && R.esquema) fuente.eid = R.esquema.id;
+    }));
+    const nomEsq = eid => { const e = eid && docs.esquema(eid); return e ? comillas(e.esquema.nombre) + ' (' + e.esquema.id + ')' : 'un esquema que ya no está'; };
+    const nomBib = sid => { const b = sid && docs.sub(sid); return b ? comillas(b.sub.nombre) + ' (' + b.sub.id + ')' : 'una biblioteca que ya no está'; };
+    if (s.tipo === 'documento' || s.tipo === 'esquema') {
+      if (dest.eid && s.eid !== dest.eid) falla('El esquema ' + nomEsq(s.eid) + ' no es el de su destino: esta operación escribe en ' + nomEsq(dest.eid) + ', y esa es su salida');
+      if (enSitio && fuente.eid && s.eid !== fuente.eid) falla('Esta operación escribe en su sitio: su salida es el guion de la fuente, ' + nomEsq(fuente.eid) + ', no ' + nomEsq(s.eid));
+      if (enSitio && !fuente.eid && fuente.notas.size) falla('Esta operación escribe en su sitio y su fuente es una nota: su salida es esa nota ({ tipo: "nota", nota })');
+      if (dest.subId) falla('Esta operación escribe en la biblioteca ' + nomBib(dest.subId) + ': su salida es ' + (s.tipo === 'documento' ? 'una nota de ahí ({ tipo: "nota", nota })' : 'lo de ahí'));
+      return;
+    }
+    (s.tipo === 'nota' ? [s.notaId] : s.notas).forEach(id => {
+      const x = docs.nota(id), t = 'La nota ' + comillas(x.titulo), r = docs.sub(x.subId), E = r && especialDe(r.sub);
+      if (E) falla(t + ' es de «' + E.nombre + '»: la salida de una operación es una nota de una biblioteca');
+      if (r && r.sub.guionEid) falla(t + ' es el guion de un esquema: esa salida es { tipo: "documento", esquema }');
+      if (enSitio) { if (!fuente.notas.has(id)) falla(t + ' no es la de su fuente: esta operación escribe en su sitio' + (fuente.eid ? ', en el guion de ' + nomEsq(fuente.eid) + ' ({ tipo: "documento", esquema })' : '')); return; }
+      if (entran.has(id)) falla(t + ' es de lo que entra en la operación, no lo que sale de ella: escribe la salida en una nota nueva');
+      if (dest.eid) falla('Esta operación escribe en el guion de ' + nomEsq(dest.eid) + ': su salida es { tipo: "documento", esquema: "' + dest.eid + '" }, no una nota');
+      if (dest.subId && x.subId !== dest.subId) falla(t + ' no está en la biblioteca de su destino, ' + nomBib(dest.subId));
+      if (dest.subId && dest.etiquetaId && x.etiquetaId !== dest.etiquetaId) { const e = docs.etiqueta(dest.etiquetaId); falla(t + ' no está en el segmento de su destino' + (e ? ' (' + comillas(e.nombre) + ')' : '')); }
+    });
+  }
   function salidaDe(ctx, m, n, s) {
     const docs = ctx.docs;
     if (typeof s === 'string') s = esEnlace(s) ? (x => (x.tipo === 'nota' && !x.esquema ? { tipo: 'nota', nota: x.id } : x.tipo === 'biblioteca' ? { tipo: 'fragmentos', biblioteca: x.id } : { esquema: x.esquema || x.id }))(leerEnlace(s)) : falla('"salida" es un objeto: { tipo, esquema | nota | biblioteca, notas }');
@@ -1984,25 +2216,41 @@
     let tipo = s.tipo || (v('nota') ? 'nota' : v('biblioteca') ? 'fragmentos' : permitidas[0]);
     if (tipo === 'guion') tipo = 'documento';
     if (!permitidas.includes(tipo)) falla('Una operación «' + nombreTipoL(n.tipo) + '» da ' + permitidas.map(comillas).join(' o ') + ', no ' + comillas(tipo));
+    let out;
     if (tipo === 'documento') {
       const r = esquemaDe(docs, v('esquema') || falla('Falta el esquema cuyo documento es la salida')), doc = docs.documentoEsquema(r.esquema.id);
       if (!doc || !V().palabras(doc.html)) falla('El esquema ' + comillas(r.esquema.nombre) + ' no tiene guion escrito: escríbelo antes con escribir_documento');
-      return { tipo, eid: r.esquema.id };
+      out = { tipo, eid: r.esquema.id };
+      comprobarSalida(docs, m, n, out);
+      /* la versión «Antes de …» que dejó esta vez al escribir encima (su destino o en su sitio): de después de pedirla (o de la vez
+         anterior que se hizo), nunca una más vieja */
+      const dest = (n.datos || {}).destino || {}, desdeV = Math.max(+n.pedido || 0, +n.hecho || 0);
+      if (desdeV && (dest.eid === out.eid || dest.enSitio)) { const ver = (doc.versiones || []).filter(y => /^Antes de /.test(y.nombre) && (+y.guardada || 0) >= desdeV).pop(); if (ver) out.versionId = ver.id; }
+      return out;
     }
     if (tipo === 'esquema') {
       const r = esquemaDe(docs, v('esquema') || falla('Falta el esquema'));
       if (!(r.esquema.datos.puntos || []).length) falla('El esquema ' + comillas(r.esquema.nombre) + ' no tiene nodos: llénalo antes con editar_esquema');
-      return { tipo, eid: r.esquema.id };
+      out = { tipo, eid: r.esquema.id };
+      comprobarSalida(docs, m, n, out);
+      return out;
     }
-    if (tipo === 'nota') { const x = notaDe(docs, v('nota') || falla('Falta la nota')); return { tipo, notaId: x.id, subId: x.subId }; }
+    if (tipo === 'nota') {
+      const x = notaExacta(docs, v('nota') || falla('Falta la nota (su id, su título exacto o su enlace)'));
+      out = { tipo, notaId: x.id, subId: x.subId };
+      comprobarSalida(docs, m, n, out);
+      return out;
+    }
     /* fragmentos: la biblioteca, el esquema (si no se dice, el del guion que entra) y sus notas (si no se dicen, las que son fragmento de ese esquema en esa biblioteca) */
     const b = bibliotecaDe(docs, v('biblioteca') || falla('Falta la biblioteca de los fragmentos')).sub;
     let eid = v('esquema') ? esquemaDe(docs, v('esquema')).esquema.id : null;
     if (!eid) { const p = entradasL(m, n).find(x => x.id === 'guion'), x = p && p.nodos[0]; eid = x ? (x.tipo === 'esquema' ? (x.datos || {}).eid : x.salida && x.salida.eid) : null; }
-    let notas = s.notas !== undefined ? lista(s.notas).map(x => notaDe(docs, x, b.id).id) : docs.notasDe(b.id).filter(x => x.fragmento && (!eid || x.fragmento.eid === eid)).map(x => x.id);
+    let notas = s.notas !== undefined ? lista(s.notas).map(x => notaExacta(docs, x, b.id).id) : docs.notasDe(b.id).filter(x => x.fragmento && (!eid || x.fragmento.eid === eid)).map(x => x.id);
     if (!notas.length) falla('En ' + comillas(b.nombre) + ' no hay ninguna nota que sea fragmento' + (eid ? ' de ese esquema' : '') + ': créalas antes con editar_biblioteca › crear_nota { fragmento }');
     if (!eid) { const f = docs.nota(notas[0]).fragmento; eid = f && f.eid; }
-    return Object.assign({ tipo, subId: b.id, notas }, eid ? { eid } : {});
+    out = Object.assign({ tipo, subId: b.id, notas }, eid ? { eid } : {});
+    comprobarSalida(docs, m, n, out);
+    return out;
   }
   function guardarL(ctx, r, m, antes) {
     const json = m.toJSON(), docs = ctx.docs;
@@ -2023,6 +2271,9 @@
     }
     const s = salidaDe(ctx, m, n, args.salida);
     const msg = String(args.mensaje || (args.salida && args.salida.mensaje) || '').trim(); if (msg) s.mensaje = msg;
+    /* la huella de lo que entra se toma al completar, no en ejecutar_nodo (a propósito: lo que la operación escribe en su propia
+       fuente —en su sitio, o una biblioteca que también entra— la dejaría desactualizada nada más hacerla). Si Leo cambia una
+       entrada mientras Claude trabaja, no se nota: la huella ya la incluye. */
     ok(m.completar(n.id, s, { firma: m._firma }));
     guardarL(ctx, r, m, antes);
     const pend = pendientesL(m).filter(id => id !== n.id);
@@ -2064,7 +2315,12 @@
   }
   /* los datos de un nodo nuevo (o lo que cambia de uno), desde los campos de la operación */
   function datosNodoL(docs, tipo, o, previo) {
-    const d = Object.assign({}, previo || {}, o.datos && typeof o.datos === 'object' ? o.datos : {});
+    /* de `datos`, solo los campos de su tipo, y una imagen solo como data:image/… (revisión del port a ClapBook: `datos: { src:
+       "https://…" }` se pintaba en el lienzo y se pedía sola, y una IA podía sacar por la dirección lo que había leído) */
+    const extra = {}, crudo = o.datos && typeof o.datos === 'object' && !Array.isArray(o.datos) ? o.datos : {};
+    Object.keys(infoTipo(tipo).campos || {}).forEach(k => { if (crudo[k] !== undefined) extra[k] = crudo[k]; });
+    if (tipo === 'imagen' && extra.src !== undefined && extra.src !== '' && !/^data:image\//i.test(texto(extra.src).trim())) falla('Una imagen va como data:image/… (base64)');
+    const d = Object.assign({}, previo || {}, extra);
     const hay = k => o[k] !== undefined;
     if (tipo === 'texto' && (hay('texto') || hay('md'))) d.md = texto(hay('md') ? o.md : o.texto);
     if (tipo === 'imagen') {
@@ -2191,13 +2447,12 @@
     if (!Array.isArray(ops) || !ops.length) falla('Faltan las operaciones (una lista)');
     const m = modeloLienzo(r.lienzo, ctx), refs = new Map(), hechos = [];
     ops.forEach((o, i) => {
-      const nombre = o && plano(o.op || o.operacion || '').replace(/\s+/g, '_');
-      const fn = OPS_LIENZO[nombre === 'borrar_nodo' || nombre === 'borrar_nodos' ? 'borrar' : nombre === 'mover_nodo' || nombre === 'mover_nodos' ? 'mover' : nombre];
+      const fn = OPS_LIENZO[nombreOperacion('editar_lienzo', o)];
       try {
-        if (!fn) falla('no conozco la operación ' + comillas(o && (o.op || o.operacion)) + '. Operaciones: ' + Object.keys(OPS_LIENZO).join(', '));
+        if (!fn) falla('no conozco la operación ' + comillas(opCruda(o)) + '. Operaciones: ' + Object.keys(OPS_LIENZO).join(', '));
         hechos.push((i + 1) + '. ' + fn(docs, m, o, refs));
       } catch (e) {
-        if (e instanceof Falla) falla('La operación ' + (i + 1) + ' (' + ((o && o.op) || '?') + ') no se pudo: ' + e.message + '. No se cambió nada del lienzo.');
+        if (e instanceof Falla) falla('La operación ' + (i + 1) + ' (' + (opCruda(o) || '?') + ') no se pudo: ' + e.message + '. No se cambió nada del lienzo.');
         throw e;
       }
     });
@@ -2205,6 +2460,43 @@
     const creados = [...refs].map(([k, x]) => '$' + k + ' = ' + x.id);
     return { texto: 'Lienzo ' + comillas(r.lienzo.nombre) + ': ' + plural(ops.length, 'operación hecha', 'operaciones hechas') + '.\n' + hechos.join('\n')
       + (creados.length ? '\nCreados: ' + creados.join(', ') : '') + (cambio ? '' : '\n(nada cambió)'), datos: { refs: Object.fromEntries([...refs].map(([k, x]) => [k, x.id])) } };
+  }
+  /* ¿Algún `conectar` de este editar_lienzo sustituiría un cable que ya está? (para el permiso del asistente: quitar un cable de Leo
+     también es borrar). Se prueba el lote entero sobre una copia del lienzo (el modelo de `modeloLienzo` lo es), en orden: un
+     conectar que no suma un cable ha sustituido otro. Lo que no se entiende, no cuenta (la herramienta fallará). */
+  function sustituyeCable(docs, args) {
+    const a = args && typeof args === 'object' ? args : {};
+    if (!Array.isArray(a.operaciones) || !docs) return false;
+    let m;
+    try { m = modeloLienzo(lienzoDe(docs, a.lienzo).lienzo, { docs }); } catch (_) { return false; }
+    const refs = new Map();
+    for (const o of a.operaciones) {
+      const k = nombreOperacion('editar_lienzo', o), fn = OPS_LIENZO[k];
+      if (!fn) continue;
+      const n = cablesL(m).length;
+      try { fn(docs, m, o, refs); } catch (_) { continue; }
+      if (k === 'conectar' && cablesL(m).length <= n) return true;
+    }
+    return false;
+  }
+  /* escribir_documento › sustituir que se lleva mucho texto (para el permiso del asistente; revisión: sustituir todos los bloques
+     por uno vacío dejaba el documento en blanco sin preguntar). `quitado`/`puesto`: los caracteres de texto de los bloques que se
+     van y de lo que llega; `mucho` si lo que llega está vacío, o se pierden 200 caracteres o más y queda menos de la mitad. Si no se
+     puede saber (el documento no se encuentra), `mucho` (que se pregunte). */
+  const MUCHO_SUSTITUIR = 200;
+  function quitaAlSustituir(docs, args) {
+    const a = args && typeof args === 'object' ? args : {};
+    let x; try { x = documentoDe({ docs }, a, false); } catch (_) { return { quitado: 0, puesto: 0, mucho: true }; }
+    if (!x.nota) return { quitado: 0, puesto: 0, mucho: false };
+    const bs = V().bloques(x.nota.html), d = Math.round(+a.desde), h = a.hasta === undefined || a.hasta === null ? d : Math.round(+a.hasta);
+    if (!(d >= 1 && h >= d && h <= bs.length)) return { quitado: 0, puesto: 0, mucho: false };   // la herramienta no lo hará
+    const largo = t => String(t || '').replace(/\s+/g, ' ').trim().length;
+    const quitado = largo(bs.slice(d - 1, h).map(b => V().textoPlano(b.html)).join(' '));
+    let c = a.contenido;
+    if (typeof c === 'string' && a.formato === 'bloques') { try { c = JSON.parse(c); } catch (_) { /* tal cual */ } }
+    const puesto = largo(Array.isArray(c) ? c.map(b => (b && typeof b === 'object' ? texto(b.texto) : texto(b))).join(' ')
+      : a.formato === 'html' ? V().textoPlano(limpiarHtml(texto(c))) : texto(c));
+    return { quitado, puesto, mucho: quitado > 0 && (puesto === 0 || (quitado - puesto >= MUCHO_SUSTITUIR && puesto < quitado / 2)) };
   }
   /* un nodo de un lienzo, para ver_enlace */
   function textoNodoLienzo(ctx, R) {
@@ -2455,7 +2747,7 @@
       description: 'NO ESCRIBE NADA: da el encargo completo de una operación de un lienzo para que la hagas tú —su tipo, la instrucción de Leo (con sus FÓRMULAS, si eligió alguna: ya compuestas, en orden, y avisa de las que ya no están), sus opciones, su destino y el contenido de TODO lo que le entra, ya resuelto por puerto: el texto de las notas y segmentos (Markdown, o guion al estilo Fountain), la estructura y el guion de un esquema, la hoja y las apariciones de un personaje, la salida de una operación anterior leída de lo que creó— con las IMÁGENES de esas notas y de los nodos de imagen adjuntas como imágenes (reducidas a 1024 px de lado largo; como mucho 8 por encargo: las demás se nombran). Termina con los pasos para escribir la salida en ClapCraft (escribir_documento, editar_esquema, editar_biblioteca, preparar_fragmentos…) y cómo llamar a completar_nodo. Si entra una operación que aún no tiene salida, lo dice: hazla antes.',
       inputSchema: { type: 'object', required: ['lienzo', 'nodo'], properties: { proyecto: P_PROYECTO, lienzo: P_LIENZO, nodo: P_NODO_L } } },
     { name: 'completar_nodo', title: 'Completar un nodo del lienzo', annotations: { destructiveHint: false },
-      description: 'Le dice a una operación del lienzo qué salió, cuando ya escribiste su salida con las otras herramientas (o qué falló): la marca hecha (deja de estar pendiente, enseña la salida como chips que llevan a lo creado) o con error. Comprueba que la salida existe: { tipo: "documento", esquema } (el guion escrito de ese esquema; generar, y resumir/reescribir/traducir/prompt en su sitio) · { tipo: "fragmentos", biblioteca, esquema, notas: [ids] } (partir; sin «notas», las que son fragmento de ese esquema en esa biblioteca) · { tipo: "esquema", esquema } (escaleta) · { tipo: "nota", nota } (resumir, reescribir, traducir, prompt). Con "error" (y sin salida), la deja en rojo con ese texto. "mensaje": una línea opcional para Leo.',
+      description: 'Le dice a una operación del lienzo qué salió, cuando ya escribiste su salida con las otras herramientas (o qué falló): la marca hecha (deja de estar pendiente, enseña la salida como chips que llevan a lo creado) o con error. Comprueba que la salida existe y que es la de su destino (el esquema del destino; en su sitio, lo de la fuente; notas de la biblioteca del destino, nunca de lo que entra ni plantillas o fórmulas): { tipo: "documento", esquema } (el guion escrito de ese esquema; generar, y resumir/reescribir/traducir/prompt en su sitio) · { tipo: "fragmentos", biblioteca, esquema, notas: [ids] } (partir; sin «notas», las que son fragmento de ese esquema en esa biblioteca) · { tipo: "esquema", esquema } (escaleta) · { tipo: "nota", nota } (resumir, reescribir, traducir, prompt; la nota por su id, su enlace o su título exacto). Con "error" (y sin salida), la deja en rojo con ese texto. "mensaje": una línea opcional para Leo.',
       inputSchema: { type: 'object', required: ['lienzo', 'nodo'], properties: { proyecto: P_PROYECTO, lienzo: P_LIENZO, nodo: P_NODO_L,
         salida: { type: 'object', description: '{ tipo, esquema | nota | biblioteca, notas }' }, error: { type: 'string', description: 'Si no se pudo: por qué.' }, mensaje: { type: 'string' } } } },
     { name: 'buscar', title: 'Buscar en el proyecto', annotations: { readOnlyHint: true },
@@ -2480,6 +2772,29 @@
     { name: 'olvidar_estilo', title: 'Olvidar algo del estilo de Leo', annotations: { destructiveHint: false },
       description: 'Quita una regla de la MEMORIA DE ESTILO (por su texto o su id, de ver_proyecto) cuando Leo dice que ya no la quiere o la contradice.',
       inputSchema: { type: 'object', required: ['regla'], properties: { proyecto: P_PROYECTO, regla: { type: 'string', description: 'Su texto o su id.' }, ambito: { type: 'string', enum: ['proyecto', 'general'] } } } },
+    { name: 'preparar_obra', title: 'Preparar una obra del teatro', soloClaude: true, annotations: { readOnlyHint: true },
+      description: 'Para dirigir una OBRA del teatro de duendes (el botón «Teatro» del editor): da el guion de un documento (o el de un esquema) en eventos numerados, con cómo dirigir y el catálogo de lo que existe (escenarios, vestuarios, máscaras, músicas, utilería y gestos, de fábrica y los mods del proyecto). No escribe nada. Después, dirigir_obra.',
+      inputSchema: { type: 'object', properties: { proyecto: P_PROYECTO, esquema: { type: 'string', description: 'Su guion.' }, nota: { type: 'string', description: 'Id, título o enlace del documento.' } } } },
+    { name: 'dirigir_obra', title: 'Dirigir una obra del teatro', soloClaude: true, annotations: { destructiveHint: false },
+      description: 'Guarda la PUESTA EN ESCENA de una obra del teatro de duendes que leíste con preparar_obra: escenario, noche, música, presentes, utilería y cartel de cada escena; vestuario, máscara, tamaño y voz en off de cada personaje (también los que no hablan); gesto de cada línea; quién entra, sale o hace algo en cada acotación. Nunca cambia diálogos ni nombres. Sustituye la dirección anterior de ese documento, pero no los ajustes de Leo (los escenarios que eligió él en el teatro: preparar_obra los dice).',
+      inputSchema: { type: 'object', required: ['plan'], properties: { proyecto: P_PROYECTO, esquema: { type: 'string' }, nota: { type: 'string' },
+        plan: { type: 'object', description: '{ escenas: [{ i, escenario, noche, musica, presentes, objetos: [{ id, x }], cartel }], personajes: [{ nombre, vestuario, mascara, tamano, voz }], lineas: [{ i, gesto }], acotaciones: [{ i, quienes, movimiento, gesto, objetos, cartel }] } (i = número de evento de preparar_obra).' } } } },
+    { name: 'duende_personaje', title: 'El duende de un personaje', soloClaude: true, annotations: { destructiveHint: false },
+      description: 'Crea, cambia o mira el DUENDE de un personaje del proyecto: cómo es en el teatro de duendes (sale así en todas las obras; Leo lo ve y lo retoca en Personajes, en el creador de duendes). Empieza con ver: true (su hoja de personaje, su duende de ahora, los rasgos que existen y las imágenes de su biblioteca —y la de «imagen»— adjuntas). Por defecto es un DUENDE; si Leo da una imagen de una persona o lo pide, cuerpo: "humano" (o "nino") con sus rasgos característicos (peinado y color de pelo, vello, lentes, complexión, altura, su ropa típica). Si faltan rasgos para dibujarlo (persona, duende o animal, colores de piel, pelo y ropa, tamaño, voz), PREGÚNTASELOS A LEO antes. Rasgos en la skill (references/teatro.md) y en leer_teatro.',
+      inputSchema: { type: 'object', required: ['personaje'], properties: { proyecto: P_PROYECTO, personaje: { type: 'string', description: 'Id, nombre o enlace del personaje.' },
+        ver: { type: 'boolean', description: 'true: solo mira (hoja, duende actual, rasgos e imágenes adjuntas). No escribe nada.' },
+        imagen: { type: 'string', description: 'Enlace (clapcraft://…), id o título de una nota con una imagen de cómo es (una foto, un dibujo): va adjunta con ver y queda como su fuente al crearlo.' },
+        duende: { type: 'object', description: '{ cuerpo (duende|humano|nino), complexion, altura, escala, skin, peinado, hairCol, cejas, ear (solo duende), ojos, eyeCol, nariz, boca, vello, beardCol, marcas [], lentes, prenda, cloth, cloth2, bajo, pants, calzado, shoes, pat, patCol, long, cape, capeIn, hat, hatCol, accesorios [], acc, prop, wings, face, faceCol, vestuario (un disfraz de base), animal, cola, mascara, voz, descripcion } (y los de antes: beard, nose, blush, belt, bigEyes, curly, noEars, noBeard, noBelt)' },
+        cambiar: { type: 'boolean', description: 'true: solo cambia lo que mandas y conserva lo demás.' }, fuente: { type: 'string', description: 'La nota de donde sale (su hoja).' }, quitar: { type: 'boolean' } } } },
+    { name: 'leer_teatro', title: 'Ver los mods del teatro', soloClaude: true, annotations: { readOnlyHint: true },
+      description: 'Los MODS del teatro de duendes (escenarios, vestuarios, objetos de utilería, máscaras, músicas y gestos añadidos, de todos los proyectos), lo que el teatro trae de fábrica (ids que no se pueden reutilizar y las piezas de vestuario que sabe dibujar), los rasgos del duende de un personaje, los duendes de este proyecto y las obras con escenarios que Leo eligió a mano. Léelos antes de editar_teatro.',
+      inputSchema: { type: 'object', properties: { proyecto: P_PROYECTO } } },
+    { name: 'editar_teatro', title: 'Añadir mods al teatro', soloClaude: true, annotations: { destructiveHint: false },
+      description: 'Añade, cambia o quita MODS del teatro de duendes, que son DE TODOS LOS PROYECTOS de Leo. Reutiliza antes lo que ya existe (leer_teatro, preparar_obra); crea mods SOLO para personajes y momentos clave que no se entenderían sin ellos: un gesto clave (una acción en cuadros de pose), un escenario que falta (el interior de un coche, un laboratorio), un vestuario (combinando piezas de fábrica), un objeto de utilería (un Vocho, un generador) o una máscara dibujados en píxeles, o una música de ambiente. Son datos que el teatro valida: nunca código. Lote entero o nada. El formato de cada tipo está en la skill (references/teatro.md).',
+      inputSchema: { type: 'object', required: ['operaciones'], properties: { proyecto: P_PROYECTO,
+        operaciones: { type: 'array', items: { type: 'object', required: ['op', 'tipo'], properties: {
+          op: { type: 'string', enum: ['poner', 'quitar'] }, tipo: { type: 'string', enum: ['escenario', 'vestuario', 'objeto', 'mascara', 'musica', 'gesto'] },
+          id: { type: 'string', description: 'Para quitar.' }, datos: { type: 'object', description: 'Para poner: el mod (id, nombre, parecidos y lo de su tipo).' } } } } } } },
     { name: 'mostrar_en_clapcraft', title: 'Enseñarlo en ClapCraft', soloVivo: true,
       description: 'Lleva la ventana de ClapCraft a un sitio para que la persona lo vea: cualquier cosa por su enlace (clapcraft://…: un nodo, una nota, una trama, un tramo del guion, un lienzo o un nodo de un lienzo…), o un esquema (y un nodo elegido en él), el documento de un esquema, una nota o un lienzo (y uno de sus nodos). Si el proyecto no está abierto, lo abre.',
       inputSchema: { type: 'object', properties: { proyecto: P_PROYECTO, enlace: { type: 'string', description: 'Un enlace clapcraft:// (de ver_enlace, o que haya pegado Leo).' }, esquema: P_ESQUEMA, nodo: { type: 'string', description: 'Un nodo del esquema o del lienzo.' }, documento: { type: 'boolean', description: 'Abrir el documento (guion) del esquema.' }, nota: { type: 'string' }, lienzo: P_LIENZO } } }
@@ -2489,7 +2804,7 @@
     ver_historial: verHistorial, revertir_cambio: revertirCambio,
     ver_enlace: verEnlace, preparar_fragmentos: prepararFragmentos,
     leer_lienzo: leerLienzo, ejecutar_nodo: ejecutarNodo, completar_nodo: completarNodo, editar_lienzo: editarLienzo, usar_formula: usarFormula,
-    recordar_estilo: recordarEstilo, olvidar_estilo: olvidarEstilo,
+    recordar_estilo: recordarEstilo, olvidar_estilo: olvidarEstilo, leer_teatro: leerTeatro, editar_teatro: editarTeatro, preparar_obra: prepararObra, dirigir_obra: dirigirObra, duende_personaje: duendePersonaje,
     mostrar_en_clapcraft: (ctx, args) => {
       if (!ctx.mostrar) falla('Solo con el proyecto abierto en ClapCraft');
       if (args.enlace) {                                        // cualquier enlace: ClapCraft va a su sitio (1.1.52)
@@ -2555,6 +2870,6 @@
     } finally { ctx.cambio = avisar; }
   }
 
-  C.herramientas = { LISTA, ejecutar, estiloDe, datosEsquema, prepararFragmentos, beatsDeGuion, textoEsquema, limpiarHtml, vistaCambio, titularCambio, OPERACIONES: { esquema: Object.keys(OPS_ESQUEMA), biblioteca: Object.keys(OPS_BIBLIOTECA), proyecto: Object.keys(OPS_PROYECTO) } };
+  C.herramientas = { LISTA, ejecutar, estiloDe, datosEsquema, prepararFragmentos, beatsDeGuion, textoEsquema, limpiarHtml, vistaCambio, titularCambio, nombreOperacion, sustituyeCable, quitaAlSustituir, OPERACIONES: { esquema: Object.keys(OPS_ESQUEMA), biblioteca: Object.keys(OPS_BIBLIOTECA), proyecto: Object.keys(OPS_PROYECTO) } };
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

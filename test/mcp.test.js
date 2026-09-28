@@ -122,7 +122,7 @@ test('MCP: saludo, lista de herramientas y, con el proyecto cerrado, lectura y e
     assert.match(ini.result.instructions, /ClapCraft es el programa de Leo/);
     const lista = (await c.pedir('tools/list', {})).result.tools;
     assert.deepEqual(lista.map(t => t.name), ['listar_proyectos', 'ver_proyecto', 'leer_esquema', 'editar_esquema', 'leer_documento', 'escribir_documento',
-      'leer_biblioteca', 'editar_biblioteca', 'editar_proyecto', 'preparar_fragmentos', 'leer_lienzo', 'editar_lienzo', 'ejecutar_nodo', 'completar_nodo', 'buscar', 'ver_enlace', 'ver_historial', 'revertir_cambio', 'usar_formula', 'recordar_estilo', 'olvidar_estilo', 'mostrar_en_clapcraft', 'crear_proyecto']);
+      'leer_biblioteca', 'editar_biblioteca', 'editar_proyecto', 'preparar_fragmentos', 'leer_lienzo', 'editar_lienzo', 'ejecutar_nodo', 'completar_nodo', 'buscar', 'ver_enlace', 'ver_historial', 'revertir_cambio', 'usar_formula', 'recordar_estilo', 'olvidar_estilo', 'preparar_obra', 'dirigir_obra', 'duende_personaje', 'leer_teatro', 'editar_teatro', 'mostrar_en_clapcraft', 'crear_proyecto']);
     assert.equal(lista.find(t => t.name === 'leer_esquema').annotations.readOnlyHint, true);
     assert.equal(lista.find(t => t.name === 'editar_esquema').annotations.destructiveHint, true);
     assert.equal((await c.pedir('ping', {})).result && true, true);
@@ -135,7 +135,7 @@ test('MCP: saludo, lista de herramientas y, con el proyecto cerrado, lectura y e
     assert.equal(r.error, false, r.texto);
     assert.match(r.texto, /\(Escrito en .*Faro\.clapcraft\. ClapCraft lo verá al abrirlo\.\)/);
     const guardado = leer(ruta);
-    assert.equal(guardado.app, 'clapcraft'); assert.equal(guardado.formato, 2); assert.equal(guardado.nombre, 'Faro');
+    assert.equal(guardado.app, 'clapcraft'); assert.equal(guardado.formato, 4); assert.equal(guardado.nombre, 'Faro');
     assert.equal(guardado.documentos.contenedores[0].esquemas[0].datos.puntos[0].titulo, 'La tormenta');
     assert.deepEqual(fs.readdirSync(dir).filter(f => f.includes('.tmp')), [], 'no quedan temporales');
     /* el historial de Claude va en el archivo, con quién y cómo */
@@ -332,5 +332,30 @@ test('MCP: fórmulas en el archivo — crear (aplanada), usar_formula y el encar
       && k('Fórmula «Noir»') < k('la escena del faro') && k('la escena del faro') < k('Frases cortas.') && k('Frases cortas.') < k('ENTRADAS'), 'en su orden, lo escrito dentro de «Noir»');
     assert.ok(!t.includes('Instrucción de Leo'));
     assert.match(t, /OJO: una fórmula elegida ya no está \(\S+ «Borrada» ROTA: está en la papelera\)/);
+  } finally { await c.cerrar(); }
+});
+
+test('revisión del port · MCP: escribe con el formato 4, y un proyecto de una versión más nueva se lee pero no se reescribe', async () => {
+  try { fs.unlinkSync(PUENTE); } catch (_) {}
+  const ruta = archivo('Futuro'), c = cliente();
+  try {
+    await c.pedir('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '1' } });
+    let r = await c.llamar('escribir_documento', { proyecto: ruta, esquema: 'Piloto', contenido: 'INT. FARO - NOCHE\n\nMara sube.' });
+    assert.equal(r.error, false, r.texto);
+    assert.equal(leer(ruta).formato, 4, 'lo que escribe el servidor va con el formato de esta versión');
+    /* lo escribe una versión más nueva (formato 5, con algo que esta no conoce) */
+    const x = leer(ruta); x.formato = 5; x.documentos.algoNuevo = { de: 'la 1.2' };
+    fs.writeFileSync(ruta, zlib.gzipSync(JSON.stringify(x)));
+    const antes = fs.readFileSync(ruta);
+    r = await c.llamar('escribir_documento', { proyecto: ruta, esquema: 'Piloto', contenido: 'Otra cosa.' });
+    assert.equal(r.error, true);
+    assert.match(r.texto, /versión más nueva de ClapCraft/);
+    r = await c.llamar('editar_proyecto', { proyecto: ruta, operaciones: [{ op: 'crear_contenedor', nombre: 'Otro' }] });
+    assert.equal(r.error, true);
+    assert.ok(fs.readFileSync(ruta).equals(antes), 'el archivo no se tocó');
+    r = await c.llamar('leer_documento', { proyecto: ruta, esquema: 'Piloto' });
+    assert.equal(r.error, false, r.texto);
+    assert.match(r.texto, /versión más nueva de ClapCraft: lo lees con lo que esta versión conoce/);
+    assert.match(r.texto, /Mara sube/);
   } finally { await c.cerrar(); }
 });

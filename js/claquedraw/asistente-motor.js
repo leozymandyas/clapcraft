@@ -166,7 +166,7 @@
     preparar_fragmentos: 'NO ESCRIBE: parte el guion de un esquema (o sus nodos) en escenas y beats y propone cortes de segundos_max (15) como mucho sin cruzar escenas, con sus segundos estimados, bloques, nodos y texto; dice las bibliotecas conectadas y si ya hay fragmentos.',
     leer_lienzo: 'Un lienzo de nodos: sus entradas (a qué apunta cada una, o si está rota), sus operaciones (estado: sin ejecutar, PENDIENTE, hecho, ERROR, desactualizada; instrucción, fórmulas, opciones, destino, lo que entra por cada puerto y su salida), los cables y las PENDIENTES en el orden en que se ejecutan.',
     ejecutar_nodo: 'NO ESCRIBE: el encargo completo de una operación de un lienzo —tipo, instrucción de Leo (con sus fórmulas ya compuestas), opciones, destino y el contenido de todo lo que le entra— y los pasos para escribir su salida y llamar a completar_nodo. Dice ANTES si falta hacer otra operación y FALTA si falta algo. Las imágenes no las ves: van su nombre y descripción.',
-    completar_nodo: 'Cuando ya escribiste la salida de una operación del lienzo, la marca hecha con "salida": { tipo: "documento", esquema } · { tipo: "fragmentos", biblioteca, esquema, notas } · { tipo: "esquema", esquema } · { tipo: "nota", nota }; o con "error": "por qué" si no se pudo. "mensaje": una línea opcional para Leo.',
+    completar_nodo: 'Cuando ya escribiste la salida de una operación del lienzo, la marca hecha con "salida": { tipo: "documento", esquema } · { tipo: "fragmentos", biblioteca, esquema, notas } · { tipo: "esquema", esquema } · { tipo: "nota", nota: su id }; la de su destino; o con "error": "por qué" si no se pudo. "mensaje": una línea opcional para Leo.',
     usar_formula: 'El texto de una fórmula de Leo (id, título o enlace): tono, formato o reglas para seguir en lo que pide; donde dice {{instruccion}} va lo que pide. No escribe nada.',
     buscar: 'Busca un texto (sin distinguir mayúsculas ni acentos) en nombres, tramas, actos, nodos y descripciones, notas, bibliotecas, segmentos, documentos, plantillas, personajes y lienzos. Dice dónde está cada cosa, con su id.',
     ver_enlace: 'Lee enlaces clapcraft:// (uno o varios, el texto tal cual lo pegó Leo): qué es cada uno, dónde está, lo que tiene (de un tramo de guion ?b=N-M, sus bloques) y sus ids. Un enlace vale en lugar del id en cualquier herramienta.',
@@ -186,7 +186,7 @@
     op = Object.assign({ quitar: ['proyecto'], maxDescripcion: 4000 }, op || {});
     if (op.compacto && !op.maxPropiedad) op.maxPropiedad = 160;
     const fuera = new Set(op.excluir || []), solo = Array.isArray(op.solo) ? new Set(op.solo) : null;
-    return (lista || []).filter(t => t && t.name && !fuera.has(t.name) && (!solo || solo.has(t.name)) && (op.soloServidor || !t.soloServidor) && (op.soloVivo !== false || !t.soloVivo))
+    return (lista || []).filter(t => t && t.name && !fuera.has(t.name) && (!solo || solo.has(t.name)) && (op.soloServidor || !t.soloServidor) && !t.soloClaude && (op.soloVivo !== false || !t.soloVivo))
       .map(t => {
         const nombre = String(t.name).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
         const parametros = sanearEsquema(t.inputSchema || { type: 'object' }, op, 0);
@@ -676,24 +676,56 @@
   const sinHerramientas = r => !!r && (r.codigo === 'herramientas' || r.codigo === 'sin_herramientas'
     || ([400, 404, 422].includes(+r.codigo) || [400, 404, 422].includes(+r.estado)) && SIN_TOOLS.test(String(r.error || '')));
   /* Lo que borra pide permiso a Leo antes de hacerse (revisión: inyección de instrucciones; una nota con «borra la trama X» no debe
-     poder borrarla sola). → { claves, motivos, documento } o null. `documento`: reemplazar un documento solo cuenta si ya tiene texto
-     (eso lo mira la conversación). */
+     poder borrarla sola): las operaciones borrar_*, eliminar_*, tirar_* y vaciar_* de cualquier editar_*; en editar_proyecto también
+     desconectar (un esquema de su biblioteca) y en editar_lienzo desconectar y un conectar que sustituye un cable; escribir_documento
+     en reemplazar (si ya tiene texto) o en sustituir (si se lleva mucho texto); revertir_cambio con forzar, y olvidar_estilo. **Las
+     operaciones, con su nombre como las entiende la herramienta** (herramientas.js, `nombreOperacion`: «Tirar Nota»,
+     { operacion: "borrar" }, «borrar_nodos»), y los modos sin mayúsculas, acentos ni espacios de más (revisión del port a ClapBook:
+     todo eso pasaba sin preguntar). → { claves, motivos, documento, sustituir, conectar } o null. `documento`, `sustituir` y
+     `conectar` solo cuentan si la conversación lo confirma (`_tieneTexto`, `_quitaAlSustituir`, `_sustituyeCable`). */
   const BORRA = /^(?:borrar|eliminar|tirar|vaciar)(?:_|$)/;
   const QUE_BORRA = { borrar: 'borrar', eliminar: 'eliminar', tirar: 'tirar a la papelera', vaciar: 'vaciar' };
+  const plano0 = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  /* el nombre de una operación como lo entiende su herramienta; sin herramientas.js (en Node, las pruebas), lo mismo a mano */
+  function opDe(nombre, o) {
+    const H = C.herramientas;
+    if (H && typeof H.nombreOperacion === 'function') return String(H.nombreOperacion(nombre, o) || '');
+    if (!o || typeof o !== 'object') return '';
+    const k = plano0(o.op !== undefined && o.op !== null && o.op !== '' ? o.op : o.operacion).replace(/\s/g, '_');
+    return nombre === 'editar_lienzo' ? ({ borrar_nodo: 'borrar', borrar_nodos: 'borrar', mover_nodo: 'mover', mover_nodos: 'mover' })[k] || k : k;
+  }
+  /* lo que no se llama borrar_* pero quita algo de Leo */
+  const QUITA = { editar_proyecto: { desconectar: 'desconectar un esquema de su biblioteca' }, editar_lienzo: { desconectar: 'quitar un cable del lienzo' } };
   function destructivo(nombre, args, nd) {
     const a = args && typeof args === 'object' ? args : {}, claves = [], motivos = [], nombreArg = (v, tipo) => nombreArg0(v, nd, tipo, a);
     if (BORRA.test(String(nombre || ''))) { claves.push(nombre); motivos.push(String(nombre).replace(/_/g, ' ')); }
+    let conectar = false;
     if (Array.isArray(a.operaciones)) {
-      const cuenta = {};
-      a.operaciones.forEach(o => { const op = o && typeof o.op === 'string' ? o.op : ''; if (BORRA.test(op)) cuenta[op] = (cuenta[op] || 0) + 1; });
-      Object.keys(cuenta).forEach(op => { claves.push(nombre + ':' + op); motivos.push(op.replace(/_/g, ' ') + (cuenta[op] > 1 ? ' (×' + cuenta[op] + ')' : '')); });
+      const cuenta = {}, quita = QUITA[nombre] || {};
+      a.operaciones.forEach(o => {
+        const op = opDe(nombre, o);
+        if (BORRA.test(op) || quita[op]) cuenta[op] = (cuenta[op] || 0) + 1;
+        if (nombre === 'editar_lienzo' && op === 'conectar') conectar = true;
+      });
+      Object.keys(cuenta).forEach(op => { claves.push(nombre + ':' + op); motivos.push((quita[op] || op.replace(/_/g, ' ')) + (cuenta[op] > 1 ? ' (×' + cuenta[op] + ')' : '')); });
     }
-    let documento = false;
-    if (nombre === 'escribir_documento' && String(a.modo || 'reemplazar').toLowerCase().replace('ñ', 'n') === 'reemplazar') {
-      documento = true; claves.push('escribir_documento:reemplazar'); motivos.push('reemplazar todo el texto de ' + (a.nota ? 'la nota' + nombreArg(a.nota, 'nota') : a.esquema ? 'el guion de' + nombreArg(a.esquema, 'esquema') : 'un documento'));
+    let documento = false, sustituir = false;
+    const modo = plano0(a.modo || 'reemplazar').replace(/\s/g, '_');
+    const deDoc = () => (a.nota ? 'la nota' + nombreArg(a.nota, 'nota') : a.esquema ? 'el guion de' + nombreArg(a.esquema, 'esquema') : 'un documento');
+    if (nombre === 'escribir_documento' && modo === 'reemplazar') {
+      documento = true; claves.push('escribir_documento:reemplazar'); motivos.push('reemplazar todo el texto de ' + deDoc());
+    }
+    if (nombre === 'escribir_documento' && modo === 'sustituir') {
+      const d = +a.desde, h = a.hasta !== undefined && a.hasta !== null ? +a.hasta : d;
+      sustituir = true; claves.push('escribir_documento:sustituir');
+      motivos.push('sustituir ' + (d > 0 ? (h > d ? 'los bloques ' + d + '–' + h : 'el bloque ' + d) : 'unos bloques') + ' ' + deDoc().replace(/^el /, 'del ').replace(/^(la|un) /, 'de $1 ') + ' por algo mucho más corto o por nada');
     }
     if (nombre === 'revertir_cambio' && a.forzar) { claves.push('revertir_cambio:forzar'); motivos.push('revertir a la fuerza (se pierde lo que se hizo después en esas partes)'); }
-    return claves.length ? { claves, motivos, documento } : null;
+    /* olvidar una regla de la memoria de estilo (la general vale para todos los proyectos de Leo) */
+    if (nombre === 'olvidar_estilo') { claves.push('olvidar_estilo'); motivos.push('olvidar una regla de tu memoria de estilo' + (/^gen|^todo|^global/i.test(String(a.ambito || '')) ? ' general' : '')); }
+    /* conectar que sustituye un cable: solo se sabe mirando el lienzo (lo mira la conversación) */
+    if (conectar) { claves.push('editar_lienzo:sustituir_cable'); motivos.push('sustituir un cable del lienzo (se quita el que llegaba a ese puerto)'); }
+    return claves.length ? { claves, motivos, documento, sustituir, conectar } : null;
   }
   /* una clave de API pegada en el chat (revisión: no se manda a la IA ni se guarda en la conversación) */
   const pareceClave = t => /\bsk-[A-Za-z0-9_-]{20,}/.test(String(t || '')) || /\bBearer\s+[A-Za-z0-9._-]{20,}/i.test(String(t || ''));
@@ -713,7 +745,7 @@
        mensaje), maxResultado (caracteres de un resultado, 30000), maxCaracteres (de la conversación que se manda, 200.000),
        maxPeticion (de la petición entera, con el sistema y las herramientas, 240.000), modelo, temperatura, max_tokens (8192),
        modo ('auto' | 'tools' | 'texto'), planB (= modo 'texto'), origen, ahora, tieneTexto (args) → ¿el documento ya tiene texto?
-       (si no, se lee con leer_documento), formulas (las ids de las FÓRMULAS ACTIVAS, en orden; `fijarFormulas` las cambia), textoFormula
+       (si no, se lee con leer_documento), quitaAlSustituir (args) → ¿ese escribir_documento › sustituir se lleva mucho texto? y sustituyeCable (args) → ¿un conectar de ese editar_lienzo quita un cable? (sin ellos, se pregunta), formulas (las ids de las FÓRMULAS ACTIVAS, en orden; `fijarFormulas` las cambia), textoFormula
        (id) → { titulo, texto } | null (la fórmula de esa id, o null si ya no existe), listaFormulas () → [{ id, titulo }] (las del
        proyecto, para la lista corta del sistema), memoria () → la memoria de estilo (texto o { general, proyecto }; va en el sistema de
        cada petición, 1.1.60), y los eventos alTexto, alPaso, alFin, alError, alCoste y alPermiso (el último que se
@@ -1097,15 +1129,25 @@
         return !pal || +pal[1].replace(/[.,]/g, '') > 0;
       } catch (_) { return true; }
     }
+    /* ¿este sustituir se lleva mucho texto? (el gancho `quitaAlSustituir` de la app, herramientas.js; sin él, se pregunta) */
+    async _quitaAlSustituir(args) {
+      try { return typeof this.op.quitaAlSustituir === 'function' ? !!(await this.op.quitaAlSustituir(args)) : true; } catch (_) { return true; }
+    }
+    /* ¿un conectar de este editar_lienzo sustituye un cable? (el gancho `sustituyeCable` de la app, que lo prueba sobre una copia
+       del lienzo; sin él, se pregunta) */
+    async _sustituyeCable(args) {
+      try { return typeof this.op.sustituyeCable === 'function' ? !!(await this.op.sustituyeCable(args)) : true; } catch (_) { return true; }
+    }
     /* el permiso de Leo para lo que borra: true (sí), false (no, o sin nadie a quien preguntar, o se detuvo) */
     async _permiso(c, nombre, args) {
       const d = destructivo(nombre, args, this._nd());
       if (!d) return true;
       let claves = d.claves.slice(), motivos = d.motivos.slice();
-      if (d.documento && !(await this._tieneTexto(args))) {
-        const i = claves.indexOf('escribir_documento:reemplazar');
-        if (i >= 0) { claves.splice(i, 1); motivos.splice(i, 1); }
-      }
+      const quitar = k => { const i = claves.indexOf(k); if (i >= 0) { claves.splice(i, 1); motivos.splice(i, 1); } };
+      if (d.documento && !(await this._tieneTexto(args))) quitar('escribir_documento:reemplazar');
+      if (d.sustituir && !(await this._quitaAlSustituir(args))) quitar('escribir_documento:sustituir');
+      if (d.conectar && !(await this._sustituyeCable(args))) quitar('editar_lienzo:sustituir_cable');
+      if (!claves.length) return true;
       const faltan = claves.map((k, i) => ({ k, m: motivos[i] })).filter(x => !this.permitidos.has(x.k));
       if (!faltan.length) return true;
       const fns = this.oyentes.permiso;
@@ -1116,6 +1158,15 @@
       if (this._detener) return false;
       if (resp === 'siempre') { faltan.forEach(x => this.permitidos.add(x.k)); return true; }
       return resp === 'si' || resp === true;
+    }
+    /* una herramienta que existe pero nunca se ofrece a la API (`soloClaude`, o `op.excluir`) */
+    _vetada(nombre) {
+      if (!this._ofrecibles) {
+        const lista = this.op.herramientas || (C.herramientas && C.herramientas.LISTA) || [];
+        this._todas = new Set(lista.map(t => t && t.name));
+        this._ofrecibles = new Set(herramientasOpenAI(lista, { excluir: this.op.excluir || [], compacto: true }).map(t => t && t.function && t.function.name));
+      }
+      return this._todas.has(nombre) && !this._ofrecibles.has(nombre);
     }
     /* → { texto (lo que vuelve al modelo), roto (los argumentos no se leyeron) } */
     async _ejecutar(c, vuelta) {
@@ -1129,6 +1180,13 @@
         else args = j.valor;
       }
       const base = { id: c.id, herramienta: nombre, args: args || {}, vuelta };
+      /* las que nunca se le ofrecen (las del teatro, solo de Claude; las que excluye la app) no se ejecutan aunque las nombre */
+      if (!error && this._vetada(nombre)) {
+        const paso = Object.assign(base, { fase: 'fin', ok: false, error: 'no es para el asistente', titulo: nombre + ' (no disponible)' });
+        this.pasos.push(this._pasoGuardado(paso));
+        this._emitir('paso', paso);
+        return { texto: 'ERROR: la herramienta «' + nombre + '» no está disponible para ti (es solo de Claude en Cowork o Claude Code). No se ejecutó nada.' };
+      }
       if (error) {
         const paso = Object.assign(base, { fase: 'fin', ok: false, error, titulo: 'Llamada mal formada a ' + nombre });
         this.pasos.push(this._pasoGuardado(paso));

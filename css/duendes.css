@@ -1,0 +1,22 @@
+/* El teatro de duendes (1.1.62, js/claquedraw/duendes.js): la vista previa de duendes.html sobre la app, con su cabecera
+   «TEATRO DE DUENDES · título» y el marco; deja sitio al asistente si está abierto */
+.dn-capa { position: fixed; inset: 38px 0 0 0; z-index: 72; display: flex; align-items: stretch; justify-content: center; padding: 3vh 24px;
+  background: var(--backdrop, rgba(10, 10, 20, .45)); animation: gd-modal-capa .14s ease-out; }
+body.con-asistente .dn-capa { right: var(--as-ancho, 380px); }
+body.con-asistente.asistente-plegado .dn-capa { right: 40px; }
+.dn-ventana { width: min(1240px, 100%); display: flex; flex-direction: column; background: var(--papel); color: var(--tinta);
+  border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra-modal); overflow: hidden; }
+.dn-cab { flex: none; display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--regla, var(--borde)); font-family: var(--sans); }
+.dn-rotulo { flex: none; font: 500 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido, var(--tinta)); }
+.dn-titulo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 14px; }
+.dn-nota { flex: none; font: 500 10px var(--mono); color: var(--palido, var(--tinta)); }
+.dn-descargar { margin-left: auto; flex: none; height: 28px; padding: 0 10px; font-size: 12.5px; }
+.dn-cerrar { font-size: 20px; line-height: 1; }
+.dn-marco { flex: 1; width: 100%; border: 0; background: var(--lienzo); }
+@media (max-width: 700px) { .dn-capa { padding: 8px; } }
+
+/* La tarjeta «Duende» de un personaje (1.1.64, gestor.js `tarjetaDuende`): su retrato animado, lo que Claude entendió de él y el encargo */
+.gd-duende-cuerpo { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.gd-duende-retrato { width: 100%; max-width: 200px; aspect-ratio: 1 / 1; align-self: center; border: 1px solid var(--borde); border-radius: 6px; background: var(--lienzo); }
+.gd-duende-desc { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--tinta); }
+.gd-duende-enc { align-self: flex-start; }

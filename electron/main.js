@@ -223,7 +223,9 @@ function montarMenu() {
         { label: 'Claro / oscuro', accelerator: 'CmdOrCtrl+Shift+D', click: () => enviar('tema') } ] },
       { type: 'separator' },
       { label: 'Plantillas', click: () => enviar('plantillas') },   // su biblioteca especial, como «Plantillas» al pie del menú (1.1.56)
-      { label: 'Fórmulas', click: () => enviar('formulas') } ] },   // la de las fórmulas, prompts para las operaciones de IA del lienzo (1.1.60)
+      { label: 'Fórmulas', click: () => enviar('formulas') },   // la de las fórmulas, prompts para las operaciones de IA del lienzo (1.1.60)
+      { type: 'separator' },
+      { label: 'Teatro…', click: () => enviar('duendes') } ] },   // la vista previa del documento del editor con los duendes (1.1.62)
     /* Claude (1.1.49, electron/claude.js): la conexión se puede apagar; apagada, Claude solo toca los proyectos cerrados */
     { label: 'Claude', submenu: [
       { label: 'Permitir que Claude acceda', type: 'checkbox', checked: !!(claude && claude.activo()), click: m => { if (claude) claude.alternar(m.checked); } },
@@ -250,6 +252,23 @@ app.whenReady().then(() => {
   require('./ia').iniciar({ app, ipcMain, safeStorage, shell, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
   /* la memoria de estilo (1.1.60): la general y lo que escribió la IA, en los datos de la app */
   require('./memoria').iniciar({ app, ipcMain, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
+  /* los mods del teatro de duendes, de todos los proyectos (1.1.64, claude/teatro-global.js): los lee y escribe cada ventana, y si
+     cambian (otra ventana, o Claude con un proyecto cerrado) se avisa a las demás */
+  (() => {
+    const Tm = require('../js/claquedraw/teatro-mods.js').teatroMods;
+    const almacen = require('../claude/teatro-global').crear(app.getPath('userData'), Tm);
+    const esV = wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc);
+    let propio = 0;
+    const avisar = salvo => { for (const v of ventanas.values()) if (v.win && !v.win.isDestroyed() && v.win.webContents !== salvo) v.win.webContents.send('teatro:cambio'); };
+    ipcMain.handle('teatro:leer', e => (esV(e.sender) ? almacen.leer() : {}));
+    /* el teatro tal cual viene en la app, para descargar una obra como página suelta (1.1.65) */
+    ipcMain.handle('teatro:fuente', e => { if (!esV(e.sender)) return null; try { return fsSync.readFileSync(path.join(__dirname, '..', 'duendes.html'), 'utf8'); } catch (_) { return null; } });
+    ipcMain.handle('teatro:escribir', (e, t) => {
+      if (!esV(e.sender)) return null;
+      try { const x = almacen.escribir(t); propio = Date.now(); avisar(e.sender); return x; } catch (_) { return null; }
+    });
+    try { fsSync.watch(path.dirname(almacen.archivo), (ev, f) => { if (f === 'teatro-mods.json' && Date.now() - propio > 1500) avisar(null); }); } catch (_) {}
+  })();
   claude = require('./claude')({ app, ipcMain, dialog, shell, clipboard, ventanas, enfocar, abrirRuta, alCambiar: () => montarMenu(), nuevaVentana: () => createWindow() });
   montarMenu();
   listo = true;
@@ -271,13 +290,15 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
    `binario` devuelve los bytes tal cual. */
 const escribir = (p, content) => atomico.escribir(p, typeof content === 'string' ? content : Buffer.from(content));   // de una vez (claude/atomico.js)
 const leer = (p, binario) => binario ? fs.readFile(p).then(b => new Uint8Array(b)) : fs.readFile(p, 'utf8');
-ipcMain.handle('file:save', async (event, { defaultPath, content, filters }) => {
+ipcMain.handle('file:save', async (event, { defaultPath, content, filters, noEncima }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const { canceled, filePath } = await dialog.showSaveDialog(win, { defaultPath, filters });
   if (canceled || !filePath) return null;
   /* el archivo de otro proyecto abierto no vale: las dos ventanas escribirían en él y ganaría la última (1.1.55) */
   const v0 = ventanas.get(event.sender.id);
   if ([...ventanas.values()].some(v => v !== v0 && !v.win.isDestroyed() && atomico.mismoArchivo(v.ruta, filePath))) throw new Error('ABIERTO');
+  /* ni el que se pide no pisar (el de una versión más nueva de ClapCraft: la copia de esta versión perdería lo que no conoce) */
+  if (noEncima && atomico.mismoArchivo(noEncima, filePath)) throw new Error('MAS_NUEVO');
   await escribir(filePath, content);
   if (claude) claude.escrito(filePath);
   return filePath;

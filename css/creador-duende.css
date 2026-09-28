@@ -1,0 +1,99 @@
+/* El creador de duendes (1.1.67, js/claquedraw/creador-duende.js): una ventana como el selector de avatar de Stardew Valley, con el
+   retrato grande a la izquierda y las categorías del motor y de sus mods a la derecha. Todo con los tokens de la piel, así vale en
+   Claro, Oscuro, Synthwave y Vaporwave. */
+.cd-capa { position: fixed; inset: 38px 0 0 0; z-index: 72; display: flex; align-items: center; justify-content: center; padding: 3vh 24px;
+  background: var(--backdrop, rgba(10, 10, 20, .45)); animation: gd-modal-capa .14s ease-out; font-family: var(--sans); }
+body.con-asistente .cd-capa { right: var(--as-ancho, 380px); }
+body.con-asistente.asistente-plegado .cd-capa { right: 40px; }
+.cd-ventana { width: min(1040px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--papel); color: var(--tinta);
+  border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra-modal); overflow: hidden; }
+.cd-cab { flex: none; display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--regla, var(--borde)); }
+.cd-rotulo, .cd-mini { font: 500 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido, var(--tinta)); }
+.cd-rotulo { flex: none; }
+.cd-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 15px; }
+.cd-hueco { flex: 1; }
+.cd-cerrar { font-size: 20px; line-height: 1; }
+
+.cd-cuerpo { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 380px) minmax(0, 1fr); }
+.cd-escena { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--lienzo); border-right: 1px solid var(--regla, var(--borde)); overflow: auto; }
+.cd-marco-caja { border: 1px solid var(--borde); border-radius: 6px; overflow: hidden; background: var(--panel); box-shadow: var(--sombra); }
+.cd-marco { display: block; width: 100%; aspect-ratio: 1 / 1; border: 0; background: transparent; transition: transform .22s ease; }
+.cd-marco.girado { transform: scaleX(-1); }
+.cd-escena-acc { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.cd-girar { flex: none; height: 30px; }
+.cd-gesto-l, .cd-desc-l { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cd-gesto-l { flex: 1; }
+.cd-gesto, .cd-desc { font: 13px var(--sans); color: var(--tinta); background: var(--papel); border: 1px solid var(--borde); border-radius: 4px; }
+.cd-gesto { height: 30px; padding: 0 6px; min-width: 0; }
+.cd-desc { resize: vertical; padding: 6px 8px; line-height: 1.4; min-height: 54px; }
+.cd-gesto:focus-visible, .cd-desc:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; border-color: var(--foco); }
+
+.cd-panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.cd-pestanas { flex: none; display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 8px; border-bottom: 1px solid var(--regla, var(--borde)); background: var(--panel); }
+.cd-pestana { height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--tenue, var(--tinta));
+  font: 500 12.5px var(--sans); cursor: pointer; }
+.cd-pestana:hover { background: var(--hover); color: var(--tinta); }
+.cd-pestana[aria-selected="true"] { background: var(--papel); border-color: var(--borde); color: var(--tinta); box-shadow: inset 0 -2px 0 var(--foco); }
+.cd-pestana:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+.cd-cat-cab { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 16px 6px; }
+.cd-cat-n { flex: 1; font: 600 16px var(--sans); }
+.cd-azar-cat { height: 28px; font-size: 12.5px; }
+.cd-filas { flex: 1; min-height: 0; overflow: auto; padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+.cd-nota { margin: 6px 2px 0; font-size: 12px; color: var(--tenue, var(--tinta)); line-height: 1.4; }
+
+/* una fila: nombre del rasgo y su selector */
+.cd-fila { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; column-gap: 12px; row-gap: 6px; padding: 7px 10px;
+  border: 1px solid var(--regla, var(--borde)); border-radius: 6px; background: var(--papel); outline: none; }
+.cd-fila:hover { border-color: var(--borde-fuerte, var(--borde)); }
+.cd-fila:focus, .cd-fila:focus-within { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); }
+.cd-fila-n { font: 500 13px var(--sans); color: var(--tinta); }
+.cd-selector { display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; align-items: center; gap: 6px; max-width: 340px; }
+.cd-flecha { width: 30px; height: 30px; border: 1px solid var(--borde); border-radius: 4px; background: var(--lienzo); color: var(--tinta);
+  font: 600 18px/1 var(--sans); cursor: pointer; }
+.cd-flecha:hover { background: var(--foco-suave); border-color: var(--foco); color: var(--foco); }
+.cd-valor { text-align: center; font: 500 13.5px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 5px 6px;
+  border-radius: 4px; background: var(--foco-suave); color: var(--tinta); }
+.cd-valor.serie { background: transparent; color: var(--palido, var(--tinta)); font-style: italic; }
+.cd-rango { grid-column: 2; width: 100%; max-width: 340px; accent-color: var(--foco); }
+
+/* muestras de color */
+.cd-muestras { display: flex; flex-wrap: wrap; gap: 5px; }
+.cd-muestra { position: relative; width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--borde-fuerte, var(--borde));
+  background: var(--m, var(--lienzo)); cursor: pointer; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .18); }
+.cd-muestra[aria-pressed="true"], .cd-muestra--propio.on { outline: 2px solid var(--foco); outline-offset: 2px; }
+.cd-muestra--serie { display: grid; place-items: center; font: 500 12px var(--sans); color: var(--palido, var(--tinta)); background: var(--lienzo); }
+.cd-muestra--propio { display: grid; place-items: center; overflow: hidden;
+  background: var(--m, conic-gradient(#e74c3c, #f1c40f, #2ecc71, #3498db, #9b59b6, #e74c3c)); }
+.cd-muestra--propio input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+
+/* varias a la vez */
+.cd-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.cd-chip { height: 26px; padding: 0 10px; border: 1px solid var(--borde); border-radius: 13px; background: var(--lienzo); color: var(--tinta);
+  font: 12.5px var(--sans); cursor: pointer; }
+.cd-chip[aria-pressed="true"] { background: var(--foco); border-color: var(--foco); color: var(--foco-sobre); }
+.cd-fila:focus .cd-chip.cursor { outline: 2px dashed var(--foco); outline-offset: 1px; }
+
+.cd-pie { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--regla, var(--borde)); background: var(--panel); }
+.cd-pie .btn { height: 30px; }
+.cd-pie .btn:disabled { opacity: .45; cursor: default; }
+.cd-error { flex: 1; min-width: 0; font-size: 12.5px; color: var(--peligro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-guardar { min-width: 96px; }
+
+/* los temas neón: brillo en lo elegido, como el resto de la piel */
+html[data-estilo] .cd-pestana[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--foco), var(--neon-brillo, none); }
+html[data-estilo] .cd-valor:not(.serie) { box-shadow: var(--neon-brillo, none); }
+html[data-estilo] .cd-chip[aria-pressed="true"] { background: var(--sol, var(--foco)); border-color: transparent; color: var(--sol-tinta, var(--foco-sobre)); }
+
+@media (max-width: 760px) {
+  .cd-capa { padding: 8px; }
+  .cd-cuerpo { grid-template-columns: 1fr; overflow: auto; }
+  .cd-escena { border-right: 0; border-bottom: 1px solid var(--regla, var(--borde)); }
+  .cd-marco-caja { max-width: 260px; align-self: center; width: 100%; }
+  .cd-fila { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .cd-marco { transition: none; } }
+
+/* la tarjeta «Duende» de la biblioteca de un personaje: crear o editar a mano, además del encargo para Claude */
+.gd-duende-botones { display: flex; flex-wrap: wrap; gap: 6px; }
+.gd-duende-crear { font-weight: 500; }
+.cd-quitar.seguro { color: var(--peligro); border-color: var(--peligro); }

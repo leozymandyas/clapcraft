@@ -507,5 +507,5 @@ table { border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2
     C.gestor.pop(trigger, f);
   }
 
-  C.exportar = { menu, exportar, aTexto, aMarkdown, docx, mediosDocx, aImprimible, preparar };
+  C.exportar = { menu, exportar, aTexto, aMarkdown, docx, mediosDocx, aImprimible, preparar, guardar };
 })(window.Claquedraw);

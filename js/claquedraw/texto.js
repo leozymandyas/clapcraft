@@ -596,6 +596,15 @@
       });
       modo.parentElement.before(x);
     }
+    /* «Teatro» (1.1.62): la vista previa del teatro de duendes con lo que hay en el editor o lo seleccionado (js/claquedraw/duendes.js) */
+    if (barra && modo && o.duendes && !d.getElementById('cdDuendes')) {
+      const x = d.createElement('div');
+      x.className = 'fb-item cd-exportar cd-duendes';
+      x.innerHTML = `<button type="button" id="cdDuendes" title="Verlo en el teatro, interpretado por los duendes (lo seleccionado o todo el documento)">${SVG('<path d="M3 13.2h10"/><path d="M4.2 13.2V5.4L8 2.8l3.8 2.6v7.8"/><path d="M6.6 13.2v-3a1.4 1.4 0 0 1 2.8 0v3"/>')}Teatro</button>`;
+      x.querySelector('button').addEventListener('mousedown', e => e.preventDefault());   // que no se pierda lo seleccionado
+      x.querySelector('button').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); o.duendes(); });
+      modo.parentElement.before(x);
+    }
     /* «Copiar enlace para Claude» en el clic derecho (el párrafo del cursor o lo seleccionado) y en el menú del asa de bloques
        (los bloques elegidos), 1.1.52 */
     const ctxMenu = d.getElementById('ctxMenu');

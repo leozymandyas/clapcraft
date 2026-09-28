@@ -90,3 +90,18 @@ test('limpiar quita los temporales de una escritura cortada, no los de un proces
   assert.strictEqual(A.limpiar(f), 2);
   assert.deepStrictEqual(temporales(dir).sort(), [ajeno, vivo].sort());
 });
+
+test('revisión del port · los permisos no pasan por el umask: un 0664 sigue siendo 0664 y el modo pedido es ese', async () => {
+  if (process.platform === 'win32') return;
+  const dir = carpeta(), f = path.join(dir, 'grupo.clapcraft'), g = path.join(dir, 'nuevo.clapcraft');
+  const antes = process.umask(0o077);
+  try {
+    fs.writeFileSync(f, 'uno'); fs.chmodSync(f, 0o664);
+    A.escribirSync(f, 'dos');
+    assert.strictEqual(fs.statSync(f).mode & 0o777, 0o664, 'escribirSync');
+    await A.escribir(f, 'tres');
+    assert.strictEqual(fs.statSync(f).mode & 0o777, 0o664, 'escribir');
+    await A.escribir(g, 'x', 0o644);
+    assert.strictEqual(fs.statSync(g).mode & 0o777, 0o644, 'el modo pedido');
+  } finally { process.umask(antes); fs.rmSync(dir, { recursive: true, force: true }); }
+});

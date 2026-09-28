@@ -18,7 +18,10 @@
   const CLAVE_TEMA = 'guiones.tramas.theme', CLAVE_TRAMAS = 'guiones.tramas.doc';
   const FORMATO_TABLERO = 1;                                   // el mismo que escribe tramas.html
   const EXT = 'clapcraft', SIN_TITULO = 'Sin título';
-  const FORMATO_ARCHIVO = 2;                                   // .clapcraft: { app, formato, nombre, documentos }, con gzip
+  /* .clapcraft: { app, formato, nombre, documentos }, con gzip. 3 desde la 1.1.61 (lienzos, fórmulas, memoria de estilo: la 1.1.60
+     los escribía con el 2 de la 1.1.55, que los tiraba al guardar); 4 desde la 1.1.67 (el duende v2 de un personaje y los ajustes de
+     escenario de una obra: la 1.1.66 los quitaba al normalizar); uno mayor que este se lee pero no se escribe (`formatoDe`) */
+  const FORMATO_ARCHIVO = 4;
   const $ = id => document.getElementById(id);
   const api = window.editorAPI;                                // puente de Electron, si existe
   const escritorio = !!(api && api.isElectron);
@@ -154,8 +157,11 @@
     if (!abiertoId || !lid || !v) return;
     const m = vista.lienzos || (vista.lienzos = {}), p = m[abiertoId] || (m[abiertoId] = {});
     p[lid] = { x: +v.x || 0, y: +v.y || 0, zoom: +v.zoom || 1 };
-    clearTimeout(vistaLienzoT); vistaLienzoT = setTimeout(guardarVista, 400);   // desplazar y hacer zoom avisan a cada paso
+    clearTimeout(vistaLienzoT); vistaLienzoT = setTimeout(() => { vistaLienzoT = null; guardarVista(); }, 400);   // desplazar y hacer zoom avisan a cada paso
   }
+  /* la que espera, ya (1.1.61, revisión: al salir, `volcarLienzo` → `alVista` volvía a programar los 400 ms y nadie la guardaba: la
+     vista movida en el último medio segundo se perdía) */
+  function guardarVistaLienzoYa() { if (vistaLienzoT) { clearTimeout(vistaLienzoT); vistaLienzoT = null; guardarVista(); } }
   function ganchosLienzo(lid) {
     return {
       guardar: datos => {
@@ -193,7 +199,7 @@
     return true;
   }
   /* lo pendiente del lienzo (un campo a medio escribir, un arrastre), a sus datos, si la interfaz sabe hacerlo */
-  function volcarLienzo() { if (lienzoMontado && C.lienzoUI && C.lienzoUI.volcar) { try { C.lienzoUI.volcar(); } catch (_) {} } }
+  function volcarLienzo() { if (lienzoMontado && C.lienzoUI && C.lienzoUI.volcar) { try { C.lienzoUI.volcar(); } catch (_) {} } guardarVistaLienzoYa(); }   // (y su vista: salir, cerrar, cambiar de pantalla)
   function desmontarLienzo() {
     if (!lienzoMontado) return;
     volcarLienzo();
@@ -727,7 +733,10 @@
      (`.esq-titulo`: esquema, documento, biblioteca, segmento y nota; las cabeceras se rehacen, así que un MutationObserver los
      vuelve a poner) y se apagan sin nada a ese lado. También Cmd/Ctrl+[ y ]. */
   const MAX_HISTORIA = 40;
+  /* el creador de duendes o el teatro tapan la app: mientras están, no se navega por debajo (1.1.67) */
+  const capaTeatro = () => !!((C.creadorDuende && C.creadorDuende.abierto()) || (C.duendes && C.duendes.abierto && C.duendes.abierto()));
   function irHistoria(salto) {
+    if (capaTeatro()) return;
     const t = pestanaActiva(); if (!t || pantalla !== 'proyecto') return;
     recordarPantalla(); if (temporizador) volcar(); volcarTexto();
     const de = salto < 0 ? t.atras : t.adelante; if (!de || !de.length) return;
@@ -896,7 +905,7 @@
     return null;
   }
   function nuevaPestana() {
-    if (!pestanas || pantalla !== 'proyecto') return;
+    if (!pestanas || pantalla !== 'proyecto' || capaTeatro()) return;
     const x = primerElemento();
     const p = (x && pantallaDe(x)) || { modo: 'documentos', esquema: esquemaId || null };
     p.arbol = 'contenedores';
@@ -1364,6 +1373,8 @@
   /* Cmd+W: la pestaña de delante; si es la única, el proyecto (como un navegador con su última pestaña) */
   function cerrarLoDeDelante() {
     if (pantalla === 'nuevo') { cancelarProyecto(); return; }
+    if (C.creadorDuende && C.creadorDuende.abierto()) { C.creadorDuende.cerrar(); return; }   // el creador de duendes (1.1.67), sin guardar
+    if (C.duendes && C.duendes.abierto && C.duendes.abierto()) { C.duendes.cerrar(); return; }   // el teatro
     if (C.gestor.ventanaAbierta && C.gestor.ventanaAbierta()) { C.gestor.cerrarVentana(); return; }   // la ventana de una nota, lo primero (como en Notion)
     if (pestanas && pestanas.lista.length > 1) { cerrarPestanaElemento(pestanas.activa); return; }
     cerrarProyecto();
@@ -1378,7 +1389,9 @@
     const est = estado(id);
     detenerAsistente();                                        // el asistente no sigue cambiando un proyecto que se cierra (1.1.59)
     volcarTodo();
-    if (est.archivo) { if (!await escribirArchivo(id) && !await T.tablero.confirmar('No se pudo escribir en ' + est.archivo.nombre + '. ¿Cerrar «' + g.nombre + '» de todas formas? Se perderían los cambios.', 'Cerrar')) return; }
+    /* de una versión más nueva: su archivo no se escribe; sin cambios de aquí, se cierra sin más (revisión del port a ClapBook) */
+    if (est.archivo && est.formatoNuevo) { if (sucio(id) && !await T.tablero.confirmar('«' + g.nombre + '» es de una versión más nueva de ClapCraft y no se escribe en su archivo. ¿Cerrarlo de todas formas? Se perderían los cambios de aquí (Guardar como… hace una copia con ellos).', 'Cerrar')) return; }
+    else if (est.archivo) { if (!await escribirArchivo(id) && !await T.tablero.confirmar('No se pudo escribir en ' + est.archivo.nombre + '. ¿Cerrar «' + g.nombre + '» de todas formas? Se perderían los cambios.', 'Cerrar')) return; }
     else if (!esVirgen(g) && !await T.tablero.confirmar('¿Cerrar «' + g.nombre + '»? No está guardado en ningún archivo y se perderá.', 'Cerrar')) return;
     if (est.archivo) recordarReciente(id);
     quitarDeLaVentana(id);
@@ -1396,6 +1409,18 @@
      forma antigua (`g.datos`, `g.notas`) ya está migrado a los documentos y no viaja. Se compara como
      texto (`ultimoEscrito`) y se escribe comprimido (`empaquetar`). */
   const serializar = g => JSON.stringify({ app: 'clapcraft', formato: FORMATO_ARCHIVO, nombre: g.nombre, documentos: g.documentos });
+  /* **Un archivo de una versión más nueva de ClapCraft** (su `formato` es mayor que FORMATO_ARCHIVO) se lee, pero su archivo no se
+     escribe (revisión del port a ClapBook): esta versión tiraría al guardarlo lo que no conoce (la 1.1.55 abría los de la 1.1.60,
+     con el mismo formato 2, y al autoguardar perdía los lienzos y la memoria de estilo). Lo que se cambie se queda en este equipo;
+     «Guardar como…» hace una copia con lo que esta versión conoce, con otro nombre. `est.formatoNuevo`: el formato de su archivo
+     (0: el nuestro o uno de antes). */
+  function formatoDe(texto) {
+    const m = /^\s*\{\s*"app"\s*:\s*"clapcraft"\s*,\s*"formato"\s*:\s*(\d+)/.exec(String(texto || '').slice(0, 80));
+    let f = m ? +m[1] : NaN;
+    if (!m) { try { f = +JSON.parse(texto).formato; } catch (_) { f = 0; } }
+    return f > FORMATO_ARCHIVO ? f : 0;
+  }
+  const avisoFormato = nombre => '«' + sinExtension(nombre) + '» es de una versión más nueva de ClapCraft: se puede leer, pero no se escribe en su archivo (se perdería lo que esta versión no conoce). Lo que cambies se queda en este equipo; actualiza ClapCraft, o haz una copia con Guardar como…';
   /* gzip con CompressionStream (Chromium/Electron, Safari 16.4+): el texto de un guion baja a ~1/5. Sin
      CompressionStream se escribe el JSON tal cual; al leer se reconoce por la firma de gzip (1f 8b). */
   async function empaquetar(texto) {
@@ -1422,7 +1447,8 @@
   const ordenado = v => Array.isArray(v) ? v.map(ordenado) : v && typeof v === 'object' ? Object.keys(v).sort().reduce((o, k) => { o[k] = ordenado(v[k]); return o; }, {}) : v;
   function mismoContenido(a, b) {
     if (!a || !b) return false;
-    const plano = t => { const x = JSON.parse(t); if (x && x.documentos && typeof x.documentos === 'object') x.documentos = sinMarcas(C.normalizarDocumentos(x.documentos)); return JSON.stringify(ordenado(x)); };
+    /* sin el `formato`: un archivo de antes con lo mismo no se reescribe solo por subir de formato (ni al abrirlo) */
+    const plano = t => { const x = JSON.parse(t); if (x && typeof x === 'object') delete x.formato; if (x && x.documentos && typeof x.documentos === 'object') x.documentos = sinMarcas(C.normalizarDocumentos(x.documentos)); return JSON.stringify(ordenado(x)); };
     try { return plano(a) === plano(b); } catch (_) { return false; }
   }
   const mismosBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -1430,7 +1456,14 @@
   /* Estado de archivo de cada guion: { archivo: { nombre, ruta?, handle?, permiso }, ultimoEscrito,
      temporizador, escribiendo }. Se conserva mientras la pestaña esté abierta. */
   const estados = {};
-  const estado = id => estados[id] || (estados[id] = { archivo: null, ultimoEscrito: null, temporizador: null, escribiendo: false });
+  const estado = id => estados[id] || (estados[id] = { archivo: null, ultimoEscrito: null, temporizador: null, escribiendo: false, formatoNuevo: 0 });
+  /* lo que se acaba de leer de su archivo: ¿es de una versión más nueva? (`formatoDe`; desde ahí, su archivo no se escribe) */
+  function leidoDelArchivo(id, texto) {
+    const est = estado(id), f = formatoDe(texto);
+    if (f !== est.formatoNuevo) { est.formatoNuevo = f; est.avisadoFormato = false; est.sucioDe = null; }
+    if (f) { clearTimeout(est.temporizador); est.temporizador = null; }
+    return f;
+  }
 
   /* Los FileSystemFileHandle sobreviven a la recarga en IndexedDB (localStorage no los admite). */
   const idb = {
@@ -1445,7 +1478,14 @@
     del: async k => { const db = await idb.abrir(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite').objectStore('kv').delete(k); t.onsuccess = () => res(); t.onerror = () => rej(t.error); }); }
   };
 
-  const sucio = id => { const g = biblioteca.guion(id), est = estado(id); return !!(est.archivo && g && serializar(g) !== est.ultimoEscrito); };
+  const sucio = id => {
+    const g = biblioteca.guion(id), est = estado(id); if (!est.archivo || !g) return false;
+    const t = serializar(g); if (t === est.ultimoEscrito) return false;
+    if (!est.formatoNuevo) return true;
+    /* de una versión más nueva: lo leído nunca es igual que lo nuestro (su formato, lo que no conocemos); se compara lo que sí */
+    if (est.sucioDe !== t) { est.sucioDe = t; est.sucioEs = !mismoContenido(t, est.ultimoEscrito); }
+    return est.sucioEs;
+  };
   /* Lo que enseña el asterisco de la pestaña: con archivo, cambios sin escribir; sin archivo, que ya
      se tocó (un «Sin título» recién abierto va limpio). */
   const modificado = id => { const g = biblioteca.guion(id); if (!g) return false; return estado(id).archivo ? sucio(id) : !esVirgen(g); };
@@ -1459,6 +1499,7 @@
     /* sin el nombre del archivo (Leo): solo el estado; el nombre y la ruta van en el globo */
     else if (a.permiso === false && a.ruta) { texto = 'Sin escribir'; pista = 'No se pudo escribir en ' + a.ruta + ' · se reintenta solo; Guardar lo intenta ya'; clase = 'sucio'; }
     else if (a.permiso === false) { texto = 'Reconectar'; pista = a.nombre + ' · pulsa Guardar para volver a escribir en el archivo'; clase = 'sucio'; }
+    else if (est.formatoNuevo) { texto = 'Solo lectura'; pista = avisoFormato(a.nombre); clase = sucio(abiertoId) ? 'sucio' : ''; }
     else if (sucio(abiertoId)) { texto = ''; pista = a.nombre + ' · cambios sin escribir (se guardan solos en un momento)'; clase = 'sucio'; }
     else { texto = ''; pista = 'Guardado en ' + (a.ruta || a.nombre); clase = 'ok'; }
     /* con archivo, que no quepa en este equipo no es no estar guardado: el archivo es la copia (1.1.55) */
@@ -1471,6 +1512,7 @@
     const est = estado(id);
     est.archivo = Object.assign({ permiso: true }, a);
     est.ultimoEscrito = null;      // archivo nuevo: aún no tiene nada, aunque el contenido no haya cambiado
+    est.formatoNuevo = 0; est.avisadoFormato = false;   // (si es uno que se abre, lo dice quien lo leyó: `leidoDelArchivo`)
     vista.archivos[id] = { nombre: est.archivo.nombre, ruta: est.archivo.ruta || null }; guardarVista();
     if (est.archivo.handle) idb.set('archivo:' + id, est.archivo.handle).catch(() => {});
     else idb.del('archivo:' + id).catch(() => {});
@@ -1478,7 +1520,7 @@
   }
   function desvincular(id) {
     const est = estado(id);
-    est.archivo = null; est.ultimoEscrito = null; clearTimeout(est.temporizador);
+    est.archivo = null; est.ultimoEscrito = null; est.formatoNuevo = 0; clearTimeout(est.temporizador);
     delete vista.archivos[id]; guardarVista();
     idb.del('archivo:' + id).catch(() => {});
     indicador(); renderPestanas(); informarVentana();
@@ -1500,6 +1542,12 @@
     const est = estado(id), g = biblioteca.guion(id);
     clearTimeout(est.temporizador); est.temporizador = null;
     if (!est.archivo || !g || est.bloqueado) return false;
+    /* de una versión más nueva de ClapCraft: su archivo no se toca (se dice una vez; lo de aquí sigue en la copia de este equipo) */
+    if (est.formatoNuevo) {
+      if (!est.avisadoFormato && sucio(id)) { est.avisadoFormato = true; T.tablero.avisar(avisoFormato(est.archivo.nombre)); }
+      indicador(); renderPestanas();
+      return false;
+    }
     if (est.escribiendo) return est.enCurso.then(() => escribirArchivo(id));
     let contenido = serializar(g);
     if (contenido === est.ultimoEscrito || mismoContenido(contenido, est.ultimoEscrito)) { anotarEscrito(id, contenido); indicador(); renderPestanas(); return true; }
@@ -1577,16 +1625,19 @@
     const id = abiertoId, g = biblioteca.guion(id); if (!g) return;
     volcar(); volcarTexto();
     const teniaArchivo = !!estado(id).archivo;                  // sus enlaces (1.1.52): el archivo de antes sigue siendo de aquel
+    /* de una versión más nueva de ClapCraft: la copia lleva solo lo que esta conoce, y nunca encima de aquel archivo */
+    const nuevo = estado(id).formatoNuevo ? estado(id).archivo : null, MAS_NUEVO = 'Ese es el archivo de la versión más nueva de ClapCraft: guarda la copia con otro nombre';
+    if (nuevo && !await T.tablero.confirmar('«' + g.nombre + '» es de una versión más nueva de ClapCraft: la copia se guarda con esta, sin lo que esta no conoce. Guárdala con otro nombre (el archivo de antes se queda como está).', 'Guardar la copia')) return;
     /* nombre propuesto: el del proyecto hecho nombre de archivo, como al crear («Año nuevo» → «anio-nuevo.clapcraft»); lo que
        se elija no cambia el nombre del proyecto (Leo, 18-09-2026) */
     const contenido = serializar(g), sugerido = C.nombreArchivo(g.nombre) + '.' + EXT;
     if (api && api.saveFile) {
       /* el archivo de otro proyecto abierto no vale (se pisarían: 1.1.55, electron/main.js lo rechaza) y un error se dice */
       let ruta;
-      try { ruta = await api.saveFile({ defaultPath: sugerido, content: await empaquetar(contenido), filters: FILTROS }); }
+      try { ruta = await api.saveFile(Object.assign({ defaultPath: sugerido, content: await empaquetar(contenido), filters: FILTROS }, nuevo && nuevo.ruta ? { noEncima: nuevo.ruta } : {})); }
       catch (err) {
         const m = String((err && err.message) || err);
-        T.tablero.avisar(/ABIERTO/.test(m) ? 'Ese archivo es el de otro proyecto abierto · elige otro nombre' : 'No se pudo guardar ahí: ' + motivoError(m));
+        T.tablero.avisar(/ABIERTO/.test(m) ? 'Ese archivo es el de otro proyecto abierto · elige otro nombre' : /MAS_NUEVO/.test(m) ? MAS_NUEVO : 'No se pudo guardar ahí: ' + motivoError(m));
         return;
       }
       if (!ruta) return;
@@ -1597,6 +1648,7 @@
       let h;
       try { h = await window.showSaveFilePicker({ suggestedName: sugerido, types: TIPOS }); }
       catch (err) { if (err.name !== 'AbortError') T.tablero.avisar('No se pudo elegir el archivo'); return; }
+      if (nuevo && nuevo.handle && h.isSameEntry) { let mismo = false; try { mismo = await h.isSameEntry(nuevo.handle); } catch (_) {} if (mismo) { T.tablero.avisar(MAS_NUEVO); return; } }
       vincular(id, { nombre: h.name, handle: h });
       if (C.enlaces) C.enlaces.renombrar(g.documentos, proyectoEnlaceDe(id), { corregir: !teniaArchivo });
       if (!await escribirArchivo(id)) {
@@ -1617,8 +1669,11 @@
 
   /* «Guardar»: escribe ya en el archivo de la pestaña (reconectando si hace falta) o pide uno. */
   async function guardar() {
+    /* ⌘S con el creador de duendes delante (en Electron llega por el menú): guarda el duende, que ya escribe el proyecto */
+    if (C.creadorDuende && C.creadorDuende.abierto() && C.creadorDuende.guardar) { C.creadorDuende.guardar(); return; }
     const id = abiertoId, est = estado(id); if (!biblioteca.guion(id)) return;
     if (!est.archivo) return guardarComo();
+    if (est.formatoNuevo) { T.tablero.avisar(avisoFormato(est.archivo.nombre)); return; }
     if (est.archivo.permiso === false && est.archivo.handle) {
       let p = 'denied';
       try { p = await est.archivo.handle.requestPermission({ mode: 'readwrite' }); } catch (_) {}
@@ -1639,7 +1694,7 @@
       else if (a.handle) texto = await desempaquetar(await (await a.handle.getFile()).arrayBuffer());
     } catch (_) { return false; }                               // no se lee (no existe, o está roto): se escribe
     if (texto === null || !g) return false;
-    est.ultimoEscrito = texto;
+    est.ultimoEscrito = texto; leidoDelArchivo(id, texto);
     return !!(v && await cambiadoFuera(g, v, texto));
   }
 
@@ -1703,9 +1758,9 @@
     const g = abrirDatos(texto, f.name, h.name); if (!g) return null;
     /* lo que tiene el archivo, no el proyecto ya montado: si al montar cambió algo (la papelera purgada, un esquema migrado), se
        escribe; si solo se normalizó, `mismoContenido` no lo reescribe (1.1.55) */
-    vincular(g.id, { nombre: h.name, handle: h }); anotarEscrito(g.id, texto); programarEscritura(g.id); indicador(); renderPestanas();
+    vincular(g.id, { nombre: h.name, handle: h }); anotarEscrito(g.id, texto); leidoDelArchivo(g.id, texto); programarEscritura(g.id); indicador(); renderPestanas();
     recordarReciente(g.id); comprobarEnlaces(g.id);
-    T.tablero.avisar('Abierto ' + h.name + ' · se irá guardando ahí solo');
+    T.tablero.avisar(estado(g.id).formatoNuevo ? avisoFormato(h.name) : 'Abierto ' + h.name + ' · se irá guardando ahí solo');
     return g;
   }
   /* Un archivo con ruta (Electron: diálogo o doble clic en el Finder). Si ya está abierto en otra ventana, se va a ella; con otro
@@ -1720,9 +1775,9 @@
     catch (_) { T.tablero.avisar('No se pudo leer ' + ruta); return false; }
     const nombre = baseDe(ruta);
     const g = abrirDatos(texto, nombre, ruta); if (!g) return true;
-    vincular(g.id, { nombre, ruta }); anotarEscrito(g.id, texto); programarEscritura(g.id); indicador(); renderPestanas();   // lo del archivo (ver abrirHandle)
+    vincular(g.id, { nombre, ruta }); anotarEscrito(g.id, texto); leidoDelArchivo(g.id, texto); programarEscritura(g.id); indicador(); renderPestanas();   // lo del archivo (ver abrirHandle)
     recordarReciente(g.id); comprobarEnlaces(g.id);
-    T.tablero.avisar('Abierto ' + nombre + ' · se irá guardando ahí solo');
+    T.tablero.avisar(estado(g.id).formatoNuevo ? avisoFormato(nombre) : 'Abierto ' + nombre + ' · se irá guardando ahí solo');
     return true;
   }
   /* Un .clapcraft soltado en la ventana (sobre todo en «Sin proyectos», que lo anuncia): con su ruta en Electron, con su
@@ -1782,8 +1837,11 @@
     g.documentos = datos.documentos;
     if (typeof datos.nombre === 'string' && datos.nombre.trim()) g.nombre = datos.nombre.trim();
     anotarEscrito(id, texto);
+    const eraNuevo = estado(id).formatoNuevo;
+    if (leidoDelArchivo(id, texto) && !eraNuevo) aviso = avisoFormato(estado(id).archivo ? estado(id).archivo.nombre : g.nombre);   // (lo escribió una versión más nueva: desde ahora, no se le escribe encima)
     if (id === abiertoId) { recordarPantalla(); montar(id); } else persistir();
     if (aviso) T.tablero.avisar(aviso);
+    indicador();
     return true;
   }
   /* Al arrancar: ¿cambió el archivo mientras ClapCraft estaba cerrado? Devuelve si se cargó el del archivo. */
@@ -1812,10 +1870,13 @@
     if (est.escribiendo) await est.enCurso;
     if (est.archivo !== a || a.ruta !== ruta) return;
     let texto; try { texto = await desempaquetar(await api.readFile({ path: ruta, binario: true })); } catch (_) { return; }
-    if (texto === est.ultimoEscrito || mismoContenido(texto, est.ultimoEscrito)) return;   // lo que escribió esta ventana
+    /* ¿lo escribió una versión más nueva de ClapCraft? (aunque lo que esta conoce sea igual: lo que no conoce, no se pisa) */
+    const nuevoAntes = est.formatoNuevo;
+    if (leidoDelArchivo(id, texto) && !nuevoAntes) { T.tablero.avisar(avisoFormato(a.nombre)); indicador(); }
+    if (texto === est.ultimoEscrito || mismoContenido(texto, est.ultimoEscrito)) { if (est.formatoNuevo) est.ultimoEscrito = texto; return; }   // lo que escribió esta ventana
     volcarTodoSinSalir();
     if (mismoContenido(texto, serializar(g))) { anotarEscrito(id, texto); return; }        // ya lo tenía
-    if (sucio(id) && !await preguntarSinEscribir(id, '«' + g.nombre + '» cambió fuera de ClapCraft y aquí hay cambios que aún no se escribieron. ¿Cargar la versión del archivo? Si no, se queda la de aquí y se escribe en el archivo.')) return;
+    if (sucio(id) && !await preguntarSinEscribir(id, '«' + g.nombre + '» cambió fuera de ClapCraft y aquí hay cambios que aún no se escribieron. ¿Cargar la versión del archivo? Si no, se queda la de aquí' + (est.formatoNuevo ? ' (sin escribirla: el archivo es de una versión más nueva de ClapCraft).' : ' y se escribe en el archivo.'))) return;
     cargarDelArchivo(id, texto, 'Cargados los cambios de ' + a.nombre + ' hechos fuera de ClapCraft');
   });
 
@@ -1836,7 +1897,7 @@
         if (api.readFile) { try { texto = await desempaquetar(await api.readFile({ path: v.ruta, binario: true })); } catch (_) { est.archivo.permiso = false; } }
         if (renombrado) { recordarReciente(g.id); informarVentana(); }
         if (texto !== null) {
-          est.ultimoEscrito = texto;
+          est.ultimoEscrito = texto; leidoDelArchivo(g.id, texto);
           const cargado = await cambiadoFuera(g, v, texto);
           comprobarEnlaces(g.id, { renombrado: !!renombrado });
           if (cargado) continue;
@@ -1850,6 +1911,7 @@
           if (await h.queryPermission({ mode: 'readwrite' }) === 'granted') {
             est.archivo.permiso = true;
             est.ultimoEscrito = await desempaquetar(await (await h.getFile()).arrayBuffer());
+            leidoDelArchivo(g.id, est.ultimoEscrito);
           }
         } catch (_) {}
         if (est.ultimoEscrito && await cambiadoFuera(g, v, est.ultimoEscrito)) continue;
@@ -2005,6 +2067,7 @@
     asistente: () => alternarAsistente(),                     // Cmd+Shift+I con el foco en el editor (1.1.60; en Electron lo lleva el menú)
     volver: () => { C.gestor.contraer(); verVista('esquema'); },
     exportar: rect => exportarDesdeEditor(rect),
+    duendes: () => abrirDuendes(),                           // la vista previa del teatro de duendes (1.1.62)
     versiones: rect => menuVersiones(rect),
     copiarEnlace: () => copiarLoElegido(), copiarTramo: t => copiarTramo(t), copiarEnlaceFlot: q => copiarEnlaces(refDeFlot(q)),   // enlaces (1.1.52)
     mandarTramo: t => mandarTramo(t), hayAsistente: () => conAsistente(),   // «Mandar al asistente» en el clic derecho del editor (1.1.59)
@@ -2023,6 +2086,109 @@
     const nid = C.gestor.notaAbierta() || (C.texto.enDocumento() ? docId : null);
     const n = nid && d.nota(nid);
     return n ? { titulo: n.titulo, html: n.html } : null;
+  }
+  /* ---------- el teatro de duendes (1.1.62, js/claquedraw/duendes.js) ----------
+     Lo que hay en el editor (o, con una nota en su ventana, esa nota), en la vista previa del teatro: sus personajes con los
+     colores del elenco y del registro del documento; con algo seleccionado en el editor, solo esos bloques. */
+  function documentoParaDuendes() {
+    const d = docs(); if (!d) return null;
+    const enVentana = document.body.classList.contains('con-ventana') && C.gestor.notaElegida && C.gestor.notaElegida();
+    if (enVentana) { if (C.gestor.guardarPanel) C.gestor.guardarPanel(); const n = d.nota(enVentana); return n ? { id: n.id, titulo: n.titulo, html: n.html, characters: n.characters, conTramo: false } : null; }
+    volcarTexto();
+    const n = notaAbiertaEnEditor();
+    return n ? { id: n.id, titulo: n.titulo, html: n.html, characters: n.characters, conTramo: true } : null;
+  }
+  /* **Los mods del teatro son de todos los proyectos** (1.1.64, claude/teatro-global.js): la copia de esta ventana, que se pone al
+     día al arrancar, cuando otra ventana o Claude los cambian y antes de abrir el teatro. Sin Electron, en el localStorage. */
+  let modsGlobales = {};
+  const CLAVE_MODS = 'guiones.claquedraw.teatroMods';
+  function leerModsGlobales() {
+    if (!C.teatroMods) return Promise.resolve();
+    if (api && api.teatro) return api.teatro.leer().then(x => { modsGlobales = C.teatroMods.soloMods(x || {}); }).catch(() => {});
+    try { modsGlobales = C.teatroMods.soloMods(JSON.parse(localStorage.getItem(CLAVE_MODS) || '{}') || {}); } catch (_) { modsGlobales = {}; }
+    return Promise.resolve();
+  }
+  function escribirModsGlobales(t) {
+    modsGlobales = C.teatroMods.soloMods(t);
+    if (api && api.teatro) api.teatro.escribir(modsGlobales).catch(() => {});
+    else try { localStorage.setItem(CLAVE_MODS, JSON.stringify(modsGlobales)); } catch (_) {}
+    return modsGlobales;
+  }
+  leerModsGlobales();
+  if (api && api.teatro && api.teatro.alCambiar) api.teatro.alCambiar(() => leerModsGlobales());
+  /* los mods que un proyecto de la 1.1.63 guardaba dentro pasan a los de todos (y el proyecto se queda con sus obras y sus duendes) */
+  function mudarModsDelProyecto() {
+    const d = docs(); if (!d || !C.teatroMods) return;
+    const t = d.teatro(); if (!C.teatroMods.tieneMods(t)) return;
+    escribirModsGlobales(C.teatroMods.mezclar(modsGlobales, t));
+    if (d.fijarTeatro(C.teatroMods.soloProyecto(t))) { biblioteca.marcar(abiertoId); persistir(); }
+  }
+  /* los duendes de los personajes del proyecto, por la clave de su nombre en el teatro */
+  function duendesDelProyecto() {
+    const d = docs(); if (!d || !C.duendes) return {};
+    const t = d.teatro().duendes || {}, out = {};
+    for (const p of d.elenco()) if (t[p.id]) out[C.duendes.claveTeatro(p.nombre)] = Object.assign({}, t[p.id], { nombre: p.nombre });   // su nombre de ahora (tras renombrarlo)
+    return out;
+  }
+  function encargoDuende(pid) {
+    const d = docs(), p = d && d.personaje(pid); if (!p || !C.enlaces) return false;
+    if (sellarEnlaces(abiertoId)) { biblioteca.marcar(abiertoId); persistir(); }
+    const enl = C.enlaces.markdown(d, proyectoEnlace(), { tipo: 'personaje', id: pid }, opEnlace());
+    const ya = (d.teatro().duendes || {})[pid];
+    const texto = (ya ? 'Cambia el duende de ' + enl + ' en el teatro de ClapCraft: ' : 'Crea el duende de ' + enl + ' para el teatro de ClapCraft') +
+      (ya ? '(míralo con duende_personaje { ver: true } y dime qué cambio o pregúntame)' : ': míralo antes con duende_personaje { ver: true } (su hoja de personaje y sus imágenes). Por defecto es un duende; si hay una imagen de una persona, hazlo humano con sus rasgos característicos. Si faltan rasgos para dibujarlo (duende, persona o animal, colores de piel, pelo y ropa, tamaño, accesorios, voz), pregúntamelos antes. Guárdalo con duende_personaje.');
+    return copiarTexto(texto).then(ok => { if (ok) T.tablero.avisar('Encargo copiado. Pégalo en Claude.'); return ok; });
+  }
+  /* **El creador de duendes** (1.1.67, js/claquedraw/creador-duende.js): lo que Leo hace a mano va donde lo deja Claude con
+     `duende_personaje`, `documentos.teatro.duendes[pid]`, validado y con `fuente: 'creador'`; se guarda y la tarjeta se repinta.
+     `datos` null quita el duende. */
+  function guardarDuende(pid, datos) {
+    const d = docs(), p = d && d.personaje(pid);
+    if (!p || !C.teatroMods) return { ok: false, error: 'Ese personaje ya no está en el elenco' };
+    const t = d.teatro(), du = Object.assign({}, t.duendes || {});
+    if (datos == null) delete du[pid];
+    else {
+      const r = C.teatroMods.validarDuende(datos, { mascaras: (modsGlobales.mascaras || []).map(m => m.id), vestuarios: (modsGlobales.vestuarios || []).map(m => m.id) });
+      if (!r.ok) return r;
+      /* `fuente`: si lo hizo Claude a partir de una nota (su hoja, una imagen), retocarlo aquí no la pierde; si no, «creador» */
+      const antes = (t.duendes || {})[pid], fuente = antes && antes.fuente && antes.fuente !== 'creador' ? antes.fuente : 'creador';
+      du[pid] = Object.assign(r.dato, { nombre: p.nombre, fuente, fecha: Date.now() });
+    }
+    if (d.fijarTeatro(Object.assign({}, t, { duendes: du }))) { biblioteca.marcar(abiertoId); persistir(); }
+    C.gestor.render();
+    return { ok: true, dato: du[pid] || null };
+  }
+  let docDuendes = null;
+  if (C.duendes) C.duendes.iniciar({
+    documento: () => (docDuendes = documentoParaDuendes()),
+    tramo: () => (docDuendes && docDuendes.conTramo && C.texto.tramo ? C.texto.tramo() : null),
+    elenco: doc => (docs() ? docs().elenco().map(p => ({ nombre: p.nombre, color: p.color })) : [])
+      .concat(Object.values((doc && doc.characters) || {}).map(r => ({ nombre: r && r.name, color: r && r.color }))),
+    paleta: () => { const E = C.texto.editor && C.texto.editor(); return (E && E.characters && E.characters.PALETTE) || []; },
+    /* los mods (de todos los proyectos), y las obras y los duendes de este (1.1.64) */
+    mods: () => { if (!docs() || !C.teatroMods) return null; mudarModsDelProyecto(); const t = docs().teatro(); return Object.assign(C.teatroMods.mezclar(modsGlobales, t), C.teatroMods.soloProyecto(t)); },
+    duendes: () => duendesDelProyecto(),
+    /* los ajustes de Leo (1.1.67): el escenario que eligió a mano para una escena, en la obra de ese documento (sin tocar la dirección) */
+    ajustar: (id, ajustes, titulo) => {
+      const d = docs(); if (!d || !id || !C.teatroMods) return false;
+      if (!d.fijarTeatro(C.duendes.ponerAjustes(d.teatro(), id, ajustes, { titulo, ahora: Date.now() }))) return false;
+      biblioteca.marcar(abiertoId); persistir();
+      return true;
+    },
+    /* el encargo para Claude: dirigir la obra de ese documento (con su enlace, y el tramo si se abrió un fragmento) */
+    encargo: u => {
+      const d = docs(), ref = u && u.id ? refDeNota(u.id) : null; if (!d || !ref || !C.enlaces) return false;
+      if (sellarEnlaces(abiertoId)) { biblioteca.marcar(abiertoId); persistir(); }
+      const enl = C.enlaces.markdown(d, proyectoEnlace(), ref, opEnlace());
+      const texto = 'Dirige en el teatro de duendes de ClapCraft la obra ' + enl + (u.desde ? ' (me interesa sobre todo de los bloques ' + u.desde + ' a ' + u.hasta + ')' : '') +
+        ': léela con preparar_obra y guarda la puesta en escena con dirigir_obra. Reutiliza los escenarios y la utilería que ya hay; crea mods con editar_teatro solo para personajes y momentos clave.';
+      return copiarTexto(texto).then(ok => { if (ok) T.tablero.avisar('Encargo copiado. Pégalo en Claude.'); return ok; });
+    },
+    avisar: m => T.tablero.avisar(m)
+  });
+  function abrirDuendes() {
+    if (C.creadorDuende && C.creadorDuende.abierto()) return;   // no encima del creador de duendes
+    if (C.duendes && conProyecto()) leerModsGlobales().then(() => C.duendes.desdeEditor());
   }
   /* ---------- versiones del documento abierto (Leo, 16-09-2026) ----------
      Un esquema tiene un documento y dentro suyo sus versiones: el botón «Versiones» de la barra inferior del editor
@@ -2098,6 +2264,10 @@
 
   /* ---------- gestor de documentos (vista Documentos) ---------- */
   C.gestor.iniciar({
+    /* el duende de un personaje en el teatro (1.1.64): el suyo, los mods para su vista previa y el encargo para Claude */
+    duendeDe: pid => { const d = docs(); return d && d.teatro().duendes ? d.teatro().duendes[pid] || null : null; },
+    modsTeatro: () => modsGlobales, encargoDuende: pid => encargoDuende(pid),
+    guardarDuende: (pid, datos) => guardarDuende(pid, datos),  // el creador de duendes (1.1.67)
     seccion: $('documentos'), lado: $('gdSide'), main: $('gdMain'), migas: $('migas'),
     alNavegar: () => recordarPantalla(),                       // lo abierto en el gestor entra en la última pantalla
     abrirEnPestana: x => abrirEnPestana(x),                    // «Abrir en pestaña» de los ⋯ (1.1.33)
@@ -2359,6 +2529,8 @@
      panel de una nota, un nombre), el suyo, y el tablero, el suyo. En Electron el menú se lleva Cmd+Z antes de que llegue a la
      página (1.1.32: hasta entonces, escribiendo en un campo, deshacía el tablero; y en Documentos, el esquema escondido). */
   function historia(accion, tablero) {
+    if (C.duendes && C.duendes.abierto()) return;           // con el teatro delante no se deshace nada de debajo
+    if (C.creadorDuende && C.creadorDuende.abierto()) { C.creadorDuende.historia(accion); return; }   // el creador de duendes: su historial (1.1.67)
     /* con el visor de una imagen abierto, Deshacer y Rehacer son suyos (si no, deshacían el documento o el tablero de debajo) */
     if (window.Anotar && Anotar.abierto()) { if (Anotar.editando()) Anotar[accion === 'undo' ? 'deshacer' : 'rehacer'](); return; }
     const marco = $('editorMarco'), a = document.activeElement;
@@ -2483,6 +2655,7 @@
     memoriaEstilo: () => { if (C.memoriaUI && C.memoriaUI.abrir) C.memoriaUI.abrir(); },   // Claude › Memoria de estilo… (1.1.60)
     asistente: () => alternarAsistente(), configurarIA: () => configurarIA(),   // Claude › Asistente con otra IA… / Configurar IA… (1.1.59)
     tutorialIA: () => { if (C.asistente && C.asistente.tutorial) C.asistente.tutorial(); else configurarIA(); },
+    duendes: () => abrirDuendes(),                            // Ver › Teatro… (1.1.62)
     nuevoLienzo: () => { if (conProyecto()) nuevoLienzoAqui(); },   // Archivo › Nuevo lienzo… (1.1.58)
     copiarEnlace: () => copiarLoElegido(), irEnlace: () => irAlEnlaceCopiado(),   // Claude › Copiar enlace / Ir al enlace copiado (1.1.52)
     pestanaSig: () => pasarPestana(1), pestanaAnt: () => pasarPestana(-1),
@@ -2648,7 +2821,8 @@
     volcarTexto();
     const foto = fotoClaude(), a = estado(abiertoId).archivo, quien = op.quien || 'Claude';
     let cambio = false;
-    const ctx = { docs: d, proyecto: { nombre: g.nombre, ruta: a ? (a.ruta || a.nombre) : null, vivo: true }, origen: op.origen || 'Claude',
+    const ctx = { docs: d, proyecto: { nombre: g.nombre, ruta: a ? (a.ruta || a.nombre) : null, vivo: true }, origen: op.origen || 'Claude', ia: !!op.ia,
+      teatroGlobal: { leer: () => modsGlobales, escribir: t => escribirModsGlobales(t) },   // los mods del teatro, de todos los proyectos (1.1.64)
       /* la memoria de estilo (1.1.60, js/claquedraw/memoria-ui.js): la general, de este equipo; el asistente ya la lleva en su prompt */
       memoriaGeneral: C.memoriaUI && C.memoriaUI.ctxGeneral ? C.memoriaUI.ctxGeneral() : null, memoriaEnPrompt: !!op.memoriaEnPrompt,
       cambio: () => { cambio = true; }, estado: estadoEnPantalla, mostrar: mostrarClaude, ponerNombre: ponerNombreProyecto,
@@ -2806,7 +2980,7 @@
   function ejecutarIA(nombre, args, op) {
     op = op || {};
     const origen = op.origen || origenIA(op.modelo), quien = quienIA(origen);
-    const r = ejecutarEnVivo(nombre, args, { origen, quien, conCambio: true, memoriaEnPrompt: true, avisar: e => avisarCambioIA(e, quien) });
+    const r = ejecutarEnVivo(nombre, args, { origen, quien, ia: true, conCambio: true, memoriaEnPrompt: true, avisar: e => avisarCambioIA(e, quien) });
     /* lo que el panel enseña de un cambio: su entrada del historial (para «Deshacer» y «Ver») */
     if (r && r.historial && docs()) { const e = C.historial.entrada(docs(), r.historial); if (e) r.entrada = { id: e.id, titulo: e.titulo, origen: e.origen }; }
     return r;
@@ -3097,7 +3271,7 @@
      (antes seguía con ✓ hasta el siguiente cambio, 1.1.55) */
   if (api && api.onArchivoPerdido) api.onArchivoPerdido(ruta => {
     const est = estado(abiertoId), a = est.archivo; if (!a || a.ruta !== ruta) return;
-    est.ultimoEscrito = null; indicador(); renderPestanas();
+    est.ultimoEscrito = null; est.formatoNuevo = 0; indicador(); renderPestanas();   // (el de una versión más nueva ya no está: no hay nada que pisar)
     T.tablero.avisar(a.nombre + ' ya no está en su carpeta · se vuelve a guardar ahí');
     programarEscritura(abiertoId);
   });

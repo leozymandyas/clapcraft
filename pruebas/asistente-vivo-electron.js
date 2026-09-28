@@ -316,7 +316,7 @@ app.whenReady().then(async () => {
     const antes3 = G.llamadas.length;
     await js(`Claquedraw.app.abrirLienzo(${JSON.stringify(ids.lid)}); await W(700); return true;`);
     const selIA = `document.querySelector('#lzNodos [data-lz-nodo="${ids.rid}"] [data-lz-ia]')`;
-    comprobar('la operación «Resumir» lleva «Ejecutar con IA»', await hasta(`const b = ${selIA}; return !!b && /Ejecutar con IA/.test(b.textContent);`, 4000));
+    comprobar('la operación «Resumir» lleva «Ejecutar con IA»', await hasta(`const b = ${selIA}; return !!b && /Ejecutar con IA/.test(b.getAttribute('aria-label') || '') && b.textContent.trim() === 'IA';`, 4000));
     await aClic(selIA, { tras: 200 });
     comprobar('mientras corre, el nodo está pendiente («Con IA…»)', await hasta(`const el = document.querySelector('#lzNodos [data-lz-nodo="${ids.rid}"]'); const e = el && el.querySelector('.lz-estado.pendiente'); return !!e && /Con IA/.test(e.textContent);`, 6000));
     const fin3 = await hastaLibre(200000);

@@ -4,7 +4,9 @@ Editor de guiones tipo Notion/Scrivener en **JavaScript puro, sin build ni depen
 Se ejecuta abriendo `index.html` (o `node serve.js 5173`) y está preparado para Electron (`npm start`,
 que abre `claquedraw.html`; con npm 11 hay que correr `node node_modules/electron/install.js` tras
 `npm install` porque los scripts de instalación vienen bloqueados). `npm run dist` deja el `.dmg` en
-`dist/`; `electron/main.js` abre **una ventana por proyecto** (1.1.33, ver `app.js` en Claquedraw), recibe los `.clapcraft` del
+`dist/`, **firmado ad hoc** (1.1.61: `identity: "-"` y `hardenedRuntime: false` en `build.mac`; sin certificado, electron-builder
+dejaba la app sin sellar —`codesign --verify --deep --strict` fallaba— y en otro Mac salía «dañada»; con ad hoc basta clic derecho →
+Abrir la primera vez, como en ClapBook); `electron/main.js` abre **una ventana por proyecto** (1.1.33, ver `app.js` en Claquedraw), recibe los `.clapcraft` del
 Finder (`open-file`: a la ventana que ya lo tenga, a una vacía por `abrir-ruta` o a una nueva con `?ruta=`), abre el puente con Claude (`electron/claude.js`, ver «Claude» al final) y monta el menú de la aplicación (Archivo / Edición / Ver / Claude): cada opción manda una orden
 por el canal `menu` (`editorAPI.onMenu`) que `app.js` resuelve en `ordenes`; con `body.escritorio`
 la barra esconde los botones que ya están en el menú. Deshacer/Rehacer del menú no llevan rol nativo
@@ -929,8 +931,9 @@ Nuevo / Abrir… / Guardar… en la cabecera.
   detrás y exportar a Markdown; «guarda la nota nueva creada en el segmento expandido» falla alguna vez por los tiempos del
   arrastre sintético: repetir antes de buscar un fallo). En el panel de navegador la tecla Enter de la herramienta no llega al campo: se prueba con
   `KeyboardEvent` sintético.
-- **Archivos `.clapcraft`** (Leo, 14-09-2026: ligeros). JSON sin sangría `{ app: 'clapcraft', formato: 2,
-  nombre, documentos }` —el tablero antiguo (`g.datos`, `g.notas`) ya está migrado y no viaja; `tramas.html`
+- **Archivos `.clapcraft`** (Leo, 14-09-2026: ligeros). JSON sin sangría `{ app: 'clapcraft', formato: 4,
+  nombre, documentos }` (`FORMATO_ARCHIVO` de app.js y `FORMATO` de claude/servidor.js: 3 desde la 1.1.61, 4 desde la 1.1.67; uno mayor se lee pero no
+  se escribe, ver «Arreglos de la revisión de ClapBook» en la 1.1.60) —el tablero antiguo (`g.datos`, `g.notas`) ya está migrado y no viaja; `tramas.html`
   ya no los abre— **comprimido con gzip** (`empaquetar`/`desempaquetar` con Compression/DecompressionStream;
   sin CompressionStream va el JSON tal cual y al leer se reconoce la firma 1f 8b). `ultimoEscrito` y `sucio`
   comparan el JSON en texto; se escriben bytes (Electron: `file:write`/`file:save` aceptan texto o
@@ -2013,7 +2016,7 @@ interfaz, integración y Claude; luego pruebas en Electron, revisión y correcci
   encargo con las entradas resueltas por puerto —notas y segmentos por el conversor, estructura y guion del esquema, hoja del
   personaje, la salida de una operación anterior—, con topes de palabras, y **las imágenes como contenido de imagen de MCP**: `ejecutar`
   devuelve `imagenes: [{ data, mimeType, nombre }]` y `claude/servidor.js` (`contenidoDe`) responde varias piezas; `claude/imagenes.js`
-  las reduce con `sips -Z 1024`, 8 como mucho, sin repetir la misma), `completar_nodo` (valida que la salida existe), `editar_lienzo`
+  las reduce con `sips -Z 1024`, 8 como mucho, sin repetir la misma), `completar_nodo` (valida que la salida existe y, desde la 1.1.61, que es la de su destino), `editar_lienzo`
   (entero o nada; `conectar` sin puerto no reemplaza si hay otro libre, y dice lo que quitó) y en `editar_proyecto` `crear_lienzo`,
   `renombrar_lienzo`, `duplicar_lienzo`, `mover_lienzo`, `tirar_lienzo`. Historial y revertir valen tal cual. La skill `clapcraft`
   lleva `references/lienzo.md` («ejecuta el lienzo» = todas las pendientes en orden) y `clapcraft-seedance` explica el nodo
@@ -2073,7 +2076,8 @@ en la aplicación para configurarlo.» Equipo de agentes: transporte, motor, int
   tope de gasto por conversación (0,50 USD por defecto; sin `usage`, estimación por caracteres, «≈»), `maxVueltas` (25; en un lienzo,
   15 por operación hasta 120), `detener`, **`reanudar`** («Reintentar» no repite el mensaje de Leo), `reasoning_content` nunca vuelve
   a la API, ids únicos por conversación, **permiso de Leo para lo destructivo** (`borrar_*`/`eliminar_*`/`tirar_*` en cualquier
-  `editar_*`, `escribir_documento` en `reemplazar` sobre un documento con texto, `revertir_cambio` con `forzar`: evento `alPermiso`,
+  `editar_*`, `escribir_documento` en `reemplazar` sobre un documento con texto, `revertir_cambio` con `forzar`; desde la 1.1.61
+  también `desconectar`, un `conectar` que sustituye un cable, `sustituir` que se lleva mucho texto y `olvidar_estilo`, ver «Arreglos de la revisión de ClapBook»: evento `alPermiso`,
   tarjeta Permitir / Permitir en esta conversación / No; sin respuesta no se hace). **Plan B** (proveedor sin `tools`, solo con el
   patrón estrecho `SIN_TOOLS`): herramientas descritas en el prompt y llamadas en bloques ```json con un **sello** por conversación;
   los resultados van entre marcadores con el sello. `encargoNodo`/`encargoLienzo` (con `nodos` y `texto`) para los lienzos.
@@ -2186,6 +2190,229 @@ depuración). El icono de macOS volvió al clásico (ver «1.1.57»).
 - **Pruebas**: test/formulas.test.js, test/ia-vision.test.js, test/memoria.test.js; en Electron `npm run test:formulas` (83),
   `test:ventana`, `test:memoria` (58) y `test:asistente` (138). Con `sendInputEvent` las flechas son `Down`/`Left`, `mouseWheel`
   con `deltaY` positivo amplía, y un repintado entre `mousedown` y `mouseup` se come el clic.
+- **Arreglos de la revisión de ClapBook, la parte de la interfaz** (28-09-2026; el port a ClapBook encontró fallos que también estaban
+  aquí). **Imágenes del lienzo**: lienzo.js solo pinta un `src` de una entrada imagen si es `data:image/` o `blob:` (`srcPropio`);
+  otro dice «Una imagen de fuera del proyecto no se carga» con «Elegir otra imagen…», y ni el doble clic ni `verImagen` la abren (un
+  `<img>` con la dirección que pusiera la IA la pedía solo al pintarse). **Enlaces del asistente**: el clic central (`auxclick`, y
+  `mousedown` con el botón 1 para el autodesplazamiento) sobre un enlace del panel va por `irA` como el clic —la misma confirmación
+  para un https de fuera—; antes Chromium lo abría en otra ventana y `setWindowOpenHandler` (main.js) lo mandaba al navegador sin
+  preguntar. **Memoria de estilo** (memoria-ui.js, `aprender`): si la IA contesta algo que no se entiende, lo automático queda en
+  `pausado` (con los pares pendientes, `revisar` volvía a pagar cada 30 s); si la ventana cambió de proyecto mientras contestaba
+  (`proyecto().clave` distinta), no se apunta nada y los pares siguen en el suyo. **La vista del lienzo al salir**: `volcarLienzo`
+  (app.js) guarda al momento la vista que esperaba sus 400 ms (`guardarVistaLienzoYa`; el `alVista` del volcado volvía a programar
+  el retraso y nadie la guardaba). **El pie de una operación en una fila**: `ANCHO_OP` 360; la etiqueta de la salida (`.lz-out`)
+  va absoluta, a la derecha de la primera fila y con su punto a su altura en el borde del nodo, y el pie le deja sitio con
+  `--lz-outn` (sus letras: `padding-right: calc(22px + n × 6,5px)`); el botón de la IA es compacto (icono + «IA», el texto largo
+  en `title`/`aria-label`) y el «ahora» de una pendiente va en el globo de su estado (con la IA configurada el pie se partía en dos
+  filas y la etiqueta bajaba mientras su punto se quedaba arriba). **El saldo**: el chip dice solo la cifra («$9,91»), «Saldo 9,91
+  USD» va en `title`/`aria-label`, y el modelo y el chip encogen con elipsis, el chip antes (`flex: 0 3 auto`; se cortaba el modelo
+  en «deepseek…»). Pruebas: test/memoria-ui.test.js (memoria-ui.js en Node, con la IA y los proyectos de mentira), y en
+  `test:lienzo` (el pie en una fila en cada estado, la imagen de fuera sin petición a un servidor que cuenta), `test:lienzo-app`
+  (la vista movida justo antes de recargar vuelve) y `test:asistente` (el clic central pregunta y «Cancelar» no abre nada —con
+  `shell.openExternal` sustituido—; el modelo y el chip no se cortan con el ancho de partida).
+- **Arreglos de la revisión de ClapBook, la parte del modelo, Claude y el archivo** (28-09-2026, 1.1.61). **El formato del archivo**
+  sube a **3** (`FORMATO_ARCHIVO` de app.js, `FORMATO` de claude/servidor.js): la 1.1.60 escribía con el 2 de la 1.1.55, y la 1.1.55
+  (que normaliza con claves cerradas) abría esos archivos y al autoguardar **tiraba los lienzos y la memoria de estilo**. Ahora un
+  archivo con un formato mayor que el propio **se lee pero no se escribe**: app.js lo apunta al leerlo (`formatoDe` → `leidoDelArchivo`
+  → `est.formatoNuevo`, al abrir, al retomarlo al arrancar, al releerlo antes de Guardar y cuando cambia fuera); `escribirArchivo` no
+  lo toca (lo dice una vez), el indicador dice **«Solo lectura»** con su motivo en el globo (`avisoFormato`), Guardar lo repite,
+  cerrar con cambios pregunta, y **«Guardar como…»** avisa y hace una copia con lo que esta versión conoce, nunca encima de aquel
+  archivo (`file:save` con `noEncima` → `MAS_NUEVO`; en el navegador, `isSameEntry`). Si el archivo desaparece, deja de serlo. Lo
+  de aquí sigue en la copia de este equipo. `mismoContenido` no mira el `formato` (un archivo de antes con lo mismo no se reescribe
+  al abrirlo), y `sucio`, con uno más nuevo, compara lo que esta versión conoce. El servidor MCP no escribe uno más nuevo (las
+  herramientas que escriben dan `AVISO_FORMATO`; las de leer lo dicen delante). **El permiso del asistente** (asistente-motor.js,
+  `destructivo`) mira las operaciones **como las entiende su herramienta** (`C.herramientas.nombreOperacion`: `op` u `operacion`
+  —los cuatro lotes aceptan los dos—, sin mayúsculas ni acentos, los alias de editar_lienzo) y los modos con `plano0`: «Tirar Nota»,
+  `{ operacion: "borrar" }` o `modo: " reemplazár"` pasaban sin preguntar. Pide permiso también para `editar_proyecto › desconectar`,
+  `editar_lienzo › desconectar`, un `conectar` que **sustituye un cable** (`sustituyeCable(docs, args)`: el lote sobre una copia del
+  lienzo), `escribir_documento › sustituir` que **se lleva mucho texto** (`quitaAlSustituir(docs, args)`: lo que llega vacío, o 200
+  caracteres menos y menos de la mitad) y `olvidar_estilo`; los dos ganchos los da asistente.js (`quitaAlSustituir`,
+  `sustituyeCable`; sin ellos, se pregunta). **editar_lienzo**: de `datos` solo los campos del tipo, y una imagen solo como
+  `data:image/…` (también en el modelo: la clase de campo `imagen` de lienzo-modelo.js deja vacía otra cosa). **completar_nodo**: la
+  nota por su id, su enlace o su **título exacto** (`notaExacta`: con los «parecidos» de `encontrar`, «Esc» valía cualquier nota que
+  lo contuviera) y **la salida tiene que ser la de su destino** (`comprobarSalida`: el esquema del destino; «en su sitio», el guion o
+  la nota de la fuente; notas de la biblioteca y el segmento del destino; nunca de Plantillas o Fórmulas, ni el guion de un esquema
+  como nota, ni una de las que entran —las que ya estaban cuando se pidió—); con destino un esquema o en su sitio, la salida apunta
+  la versión «Antes de…» de esta vez (`versionId`, solo si es de después de pedirla o de la vez anterior). La huella de lo que entra
+  se toma **al completar** a propósito (lo que la operación escribe en su propia fuente la dejaría desactualizada nada más hacerla).
+  **renombrar_proyecto**: el mismo nombre no es un fallo («ya se llamaba así») y, si la app no puede renombrarlo, el lote entero se
+  deshace (antes fallaba con lo demás hecho y la IA lo repetía). **El historial**: la foto lleva `lienzos: []` y `memoriaEstilo: []`
+  cuando faltan (ver «El historial de Claude»). **atomico.js** pone los permisos con `fchmod` (el modo de `open` pasa por el umask:
+  un 0664 quedaba en 0644). **Invisibles**: quedaban literales en js/mdvivo.js (un espacio duro), historial.js (los marcadores de
+  `sinIds`) y test/maquetar.test.js; test/invisibles.test.js lo vigila en js, claude, electron, test y pruebas. El README y
+  `references/lienzo.md` del plugin ya no dicen que ClapCraft no llama a ninguna IA («Ejecutar con IA», 1.1.59). Pruebas:
+  test/asistente-motor.test.js, test/herramientas.test.js, test/lienzo-claude.test.js, test/historial.test.js, test/atomico.test.js,
+  test/mcp.test.js (el formato en el servidor) y `test:archivos` (sección 7: abrir uno de formato 99, no se escribe ni solo ni con
+  Guardar, «Guardar como…» encima no se deja y con otro nombre sale con el 3).
+
+## 1.1.62–1.1.63: el teatro de duendes
+
+Leo, 27/28-09-2026, con su «Generador de Duendes» (un HTML suelto): «que los duendes puedan interpretar guiones o fragmentos de
+guiones… si no hay escenarios o vestuario acorde toman algo genérico o parecido. Conserva las etiquetas de nombre del personaje y
+los diálogos»; «no tiene que exportarse para verlo, quiero ver una vista previa desde el mismo programa»; y en la 1.1.63: solo el
+teatro (no toda su interfaz), que se vean los que no hablan (Audaz, el Experimento P3), carteles «Imagina un auto» para lo que no
+hay, animales y más expresiones, música de ambiente, un menú de escenas, el botón «Teatro» (no «Duendes»), mods del teatro que solo
+haga Claude («sin tocar el motor de teatro para no dañarlo»), reutilizar lo que hay y crear solo para personajes y puntos clave, y
+**«que las obras solo funcionen con Claude porque se tiene que leer el guion antes, que no funcionen con la API configurada»**.
+
+- **`duendes.html`** es su generador (sigue funcionando solo): bosque con duendes-agente y teatro que lee guiones (formato rápido
+  «NOMBRE: (emoción) texto» y de serie). Dentro de ClapCraft (`?embebido=1&tema=dark|light`) enseña **solo el escenario y los
+  controles** (▶, pausa, siguiente, terminar, **Escena** —`#escenaSel`, `listarEscenas`: antes de la función empieza en esa, durante
+  salta a ella—, velocidad, nombres, sonido y **música**) y no invoca duendes de partida. `window.Duendes.cargar({ texto, titulo,
+  personajes: [{ nombre, claro, oscuro }], mods, obra })`: con `fijos` los nombres valen de cualquier largo y se quedan tal cual, con
+  las etiquetas del actor y de su globo en su par de colores; con `fiel`, el diálogo no pierde los paréntesis de en medio.
+  · **Sin dirección** improvisa: escenario parecido o genérico (`backdropParecido`; hospital → oficina, cantina → cocina, muelle →
+    playa…; INT. → sala, EXT. → pradera) y entonces un **cartel «Imagina: el lugar»**; vestuario por el nombre o la presentación
+    (`costumeFor` + `introDe`; «la doctora Mara», «un perro»); gestos por palabras (`EMO`); música por el lugar (`musicaDe`); la voz
+    en off por la acotación (V.O., O.S., off: su globo sale arriba, discontinuo, sin actor).
+  · **Con la obra dirigida por Claude** (`aplicarObra`): por la **firma** de cada evento (`firma`: tipo, quién y texto; la de una
+    escena es su lugar tal cual, `raw`) aplica escenario, noche, música, **presentes** (quién está al empezar), utilería y cartel de
+    cada escena; vestuario, máscara, tamaño (`TAMANOS`), cartel propio y voz de cada personaje, y **los que no hablan** (`dirExtras`,
+    entran al reparto); el gesto de cada línea; y en cada acotación quién entra, sale o hace algo (quien la IA nombra está en
+    escena). El estado dice si está dirigida, si el guion cambió desde entonces, y «📋 Encargo para Claude» copia el pedido.
+  · **Animales**: disfraces de cuerpo entero (`perro`, `gato`, `gorila`, `oso`, `conejo`, `zorro`, `tigre`, `raton`: `animal` = la
+    máscara de su cara, `cola`, `escala`) y máscaras nuevas `perro`, `gorila`, `raton`; `blit(g, x, y, k)` dibuja más grande o más
+    chico con los pies en su sitio (`escalaDe`). **Gestos nuevos**: miedo, corre (va y viene), olfatea, ladra (con su «guau»),
+    aulla, esconde, pelea, telefono, desmayo, come, aplaude, senala, muerde, grune (poses en `getPose`, efectos en `actorUpdate`).
+  · **Carteles**: de escena (colgado a la izquierda), de acotación (a la derecha, se va solo) y el propio de un personaje bajo su
+    nombre (`drawCartel`, `drawCartelPersonaje`).
+  · **Música**: chiptune compuesto al vuelo por ánimo (`MUSICAS`: alegre, comedia, romantica, triste, noche, misterio, suspenso,
+    terror, accion, epica; `componer` con semilla fija, `musicaTick` programa las notas con `blip`), baja cuando alguien habla y
+    calla en pausa.
+- **`js/claquedraw/duendes.js`** (`C.duendes`, test/duendes.test.js): `guionDe(html, { titulo, elenco, paleta, desde, hasta })` da el
+  texto del teatro («Nombre (acotación): diálogo», acciones entre paréntesis, encabezados o `[escenario: …]`, CORTE A: y FIN), los
+  personajes con sus colores (también los del elenco que no hablan), `eventos` numerados con su `firma` (`firmaDe`, la misma que la
+  página), `hablan` y la `huella` del guion. `leerDireccion(plan, resumen, catalogo)` deja solo lo que es de los catálogos y de los
+  eventos (y apunta los que no hablan en `extras`); `aFirmas` la pasa a firmas. **No llama a ninguna IA.** La vista previa es una capa
+  sobre la app (`.dn-capa`, css/duendes.css) que se cierra con ×, Esc o un clic fuera; mientras, las teclas no llegan a la app y
+  Deshacer no toca lo de debajo (`historia`). En la app: botón **«Teatro»** de la barra del editor (`#cdDuendes`, texto.js) y Ver ›
+  Teatro… (orden `duendes`) → `abrirDuendes`, con el documento del editor o el de la ventana de una nota; `encargo` copia «Dirige en el
+  teatro de duendes de ClapCraft la obra [enlace]…».
+- **Solo Claude dirige y hace mods** (`soloClaude` en herramientas.js: el asistente de la app no los recibe, `herramientasOpenAI`, y
+  si le llegaran, `esClaude(ctx)` se niega): `preparar_obra` (solo lee: los eventos numerados, las reglas —`C.duendes.REGLAS`: leer
+  entero, reutilizar lo que hay, mods solo para personajes y momentos clave— y el catálogo de fábrica y de los mods), `dirigir_obra`
+  (guarda la obra en `documentos.teatro.obras[nota] = { huella, fecha, titulo, plan }` y dice lo que no pudo usar), `leer_teatro` y
+  `editar_teatro`. La skill lo explica en `references/teatro.md`.
+- **Los mods** (`js/claquedraw/teatro-mods.js`, `C.teatroMods`, test/teatro-mods.test.js): `documentos.teatro = { escenarios,
+  vestuarios, objetos, mascaras, musicas, obras }` (la clave solo si hay algo; `normalizar` lo pasa por `sanear`; en el historial de
+  Claude va como objeto, `foto`/`sinVacias`). Son **datos, nunca código**: escenario = capas de dibujo (cielo, bandas, rect, círculo,
+  elipse, triángulo, colina, estrellas, nube, píxel, dibujo); vestuario = piezas que el motor ya dibuja (`PIEZAS`); objeto de utilería
+  y máscara = dibujo en píxeles (filas de letras y sus colores); música = parámetros del compositor. `validar` comprueba cada campo,
+  **ningún mod puede llevar un id de fábrica** (`FABRICA`, que la prueba compara con duendes.html), y la página los vuelve a mirar y
+  dibuja un escenario malo como telón negro (`aplicarMods`, `pintarCapas`, `ponerObjeto`, `objetosDelTexto`: sin dirección, la
+  utilería sale si el texto nombra uno de sus `parecidos`).
+
+**1.1.64** (Leo, 28-09-2026: «algunos de los objetos que generas (el vocho) son muy pequeños»; «configurar en los personajes a mis
+propios duendes (también animales) desde Personajes… a partir de un documento con una descripción o, si faltan detalles, que Claude
+pregunte… que solo funcione con Claude»; «en las obras se pueden generar acciones o gestos clave con ayuda de Claude»; «la utilería
+generada (los mods) se comparte en todos los proyectos»):
+- **Los mods son de todos los proyectos**: `teatro-mods.json` en los datos de la app (`claude/teatro-global.js`), que lee y escribe la
+  app (IPC `teatro:leer` / `teatro:escribir`, `editorAPI.teatro`, y `teatro:cambio` a las demás ventanas; `modsGlobales` y
+  `escribirModsGlobales` en app.js; sin Electron, el localStorage `guiones.claquedraw.teatroMods`) y el servidor MCP con el proyecto
+  cerrado (`almacenTeatro`). Las herramientas los reciben en `ctx.teatroGlobal` ({ leer, escribir }); sin él, en el proyecto. En el
+  proyecto quedan sus **obras** y los **duendes de sus personajes** (`soloMods`, `soloProyecto`, `mezclar`); lo que un proyecto de la
+  1.1.63 guardaba dentro (el Vocho de Leo) se muda solo (`mudarModsDelProyecto` al abrir el teatro, `mudarMods` en las herramientas).
+  No van en el historial de Claude de un proyecto.
+- **Utilería a su tamaño**: un objeto lleva `ancho` (lo que mide en el escenario, 6–300; un duende mide 24 de alto, un coche 110–130)
+  y el teatro escala su dibujo a eso (los de la 1.1.63, su `escala`); la dirección puede cambiarlo por escena (`objetos: [{ id, x,
+  ancho }]`).
+- **Gestos clave como mods** (tipo `gesto`): de 1 a 8 cuadros de pose (`brazoI`, `brazoD`, `piernas`, `cuerpo`, `sentado`, `ojos`,
+  `boca`, `dura`) con `sacude`, `salta`, `mueve`, `particula` y `globo`; el teatro los anima con `poseMod` y `efectoMod`, y sin dirección
+  los reconoce por sus `parecidos` (entran en `EMO`). Sus ids no pueden ser los de fábrica (`FABRICA.gestos` = `GESTOS_FABRICA`).
+- **El duende de un personaje** (`documentos.teatro.duendes[personajeId]`, `validarDuende`): rasgos del duende, piezas de vestuario,
+  animal (máscara de su cara), máscara, voz (`VOCES` = VOICES), escala, cartel y descripción. Solo Claude, con `duende_personaje`
+  (`cambiar`, `quitar`, `fuente`), a partir de la hoja del personaje y preguntando lo que falte (la skill lo pide). En las obras
+  **manda siempre** (`DUENDES_PJ`, `aplicarDuendePj`: un disfraz «pj-…» para él) y, si no habla pero el guion lo nombra, sale y entra al
+  nombrarlo (`mudo`). En Personajes, la biblioteca del personaje lleva la tarjeta **«Duende»** (`tarjetaDuende` en gestor.js, css/duendes.css):
+  su retrato animado (`duendes.html?embebido=1&retrato=1`, `Duendes.retrato({ duende, mods })`), su descripción y «📋 Encargo para Claude»
+  / «Pedir cambios a Claude» (`encargoDuende` en app.js).
+- **Cowork**: las herramientas vienen en la app instalada (el plugin la arranca en modo Node); una tarea de Cowork que no corre en el
+  Mac de Leo o sin el plugin activado no tiene ninguna herramienta de ClapCraft (le pasó con la 1.1.62 instalada).
+
+**1.1.65** (Leo, 28-09-2026: «los carteles de imaginación no se ven a veces cuando aparecen los bloques negros… mala disposición de la
+información»; «quita ese verde de la interfaz del teatro, que se vea rojo o un diseño más de teatro»; «déjame descargar la obra generada
+en formato html»):
+- **Sobretítulos**: el encabezado de la escena y las acotaciones van en la franja `#sobretitulo` debajo del escenario
+  (`pintarSobretitulo`), no en un bloque oscuro sobre él (`drawCaption` queda sin uso); los carteles cuelgan más arriba (y 24) y el globo
+  de quien habla se aparta de ellos (`cartelRects`: de lado y, si no cabe, por debajo).
+- **Aspecto de teatro** en `html.embebido` (dentro de ClapCraft y en las obras descargadas): terciopelo rojo, dorado y madera en los
+  tokens, botones, tarjeta, selects, marco del escenario y casillas; el retrato de Personajes, sobre telón rojo y tablas. El generador
+  suelto conserva su verde de bosque.
+- **Descargar HTML** (botón «⬇ Descargar HTML» de la cabecera del teatro, `C.duendes.descargar`): el teatro tal cual (Electron:
+  `editorAPI.teatro.fuente()`, IPC `teatro:fuente`; navegador: `fetch`) con la obra dentro (`conObra`: `window.__OBRA__` al principio del
+  `<head>`, con `<` escapado; el título de la página es el de la obra) —guion, personajes con sus colores, la dirección de Claude, los
+  duendes de los personajes y los mods (`soloMods`: sin las obras de otros documentos)—, guardado con `C.exportar.guardar`. Al abrirla,
+  la página se pone en modo teatro (`embebido exportado`) y carga la obra sola.
+
+**1.1.66** (Leo: «lo de "Imagina a una criatura…" puedes quitarlo, no quiero verlo en los personajes»): los personajes ya no llevan
+cartel (se quitaron `drawCartelPersonaje`, el `cartel` de `dirPersonas` y del duende de un personaje, y las reglas y la skill se lo
+prohíben a Claude); los carteles de escena y de acotación siguen.
+
+## 1.1.67: motor del teatro a 64×64, cuerpos humanos, creador de duendes y el asistente
+
+Leo, 28-09-2026: «Mejora el motor para el teatro y los duendes… Que aparte de duendes puedan elegirse otros cuerpos, como cuerpos
+humanos. Que todos los personajes sean de 64x64. Por defecto son los duendes, pero Claude puede generar humanos con rasgos
+característicos a partir de una imagen. Agrega una variedad más amplia de características… Que Claude me deje cambiar los escenarios
+en las composiciones que hace»; «en los duendes de la biblioteca de personaje, que exista la creación de duendes (como cuando
+seleccionas tu avatar… stardew valley)»; y del asistente, «el razonamiento se ve pero no puedo hacer scroll hacia abajo» y «ver un
+duende genérico trabajando… cuando las tareas están tardando». Equipo de agentes (motor, modelo/Claude, creador, asistente; luego
+integración y revisión) contra un contrato común.
+
+- **El motor** (duendes.html): el mundo sigue en unidades de 320×180 (posiciones, SLOTS, capas de los escenarios de mods, `ancho` de
+  la utilería), pero el escenario se pinta a 640×360 y **cada personaje a resolución real** en un búfer de 80×88 (`OY = 84`; el
+  personaje cabe en 64×64, lo demás es para sombreros altos, capas y alas); escenarios, suelo, telón y marco, escalados ×2 sin
+  suavizado. `altoDe(d)` para globos, flecha y zona de toque. Todo redibujado con sombreado de 2–3 tonos y caras que cambian con la
+  emoción; los animales tienen cabeza propia (`ANIM`: perro, gato, zorro, conejo, oso, jaguar, gorila, raton). **Cuerpos**
+  `duende` (por defecto) | `humano` | `nino`, con `complexion` y `altura`, y los rasgos nuevos (ver abajo). Lo que un duende de
+  personaje no dice se decide por el nombre (sale igual en la obra y en el retrato); un humano sin piel recibe un tono humano.
+  **Un animal manda con su pelaje** salvo `skin` explícito (`pielAnimal`), y un `animal` que no está en `ANIM` se pinta como máscara.
+- **API** (`window.Duendes`): `cargar(op)` con `op.ajustes` / `op.alAjustar(ajustes)`; `retrato({ duende, nombre, mods, accion,
+  fondo })` (reutiliza el duende; `accion: 'trabajar'` cicla teclear → leer → escribir → revisar, otro id de gesto se repite;
+  `fondo: 'transparente'`); `previa(duende, { facing, gesto })` cambia el retrato al vuelo sin parpadeo; `catalogo()` (las listas que
+  sabe dibujar); `retratoInfo()` y `reparto()` (lecturas para las pruebas). `?retrato=1&trabajo=1`: un duende genérico trabajando,
+  fondo transparente, sin sonido. El retrato es un canvas cuadrado de 90×90 con los pies a 80 (cabe el humano alto con sombrero de
+  chef); los marcos de la tarjeta y del creador van con `aspect-ratio: 1`.
+- **Los rasgos** (`C.teatroMods.RASGOS`, la única verdad; test/teatro-mods.test.js los compara con `Duendes.catalogo()`): `cuerpo`,
+  `complexion`, `altura`, `peinado` (+ `hairCol`), `cejas`, `ojos` (+ `eyeCol`), `nariz`, `boca`, `vello` (+ `beardCol`), `marcas`
+  (lista), `lentes`, `prenda` (+ `cloth`, `cloth2`), `bajo` (+ `pants`), `calzado` (+ `shoes`), `accesorios` (lista), los sombreros
+  nuevos (`gorra`, `boina`, `copa`, `bandana`, `casco-obra`, `diadema`, también en `PIEZAS.hat`) y `vestuario` (uno de fábrica o de
+  mods como base; los rasgos del personaje mandan encima). Los campos de la 1.1.64 siguen (`beard`, `bigEyes`, `nose`, `blush` se leen
+  como su equivalente). Un vestuario de mods acepta además `cuerpo`, `prenda`, `bajo`, `calzado`, `peinado`, `cloth2`.
+  `catalogoDuende(mods)` → `{ categorias, paletas }` (Cuerpo, Piel, Cabeza, Cara, Ropa, Sombrero, Accesorios, Disfraz, Animal, Máscara,
+  Voz; cada una con `rasgos: [{ id, n, campo, tipo, opciones, colores?, campoColor?, campoColor2?, solo?, opcional? }]`), `NOMBRES`,
+  `PALETAS`, `ANIMALES`, `resumenRasgos`, `sanearAjustes`.
+- **El creador de duendes** (js/claquedraw/creador-duende.js, `C.creadorDuende`; css/creador-duende.css): «✎ Crear duende» / «✎ Editar
+  duende» en la tarjeta «Duende» de la biblioteca de un personaje (`tarjetaDuende` de gestor.js). Retrato animado a la izquierda
+  (`previa` en cada cambio, girar y probar un gesto, descripción), categorías de `catalogoDuende(o.modsTeatro())` como pestañas con
+  ‹ › por rasgo, muestras de color y casillas; «🎲 Aleatorio» (todo menos disfraz, animal y máscara; respeta lo opcional) y «🎲 Esta
+  categoría», Deshacer/Rehacer, «Quitar duende» (dos clics). Elegir un animal quita la piel (y un disfraz de animal, los colores de
+  ropa); una piel elegida después se queda. Guardar valida con `validarDuende(d, { mascaras, vestuarios })` y `guardarDuende(pid,
+  datos)` de app.js lo escribe en `documentos.teatro.duendes[pid]` (`fuente: 'creador'`, salvo que ya la tuviera de Claude; `null`
+  lo quita). Teclado: ← → valor, ↑ ↓ fila, Esc cierra, ⌘Z/⌘⇧Z, ⌘S guarda el duende (`historia()` y el orden `guardar` de app.js lo
+  llevan ahí); las teclas no llegan a la app de debajo, salvo las del panel del asistente. Ya no es solo de Claude.
+- **Leo cambia el escenario de una escena**: selector «Escenario» y «🌙 Noche» junto a «Escena» en el teatro («Como lo dirigió
+  Claude (X)» / «Automático (X)» y todos los de fábrica y mods). `obras[nota].ajustes = { escenas: { [firmaEscena]: { bd?, noche? } } }`
+  (la firma `scene||` es lo de antes del primer encabezado); mandan sobre la dirección y la improvisación. `C.duendes.ponerAjustes`
+  (puro) y el gancho `ajustar` de app.js los guardan; `sanearObra` admite una obra con solo ajustes; `dirigir_obra` no los borra;
+  `preparar_obra` y `leer_teatro` los enseñan («AJUSTES DE LEO — respétalos»); la obra descargada los lleva.
+- **Claude**: `duende_personaje` con los campos nuevos, `ver: true` (solo lee: hoja, duende actual, rasgos e **imágenes de la
+  biblioteca del personaje** como contenido de imagen de MCP, también si el texto va en extracto) e `imagen` (enlace o nota); por
+  defecto duende, y con una imagen o si Leo lo pide, `cuerpo: 'humano'` con sus rasgos característicos. references/teatro.md lo
+  explica. **`esClaude` exige `!ctx.ia`**: el asistente por API marca su contexto con `ia: true` (antes un modelo que se llamara
+  «claude…» pasaba), y su motor no ejecuta herramientas que no se le ofrecieron (`_vetada`).
+- **Formato de archivo 4**: la 1.1.66 normalizaba y borraba los duendes v2 y los ajustes (el caso de la 1.1.61).
+- **La capa del teatro y el creador**: Cmd+W los cierra (`cerrarLoDeDelante`), atrás/adelante/pestaña nueva no actúan con ellos
+  (`capaTeatro`), Ver › Teatro no se abre encima del creador.
+- **El asistente**: el razonamiento no se dejaba bajar porque `pintarTodo` rehacía `cuerpo.innerHTML` cada 40 ms. Ahora cada mensaje
+  conserva su nodo (`nodosItems`, `ordenar`), el que llega se actualiza en sitio (`parchearIa`, `parchearRazon`), el desplazamiento
+  sigue el final solo si Leo está al final (lo que mueve el código va en `autoTop`/`_auto`; la rueda hacia arriba lo suelta; a menos
+  de 48 px lo vuelve a enganchar; `ResizeObserver`) y abrir o cerrar el razonamiento a mano manda (`it.razonAbierto`). **El duende
+  trabajando**: franja `.as-trabajo` entre la conversación y el campo, un iframe `duendes.html?embebido=1&retrato=1&trabajo=1` de
+  76 px creado una vez y escondido; sale tras 1,5 s sin trozos o 0,6 s con un paso en curso, con un rótulo en palabras («Leyendo el
+  esquema…»), y se va al llegar texto, al pedir permiso o al terminar; con «reducir movimiento», solo el rótulo.
+- **Pruebas**: test/teatro-mods.test.js, test/duendes.test.js, test/asistente-motor.test.js; `npm run test:creador` (59, ratón y
+  teclado de verdad) y `test:asistente` (162: razonamiento en trozos lentos con la rueda de verdad, el duende, el marco que no se
+  recrea). En vivo con APIMart ≈ 0,0034 USD (`deepseek-v4-flash` no mandó razonamiento).
 
 ## Claude: acceso desde Cowork y Claude Code (1.1.49)
 
@@ -2267,7 +2494,9 @@ puedas acceder al contenido de la aplicación, tanto texto y muy principalmente 
   nombreProyecto?, parche, revertido? }`. **El parche** es la diferencia antes → después: por claves en los objetos y, en las
   listas cuyos elementos tienen id (en la papelera, el de lo que guarda), elemento a elemento —`q` lo quitado con su valor y sus
   tres vecinos de delante, `p` la huella de lo puesto, `c` lo cambiado dentro, `o` el orden—; de lo de después solo la huella
-  (FNV-1a del contenido con las claves ordenadas). `modificado` y `columnas` no cuentan (se ponen solos). **Revertir** aplica el
+  (FNV-1a del contenido con las claves ordenadas). `modificado` y `columnas` no cuentan (se ponen solos). La foto lleva siempre
+  `lienzos` en cada contenedor y `memoriaEstilo` (vacías si faltan; `sinVacias` las quita al revertir y al reponer: 1.1.61, si no el
+  primer lienzo o la primera regla iban en el parche como un valor entero). **Revertir** aplica el
   parche al revés sobre lo de ahora: quita lo puesto si su huella sigue igual, deshace lo cambiado, devuelve el orden y repone lo
   quitado detrás de su vecino (en ese orden: al revés, el reordenamiento descolocaba lo repuesto). Lo que se tocó después es un
   **choque** (`describir` lo dice en palabras: «contenedor «X» › esquema «Y» › nodo «Z»»): sin `forzar` no se hace nada; con él,

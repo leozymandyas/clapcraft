@@ -77,6 +77,13 @@ contextBridge.exposeInMainWorld('editorAPI', {
     leer: nombre => ipcRenderer.invoke('memoria:leer', String(nombre || '')),
     escribir: (nombre, datos) => ipcRenderer.invoke('memoria:escribir', String(nombre || ''), datos)
   },
+  /* los mods del teatro de duendes, de todos los proyectos (1.1.64, claude/teatro-global.js) */
+  teatro: {
+    leer: () => ipcRenderer.invoke('teatro:leer'),
+    fuente: () => ipcRenderer.invoke('teatro:fuente'),
+    escribir: t => ipcRenderer.invoke('teatro:escribir', t || {}),
+    alCambiar: cb => ipcRenderer.on('teatro:cambio', () => cb())
+  },
   /* salir de la app (1.1.55): Electron pide a la ventana que escriba lo pendiente y espera su respuesta */
   onVaciar: cb => ipcRenderer.on('app:vaciar', async (_e, n) => {
     let ok = false; try { ok = await cb(); } catch (_) {}

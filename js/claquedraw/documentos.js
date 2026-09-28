@@ -93,6 +93,7 @@
     subs: [{ id: ESPECIALES[k].bib, nombre: ESPECIALES[k].nombre, creado: t, modificado: t }], oculto: true, especial: k });
   /* el texto plano de las fórmulas (js/claquedraw/formulas.js: en la página va detrás de este archivo; en Node se pide aquí) */
   const Fm = () => C.formulas || (typeof require === 'function' ? require('./formulas.js').formulas : null);
+  const Tm = () => C.teatroMods || (typeof require === 'function' ? (() => { try { return require('./teatro-mods.js').teatroMods; } catch (_) { return null; } })() : null);
   const Me = () => C.memoria || (typeof require === 'function' ? (() => { try { return require('./memoria.js').memoria; } catch (_) { return null; } })() : null);
   /* Carpetas (Leo, 15-09-2026): dentro de un contenedor anidan sin límite y de cualquier nivel cuelgan esquemas y
      bibliotecas (`carpetaId`); en Personajes agrupan el elenco (`datos.carpetasElenco`, `personaje.carpetaId`).
@@ -481,6 +482,11 @@
     if (Array.isArray(src.memoriaEstilo) && src.memoriaEstilo.length) {
       const me = Me() ? Me().sanear(src.memoriaEstilo) : clonar(src.memoriaEstilo);
       if (me.length) d.memoriaEstilo = me;
+    }
+    /* los mods del teatro de duendes (1.1.63, js/claquedraw/teatro-mods.js): solo si hay alguno */
+    if (src.teatro && typeof src.teatro === 'object') {
+      const tm = Tm() ? Tm().sanear(src.teatro) : clonar(src.teatro);
+      if (tm && Object.keys(tm).length) d.teatro = tm;
     }
     return d;
   }
@@ -2364,6 +2370,15 @@
       const antes = JSON.stringify(this.memoriaEstilo());
       if (JSON.stringify(l) === antes) return false;
       if (l.length) this.datos.memoriaEstilo = l; else delete this.datos.memoriaEstilo;
+      return true;
+    }
+    /* **Los mods del teatro de duendes** (1.1.63, js/claquedraw/teatro-mods.js): escenarios, vestuarios, objetos, máscaras y músicas
+       que Claude añade para que la obra se parezca más al guion. La clave solo existe si hay alguno. */
+    teatro() { return this.datos.teatro && typeof this.datos.teatro === 'object' ? this.datos.teatro : {}; }
+    fijarTeatro(t) {
+      const x = Tm() ? Tm().sanear(t) : (t || {});
+      if (JSON.stringify(x) === JSON.stringify(this.teatro())) return false;
+      if (Object.keys(x).length) this.datos.teatro = x; else delete this.datos.teatro;
       return true;
     }
     /* Guarda como fórmula (en la bandeja de las fórmulas o en su segmento `etiquetaId`) **el texto plano** de una nota, con su

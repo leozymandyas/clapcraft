@@ -2,7 +2,7 @@
 
 Un **lienzo** es una pieza del árbol de un proyecto (como un esquema o una biblioteca: vive en un contenedor, sale en `ver_proyecto` como `LIENZO … · 6 nodos (2 operaciones) · 1 pendiente`). Es como los «Space» de Dreamina, pero en lugar de vídeo sale un guion, sus fragmentos o una nota: **nodos** conectados con **cables**, de la salida de uno al puerto de entrada de otro.
 
-**ClapCraft no llama a ninguna IA: las operaciones las ejecutas tú.** Leo pulsa ▶ en un nodo (o «▶ Pedir todo»): queda **pendiente** y se copia su enlace; te lo pega o te dice «ejecuta el lienzo».
+**Las operaciones las ejecutas tú** (o, si Leo pulsa «Ejecutar con IA» en la app, su asistente con otra IA, con estas mismas herramientas y estos mismos pasos). Leo pulsa ▶ en un nodo (o «▶ Pedir todo»): queda **pendiente** y se copia su enlace; te lo pega o te dice «ejecuta el lienzo».
 
 ## Los nodos
 
@@ -57,7 +57,7 @@ Las **fórmulas** son prompts reutilizables de Leo, como skills: notas de **solo
    - `partir`: la skill **clapcraft-seedance** (conectar esquema ↔ biblioteca, `preparar_fragmentos`, una nota por fragmento con `crear_nota { fragmento }`), con los `segundos_max` del nodo.
    - `escaleta`: `editar_esquema` con un `crear_nodo` por beat, en orden (tramas nuevas solo si Leo las pide).
    - `resumir` / `reescribir` / `traducir` / `prompt`: `editar_biblioteca › crear_nota` en el destino, o `escribir_documento { esquema }` si es «en su sitio».
-4. **`completar_nodo { lienzo, nodo, salida }`**: `{ tipo: "documento", esquema }` · `{ tipo: "fragmentos", biblioteca, esquema, notas }` (sin `notas`, las que son fragmento de ese esquema en esa biblioteca) · `{ tipo: "esquema", esquema }` · `{ tipo: "nota", nota }`. Comprueba que existe (un guion vacío no vale). Puedes añadir `mensaje`: una línea para Leo. Si no se pudo, `completar_nodo { lienzo, nodo, error: "por qué" }`: el nodo se pone en rojo con ese texto.
+4. **`completar_nodo { lienzo, nodo, salida }`**: `{ tipo: "documento", esquema }` · `{ tipo: "fragmentos", biblioteca, esquema, notas }` (sin `notas`, las que son fragmento de ese esquema en esa biblioteca) · `{ tipo: "esquema", esquema }` · `{ tipo: "nota", nota }`. Comprueba que existe (un guion vacío no vale) y que **es la de su destino**: el esquema del destino; «en su sitio», el guion (o la nota) de la fuente; con destino una biblioteca (y su segmento), notas de ahí. La nota va por su **id** (el que te dio `crear_nota`), su enlace o su **título exacto** (uno parecido no vale), y nunca es una plantilla, una fórmula, el guion de un esquema ni una de las que entran en la operación. Puedes añadir `mensaje`: una línea para Leo. Si no se pudo, `completar_nodo { lienzo, nodo, error: "por qué" }`: el nodo se pone en rojo con ese texto.
 5. Dile a Leo qué escribiste, con los enlaces que devuelve `completar_nodo`.
 
 ## «Ejecuta el lienzo»
@@ -84,7 +84,7 @@ Si Leo te lo pide, `editar_proyecto › crear_lienzo { contenedor, nombre }` y `
 ]
 ```
 
-Sin `x`/`y`, las entradas van en una columna a la izquierda y las operaciones a la derecha. `conectar` sin `puerto` usa el primero que acepta lo que da el nodo de salida; a una entrada no llega nada y no hay ciclos. `editar_nodo`, `mover`, `desconectar` y `borrar` completan el juego. No pongas tú operaciones en pendiente: eso es el ▶ de Leo.
+Sin `x`/`y`, las entradas van en una columna a la izquierda y las operaciones a la derecha. `conectar` sin `puerto` usa el primero que acepta lo que da el nodo de salida; a una entrada no llega nada y no hay ciclos. `editar_nodo`, `mover`, `desconectar` y `borrar` completan el juego (estos dos, y un `conectar` que sustituye un cable, piden permiso en el asistente de la app). Una imagen va como `data:image/…` (base64): una dirección de la web no vale; y de `datos` solo cuentan los campos de su tipo. No pongas tú operaciones en pendiente: eso es el ▶ de Leo.
 
 ## Enlaces
 

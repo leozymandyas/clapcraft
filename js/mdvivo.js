@@ -495,7 +495,7 @@
     let fin = 0; while (fin < li.childNodes.length && !(li.childNodes[fin].nodeType === 1 && LISTA.test(li.childNodes[fin].tagName))) fin++;
     const propio = document.createRange(); propio.setStart(li, 0); propio.setEnd(li, fin);
     const conSublista = fin < li.childNodes.length;
-    const vacio = !conSublista && !propio.toString().replace(/[\s\u200B ]/g, '') && !propio.cloneContents().querySelector(NO_TEXTO);
+    const vacio = !conSublista && !propio.toString().replace(/[\s\u200B\u00A0]/g, '') && !propio.cloneContents().querySelector(NO_TEXTO);
     const antes = document.createRange(); antes.setStart(li, 0); antes.setEnd(r.startContainer, r.startOffset);
     const alPrincipio = !antes.toString().replace(/\u200B/g, '') && !antes.cloneContents().querySelector('br, ' + NO_TEXTO);
     /* un elemento de una sublista a la manera de Markdown (<li>a<ul>…</ul></li>) lo sube mal Chrome (un <li> dentro de otro): antes

@@ -25,6 +25,10 @@ let portapapeles = '';
 ipcMain.removeHandler('portapapeles:escribir'); ipcMain.handle('portapapeles:escribir', (_e, t) => { portapapeles = String(t || ''); return true; });
 ipcMain.removeHandler('portapapeles:leer'); ipcMain.handle('portapapeles:leer', () => portapapeles);
 const espera = ms => new Promise(r => setTimeout(r, ms));
+/* 1.1.61: un servidor «de fuera» que cuenta lo que se le pide (una imagen del lienzo con su dirección no se pide sola al pintarla) */
+const pedidasFuera = [];
+const fuera = require('http').createServer((req, res) => { pedidasFuera.push(req.url); res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(); });
+fuera.listen(0, '127.0.0.1');
 const borrarDespues = dir => { try { spawn('/bin/sh', ['-c', 'sleep 3; rm -rf "$0"', dir], { detached: true, stdio: 'ignore' }).unref(); } catch (_) {} };
 const resultados = [];
 function comprobar(nombre, ok, detalle) { resultados.push({ nombre, ok: !!ok }); console.log((ok ? '  ✔ ' : '  ✖ ') + nombre + (ok || !detalle ? '' : '\n      ' + String(detalle).slice(0, 900))); }
@@ -55,6 +59,17 @@ app.whenReady().then(async () => {
   const N = `Claquedraw.gestor.documentos()`;
   const nodoEl = id => `document.querySelector('#lzNodos [data-lz-nodo="${id}"]')`;
   const datosL = () => js(`const r = ${N}.lienzo(window.__lid); return JSON.stringify(r.lienzo);`).then(JSON.parse);
+  /* 1.1.61 (revisión de ClapBook): el pie de un nodo, en una fila —estado, ▶ e «IA»— y la etiqueta de la salida a la derecha de lo
+     demás, a la altura de la primera fila, con su punto a su altura y en el borde del nodo (en el flujo, la etiqueta bajaba a otra fila
+     y su punto se quedaba arriba) */
+  const pieDe = id => js(`const el = ${nodoEl(id)}, p = el.querySelector('.lz-npie'), o = p.querySelector('[data-lz-out]'), d = o.querySelector('.lz-dot');
+    const fila = [...p.children].filter(x => !x.matches('[data-lz-out], .lz-salidas, .lz-error, .lz-mensaje'));
+    const r = x => x.getBoundingClientRect(), ro = r(o), rd = r(d), rn = r(el), c = x => r(x).top + r(x).height / 2;
+    const cs = fila.map(c);
+    return JSON.stringify({ n: fila.length, ia: !!p.querySelector('[data-lz-ia]'), iaTxt: (p.querySelector('[data-lz-ia]') || {}).textContent || '', unaFila: cs.every(t => Math.abs(t - cs[0]) <= 2),
+      fila: cs.length ? cs[0] : null, out: c(o), punto: c(d), sinPisar: !fila.length || Math.max(...fila.map(x => r(x).right)) <= ro.left + 0.5, borde: rd.left + rd.width / 2 - rn.right, zoom: Claquedraw.lienzoUI.vista().zoom,
+      anchos: fila.map(x => Math.round(x.offsetWidth)), salida: o.offsetWidth, pie: p.offsetWidth });`).then(JSON.parse);
+  const pieBien = (x, op) => x.unaFila && Math.abs(x.out - x.punto) <= 1.5 && (x.fila === null || Math.abs(x.fila - x.out) <= 3 * x.zoom + 1) && x.sinPisar && Math.abs(x.borde) <= 3 && (!op || !op.ia || (x.ia && x.iaTxt.trim() === 'IA'));
   try {
     for (let i = 0; i < 200 && !win; i++) { await espera(50); win = BrowserWindow.getAllWindows().find(x => /claquedraw\.html/.test(x.webContents.getURL() || '')); }
     if (win.webContents.isLoading()) await new Promise(r => win.webContents.once('did-finish-load', r));
@@ -148,20 +163,26 @@ app.whenReady().then(async () => {
     /* ---------- encajar, capturas ---------- */
     await js(`Claquedraw.lienzoUI.encajar(); await W(400); return true;`);
     await captura('02-lienzo-claro');
+    { const a = await pieDe(gen.id), b = await pieDe(par.id), c = await pieDe(nIds[0]), e = await pieDe(nIds[2]);
+      comprobar('1.1.61 · «Sin pedir»: el pie de una operación en una fila (con «IA» compacto) y la salida a la altura de su punto', pieBien(a, { ia: true }) && pieBien(b, { ia: true }), JSON.stringify({ a, b }));
+      comprobar('1.1.61 · y el de una entrada (la etiqueta de la salida a la altura de su punto, en el borde)', pieBien(c) && pieBien(e), JSON.stringify({ c, e })); }
     /* ---------- pedir a Claude ---------- */
     await clic(await centro(`${nodoEl(par.id)}.querySelector('[data-lz-pedir]')`));
     d1 = await datosL();
     comprobar('▶ en «Partir» deja pendientes «Generar» y «Partir»', d1.nodos.filter(n => n.estado === 'pendiente').length === 2, JSON.stringify(d1.nodos.map(n => n.estado)));
     comprobar('el encargo va al portapapeles con los enlaces', /Ejecuta en orden/.test(portapapeles) && /clapcraft:\/\//.test(portapapeles), portapapeles);
     comprobar('los cables hacia una pendiente corren', await js(`return document.querySelectorAll('.lz-cable-g.fluye').length >= 4;`));
+    { const a = await pieDe(par.id); comprobar('1.1.61 · «Pendiente»: el pie sigue en una fila (cuándo se pidió, en el globo)', pieBien(a, { ia: true }) && await js(`const p = ${nodoEl(par.id)}.querySelector('.lz-npie'); return !p.querySelector('.lz-cuando') && /Pedido ahora/.test(p.querySelector('.lz-estado').title);`), JSON.stringify(a)); }
     /* completar como haría Claude, en el archivo de datos, y refrescar */
     await js(`const d = ${N}, I = window.__ids, m = d.modeloLienzo(window.__lid); const g = m.nodos().find(n => n.tipo === 'generar');
       m.completar(g.id, { tipo: 'documento', eid: I.eid, mensaje: 'Escribí la escena de la azotea.' }, { firma: d.firma() });
       d.guardarLienzo(window.__lid, m); Claquedraw.lienzoUI.refrescar(); await W(200); return true;`);
     comprobar('hecho: ✓ y la ficha del guion', await js(`const el = ${nodoEl(gen.id)}; return /Hecho/.test(el.querySelector('.lz-estado').textContent) && !!el.querySelector('.lz-sal[data-lz-abrir]');`));
+    { const a = await pieDe(gen.id); comprobar('1.1.61 · «Hecho»: el estado, «Otra vez» e «IA» en una fila, la ficha debajo', pieBien(a, { ia: true }), JSON.stringify(a)); }
     /* fallar el otro */
     await js(`const d = ${N}, m = d.modeloLienzo(window.__lid); const p = m.nodos().find(n => n.tipo === 'partir'); m.fallar(p.id, 'El guion no tiene escenas que partir todavía.'); d.guardarLienzo(window.__lid, m); Claquedraw.lienzoUI.refrescar(); await W(200); return true;`);
     comprobar('error en rojo con su texto', await hasta(`const el = ${nodoEl(par.id)}; return !!el.querySelector('.lz-estado.error') && /escenas/.test((el.querySelector('.lz-error') || {}).textContent || '');`, 2000), await js(`return ${nodoEl(par.id)}.querySelector('.lz-npie').innerHTML;`));
+    { const a = await pieDe(par.id); comprobar('1.1.61 · «Error»: la fila de arriba entera, el texto del error debajo', pieBien(a, { ia: true }), JSON.stringify(a)); }
     /* desactualizada: cambiar la instrucción */
     await clic(await centro(`${nodoEl(gen.id)}.querySelector('.lz-instr')`));
     await tecla('End'); await escribir(' y final abierto'); await espera(700);
@@ -348,10 +369,22 @@ app.whenReady().then(async () => {
     await tema('synthwave'); await captura('06-synthwave');
     await tema('vaporwave'); await captura('07-vaporwave');
     await tema('claro');
+    /* ---------- 1.1.61 (revisión): una imagen con una dirección de fuera no se carga al pintarla ---------- */
+    {
+      const url = 'http://127.0.0.1:' + fuera.address().port + '/lejos.png';
+      const idF = await js(`const b = document.getElementById('lzCuerpo').getBoundingClientRect(); const r = Claquedraw.lienzoUI.soltar('imagen', ${JSON.stringify(url)}, b.left + 60, b.top + 60); await W(300); return r && r.nodo;`);
+      await espera(600);
+      comprobar('1.1.61 · una imagen de fuera del proyecto no se pinta ni se pide (se dice, y se puede elegir otra)', !pedidasFuera.length
+        && await js(`const el = ${nodoEl(idF)}; return !el || (!el.querySelector('img[src^="http"]') && !!el.querySelector('[data-lz-imagen]'));`),
+        JSON.stringify({ idF, pedidasFuera, html: await js(`const el = document.querySelector('#lzNodos [data-lz-nodo="${idF}"]'); return el ? el.querySelector('.lz-ncuerpo').innerHTML : null;`) }));
+      await dobleClic(await centro(`document.querySelector('#lzNodos [data-lz-nodo="${idF}"] .lz-ncuerpo')`) || { x: 5, y: 5 });
+      comprobar('1.1.61 · y el doble clic no la abre en el visor', !pedidasFuera.length && await js(`return !document.querySelector('.an-capa, .an-vista');`), JSON.stringify(pedidasFuera));
+    }
     comprobar('la página no soltó errores', !errores.length, errores.join('\n'));
   } catch (e) { console.log('FALLO: ' + (e && e.stack || e)); comprobar('sin excepciones', false, e && e.stack); }
   const mal = resultados.filter(r => !r.ok).length;
   console.log('\n' + (mal ? mal + ' de ' + resultados.length + ' comprobaciones fallaron' : 'Las ' + resultados.length + ' comprobaciones pasaron') + '\n');
   if (!mal) { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {} borrarDespues(TMP); }
+  fuera.close();
   app.exit(mal ? 1 : 0);
 });

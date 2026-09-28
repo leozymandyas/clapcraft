@@ -17,6 +17,8 @@ const { spawn } = require('child_process');
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-asistente-'));
 const DATOS = path.join(TMP, 'datos');
+const CAPTURAS = process.env.CAPTURAS_ASISTENTE || path.join(TMP, 'capturas');   // 1.1.67: las del duende trabajando
+fs.mkdirSync(CAPTURAS, { recursive: true });
 const PUERTO = 47100 + (process.pid % 700);
 process.env.CLAPCRAFT_IA_URL = 'http://127.0.0.1:' + PUERTO + '/v1';
 delete process.env.CLAPCRAFT_IA_CLAVE_ARCHIVO;               // la clave, la del diálogo (nunca la de verdad)
@@ -39,6 +41,9 @@ ipcMain.removeHandler('portapapeles:escribir'); ipcMain.handle('portapapeles:esc
 ipcMain.removeHandler('portapapeles:leer'); ipcMain.handle('portapapeles:leer', () => portapapeles);
 /* nada de abrir el navegador del sistema desde una prueba (el canal lo registra electron/ia.js al arrancar: se sustituye después) */
 const webs = [];
+/* ni lo que abre `setWindowOpenHandler` (main.js): se apunta (1.1.61, el clic central de un enlace de una respuesta) */
+const externos = [];
+electron.shell.openExternal = async u => { externos.push(String(u)); return true; };
 
 /* ---------- el servidor falso compatible con OpenAI ---------- */
 const S = { cola: [], peticiones: [], cortadas: 0 };
@@ -57,6 +62,9 @@ function responder(req, res, b, r) {
   let cerrado = false;
   res.on('close', () => { if (!res.writableEnded) { cerrado = true; S.cortadas++; } });
   const trozos = [];
+  /* 1.1.67: un razonamiento (`reasoning_content`, como DeepSeek) en trozos de `r.trozo` letras, antes del texto */
+  const rz = new RegExp('[\\s\\S]{1,' + (r.trozo || 10) + '}', 'g');
+  (String(r.razon || '').match(rz) || []).forEach(p => trozos.push({ choices: [{ index: 0, delta: { reasoning_content: p }, finish_reason: null }] }));
   (String(r.texto || '').match(/[\s\S]{1,10}/g) || []).forEach(p => trozos.push({ choices: [{ index: 0, delta: { content: p }, finish_reason: null }] }));
   llamadas.forEach((c, i) => {
     const a = c.function.arguments, mitad = Math.floor(a.length / 2);   // los argumentos llegan troceados, como en DeepSeek
@@ -72,7 +80,7 @@ function responder(req, res, b, r) {
     res.write('data: ' + JSON.stringify(Object.assign({}, base, trozos[i++])) + '\n\n');
     setTimeout(siguiente, r.pausa || 12);
   };
-  siguiente();
+  if (r.antes) setTimeout(siguiente, r.antes); else siguiente();   // `antes`: lo que tarda en llegar el primer trozo
 }
 S.serie = 0;
 const servidor = http.createServer((req, res) => {
@@ -138,8 +146,12 @@ app.whenReady().then(async () => {
     ev({ type: 'keyUp', keyCode: k, modifiers }); await espera(tras === undefined ? 80 : tras);
   }
   async function centro(expr) {
+    /* espera a que su sitio se quede quieto: el panel sigue desplazándose solo (suave) cuando aparece algo nuevo, y un clic medido
+       a mitad caía donde ya no estaba el botón (la tarjeta de permiso, de vez en cuando) */
     const r = await js(`const el = ${expr}; if (!el) return null; el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); await W(60);
-      const b = el.getBoundingClientRect(); return JSON.stringify({ x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height });`);
+      let b = el.getBoundingClientRect();
+      for (let i = 0; i < 20; i++) { await W(50); const c = el.getBoundingClientRect(); if (c.top === b.top && c.left === b.left) break; b = c; }
+      return JSON.stringify({ x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height });`);
     return r ? JSON.parse(r) : null;
   }
   const aClic = async (expr, op) => { const p = await centro(expr); if (!p) throw new Error('no está: ' + expr); await clic(p, op); return p; };
@@ -302,6 +314,82 @@ app.whenReady().then(async () => {
     txt = await panelTxt();
     comprobar('el panel dice que se detuvo', /Detenido/.test(txt), txt.slice(-300));
 
+    /* ---------- 1.1.67: el razonamiento se deja leer mientras llega, y el duende trabajando ---------- */
+    const RAZON = Array.from({ length: 110 }, (_, i) => 'Paso ' + (i + 1) + ' del razonamiento: pienso en Mara, en la lluvia y en la estación.\n').join('');
+    S.cola.push({ antes: 2600, razon: RAZON, trozo: 40, pausa: 70, texto: 'Ya lo pensé: la escena empieza con la lluvia.' });
+    await js(`window.__primerYo = document.querySelector('#asistente .as-cuerpo .as-yo'); return true;`);
+    await mandar('Piensa despacio en la escena de la estación');
+    comprobar('1.1.67 · antes de que salga el duende, los tres puntos', await hasta(`return ${A}.trabajando() && !!document.querySelector('#asistente .as-pensando') && document.querySelector('#asistente [data-as-trabajo]').hidden;`, 1200));
+    comprobar('1.1.67 · si tarda, sale el duende trabajando con «Pensando…» (y los puntos se van)', await hasta(`const c = document.querySelector('#asistente [data-as-trabajo]'); return !c.hidden && /Pensando/.test(c.textContent) && !!c.querySelector('iframe.as-duende-marco') && !document.querySelector('#asistente .as-pensando');`, 2600));
+    const marco = JSON.parse(await js(`const f = document.querySelector('#asistente iframe.as-duende-marco'); window.__marcoDuende = f;
+      for (let i = 0; i < 40 && !(f.contentWindow && f.contentWindow.Duendes); i++) await W(100);
+      try { f.contentWindow.__marca = 1; } catch (_) {}
+      const r = f.getBoundingClientRect(), fondo = getComputedStyle(f.contentDocument.body).backgroundColor, htmlF = getComputedStyle(f.contentDocument.documentElement).backgroundColor;
+      return JSON.stringify({ n: document.querySelectorAll('#asistente iframe').length, w: r.width, h: r.height, src: f.getAttribute('src'), motor: !!f.contentWindow.Duendes, fondo, htmlF, dentro: !!f.closest('.as-cuerpo') });`));
+    comprobar('1.1.67 · un solo marco, pequeño (64–96 px), fuera de la conversación, con el motor del teatro en modo trabajo', marco.n === 1 && marco.w >= 64 && marco.w <= 96 && marco.h >= 64 && marco.h <= 96 && !marco.dentro && marco.motor && /retrato=1/.test(marco.src) && /trabajo=1/.test(marco.src), JSON.stringify(marco));
+    comprobar('1.1.67 · el marco del duende, con fondo transparente', /rgba\(0, 0, 0, 0\)|transparent/.test(marco.fondo) && /rgba\(0, 0, 0, 0\)|transparent/.test(marco.htmlF), JSON.stringify(marco));
+    await espera(300);
+    await win.webContents.capturePage().then(img => fs.writeFileSync(path.join(CAPTURAS, 'duende-pensando.png'), img.toPNG())).catch(() => {});
+    comprobar('1.1.67 · llega el razonamiento: abierto y el duende se va (tras un momento)', await hasta(`const d = [...document.querySelectorAll('#asistente .as-razon')].pop(); return !!d && d.open && document.querySelector('#asistente [data-as-trabajo]').hidden;`, 4000));
+    comprobar('1.1.67 · el razonamiento pasa de su alto y la caja lo sigue al final', await hasta(`const d = [...document.querySelectorAll('#asistente .as-razon > div')].pop(); return !!d && d.scrollHeight > d.clientHeight + 120 && d.scrollHeight - d.scrollTop - d.clientHeight < 8;`, 6000),
+      await js(`const d = [...document.querySelectorAll('#asistente .as-razon > div')].pop(); return d ? [d.scrollHeight, d.scrollTop, d.clientHeight].join(' ') : 'sin razonamiento';`));
+    await js(`window.__cajaRazon = [...document.querySelectorAll('#asistente .as-razon > div')].pop(); return true;`);
+    /* la rueda de verdad sobre la caja del razonamiento: hacia arriba (deltaY positivo, en Electron) */
+    const pr = JSON.parse(await js(`const r = window.__cajaRazon.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 });`));
+    ev({ type: 'mouseMove', x: R(pr.x), y: R(pr.y) }); await espera(40);
+    ev({ type: 'mouseWheel', x: R(pr.x), y: R(pr.y), deltaX: 0, deltaY: 50, canScroll: true });
+    await espera(450);                                               // el desplazamiento suave de Chromium, hasta el final
+    const subio = JSON.parse(await js(`const d = window.__cajaRazon; return JSON.stringify({ top: d.scrollTop, max: d.scrollHeight - d.clientHeight, igual: d === [...document.querySelectorAll('#asistente .as-razon > div')].pop(), vivo: ${A}.trabajando() });`));
+    comprobar('1.1.67 · la rueda sube en el razonamiento mientras llega', subio.igual && subio.vivo && subio.top > 20 && subio.top < subio.max - 60, JSON.stringify(subio));
+    await espera(700);                                               // ≥ 15 repintados
+    const quieto = JSON.parse(await js(`const d = window.__cajaRazon; return JSON.stringify({ top: d.scrollTop, max: d.scrollHeight - d.clientHeight, igual: d === [...document.querySelectorAll('#asistente .as-razon > div')].pop(), mismoYo: window.__primerYo === document.querySelector('#asistente .as-cuerpo .as-yo') });`));
+    comprobar('1.1.67 · y se queda donde lo dejó Leo (la misma caja, sin volver arriba ni abajo) mientras siguen llegando trozos', quieto.igual && Math.abs(quieto.top - subio.top) < 2 && quieto.max > subio.max, JSON.stringify({ subio, quieto }));
+    comprobar('1.1.67 · lo de antes de la conversación no se rehace (el mismo nodo)', quieto.mismoYo);
+    for (let i = 0; i < 12; i++) {
+      const q = JSON.parse(await js(`const r = window.__cajaRazon.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 });`));
+      ev({ type: 'mouseWheel', x: R(q.x), y: R(q.y), deltaX: 0, deltaY: -120, canScroll: true }); await espera(40);
+    }
+    await espera(500);
+    comprobar('1.1.67 · bajando hasta el final, vuelve a seguir lo que llega', await js(`const d = window.__cajaRazon; return ${A}.trabajando() ? d.scrollHeight - d.scrollTop - d.clientHeight < 8 : true;`),
+      await js(`const d = window.__cajaRazon; return [d.scrollHeight, d.scrollTop, d.clientHeight, ${A}.trabajando()].join(' ');`));
+    /* la conversación: la rueda hacia arriba fuera del razonamiento la suelta del final, y no se la arrastra abajo */
+    const cuerpoAntes = JSON.parse(await js(`const c = document.querySelector('#asistente .as-cuerpo'); return JSON.stringify({ top: c.scrollTop, max: c.scrollHeight - c.clientHeight });`));
+    if (cuerpoAntes.max > 40) {
+      const pc = JSON.parse(await js(`const c = document.querySelector('#asistente .as-cuerpo'), r = c.getBoundingClientRect(); return JSON.stringify({ x: r.left + 40, y: r.top + 30 });`));
+      ev({ type: 'mouseWheel', x: R(pc.x), y: R(pc.y), deltaX: 0, deltaY: 60, canScroll: true });
+      await espera(450);
+      const c1 = JSON.parse(await js(`const c = document.querySelector('#asistente .as-cuerpo'); return JSON.stringify({ top: c.scrollTop, vivo: ${A}.trabajando() });`));
+      await espera(600);
+      const c2 = JSON.parse(await js(`const c = document.querySelector('#asistente .as-cuerpo'); return JSON.stringify({ top: c.scrollTop });`));
+      comprobar('1.1.67 · la conversación sube con la rueda y no salta abajo con cada trozo', c1.vivo && c1.top < cuerpoAntes.top - 20 && c1.top > 0 && Math.abs(c2.top - c1.top) < 2, JSON.stringify({ cuerpoAntes, c1, c2 }));
+      /* y bajando hasta el final se vuelve a enganchar */
+      for (let i = 0; i < 8; i++) { ev({ type: 'mouseWheel', x: R(pc.x), y: R(pc.y), deltaX: 0, deltaY: -120, canScroll: true }); await espera(40); }
+      await espera(700);
+      comprobar('1.1.67 · y bajando al final, la conversación vuelve a seguir lo que llega', await js(`const c = document.querySelector('#asistente .as-cuerpo'); return !${A}.trabajando() || c.scrollHeight - c.scrollTop - c.clientHeight < 6;`),
+        await js(`const c = document.querySelector('#asistente .as-cuerpo'); return [c.scrollHeight, c.scrollTop, c.clientHeight].join(' ');`));
+    } else comprobar('1.1.67 · (la conversación aún no se desplaza: sin comprobar la rueda en ella)', true);
+    /* cerrarlo a mano: se queda cerrado aunque siga llegando */
+    if (await trabajando()) {
+      await aClic(`[...document.querySelectorAll('#asistente .as-razon > summary')].pop()`, { tras: 500 });
+      comprobar('1.1.67 · cerrado a mano, el razonamiento se queda cerrado mientras llega', await js(`const d = [...document.querySelectorAll('#asistente .as-razon')].pop(); return !d.open;`));
+      await aClic(`[...document.querySelectorAll('#asistente .as-razon > summary')].pop()`, { tras: 300 });
+    }
+    comprobar('1.1.67 · termina', await hastaLibre(20000));
+    comprobar('1.1.67 · abierto a mano, sigue abierto cuando llega la respuesta', await js(`const d = [...document.querySelectorAll('#asistente .as-razon')].pop(); return !!d && d.open && /empieza con la lluvia/.test(d.parentNode.textContent);`));
+    comprobar('1.1.67 · al acabar no hay duende', await js(`return document.querySelector('#asistente [data-as-trabajo]').hidden;`));
+
+    /* un paso lento: el duende dice qué hace, con palabras (no el nombre de la herramienta) */
+    S.cola.push({ llamadas: [{ name: 'leer_esquema', args: { esquema: ids.eid } }], pausa: 2200 }, { texto: 'Leído.' });
+    await mandar('Mira el esquema');
+    comprobar('1.1.67 · con un paso en curso, el duende dice lo que hace («Leyendo el esquema…»)', await hasta(`const c = document.querySelector('#asistente [data-as-trabajo]'); return !c.hidden && /Leyendo el esquema…/.test(c.textContent) && !/leer_esquema/.test(c.textContent);`, 3000),
+      await js(`return document.querySelector('#asistente [data-as-trabajo]').textContent;`));
+    await espera(200);
+    await win.webContents.capturePage().then(img => fs.writeFileSync(path.join(CAPTURAS, 'duende-paso.png'), img.toPNG())).catch(() => {});
+    comprobar('1.1.67 · y se va al terminar', await hastaLibre(12000) && await hasta(`return document.querySelector('#asistente [data-as-trabajo]').hidden;`, 1500));
+    const reusa = JSON.parse(await js(`const f = document.querySelector('#asistente iframe.as-duende-marco'); let marca = null; try { marca = f.contentWindow.__marca; } catch (_) {}
+      return JSON.stringify({ n: document.querySelectorAll('#asistente iframe').length, igual: f === window.__marcoDuende, marca });`));
+    comprobar('1.1.67 · el marco del duende no se recrea ni se recarga (el mismo, con su marca)', reusa.n === 1 && reusa.igual && reusa.marca === 1, JSON.stringify(reusa));
+
     /* ---------- un lienzo: «Ejecutar con IA» en una operación ---------- */
     const lz = JSON.parse(await js(`const x = Claquedraw.app.ejecutarEnVivo('editar_proyecto', { operaciones: [{ op: 'crear_lienzo', contenedor: ${JSON.stringify(ids.cid)}, nombre: 'Del texto al guion', ref: 'l' }] }, { origen: 'Claude', avisar: false });
       const l = (${D}.datos.contenedores[0].lienzos || []).find(y => y.nombre === 'Del texto al guion');
@@ -315,7 +403,7 @@ app.whenReady().then(async () => {
     comprobar('un lienzo con un texto conectado a «Generar guion»', lz.lid && lz.gid && !lz.error, JSON.stringify(lz));
     await js(`Claquedraw.app.abrirLienzo(${JSON.stringify(lz.lid)}); await W(600); return true;`);
     const selIA = `document.querySelector('#lzNodos [data-lz-nodo="${lz.gid}"] [data-lz-ia]')`;
-    comprobar('la operación lleva «Ejecutar con IA» junto a «Pedir a Claude»', await hasta(`const b = ${selIA}; return !!b && /Ejecutar con IA/.test(b.textContent) && !!b.parentElement.querySelector('[data-lz-pedir]');`, 4000));
+    comprobar('la operación lleva «Ejecutar con IA» junto a «Pedir a Claude»', await hasta(`const b = ${selIA}; return !!b && /Ejecutar con IA/.test(b.getAttribute('aria-label') || '') && b.textContent.trim() === 'IA' && !!b.parentElement.querySelector('[data-lz-pedir]');`, 4000));
     comprobar('y el pie, «Ejecutar todo con IA»', await js(`const b = document.querySelector('#lienzo [data-lz-ia-todo]'); return !!b && !b.hidden && /Ejecutar todo con IA/.test(b.textContent);`));
     S.cola.push(
       { llamadas: [{ name: 'ejecutar_nodo', args: { lienzo: lz.lid, nodo: lz.gid } }], pausa: 60 },
@@ -539,13 +627,38 @@ app.whenReady().then(async () => {
     comprobar('1.1.60 · el transporte sabe pedir el saldo (editorAPI.ia.saldo)', await js(`return typeof window.editorAPI.ia.saldo === 'function';`));
     {
       await js(`${A}.cerrar(); await W(100); ${A}.abrir(); await W(100); return true;`);
-      comprobar('1.1.60 · el saldo de APIMart en la cabecera del panel', await hasta(`const b = document.querySelector('#asistente [data-as-saldo]'); return !!b && !b.hidden && /Saldo 9,91 USD/.test(b.textContent) && /usados 0,09/.test(b.title);`, 4000),
+      comprobar('1.1.60 · el saldo de APIMart en la cabecera del panel (1.1.61: la cifra en el chip, «Saldo … USD» en el globo)', await hasta(`const b = document.querySelector('#asistente [data-as-saldo]'); return !!b && !b.hidden && b.textContent === '$9,91' && /^Saldo 9,91 USD/.test(b.title) && b.getAttribute('aria-label') === 'Saldo 9,91 USD' && /usados 0,09/.test(b.title);`, 4000),
         await js(`const b = document.querySelector('#asistente [data-as-saldo]'); return b ? b.outerHTML : null;`));
+      /* 1.1.61 (revisión de ClapBook): con «Saldo 9,91 USD» y el chip sin encoger, el modelo se cortaba en «deepseek…» */
+      const cab = JSON.parse(await js(`const b = document.querySelector('#asistente [data-as-saldo]'), m = document.querySelector('#asistente .as-modelo'), p = document.getElementById('asistente');
+        return JSON.stringify({ ancho: p.offsetWidth, modelo: m.textContent, cabeM: m.scrollWidth <= m.clientWidth + 1, cabeS: b.scrollWidth <= b.clientWidth + 1, mw: m.scrollWidth + '/' + m.clientWidth, sw: b.scrollWidth + '/' + b.clientWidth });`));
+      comprobar('1.1.61 · con el ancho de partida, ni el modelo ni el chip del saldo se cortan', cab.cabeM && cab.cabeS && /deepseek-v4-flash|V4 Flash/i.test(cab.modelo), JSON.stringify(cab));
       S.saldo = { remain_balance: 0.15, remain_credits: 1.5, success: true, used_balance: 9.85, used_credits: 98.5 };
       await aClic(`document.querySelector('#asistente [data-as-saldo]')`, { tras: 800 });
       comprobar('1.1.60 · un clic lo vuelve a mirar; por debajo de 0,20 USD, en rojo', await hasta(`const b = document.querySelector('#asistente [data-as-saldo]'); return /0,15/.test(b.textContent) && b.classList.contains('critico');`, 4000),
         await js(`return document.querySelector('#asistente [data-as-saldo]').outerHTML;`));
       S.saldo = null;
+    }
+
+    /* ---------- 1.1.61: el clic central en un enlace de una respuesta pregunta como el clic (no sale solo por setWindowOpenHandler) ---------- */
+    {
+      await js(`if (!${A}.abierto()) ${A}.abrir(); await W(200); return true;`);
+      S.cola.push({ texto: 'Mira [la guía](https://ejemplo.com/guia) antes de seguir.' });
+      await mandar('Dame un enlace');
+      await hastaLibre();
+      const selA = `[...document.querySelectorAll('#asistente a[href]')].find(a => /ejemplo\\.com/.test(a.getAttribute('href')))`;
+      comprobar('1.1.61 · la respuesta trae el enlace', await hasta(`return !!${selA};`, 3000), await panelTxt());
+      const nVentanas = BrowserWindow.getAllWindows().length;
+      await aClic(selA, { boton: 'middle', tras: 500 });
+      comprobar('1.1.61 · el clic central pregunta antes de salir (el mismo aviso que el clic)', await hasta(`const d = document.getElementById('dlg'); return d.open && /ejemplo\\.com\\/guia/.test(d.textContent) && /Abrir fuera de ClapCraft/.test(d.textContent);`, 3000)
+        && !externos.length && BrowserWindow.getAllWindows().length === nVentanas, JSON.stringify({ externos, dlg: await js(`return document.getElementById('dlg').textContent;`) }));
+      await aClic(`document.getElementById('dlgCancel')`, { tras: 400 });
+      comprobar('1.1.61 · «Cancelar» no abre nada', !externos.length && !(await js(`return document.getElementById('dlg').open;`)), JSON.stringify(externos));
+      await aClic(selA, { boton: 'middle', tras: 500 });
+      await hasta(`return document.getElementById('dlg').open;`, 3000);
+      await aClic(`document.getElementById('dlgOk')`, { tras: 600 });
+      comprobar('1.1.61 · y aceptando, va al navegador del sistema (una vez)', externos.length === 1 && externos[0] === 'https://ejemplo.com/guia', JSON.stringify(externos));
+      externos.length = 0;
     }
 
     /* ---------- revisión: lo que borra pide permiso; «No» no lo hace ---------- */

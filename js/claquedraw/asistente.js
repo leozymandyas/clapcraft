@@ -236,7 +236,11 @@
       /* la memoria de estilo (1.1.60, js/claquedraw/memoria-ui.js): la general y la del proyecto, en el sistema de cada petición */
       memoria: () => (g.memoria ? g.memoria() : null),
       /* el nombre de lo que tiene un id, para los pasos y el permiso (1.1.60: «Escribió en la nota «Escena del bar»», no su id) */
-      nombreDe: (v, tipo, args) => nombreDeId(v, tipo, args)
+      nombreDe: (v, tipo, args) => nombreDeId(v, tipo, args),
+      /* para el permiso (revisión del port a ClapBook): un sustituir que se lleva mucho texto y un conectar que quita un cable de Leo
+         piden permiso; lo miran herramientas.js sobre el proyecto de ahora (sin proyecto, se pregunta) */
+      quitaAlSustituir: args => { const d = g.docs && g.docs(), H = C.herramientas; return !d || !H || !H.quitaAlSustituir || H.quitaAlSustituir(d, args).mucho; },
+      sustituyeCable: args => { const d = g.docs && g.docs(), H = C.herramientas; return !d || !H || !H.sustituyeCable || H.sustituyeCable(d, args); }
     });
     /* lo que llega de una conversación que ya no es la del panel (Nueva conversación, u otro proyecto, a mitad) no se pinta */
     const suya = f => (x => { if (conv === c) f(x); });
@@ -268,6 +272,7 @@
       repintarPronto(); return;
     }
     if (!t && !o.razonamiento && !(acum && acum.trim())) return;
+    ultimaNovedad = Date.now();                        // llega algo que se lee: el duende se va (si llevaba un rato)
     if (!iaActual || iaActual.cerrado || (o.vuelta != null && iaActual.vuelta != null && o.vuelta !== iaActual.vuelta)) {
       if (iaActual) iaActual.vivo = false;
       iaActual = { tipo: 'ia', texto: '', vivo: true, vuelta: o.vuelta }; items.push(iaActual);
@@ -282,6 +287,7 @@
     /* del motor: fase «preparando» (llegan los argumentos: «Usando…»), «inicio», «fin» (con ok, texto o error, historial,
        imagenes) y «aviso» (pasa al plan B) */
     if (p.fase === 'preparando') { alTexto({ herramienta: p.herramienta || p.nombre }); return; }
+    ultimaNovedad = Date.now();
     if (p.fase === 'aviso') { if (iaActual) iaActual.cerrado = true; items.push({ tipo: 'aviso', texto: p.titulo || p.texto || '' }); repintarPronto(); return; }
     const id = p.id || p.llamada || (p.tool_call && p.tool_call.id) || null;
     let it = id ? items.find(i => i.tipo === 'paso' && i.id === id) : null;
@@ -369,6 +375,7 @@
     aplicarAConversacion();
     if (op.yo !== undefined && (op.yo || (op.imagenes && op.imagenes.length))) items.push(Object.assign({ tipo: 'yo', texto: op.visible || op.yo, fecha: Date.now() }, op.visible ? { enviado: op.yo } : {}, op.imagenes && op.imagenes.length ? { imagenes: op.imagenes } : {}));
     iaActual = null; enCurso = true;
+    vigilarDuende(true);
     pintarTodo(); abajo(true);
     let r = null; ultimoError = null;
     const desde = items.length, mia = conv;
@@ -380,6 +387,7 @@
     /* Nueva conversación, o el proyecto cambió, a mitad: lo de aquella ya no se pinta ni se guarda aquí */
     if (conv !== mia) return r;
     enCurso = false;
+    vigilarDuende(false);
     if (iaActual) { iaActual.vivo = false; iaActual.cerrado = true; }
     r = r || { ok: false, motivo: 'error', error: 'La IA no contestó' };
     const motivo = r.motivo || (r.ok ? 'fin' : 'error');
@@ -508,6 +516,7 @@
         <button type="button" class="icono" data-as-cerrar title="Cerrar el asistente (${atajo('I', true)})" aria-label="Cerrar el asistente">${ic('ic-close', 16)}</button>
       </header>
       <div class="as-cuerpo" data-as-cuerpo aria-live="polite"></div>
+      <div class="as-trabajo" data-as-trabajo role="status" hidden><span class="as-trabajo-duende" data-as-duende>${ic('ic-asistente', 18)}</span><span class="as-trabajo-txt" data-as-trabajo-txt></span></div>
       <footer class="as-pie" data-as-pie>
         <div class="as-enlaces" data-as-enlaces hidden></div>
         <div class="as-fx" data-as-fx hidden></div>
@@ -535,6 +544,16 @@
     cuerpo.addEventListener('scroll', () => { if (botonCitar) botonCitar.hidden = true; });
     document.addEventListener('selectionchange', () => { if (botonCitar && !botonCitar.hidden) { const s = getSelection(); if (!s || s.isCollapsed) botonCitar.hidden = true; } });
     panel.addEventListener('click', alClicPanel);
+    /* el clic central sobre un enlace va por el mismo camino que el clic (`irA`: los https de fuera, preguntando antes). 1.1.61,
+       revisión: sin esto lo abría Chromium en otra ventana, y `setWindowOpenHandler` (main.js) lo mandaba al navegador sin
+       preguntar. Con cualquier otro botón que no sea el principal, nada. */
+    panel.addEventListener('mousedown', e => { if (e.button === 1 && e.target.closest && e.target.closest('a[href]')) e.preventDefault(); });   // ni el autodesplazamiento
+    panel.addEventListener('auxclick', e => {
+      const a = e.target.closest && e.target.closest('a[href]');
+      if (!a || !panel.contains(a)) return;
+      e.preventDefault();
+      if (e.button === 1) irA(a.getAttribute('href'));
+    });
     panel.addEventListener('dblclick', e => { if (e.target.closest('[data-as-borde]')) { pref.ancho = ANCHO.defecto; aplicarAncho(); guardarPref(); } });
     panel.querySelector('[data-as-borde]').addEventListener('pointerdown', arrastrarBorde);
     campo.addEventListener('keydown', alTeclaCampo);
@@ -1123,6 +1142,65 @@
     setTimeout(() => { const f = buscar || pop.querySelector('button'); if (f && fxPop === pop) f.focus({ preventScroll: true }); }, 0);
   }
 
+  /* ---------- el duende trabajando (1.1.67, Leo: «Quiero ver un duende genérico trabajando en el asistente de IA cuando las tareas
+     están tardando en procesarse») ----------
+     El motor del teatro en un marco pequeño (`duendes.html?embebido=1&retrato=1&trabajo=1`: un duende genérico que teclea, lee,
+     escribe y revisa, sobre fondo transparente) entre la conversación y el campo, con lo que está haciendo. Sale cuando la respuesta
+     lleva `ESPERA_DUENDE` sin nada nuevo que leer, o antes (`ESPERA_PASO`) si hay un paso en curso; se va cuando vuelve a llegar texto
+     (tras `MINIMO_DUENDE` a la vista, para que no parpadee), cuando espera el permiso de Leo y al terminar o detener. **Un solo marco**,
+     creado la primera vez y nunca quitado del documento (quitarlo lo recargaría): se esconde con `hidden`. Está fuera de `cuerpo`, así
+     que pintar la conversación no lo toca. Sin sonido (`Duendes.detener`); con «reducir movimiento», sin marco: solo el rótulo. */
+  const ESPERA_DUENDE = 1500, ESPERA_PASO = 600, MINIMO_DUENDE = 900;
+  let duendeVisible = false, duendeDesde = 0, duendeVigia = null, ultimaNovedad = 0, duendeMarco = null;
+  const menosMovimiento = () => { try { return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (_) { return false; } };
+  const temaMarco = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  function vigilarDuende(on) {
+    if (on) { ultimaNovedad = Date.now(); if (!duendeVigia) duendeVigia = setInterval(revisarDuende, 200); return; }
+    if (duendeVigia) { clearInterval(duendeVigia); duendeVigia = null; }
+    ponerDuende(false);
+  }
+  /* lo que está haciendo, o null si el duende no toca */
+  function queHace() {
+    if (!enCurso || !panel || panel.hidden) return null;
+    if (items.some(i => i.tipo === 'permiso' && i.estado === 'pendiente')) return null;      // espera a Leo: no está trabajando
+    const paso = [...items].reverse().find(i => i.tipo === 'paso' && i.estado === 'en-curso');
+    if (Date.now() - ultimaNovedad < (paso ? ESPERA_PASO : ESPERA_DUENDE)) return null;
+    return paso ? corto(conNombres(tituloPaso(paso)), 60) + '…' : 'Pensando…';
+  }
+  function revisarDuende() {
+    if (!enCurso) { vigilarDuende(false); return; }
+    const t = queHace();
+    if (t) ponerDuende(true, t);
+    else if (duendeVisible && (Date.now() - duendeDesde >= MINIMO_DUENDE || items.some(i => i.tipo === 'permiso' && i.estado === 'pendiente'))) ponerDuende(false);
+  }
+  function ponerDuende(on, texto) {
+    const caja = panel && panel.querySelector('[data-as-trabajo]'); if (!caja) return;
+    if (on) {
+      if (!duendeVisible) { duendeDesde = Date.now(); marcoDuende(caja); }
+      const r = caja.querySelector('[data-as-trabajo-txt]'); if (r.textContent !== texto) r.textContent = texto;
+      caja.hidden = false;
+    } else caja.hidden = true;
+    if (duendeVisible !== !!on) { duendeVisible = !!on; repintarPronto(); }   // los tres puntos se van o vuelven
+  }
+  function marcoDuende(caja) {
+    const sitio = caja.querySelector('[data-as-duende]');
+    if (duendeMarco) { try { const w = duendeMarco.contentWindow; if (w && w.Duendes && w.Duendes.tema) w.Duendes.tema(temaMarco()); } catch (_) { /* aún cargando */ } return; }
+    if (menosMovimiento()) return;                       // solo el rótulo (y el icono)
+    const f = document.createElement('iframe');
+    f.className = 'as-duende-marco'; f.title = 'Un duende trabajando'; f.tabIndex = -1;
+    f.setAttribute('aria-hidden', 'true'); f.setAttribute('scrolling', 'no');
+    f.addEventListener('load', () => prepararMarcoDuende(f));
+    f.src = 'duendes.html?embebido=1&retrato=1&trabajo=1&tema=' + temaMarco();
+    sitio.appendChild(f); duendeMarco = f; sitio.classList.add('con-marco');
+  }
+  /* al cargar: sin sonido (el motor, con `?retrato=1&trabajo=1`, ya sale trabajando sobre fondo transparente y sin marco) */
+  function prepararMarcoDuende(f) {
+    let w = null;
+    try { w = f.contentWindow; } catch (_) { return; }
+    const D = w && w.Duendes; if (!D) return;
+    try { if (D.detener) D.detener(); } catch (_) { /* sin sonido de todos modos */ }
+  }
+
   /* ---------- pintar ---------- */
   function repintarPronto() {
     if (pintarPend) return;
@@ -1135,7 +1213,80 @@
     if (cfg && !hayClave() && !items.length) { cuerpo.innerHTML = bienvenidaHtml('sin-clave'); return; }
     if (!items.length) { cuerpo.innerHTML = bienvenidaHtml('vacio'); return; }
     const sinClave = cfg && !hayClave() ? `<div class="as-nota-sis as-falta-clave">${ic('ic-llave', 14)}<span>Falta la clave de APIMart para seguir.</span><button type="button" class="as-enlace-btn" data-as-tutorial="pegar">Configurar paso a paso</button></div>` : '';
-    cuerpo.innerHTML = items.map((it, i) => itemHtml(it, i)).join('') + sinClave + (enCurso && !(iaActual && (String(iaActual.texto || '').trim() || iaActual.razon)) && !items.some(x => x.tipo === 'paso' && x.estado === 'en-curso') ? '<div class="as-pensando" aria-label="Pensando"><i></i><i></i><i></i></div>' : '');
+    /* los tres puntos, solo hasta que sale el duende trabajando (que los sustituye) */
+    const puntos = enCurso && !duendeVisible && !(iaActual && (String(iaActual.texto || '').trim() || iaActual.razon)) && !items.some(x => x.tipo === 'paso' && x.estado === 'en-curso') ? '<div class="as-pensando" aria-label="Pensando"><i></i><i></i><i></i></div>' : '';
+    pintarItems([sinClave, puntos]);
+  }
+  /* **Pintar sin rehacer** (1.1.67, Leo: «el razonamiento se ve pero no puedo hacer scroll hacia abajo para verlo, se queda bloqueado
+     hasta que termina»). Hasta la 1.1.66 cada trozo (cada 40 ms) rehacía `cuerpo.innerHTML` entero: el `<details>` del razonamiento
+     y su caja con desplazamiento nacían otra vez —arriba del todo, y abierto o cerrado según la regla, no según Leo—, y el gesto de
+     la rueda o del trackpad se quedaba enganchado a una caja que ya no existía. Ahora cada elemento de la conversación es el mismo
+     nodo mientras no cambie (`nodosItems`: el objeto del item → { html, el }); el que cambia se sustituye solo a él, y el mensaje que
+     está llegando (`as-ia`) se pone al día en su sitio (`parchearIa`): el razonamiento conserva su caja, su desplazamiento (si Leo
+     está al final lo sigue; si subió, se queda donde lo dejó) y si Leo lo abrió o lo cerró. */
+  let nodosItems = new WeakMap();
+  const nodosSueltos = new Map();                         // los de detrás (falta la clave, los tres puntos), por su html
+  function nodoDe(html) { const t = document.createElement('template'); t.innerHTML = String(html).trim(); return t.content.firstElementChild; }
+  /* deja en `padre` exactamente `lista`, en ese orden, sin mover lo que ya está en su sitio (moverlo le quitaría su desplazamiento) */
+  function ordenar(padre, lista) {
+    const quedan = new Set(lista);
+    [...padre.childNodes].forEach(n => { if (!quedan.has(n)) n.remove(); });
+    let ref = padre.firstChild;
+    lista.forEach(el => { if (el === ref) ref = el.nextSibling; else padre.insertBefore(el, ref); });
+  }
+  function pintarItems(detras) {
+    const lista = [];
+    items.forEach((it, i) => {
+      const h = itemHtml(it, i); if (!h) return;
+      const c = nodosItems.get(it);
+      if (c && c.el.parentNode === cuerpo) {
+        if (c.html === h) { lista.push(c.el); return; }
+        if (it.tipo === 'ia' && parchearIa(c.el, h, it)) { c.html = h; lista.push(c.el); return; }
+      }
+      const el = nodoDe(h); if (!el) return;
+      nodosItems.set(it, { html: h, el }); lista.push(el);
+    });
+    (detras || []).forEach(h => {
+      if (!h) return;
+      let el = nodosSueltos.get(h);
+      if (!el) { el = nodoDe(h); if (!el) return; nodosSueltos.set(h, el); }
+      lista.push(el);
+    });
+    ordenar(cuerpo, lista);
+  }
+  /* el mensaje que llega, en su sitio: sus atributos, su razonamiento (`parchearRazon`), su texto y su botón de copiar */
+  function parchearIa(el, html, it) {
+    const n = nodoDe(html);
+    if (!n || n.tagName !== el.tagName) return false;
+    [...el.attributes].forEach(a => { if (!n.hasAttribute(a.name)) el.removeAttribute(a.name); });
+    [...n.attributes].forEach(a => { if (el.getAttribute(a.name) !== a.value) el.setAttribute(a.name, a.value); });
+    const clave = x => x.tagName + '.' + (x.classList[0] || '');
+    const viejos = new Map([...el.children].map(x => [clave(x), x]));
+    const lista = [...n.children].map(x => {
+      const v = viejos.get(clave(x));
+      if (!v) return x;
+      if (v.tagName === 'DETAILS') { parchearRazon(v, x, it); return v; }
+      if (v.outerHTML === x.outerHTML) return v;
+      if (v.classList.contains('as-md')) { v.innerHTML = x.innerHTML; return v; }
+      return x;
+    });
+    ordenar(el, lista);
+    return true;
+  }
+  const alFinal = (x, margen) => x.scrollHeight - x.scrollTop - x.clientHeight <= (margen || 6);
+  function parchearRazon(v, x, it) {
+    const dv = v.querySelector(':scope > div'), dx = x.querySelector(':scope > div');
+    /* ¿sigue al final? `_sigue` lo cambia solo Leo (`alDesplazarCaja`, `alRuedaCuerpo`); sin tocarlo, sí */
+    const seguia = !dv || dv._sigue !== false;
+    if (dv && dx && dv.innerHTML !== dx.innerHTML) {
+      dv.innerHTML = dx.innerHTML;                        // la caja es la misma: su desplazamiento se queda
+      if (seguia) { dv.scrollTop = dv.scrollHeight; dv._auto = dv.scrollTop; }
+    }
+    if (v.open !== x.open) {
+      /* la regla cierra el razonamiento cuando empieza la respuesta; si Leo lo estaba leyendo (subió en él), se queda abierto */
+      if (!x.open && it.razonAbierto === undefined && v.open && !seguia) it.razonAbierto = true;
+      else v.open = x.open;
+    }
   }
   function pintarCabecera() {
     if (!panel) return;
@@ -1184,7 +1335,12 @@
     const b = panel && panel.querySelector('[data-as-saldo]'); if (!b) return;
     const ok = !!(saldoIA && conSaldo());
     b.hidden = !ok; if (!ok) return;
-    b.textContent = textoSaldo(saldoIA); b.title = tituloSaldo(saldoIA);
+    /* en el chip, solo la cifra («$9,91»); «Saldo 9,91 USD», en el globo y para el lector de pantalla (1.1.61: con «Saldo … USD» el
+       chip no encogía y el nombre del modelo se cortaba en «deepseek…») */
+    const mon = saldoIA.moneda || 'USD';
+    b.textContent = mon === 'USD' ? '$' + numUsd(saldoIA.saldo) : numUsd(saldoIA.saldo) + ' ' + mon;
+    b.title = textoSaldo(saldoIA) + ' · ' + tituloSaldo(saldoIA);
+    b.setAttribute('aria-label', textoSaldo(saldoIA));
     b.classList.toggle('bajo', +saldoIA.saldo < 1 && +saldoIA.saldo >= 0.2);
     b.classList.toggle('critico', +saldoIA.saldo < 0.2);
   }
@@ -1228,7 +1384,7 @@
     const d = ` data-as-item="${i}"`;
     if (it.tipo === 'yo') return `<div class="as-msg as-yo"${d}><div class="as-burbuja">${Array.isArray(it.imagenes) && it.imagenes.length ? `<span class="as-yo-imgs">${it.imagenes.map(x => x.src && /^data:image\//.test(x.src) ? `<img src="${esc(x.src)}" alt="${esc(x.nombre || 'Imagen')}" title="${esc(x.nombre || 'Imagen')}">` : `<span class="as-yo-img-x">${ic('ic-imagen', 14)}</span>`).join('')}</span>` : ''}${textoYo(it.texto)}</div></div>`;
     if (it.tipo === 'ia') {
-      const razon = it.razon && it.razon.trim() ? `<details class="as-razon"${it.vivo && !String(it.texto || '').trim() ? ' open' : ''}><summary>Razonamiento</summary><div>${esc(it.razon.trim()).replace(/\n/g, '<br>')}</div></details>` : '';
+      const razon = it.razon && it.razon.trim() ? `<details class="as-razon"${(it.razonAbierto !== undefined ? it.razonAbierto : it.vivo && !String(it.texto || '').trim()) ? ' open' : ''}><summary>Razonamiento</summary><div>${esc(it.razon.trim()).replace(/\n/g, '<br>')}</div></details>` : '';
       const hay = String(it.texto || '').trim();
       const copiar = hay && !it.vivo && g.copiarTexto ? `<button type="button" class="as-copiar" data-as-copiar title="Copiar la respuesta" aria-label="Copiar la respuesta">${ic('ic-docs', 13)}</button>` : '';
       return hay || razon ? `<div class="as-msg as-ia${it.vivo ? ' vivo' : ''}"${d}>${razon}${hay ? `<div class="as-md">${chipsDeIds(mdHtml(it.texto.trim()))}</div>` : ''}${copiar}</div>` : '';
@@ -1469,11 +1625,45 @@
     return '<div class="as-tabla"><table><thead><tr>' + cab.map(c => '<th>' + linea(c) + '</th>').join('') + '</tr></thead><tbody>'
       + resto.map(r => '<tr>' + r.map(c => '<td>' + linea(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
   }
-  /* abajo del todo, si ya se estaba abajo (o a la fuerza) */
-  let pegadoAbajo = true;
+  /* abajo del todo, si ya se estaba abajo (o a la fuerza). **Si Leo sube, se queda donde lo dejó** (1.1.67): `pegadoAbajo` solo cambia
+     con lo que mueve Leo (la rueda, el trackpad, las teclas, la barra): el desplazamiento que pone `abajo` se apunta en `autoTop` y
+     su evento `scroll` no cuenta. Antes, con un margen de 40 px, un gesto corto hacia arriba volvía abajo en el siguiente trozo. */
+  let pegadoAbajo = true, autoTop = -1;
   function abajo(forzar) {
     if (!cuerpo) return;
-    if (forzar || pegadoAbajo) cuerpo.scrollTop = cuerpo.scrollHeight;
+    if (forzar) pegadoAbajo = true;
+    if (pegadoAbajo) { cuerpo.scrollTop = cuerpo.scrollHeight; autoTop = cuerpo.scrollTop; }
+  }
+  function alDesplazarCuerpo() {
+    if (Math.abs(cuerpo.scrollTop - autoTop) < 1) return;            // lo movió `abajo`
+    autoTop = -1;
+    pegadoAbajo = alFinal(cuerpo, 4);
+  }
+  /* lo mismo para la caja del razonamiento (el `scroll` no burbujea: se oye en captura desde `cuerpo`) */
+  function alDesplazarCaja(e) {
+    const dv = e.target;
+    if (dv === cuerpo || !dv.matches || !dv.matches('.as-razon > div')) return;
+    if (dv._auto !== undefined && Math.abs(dv.scrollTop - dv._auto) < 1) return;   // lo movió `parchearRazon`
+    dv._auto = undefined;
+    dv._sigue = alFinal(dv, 8);
+  }
+  /* la rueda hacia arriba suelta el final al momento (antes de que llegue el siguiente trozo); si es sobre el razonamiento y este aún
+     puede subir, lo que se suelta es él, no la conversación. Hacia abajo, al acabar el gesto cerca del final (48 px), se engancha:
+     lo que llega mientras el desplazamiento suave va de camino dejaría a Leo siempre un poco por encima */
+  let ruedaAbajo = null;
+  function alRuedaCuerpo(e) {
+    const r = e.target.closest && e.target.closest('.as-razon > div');
+    if (e.deltaY < 0) {
+      if (r && r.scrollTop > 0) { r._sigue = false; return; }
+      if (cuerpo.scrollTop > 0) pegadoAbajo = false;
+      return;
+    }
+    if (e.deltaY === 0) return;
+    clearTimeout(ruedaAbajo);
+    ruedaAbajo = setTimeout(() => {
+      if (r && r.isConnected && r._sigue === false && alFinal(r, 48)) { r._sigue = true; r.scrollTop = r.scrollHeight; r._auto = r.scrollTop; }
+      else if (!pegadoAbajo && alFinal(cuerpo, 48)) abajo(true);
+    }, 180);
   }
 
   /* ====================================================================
@@ -1849,7 +2039,16 @@
     g = ganchos || {};
     if (!panel) montarPanel();
     if (!panel) return;
-    cuerpo.addEventListener('scroll', () => { pegadoAbajo = cuerpo.scrollHeight - cuerpo.scrollTop - cuerpo.clientHeight < 40; });
+    cuerpo.addEventListener('scroll', alDesplazarCuerpo, { passive: true });
+    cuerpo.addEventListener('wheel', alRuedaCuerpo, { passive: true });
+    cuerpo.addEventListener('scroll', alDesplazarCaja, { capture: true, passive: true });
+    /* abrir o cerrar el razonamiento a mano: manda sobre la regla (abierto mientras piensa, cerrado cuando contesta) */
+    cuerpo.addEventListener('click', e => {
+      const s = e.target.closest && e.target.closest('details.as-razon > summary'); if (!s) return;
+      const it = itemDe(s); if (it) it.razonAbierto = !s.parentNode.open;
+    });
+    /* si cambia el alto de la conversación (sale o se va el duende, se ensancha el panel) y se estaba al final, se sigue al final */
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (pegadoAbajo) abajo(); }).observe(cuerpo);
     leerConfig().then(() => { pintarTodo(); if (pref.abierto) abrir({ foco: false, sinTutorial: true, desplegar: false }); });
     if (g.transporte && typeof g.transporte.alCambioConfig === 'function') g.transporte.alCambioConfig(c => { cfg = c; pintarTodo(); });
   }
@@ -1864,6 +2063,8 @@
     abierto: () => !!(panel && !panel.hidden),
     trabajando: () => enCurso,
     /* para las pruebas y para app.js: el estado de lo que se ve */
+    /* para las pruebas (1.1.67): enseñar o esconder el duende trabajando a mano, y en qué está */
+    _duende: (on, texto) => { if (on === undefined) return { visible: duendeVisible, texto: (panel && panel.querySelector('[data-as-trabajo-txt]') || {}).textContent || '' }; ponerDuende(!!on, texto || 'Pensando…'); return null; },
     _estado: () => ({ items: items.map(i => Object.assign({}, i)), coste: Object.assign({}, coste), cfg: cfg && Object.assign({}, cfg), pref: Object.assign({}, pref) }),
     MODELOS: MODELOS_RESPALDO, WEB
   };

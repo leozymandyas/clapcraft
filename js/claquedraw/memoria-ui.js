@@ -242,9 +242,17 @@
       repintar();
       return dice('No pude aprender de tus correcciones: ' + ((r && (r.error || r.mensaje)) || 'la IA no contestó'));
     }
+    /* mientras contestaba, la ventana pasó a otro proyecto (1.1.61, revisión: lo aprendido de uno iba al otro y se borraban los pares
+       de ese): no se apunta nada; los pares siguen pendientes en el suyo */
+    const p2 = proyecto();
+    if (!p2 || p2.clave !== p.clave) { repintar(); return dice('Cambiaste de proyecto mientras aprendía: no apunté nada'); }
     const m = r.mensaje || {}, texto = typeof m === 'string' ? m : typeof m.content === 'string' ? m.content : '';
     const aprendido = M().leerAprendido(texto);
-    if (!aprendido) { repintar(); return dice('La IA contestó algo que no se entiende; vuelve a intentarlo'); }
+    if (!aprendido) {
+      if (!op.manual) pausado = true;                     // (1.1.61, revisión: con los pares aún pendientes, volvía a pagar cada 30 s)
+      repintar();
+      return dice('La IA contestó algo que no se entiende; vuelve a intentarlo');
+    }
     pausado = false;
     const d = docs(), antesP = reglasProyecto().slice(), antesG = est.general.slice();
     const res = M().aplicarAprendido({ general: est.general, proyecto: antesP }, aprendido, { sinProyecto: !d });

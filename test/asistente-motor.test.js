@@ -49,7 +49,9 @@ test('las herramientas en el formato de OpenAI: todas las de la app, sin «proye
   const tools = M.herramientasOpenAI(H.LISTA);
   const nombres = tools.map(t => t.function.name);
   assert.ok(!nombres.includes('listar_proyectos'), 'la del servidor MCP no va (en la app no existe)');
-  H.LISTA.filter(t => !t.soloServidor).forEach(t => assert.ok(nombres.includes(t.name), t.name));
+  H.LISTA.filter(t => !t.soloServidor && !t.soloClaude).forEach(t => assert.ok(nombres.includes(t.name), t.name));
+  /* los mods del teatro son solo de Claude (1.1.62): el asistente no los tiene */
+  assert.ok(['editar_teatro', 'leer_teatro', 'preparar_obra', 'dirigir_obra', 'duende_personaje'].every(x => !nombres.includes(x)));
   tools.forEach(t => {
     assert.equal(t.type, 'function');
     assert.match(t.function.name, /^[a-zA-Z0-9_-]{1,64}$/);
@@ -808,4 +810,80 @@ test('los ids, por su nombre · la regla en la guía, el tamaño, y los pasos y 
   assert.ok(!JSON.stringify(pd).includes('«' + nota.id + '»'));
   assert.ok(pasos.filter(x => x.titulo).every(x => !x.titulo.includes(nota.id)), pasos.map(x => x.titulo).join(' | '));
   assert.equal(conv.pasos[0].titulo, 'Escribió en la nota «Escena del bar»');
+});
+
+test('revisión del port · el permiso ve las operaciones como las entiende su herramienta (mayúsculas, acentos, «operacion», alias) y lo que quita sin llamarse borrar', async () => {
+  /* antes, «Tirar Nota», { operacion: "borrar_trama" }, { operacion: "borrar" } o un modo « reemplazár» pasaban sin preguntar */
+  assert.ok(M.destructivo('editar_biblioteca', { operaciones: [{ op: 'Tirar Nota', nota: 'x' }] }));
+  assert.ok(M.destructivo('editar_esquema', { operaciones: [{ operacion: 'borrar_trama', trama: 'x' }] }));
+  assert.ok(M.destructivo('editar_lienzo', { operaciones: [{ operacion: 'borrar', nodo: 'x' }] }));
+  assert.ok(M.destructivo('editar_lienzo', { operaciones: [{ op: 'borrar_nodos', nodos: ['x'] }] }));
+  assert.ok(M.destructivo('editar_proyecto', { operaciones: [{ op: 'Eliminar Contenedor', contenedor: 'x' }] }));
+  for (const modo of [' reemplazar', 'reemplazár', 'REEMPLAZAR']) assert.equal(M.destructivo('escribir_documento', { esquema: 'x', modo, contenido: 'y' }).documento, true, modo);
+  assert.ok(M.destructivo('olvidar_estilo', { regla: 'x' }), 'olvidar una regla de estilo');
+  assert.match(M.destructivo('editar_proyecto', { operaciones: [{ op: 'desconectar', esquema: 'x', biblioteca: 'y' }] }).motivos[0], /desconectar un esquema/);
+  assert.match(M.destructivo('editar_lienzo', { operaciones: [{ op: 'desconectar', cable: 'c1' }] }).motivos[0], /quitar un cable/);
+  assert.equal(M.destructivo('editar_lienzo', { operaciones: [{ op: 'conectar', de: 'a', a: 'b' }] }).conectar, true);
+  assert.equal(M.destructivo('editar_proyecto', { operaciones: [{ op: 'conectar', esquema: 'x', biblioteca: 'y' }] }), null);
+  /* y la herramienta los entiende igual: lo que se pregunta es lo que se hace */
+  const p = proyecto();
+  const n = p.docs.crearNota(p.b.id, null, 'Suelta').nota;
+  assert.equal(H.nombreOperacion('editar_biblioteca', { op: 'Tirar Nota' }), 'tirar_nota');
+  assert.equal(H.nombreOperacion('editar_lienzo', { operacion: 'Borrar Nodos' }), 'borrar');
+  const r = p.ejecutar('editar_biblioteca', { biblioteca: 'Ideas', operaciones: [{ op: 'Tirar Nota', nota: n.id }] });
+  assert.ok(r.ok, r.error);
+  assert.ok(!p.docs.nota(n.id), 'se tiró');
+  assert.ok(p.ejecutar('editar_proyecto', { operaciones: [{ operacion: 'crear_contenedor', nombre: 'Otro' }] }).ok, 'editar_proyecto también acepta «operacion»');
+  /* en la conversación: un conectar que no quita nada no pregunta; uno que sustituye el cable de Leo, sí */
+  p.ejecutar('editar_proyecto', { operaciones: [{ op: 'crear_lienzo', contenedor: 'Temporada 1', nombre: 'Taller' }] });
+  const r0 = p.ejecutar('editar_lienzo', { lienzo: 'Taller', operaciones: [
+    { op: 'crear_nodo', tipo: 'texto', texto: 'Uno', ref: 'a' }, { op: 'crear_nodo', tipo: 'texto', texto: 'Dos', ref: 'b' },
+    { op: 'crear_nodo', tipo: 'resumir', ref: 'r' }] });
+  assert.ok(r0.ok, r0.error);
+  const { a, b, r: rid } = r0.datos.refs, lid = p.docs.todosLosLienzos()[0].lienzo.id;
+  const pd = [];
+  const t = falso([pide([llamada('c1', 'editar_lienzo', { lienzo: lid, operaciones: [{ op: 'conectar', de: a, a: rid, puerto: 'fuente' }] })]),
+    pide([llamada('c2', 'editar_lienzo', { lienzo: lid, operaciones: [{ op: 'conectar', de: b, a: rid, puerto: 'fuente' }] })]), dice('ok')]);
+  const conv = new M.Conversacion({ transporte: t, ejecutar: p.ejecutar, sustituyeCable: x => H.sustituyeCable(p.docs, x), alPermiso: x => { pd.push(x); return 'si'; } });
+  await conv.enviar('conecta');
+  assert.equal(pd.length, 1, 'solo el segundo, que sustituye');
+  assert.match(pd[0].motivos.join(' '), /sustituir un cable/);
+  assert.equal(H.sustituyeCable(p.docs, { lienzo: lid, operaciones: [{ op: 'conectar', de: a, a: rid, puerto: 'contexto' }] }), false, 'contexto admite varios');
+});
+
+test('revisión del port · sustituir unos bloques por algo mucho más corto (o por nada) pide permiso; reescribirlos parecido, no', async () => {
+  const p = proyecto();
+  const largo = 'INT. BAR - NOCHE\n\n' + 'Mara entra en el bar, mira a todos lados y se sienta en la barra sin decir nada a nadie durante un buen rato. '.repeat(4) + '\n\nEXT. CALLE - NOCHE\n\nLlueve sobre la ciudad.';
+  assert.ok(p.ejecutar('escribir_documento', { esquema: 'Piloto', contenido: largo }).ok);
+  const nb = C.conversor.bloques(p.docs.documentoEsquema(p.e.id).html).length;
+  assert.ok(nb >= 3, 'varios bloques: ' + nb);
+  assert.equal(H.quitaAlSustituir(p.docs, { esquema: 'Piloto', modo: 'sustituir', desde: 1, hasta: nb, contenido: '' }).mucho, true, 'vaciarlo');
+  assert.equal(H.quitaAlSustituir(p.docs, { esquema: 'Piloto', modo: 'sustituir', desde: 2, contenido: 'Mara entra.' }).mucho, true, 'casi todo fuera');
+  assert.equal(H.quitaAlSustituir(p.docs, { esquema: 'Piloto', modo: 'sustituir', desde: 1, contenido: 'INT. BAR - DÍA' }).mucho, false, 'una línea por otra');
+  assert.ok(M.destructivo('escribir_documento', { esquema: 'Piloto', modo: 'sustituir', desde: 1, hasta: 2, contenido: '' }).sustituir);
+  const pd = [];
+  const t = falso([pide([llamada('s1', 'escribir_documento', { esquema: 'Piloto', modo: 'sustituir', desde: 1, contenido: 'INT. BAR - DÍA' })]),
+    pide([llamada('s2', 'escribir_documento', { esquema: 'Piloto', modo: 'sustituir', desde: 1, hasta: nb, contenido: '' })]), dice('ok')]);
+  const conv = new M.Conversacion({ transporte: t, ejecutar: p.ejecutar, quitaAlSustituir: x => H.quitaAlSustituir(p.docs, x).mucho, alPermiso: x => { pd.push(x); return 'no'; } });
+  await conv.enviar('arregla el guion');
+  assert.equal(pd.length, 1, 'solo el que lo vacía');
+  assert.match(pd[0].motivos[0], /sustituir los bloques 1–\d+ del guion de «Piloto»/);
+  assert.ok(C.conversor.palabras(p.docs.documentoEsquema(p.e.id).html) > 20, 'no se vació');
+  /* sin el gancho, se pregunta siempre */
+  const pd2 = [];
+  const t2 = falso([pide([llamada('s3', 'escribir_documento', { esquema: 'Piloto', modo: 'sustituir', desde: 1, contenido: 'INT. BAR - NOCHE' })]), dice('ok')]);
+  await new M.Conversacion({ transporte: t2, ejecutar: p.ejecutar, alPermiso: x => { pd2.push(x); return 'si'; } }).enviar('x');
+  assert.equal(pd2.length, 1);
+});
+
+test('integración 1.1.67: una herramienta que nunca se le ofrece (las del teatro, de Claude) no se ejecuta aunque la nombre', async () => {
+  const p = proyecto();
+  const t = falso([pide([llamada('t1', 'duende_personaje', { personaje: 'X', ver: true })]), dice('Vale.')]);
+  const vistas = [];
+  const ejecutar = (n, a, o) => { vistas.push(n); return p.ejecutar(n, a, o); };
+  const conv = new M.Conversacion({ transporte: t, ejecutar, origen: 'anthropic/claude (OpenRouter)' });
+  await conv.enviar('hazme su duende');
+  const tool = t.peticiones.at(-1).mensajes.find(m => m.role === 'tool' && m.tool_call_id === 't1').content;
+  assert.match(tool, /no está disponible para ti/);
+  assert.ok(!vistas.includes('duende_personaje'), 'no llegó a ejecutarse');
 });

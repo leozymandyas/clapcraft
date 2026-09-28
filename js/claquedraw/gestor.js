@@ -4015,6 +4015,35 @@
     });
     return sec;
   }
+  /* **El duende del personaje** (1.1.64, Leo: «configurar en los personajes a mis propios duendes… solo con Claude»): su retrato
+     animado (duendes.html?retrato=1), lo que Claude entendió de él y el encargo para pedírselo o cambiarlo. Desde la 1.1.67 también
+     se crea y se edita a mano, con el creador (js/claquedraw/creador-duende.js, como el selector de avatar de Stardew Valley). */
+  function tarjetaDuende(pid) {
+    const du = o.duendeDe ? o.duendeDe(pid) : null;
+    const sec = document.createElement('section');
+    sec.className = 'gd-etq gd-duende';
+    sec.innerHTML = `<header class="gd-etq-head"><span class="gd-etq-nom" data-globo="Su duende en el teatro"><span>Duende</span></span></header>
+      <div class="gd-etq-body gd-duende-cuerpo">${du ? '<iframe class="gd-duende-retrato" title="Su duende" tabindex="-1"></iframe><p class="gd-duende-desc"></p>'
+        : '<p class="gd-etq-vacia">Aún no tiene duende: en el teatro se le elige un vestuario. Créalo tú o pídeselo a Claude, que lo hace a partir de su hoja (y te pregunta lo que falte).</p>'}
+      <div class="gd-duende-botones">${C.creadorDuende ? `<button type="button" class="btn gd-duende-crear" data-gd-crear-duende>✎ ${du ? 'Editar duende' : 'Crear duende'}</button>` : ''}
+      <button type="button" class="btn gd-duende-enc">📋 ${du ? 'Pedir cambios a Claude' : 'Encargo para Claude'}</button></div></div>`;
+    $('.gd-duende-enc', sec).addEventListener('click', e => { e.stopPropagation(); if (o.encargoDuende) o.encargoDuende(pid); });
+    const crear = $('[data-gd-crear-duende]', sec);
+    if (crear) crear.addEventListener('click', e => {
+      e.stopPropagation();
+      const p = modelo() && modelo().personaje(pid); if (!p) return;
+      C.creadorDuende.abrir(pid, { nombre: p.nombre, duende: o.duendeDe ? o.duendeDe(pid) : null, mods: () => (o.modsTeatro ? o.modsTeatro() : {}),
+        guardar: datos => (o.guardarDuende ? o.guardarDuende(pid, datos) : { ok: false, error: 'No se puede guardar aquí' }), avisar: t => { if (o.avisar) o.avisar(t); } });
+    });
+    if (du) {
+      $('.gd-duende-desc', sec).textContent = du.descripcion || (du.fuente === 'creador' ? 'Hecho a mano en el creador.' : 'Hecho por Claude.');
+      const f = $('.gd-duende-retrato', sec), t = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+      f.addEventListener('load', () => { try { const p = modelo() && modelo().personaje(pid), nom = (p && p.nombre) || du.nombre;
+        f.contentWindow.Duendes.retrato({ duende: Object.assign({}, du, { nombre: nom }), nombre: nom, mods: o.modsTeatro ? o.modsTeatro() : null }); } catch (_) {} });
+      f.src = 'duendes.html?embebido=1&retrato=1&tema=' + t;
+    }
+    return sec;
+  }
   function bloqueApariciones(m, pid) {
     const lista = m.menciones(pid), esquemas = m.esquemasDePersonaje(pid);
     const sec = document.createElement('section');
@@ -4025,6 +4054,7 @@
     const card = tarjetaApariciones(lista); card.dataset.expClave = 'apariciones';   // su botón de expandir
     tablero.appendChild(card);
     tablero.appendChild(tarjetaEsquemas(esquemas));
+    tablero.appendChild(tarjetaDuende(pid));
     sec.appendChild(tablero);
     return sec;
   }

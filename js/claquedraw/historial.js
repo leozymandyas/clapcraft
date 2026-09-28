@@ -42,8 +42,25 @@
     return null;
   }
   const claves = l => { const ks = l.map(claveDe); return ks.every(k => k !== null) && new Set(ks).size === ks.length ? ks : null; };
-  /* el proyecto sin su historial */
-  function foto(datos) { const x = clonar(datos) || {}; delete x[CLAVE]; return x; }
+  /* el proyecto sin su historial. **Las listas que solo están si tienen algo** (los lienzos de un contenedor, la memoria de estilo del
+     proyecto) van en la foto siempre, vacías si no hay (revisión del port a ClapBook: con la clave ausente en un lado, el parche
+     guardaba la lista entera como un valor, y revertir a la fuerza el primer lienzo o la primera regla de Claude se llevaba lo que
+     Leo añadió después; así va elemento a elemento, por su id). En el proyecto no se escriben vacías: `sinVacias`. */
+  const OPCIONALES = ['memoriaEstilo'], OPCIONALES_CONTENEDOR = ['lienzos'];
+  function foto(datos) {
+    const x = clonar(datos) || {}; delete x[CLAVE];
+    OPCIONALES.forEach(k => { if (x[k] === undefined) x[k] = []; });
+    if (x.teatro === undefined) x.teatro = {};                    // los mods del teatro (1.1.63), tipo por tipo y mod por mod
+    if (Array.isArray(x.contenedores)) x.contenedores.forEach(c => { if (esObj(c)) OPCIONALES_CONTENEDOR.forEach(k => { if (c[k] === undefined) c[k] = []; }); });
+    return x;
+  }
+  function sinVacias(x) {
+    if (!esObj(x)) return x;
+    OPCIONALES.forEach(k => { if (Array.isArray(x[k]) && !x[k].length) delete x[k]; });
+    if (esObj(x.teatro)) { Object.keys(x.teatro).forEach(k => { if (Array.isArray(x.teatro[k]) && !x.teatro[k].length) delete x.teatro[k]; }); if (!Object.keys(x.teatro).length) delete x.teatro; }
+    if (Array.isArray(x.contenedores)) x.contenedores.forEach(c => { if (esObj(c)) OPCIONALES_CONTENEDOR.forEach(k => { if (Array.isArray(c[k]) && !c[k].length) delete c[k]; }); });
+    return x;
+  }
 
   /* ---------- la diferencia ---------- */
   const tipoDe = x => (Array.isArray(x) ? 'arr' : esObj(x) ? 'obj' : 'val');
@@ -205,6 +222,7 @@
     let nuevo = e.parche ? revertir(actual, e.parche, [], choques, forzar) : clonar(actual);
     const avisos = limpiarEsquemas(actual, nuevo);
     if (C.normalizarDocumentos) nuevo = C.normalizarDocumentos(nuevo);
+    sinVacias(nuevo);
     delete nuevo[CLAVE];
     return { actual, nuevo, choques, avisos };
   }
@@ -236,7 +254,7 @@
   }
   /* Deshace una reversión: vuelve lo de antes (todo menos el historial) y la entrada deja de estar revertida. */
   function reponer(docs, antes, id) {
-    const x = JSON.parse(antes);
+    const x = sinVacias(JSON.parse(antes));
     Object.keys(docs.datos).forEach(k => { if (k !== CLAVE) delete docs.datos[k]; });
     Object.assign(docs.datos, x);
     const e = entrada(docs, id); if (e) delete e.revertido;
@@ -278,7 +296,7 @@
   const ID = '(?:[plnasc]\\d+|x\\d+|[dc](?=[a-z0-9]*\\d)[a-z0-9]{8,}|[a-z]+(?::[a-z0-9]+)+)';
   function sinIds(t) {
     const guardados = [];
-    let x = String(t || '').replace(/«[^»]*»/g, m => { guardados.push(m); return '' + (guardados.length - 1) + ''; });
+    let x = String(t || '').replace(/«[^»]*»/g, m => { guardados.push(m); return '\uE001' + (guardados.length - 1) + '\uE002'; });
     x = x.replace(new RegExp('\\b' + ID + '\\s+(?=\\uE001)', 'g'), '')
       .replace(new RegExp('\\s*\\(' + ID + '\\)', 'g'), '')
       .replace(/\s*\(extremos [^)]*\)/g, '')
@@ -286,7 +304,7 @@
       .replace(new RegExp('\\[' + ID + ',\\s*', 'g'), '[')
       .replace(new RegExp('([▢◇])\\s+' + ID + '\\s+', 'g'), '$1 ')
       .replace(new RegExp('\\b(nota|salto|nodo|trama|acto|segmento|sección|biblioteca|esquema|contenedor|carpeta|grupo|personaje)\\s+' + ID + '(?=[\\s:,.)]|$)', 'g'), '$1');
-    return x.replace(/(\d+)/g, (m, i) => guardados[+i]);
+    return x.replace(/\uE001(\d+)\uE002/g, (m, i) => guardados[+i]);
   }
 
   C.historial = { CLAVE, foto, diferencia, revertir, huella, anotar, sanear, lista, entrada, probar, revertirEntrada, reponer, antesDe, describir, sinIds, MAX, MAX_BYTES };

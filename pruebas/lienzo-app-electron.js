@@ -271,10 +271,20 @@ app.whenReady().then(async () => {
 
     /* ---------- volver a la última pantalla al recargar ---------- */
     await js(`Claquedraw.app.guardar && await Claquedraw.app.guardar(); return true;`);
+    /* 1.1.61 (revisión): la vista movida justo antes de salir —menos de lo que espera para guardarse— también vuelve */
+    const lzC = JSON.parse(await js(`const b = document.getElementById('lzCuerpo').getBoundingClientRect(); return JSON.stringify({ x: b.left + 40, y: b.bottom - 40 });`));
+    ev({ type: 'mouseMove', x: R(lzC.x), y: R(lzC.y) }); await espera(30);
+    ev({ type: 'mouseWheel', x: R(lzC.x), y: R(lzC.y), deltaX: 60, deltaY: 40 }); await espera(1000);   // una vista de partida, ya guardada
+    const vistaAntes = JSON.parse(await js(`return JSON.stringify(Claquedraw.lienzoUI.vista());`));
+    ev({ type: 'mouseWheel', x: R(lzC.x), y: R(lzC.y), deltaX: -130, deltaY: -90 }); await espera(60);
+    const vistaMovida = JSON.parse(await js(`return JSON.stringify(Claquedraw.lienzoUI.vista());`));
     win.webContents.reload();
     await new Promise(r2 => win.webContents.once('did-finish-load', r2));
     await hasta(`return !!(window.Claquedraw && Claquedraw.app && Claquedraw.app.modo);`);
     comprobar('al recargar, vuelve al lienzo', await hasta(`return Claquedraw.app.modo() === 'lienzo' && Claquedraw.app.lienzoMontado() === '${lid}';`, 5000), await js(`return Claquedraw.app.modo();`));
+    const vistaVuelta = JSON.parse(await js(`await W(300); return JSON.stringify(Claquedraw.lienzoUI.vista());`));
+    comprobar('1.1.61 · y con la vista movida justo antes de recargar (sin esperar a que se guardara)', (vistaMovida.x !== vistaAntes.x || vistaMovida.y !== vistaAntes.y)
+      && Math.abs(vistaVuelta.x - vistaMovida.x) <= 1 && Math.abs(vistaVuelta.y - vistaMovida.y) <= 1 && Math.abs(vistaVuelta.zoom - vistaMovida.zoom) < 0.01, JSON.stringify({ vistaAntes, vistaMovida, vistaVuelta }));
   } catch (e) {
     comprobar('la prueba termina sin excepciones', false, e && e.stack);
   }

@@ -191,3 +191,30 @@ test('aguante: cambios al azar con las herramientas y, revertidos del último al
     assert.deepEqual(norm(fin), norm(inicio), 'semilla ' + semilla);
   }
 });
+
+test('revisión del port · revertir a la fuerza el primer lienzo o la primera regla de estilo de Claude no se lleva lo que Leo añadió después', () => {
+  require('../js/claquedraw/lienzo-modelo.js');
+  require('../js/claquedraw/memoria.js');
+  const p = proyecto();
+  assert.equal(p.docs.datos.contenedores[0].lienzos, undefined, 'sin lienzos, la clave no está');
+  assert.deepEqual(Hi.foto(p.docs.datos).contenedores[0].lienzos, [], 'en la foto, vacía');
+  correr(p.ctx, 'editar_proyecto', { operaciones: [{ op: 'crear_lienzo', contenedor: 'Temporada 1', nombre: 'De Claude' }] });
+  correr(p.ctx, 'recordar_estilo', { regla: 'Diálogos secos, sin muletillas' });
+  const [idLienzo, idRegla] = Hi.lista(p.docs).map(e => e.id);
+  /* lo de Leo, después: otro lienzo y otra regla */
+  p.docs.crearLienzo(p.c.id, 'De Leo');
+  p.docs.datos.memoriaEstilo.push({ id: 'm-leo', texto: 'Nada de adverbios en -mente', origen: 'manual', veces: 1, activa: true });
+  correr(p.ctx, 'revertir_cambio', { cambio: idLienzo, forzar: true });
+  assert.deepEqual((p.docs.datos.contenedores[0].lienzos || []).map(l => l.nombre), ['De Leo']);
+  correr(p.ctx, 'revertir_cambio', { cambio: idRegla, forzar: true });
+  assert.deepEqual((p.docs.datos.memoriaEstilo || []).map(r => r.texto), ['Nada de adverbios en -mente']);
+  /* y sin nada de nadie, la clave vuelve a no estar (no queda un [] en el archivo) */
+  const q = proyecto();
+  correr(q.ctx, 'editar_proyecto', { operaciones: [{ op: 'crear_lienzo', contenedor: 'Temporada 1', nombre: 'Solo' }] });
+  const r = correr(q.ctx, 'revertir_cambio', { cambio: Hi.lista(q.docs)[0].id });
+  assert.ok(r.ok);
+  assert.ok(!('lienzos' in q.docs.datos.contenedores[0]));
+  assert.ok(!('memoriaEstilo' in q.docs.datos));
+  Hi.reponer(q.docs, JSON.stringify(Hi.foto(q.docs.datos)), Hi.lista(q.docs)[0].id);
+  assert.ok(!('lienzos' in q.docs.datos.contenedores[0]) && !('memoriaEstilo' in q.docs.datos), 'reponer tampoco las deja vacías');
+});

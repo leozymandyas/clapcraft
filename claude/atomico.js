@@ -3,8 +3,9 @@
    iCloud, Dropbox). Antes la app escribía encima con `fs.writeFile`, que primero lo deja vacío: un proyecto grande quedaba
    cortado al salir con Cmd+Q. Lo usan electron/main.js, electron/claude.js y el servidor de Claude (claude/servidor.js).
    - Si el archivo es un enlace simbólico, se escribe en su destino (el enlace sigue siendo enlace).
-   - Conserva los permisos del archivo que había (o los que se pidan, `modo`), y uno de solo lectura no se escribe (con `rename`
-     se podría: la carpeta es la que manda; se respeta el del archivo, como antes).
+   - Conserva los permisos del archivo que había (o los que se pidan, `modo`, con `fchmod`: sin pasar por el
+     umask, que dejaba un 0664 en 0644), y uno de solo lectura no se escribe (con `rename` se podría: la carpeta es la que
+     manda; se respeta el del archivo, como antes).
    - `limpiar(ruta)`: los temporales que dejó una escritura cortada (la app se cerró a la fuerza a mitad), si su proceso ya no vive.
    - `mismoArchivo(a, b)`: la misma ruta, o el mismo archivo por su identidad (dispositivo e inodo): una ruta con otras mayúsculas
      en un disco que no las distingue, o por un enlace. */
@@ -29,7 +30,9 @@ async function escribir(ruta, datos, modo) {
   const fsp = fs.promises;
   let h = null;
   try {
-    h = await fsp.open(tmp, 'wx', modo || modoDe(destino));
+    const m = modo || modoDe(destino);
+    h = await fsp.open(tmp, 'wx', m);
+    await h.chmod(m);                                             // (el modo de `open` pasa por el umask: el que se pide, tal cual)
     await h.writeFile(buf);
     await h.sync();
     await h.close(); h = null;
@@ -46,7 +49,9 @@ function escribirSync(ruta, datos, modo) {
   sePuedeEscribir(destino);
   let fd = null;
   try {
-    fd = fs.openSync(tmp, 'wx', modo || modoDe(destino));
+    const m = modo || modoDe(destino);
+    fd = fs.openSync(tmp, 'wx', m);
+    fs.fchmodSync(fd, m);                                         // (el de `open` pasa por el umask)
     fs.writeFileSync(fd, buf);
     fs.fsyncSync(fd);
     fs.closeSync(fd); fd = null;

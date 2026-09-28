@@ -70,7 +70,7 @@
   const TEXTUALES = ['texto', 'nota', 'guion', 'esquema', 'segmento', 'biblioteca', 'fragmentos', 'personaje'];
   const FAMILIAS = { entrada: { nombre: 'Entradas' }, operacion: { nombre: 'Operaciones' } };
 
-  /* Los campos de `datos` de cada tipo: [clase de valor, valor de partida]. 'texto' (una cadena), 'id' (una id o null),
+  /* Los campos de `datos` de cada tipo: [clase de valor, valor de partida]. 'texto' (una cadena), 'imagen' (una data:image/…; otra cosa, vacía), 'id' (una id o null),
      'numero' (positivo), 'modo:a|b' (uno de esos), 'destino' (ver `sanearDestino`), 'ids' (una lista de ids sin repetir; la clave
      **solo si hay alguna**, así lo guardado antes de tenerla sigue igual).
      `formulas` (1.1.60): las fórmulas elegidas en una operación, en su orden (ids de notas de la biblioteca «Fórmulas»,
@@ -84,7 +84,7 @@
   const operacion = (nombre, letra, puertos, da, campos, extra) => Object.assign({ nombre, icono: '', letra, familia: 'operacion', puertos, da, campos }, extra);
   const TIPOS = {
     texto: entrada('Texto', 'T', ['texto'], { md: ['texto', ''] }, 'Texto libre, una idea o una instrucción (Markdown)'),
-    imagen: entrada('Imagen', 'I', ['imagen'], { src: ['texto', ''], alt: ['texto', ''] }, 'Una imagen suelta'),
+    imagen: entrada('Imagen', 'I', ['imagen'], { src: ['imagen', ''], alt: ['texto', ''] }, 'Una imagen suelta'),
     nota: entrada('Nota', 'N', ['nota'], { notaId: ['id', null] }, 'Una nota de una biblioteca: su texto y sus imágenes'),
     segmento: entrada('Segmento', 'S', ['segmento'], { subId: ['id', null], etiquetaId: ['id', null] }, 'Todas las notas de un segmento (sin segmento: la bandeja)'),
     biblioteca: entrada('Biblioteca', 'B', ['biblioteca'], { subId: ['id', null] }, 'Toda una biblioteca: sus segmentos y sus notas'),
@@ -136,6 +136,8 @@
     Object.keys(t.campos).forEach(k => {
       const [clase, defecto] = t.campos[k], v = src[k];
       if (clase === 'texto') res[k] = typeof v === 'string' ? v : defecto;
+      /* una imagen, solo incrustada (data:image/…): una dirección de fuera se pediría sola al pintarla (revisión del port a ClapBook) */
+      else if (clase === 'imagen') res[k] = typeof v === 'string' && /^\s*data:image\//i.test(v) ? v : defecto;
       else if (clase === 'id') res[k] = idDe(v);
       else if (clase === 'numero') { const n = +v; res[k] = isFinite(n) && n > 0 ? Math.round(n * 10) / 10 : defecto; }
       else if (clase.startsWith('modo:')) res[k] = clase.slice(5).split('|').includes(v) ? v : defecto;

@@ -24,7 +24,7 @@ const imagenes = require('./imagenes');                        // las imágenes 
 
 const RAIZ = path.join(__dirname, '..');
 ['js/tramas/modelo.js', 'js/claquedraw/biblioteca.js', 'js/claquedraw/lienzo-modelo.js', 'js/claquedraw/formulas.js', 'js/claquedraw/documentos.js', 'js/claquedraw/plantillas.js', 'js/claquedraw/guion.js',
- 'js/claquedraw/relaciones.js', 'js/claquedraw/conversor.js', 'js/claquedraw/memoria.js', 'js/claquedraw/historial.js', 'js/claquedraw/enlaces.js', 'js/claquedraw/herramientas.js'].forEach(f => require(path.join(RAIZ, f)));
+ 'js/claquedraw/relaciones.js', 'js/claquedraw/conversor.js', 'js/claquedraw/memoria.js', 'js/claquedraw/historial.js', 'js/claquedraw/enlaces.js', 'js/claquedraw/teatro-mods.js', 'js/claquedraw/duendes.js', 'js/claquedraw/herramientas.js'].forEach(f => require(path.join(RAIZ, f)));
 const C = globalThis.Claquedraw;
 const H = C.herramientas;
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8')).version || '0'; } catch (_) { return '0'; } })();
@@ -46,6 +46,11 @@ function candidatos() {
     : process.platform === 'win32' ? (process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'))
     : (process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'));
   return ['ClapCraft', 'claquedraw'].map(n => path.join(base, n, 'puente.json'));
+}
+/* los mods del teatro de todos los proyectos (1.1.64): en los datos de la app, junto a su puente.json */
+function almacenTeatro() {
+  const fs0 = candidatos(), dir = path.dirname(fs0.find(f => { try { return fs.existsSync(f); } catch (_) { return false; } }) || fs0[0]);
+  return require('./teatro-global').crear(dir, C.teatroMods);
 }
 const vivo = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 /* El estado de la app: { pid, socket, activo, abiertos: [{ id, nombre, ruta }] } de la que esté en marcha, o null. */
@@ -95,9 +100,16 @@ function leerProyecto(ruta) {
 /* Escribe de una vez: a un temporal junto al archivo, fsync y se renombra (nunca queda a medias; un enlace simbólico sigue siéndolo
    y los permisos se conservan: claude/atomico.js). */
 function escribirProyecto(ruta, datos) {
-  const bytes = zlib.gzipSync(Buffer.from(JSON.stringify({ app: 'clapcraft', formato: 2, nombre: datos.nombre, documentos: datos.documentos }), 'utf8'));
+  const bytes = zlib.gzipSync(Buffer.from(JSON.stringify({ app: 'clapcraft', formato: FORMATO, nombre: datos.nombre, documentos: datos.documentos }), 'utf8'));
   atomico.escribirSync(ruta, bytes);
 }
+/* El formato del archivo que escribe esta versión (el mismo que FORMATO_ARCHIVO de js/claquedraw/app.js): 3 desde la 1.1.61, 4 desde la 1.1.67
+   (duende v2 y ajustes de escenario de las obras). Un
+   proyecto de una versión más nueva de ClapCraft se lee, pero no se reescribe: lo que esta no conoce se perdería al guardarlo
+   (revisión del port a ClapBook: la 1.1.55 tiraba así los lienzos y la memoria de estilo de la 1.1.60, que llevaba su mismo 2). */
+const FORMATO = 4;
+const masNuevo = datos => +(datos && datos.formato) > FORMATO;
+const AVISO_FORMATO = 'Ese proyecto es de una versión más nueva de ClapCraft: se puede leer, pero para cambiarlo hay que actualizar la app (y con ella este conector de Claude).';
 const nombreDentro = ruta => { try { const d = leerProyecto(ruta); return typeof d.nombre === 'string' && d.nombre.trim() ? d.nombre.trim() : null; } catch (_) { return null; } };
 /* Los .clapcraft del equipo: claude/archivos.js (Spotlight en macOS y las carpetas de siempre). */
 async function estadoApp() {
@@ -203,9 +215,12 @@ async function enArchivo(ruta, nombre, args, app) {
   const datos = leerProyecto(ruta);
   const docs = new C.Documentos(datos.documentos);
   let cambio = false;
-  const ctx = { docs, origen, proyecto: { nombre: datos.nombre || path.basename(ruta, '.clapcraft'), ruta: bonito(ruta), vivo: false }, cambio: () => { cambio = true; } };
+  const al = almacenTeatro();
+  const ctx = { docs, origen, proyecto: { nombre: datos.nombre || path.basename(ruta, '.clapcraft'), ruta: bonito(ruta), vivo: false }, cambio: () => { cambio = true; },
+    teatroGlobal: { leer: () => al.leer(), escribir: t => al.escribir(t) } };
   const abiertoSinPuente = app && app.p && !app.p.activo && (app.p.abiertos || []).some(x => x.ruta && atomico.mismoArchivo(x.ruta, ruta));
   const meta = H.LISTA.find(t => t.name === nombre);
+  if (masNuevo(datos) && !(meta && meta.annotations && meta.annotations.readOnlyHint)) return { ok: false, error: AVISO_FORMATO };
   if (abiertoSinPuente && meta && !(meta.annotations && meta.annotations.readOnlyHint))
     return { ok: false, error: 'Ese proyecto está abierto en ClapCraft y la conexión con Claude está apagada: enciéndela en el menú Claude › Permitir que Claude acceda (o cierra el proyecto) y vuelve a intentarlo.' };
   const r = H.ejecutar(ctx, nombre, args);
@@ -222,6 +237,7 @@ async function enArchivo(ruta, nombre, args, app) {
     r.texto = (r.texto || '') + '\n(Escrito en ' + bonito(ruta) + '. ClapCraft lo verá al abrirlo.)';
   }
   if (abiertoSinPuente) r.texto = '(Leído del archivo: ClapCraft lo tiene abierto con la conexión apagada; lo que no se haya guardado no sale aquí.)\n' + (r.texto || '');
+  if (r.ok && masNuevo(datos)) r.texto = '(Proyecto de una versión más nueva de ClapCraft: lo lees con lo que esta versión conoce, y no se puede cambiar hasta actualizarla.)\n' + (r.texto || '');
   return r;
 }
 /* mostrar_en_clapcraft con el proyecto cerrado: la app lo abre (si no está en marcha, se arranca con el archivo) */

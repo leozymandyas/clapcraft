@@ -437,3 +437,18 @@ test('fórmulas: una biblioteca normal llamada «Fórmulas» manda por su nombre
   /* las plantillas siguen por su lado */
   assert.match(H.ejecutar(ctx, 'leer_biblioteca', { biblioteca: 'Plantillas' }).error, /Aún no hay plantillas/);
 });
+
+test('revisión del port · renombrar_proyecto: el mismo nombre no es un fallo, y si no se puede renombrar no queda nada a medias', () => {
+  /* como en la app: renombrarProyecto da false con el mismo nombre o si otro proyecto abierto ya se llama así */
+  const p = proyecto(), llamadas = [];
+  p.ctx.renombrarProyecto = n => { llamadas.push(n); return n === p.ctx.proyecto.nombre || n === 'Ocupado' ? { ok: false, aviso: 'Ya hay un guion con ese nombre' } : { ok: true }; };
+  const r = correr(p.ctx, 'editar_proyecto', { operaciones: [{ op: 'crear_contenedor', nombre: 'Temporada 2' }, { op: 'renombrar_proyecto', nombre: 'Prueba' }] });
+  assert.match(r.texto, /ya se llamaba así/);
+  assert.deepEqual(llamadas, [], 'no se pide renombrar a lo mismo');
+  assert.equal(p.docs.datos.contenedores.filter(c => c.nombre === 'Temporada 2').length, 1);
+  const r2 = H.ejecutar(p.ctx, 'editar_proyecto', { operaciones: [{ op: 'crear_contenedor', nombre: 'Temporada 3' }, { op: 'renombrar_proyecto', nombre: 'Ocupado' }] });
+  assert.equal(r2.ok, false);
+  assert.match(r2.error, /Ya hay un guion con ese nombre\. No se cambió nada/);
+  assert.ok(!p.docs.datos.contenedores.some(c => c.nombre === 'Temporada 3'), 'el lote se deshizo: reintentarlo no duplica');
+  assert.equal(p.ctx.proyecto.nombre, 'Prueba');
+});

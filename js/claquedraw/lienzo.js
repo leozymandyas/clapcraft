@@ -46,7 +46,7 @@
     traducir: 'ic-traducir', prompt: 'ic-instruccion' };
   const TONO_OP = { generar: 'indigo', partir: 'verde', escaleta: 'violeta', resumir: 'cielo', reescribir: 'magenta', traducir: 'turquesa', prompt: 'uva' };
   const ANCHO = { texto: 260, imagen: 240, nota: 250, segmento: 240, biblioteca: 250, esquema: 260, personaje: 230 };
-  const ANCHO_OP = 300;
+  const ANCHO_OP = 360;                          // (1.1.61: con 300, el pie de una operación con «IA» no cabía en una fila)
   const tonoClase = k => (CLASES()[k] && CLASES()[k].tono) || 'gris';
   const tonoTipo = tipo => { const t = TIPOS()[tipo]; if (!t) return 'gris'; return t.familia === 'operacion' ? (TONO_OP[tipo] || 'violeta') : tonoClase(t.da[0]); };
   const colorTipo = tipo => `var(--t-${tonoTipo(tipo)})`;
@@ -414,7 +414,7 @@
       + `<button type="button" class="icono" data-lz-menu title="Más" aria-label="Más">${ic('ic-more', 15)}</button></div>`;
     const ins = op ? `<div class="lz-ins">${puertosHtml(n)}</div>` : '';
     const cuerpo = `<div class="lz-ncuerpo">${op ? cuerpoOp(n, r) : cuerpoEntrada(n, r)}</div>`;
-    const pie = `<div class="lz-npie">${op ? pieOp(n, r) : pieEntrada(n, r) + salidaHtml(n)}</div>`;
+    const pie = `<div class="lz-npie" style="--lz-outn:${letrasSalida(n)}">${op ? pieOp(n, r) : pieEntrada(n, r) + salidaHtml(n)}</div>`;
     return cab + ins + cuerpo + pie + '<div class="lz-asa-ancho" data-lz-ancho title="Arrastra para cambiar el ancho · doble clic: el de partida"></div>';
   }
   function tituloAuto(n, r) {
@@ -439,8 +439,13 @@
         + `${esc(p.nombre)}<small>${p.uno ? (p.obligatorio ? 'uno · obligatorio' : 'uno') : 'varios'}</small>${k > 1 ? `<span class="lz-cuantos">${k}</span>` : ''}</div>`;
     }).join('');
   }
+  const nombreSalida = n => TIPOS()[n.tipo].da.map(k => (CLASES()[k] ? CLASES()[k].nombre : k)).join(' · ');
+  /* la etiqueta de la salida va encima del pie, en su primera fila, a la derecha y con el punto a su altura (css: `.lz-out`
+     absoluto); el pie le deja sitio con `--lz-outn`, sus letras (1.1.61, de la revisión de ClapBook). En el flujo, cuando el pie no
+     cabía en una fila la etiqueta bajaba a la segunda y su punto se quedaba arriba */
+  const letrasSalida = n => nombreSalida(n).length;
   function salidaHtml(n) {
-    const t = TIPOS()[n.tipo], da = t.da.map(k => (CLASES()[k] ? CLASES()[k].nombre : k)).join(' · ');
+    const t = TIPOS()[n.tipo], da = nombreSalida(n);
     const k = m.salidasDe(n.id).length;
     return `<span class="lz-puerto lz-out${k ? ' lleno' : ''}" data-lz-out style="--lz-pc:var(--t-${tonoClase(t.da[0])})">${esc(da)}<span class="lz-dot" data-lz-punto="out" title="Arrastra para conectar"></span></span>`;
   }
@@ -449,6 +454,7 @@
   const PAL = () => C.PALETA_ETIQUETAS || [];
   const par = i => { const p = PAL()[i] || PAL()[0]; return p ? `--chl:${p[1]};--chd:${p[2]}` : ''; };
   const extracto = (html, max) => { const t = C.conversor && C.conversor.textoPlano ? C.conversor.textoPlano(html || '') : String(html || '').replace(/<[^>]+>/g, ' '); return t.length > (max || 260) ? t.slice(0, max || 260).trim() + '…' : t; };
+  const srcPropio = s => /^\s*(?:data:image\/|blob:)/i.test(String(s || ''));
   const imagenesDe = html => { const res = [], re = /<img\b[^>]*\bsrc="(data:image\/[^"]+)"/gi; let x; while ((x = re.exec(html || ''))) res.push(x[1]); return res; };
   const miniaturas = html => {
     const im = imagenesDe(html); if (!im.length) return '';
@@ -461,6 +467,9 @@
     if (n.tipo === 'texto') return `<div class="lz-md" contenteditable="true" spellcheck="true" data-lz-md data-vacio="Una idea, una instrucción, un texto de referencia…"></div>`;
     if (n.tipo === 'imagen') {
       if (!n.datos.src) return `<button type="button" class="lz-elegir" data-lz-imagen>${ic('ic-imagen', 13)}Elegir una imagen…</button>`;
+      /* solo una imagen del proyecto (data: o blob:): una dirección de fuera no se pide sola al pintar (1.1.61, revisión: la podía
+         poner la IA con `editar_lienzo`, y el `<img>` hacía la petición sin que Leo hiciera nada) */
+      if (!srcPropio(n.datos.src)) return `<div class="lz-roto">${ic('ic-aviso', 14)}<span>Una imagen de fuera del proyecto no se carga.</span></div><button type="button" class="lz-elegir" data-lz-imagen>${ic('ic-imagen', 13)}Elegir otra imagen…</button>`;
       return `<img class="lz-img" src="${esc(n.datos.src)}" alt="${esc(n.datos.alt)}" draggable="false" data-lz-ver><input type="text" class="lz-alt" data-lz-alt placeholder="Descripción (para Claude)" value="${esc(n.datos.alt)}">`;
     }
     if (sinElegir(n)) return elegir;
@@ -581,7 +590,9 @@
      está haciendo) y, al acabar, su `completar_nodo` lo deja hecho con su salida, como con Claude. */
   const conIA = () => !!(g && g.ejecutarConIA);
   function corriendoIA(id) { try { const s = g && g.enCursoIA ? g.enCursoIA(lid) : null; return !!s && s.includes(id); } catch (_) { return false; } }
-  const botonIA = texto => conIA() ? `<button type="button" class="lz-pedir otra lz-ia" data-lz-ia title="La hace el asistente de ClapCraft con la IA que configuraste (DeepSeek), sin copiar nada">${ic('ic-magia', 11)}${texto || 'Ejecutar con IA'}</button>` : '';
+  /* compacto (su icono e «IA»; lo demás, en el globo y para el lector de pantalla): con el nombre entero, el pie de una operación no
+     cabía en una fila (1.1.61) */
+  const botonIA = texto => conIA() ? `<button type="button" class="lz-pedir otra lz-ia" data-lz-ia title="${esc(texto || 'Ejecutar con IA')}: la hace el asistente de ClapCraft con la IA que configuraste (DeepSeek), sin copiar nada" aria-label="${esc(texto || 'Ejecutar con IA')}">${ic('ic-magia', 11)}IA</button>` : '';
   function pieOp(n, r) {
     const ev = m.estadoVisible(n.id, firmaCache);
     let est, boton;
@@ -590,7 +601,8 @@
       boton = `<button type="button" class="lz-pedir otra" data-lz-ia-ver title="Ver lo que hace en el asistente">Ver</button>`;
       return est + boton + salidaHtml(n) + salidasHtml(n, r);
     }
-    if (ev === 'pendiente') { est = `<span class="lz-estado pendiente" title="Pedido ${esc(hace(n.pedido))}: pégale el encargo a Claude"><i></i>Pendiente</span><span class="lz-cuando">${esc(hace(n.pedido))}</span>`; boton = `<button type="button" class="lz-pedir otra" data-lz-pedir title="Vuelve a copiar el encargo para Claude">${ic('ic-play', 10)}Copiar encargo</button>`; }
+    /* (cuándo se pidió va en su globo: al lado no cabía en la fila con «Copiar encargo» e «IA») */
+    if (ev === 'pendiente') { est = `<span class="lz-estado pendiente" title="Pedido ${esc(hace(n.pedido))}: pégale el encargo a Claude"><i></i>Pendiente</span>`; boton = `<button type="button" class="lz-pedir otra" data-lz-pedir title="Vuelve a copiar el encargo para Claude">${ic('ic-play', 10)}Copiar encargo</button>`; }
     else if (ev === 'hecho') { est = `<span class="lz-estado hecho">${ic('ic-check', 12)}Hecho</span><span class="lz-cuando">${esc(hace(n.hecho))}</span>`; boton = `<button type="button" class="lz-pedir otra" data-lz-pedir title="Pedir a Claude que lo haga otra vez">${ic('ic-play', 10)}Otra vez</button>`; }
     else if (ev === 'desactualizado') { const mo = m.desactualizado(n.id, firmaCache); est = `<span class="lz-estado viejo" title="Desactualizada: ${esc(MOTIVOS[mo] || '')}"><i></i>Desactualizada</span>`; boton = `<button type="button" class="lz-pedir" data-lz-pedir>${ic('ic-play', 10)}Rehacer</button>`; }
     else if (ev === 'error') { est = `<span class="lz-estado error"><i></i>Error</span>`; boton = `<button type="button" class="lz-pedir" data-lz-pedir>${ic('ic-play', 10)}Reintentar</button>`; }
@@ -1049,7 +1061,7 @@
     if (nodoEl) {
       if (t.closest(CAMPO)) return;
       const n = m.nodo(nodoEl.dataset.lzNodo); if (!n) return;
-      if (n.tipo === 'imagen' && n.datos.src) { verImagen(n); return; }
+      if (n.tipo === 'imagen' && srcPropio(n.datos.src)) { verImagen(n); return; }
       if (n.tipo === 'texto') { const md = nodoEl.querySelector('[data-lz-md]'); if (md) { md.focus(); cursorAlFinal(md); } return; }
       if (!esOp(n)) abrirEntrada(n);
       return;
@@ -1356,7 +1368,7 @@
     });
   }
   function verImagen(n) {
-    if (!window.Anotar || !Anotar.abrir) return;
+    if (!window.Anotar || !Anotar.abrir || !srcPropio(n.datos.src)) return;
     Anotar.abrir({ nombre: n.titulo || n.datos.alt || 'Imagen', src: n.datos.src, vista: n.datos.src,
       alGuardar: x => { if (!m || !m.nodo(n.id) || !x || !x.datos) return; m.editarNodo(n.id, { datos: { src: x.datos } }); cambio(); } });
   }

@@ -112,7 +112,7 @@ test('desde el documento: los mismos bloques para el editor y el PDF', () => {
   assert.equal(M.renglones('texto', M.textoBloque(el('P', '', [br()]))), 1);
   const doc = [
     el('P', 'sp-scene', [txt('INT. CASA - DÍA')]),
-    el('P', 'sp-character', [txt('LAURA  (V.O.)')]),
+    el('P', 'sp-character', [txt('LAURA\u00A0\u00A0(V.O.)')]),
     el('P', 'sp-dialogue', [txt('Hola.')]),
     el('P', 'sp-note', [txt('Revisar.')]),
     el('DIV', 'sp-doble', [el('DIV', 'sp-col', [el('P', 'sp-character', [txt('LAURA')]), el('P', 'sp-dialogue', [txt('¡Yo llegué primero al estacionamiento!')])]),

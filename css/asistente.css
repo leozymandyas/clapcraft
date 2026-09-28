@@ -80,7 +80,24 @@ a.as-chip-enlace:hover { background: var(--foco-suave); }
 @keyframes as-parpadeo { to { visibility: hidden; } }
 .as-razon { margin: 0 0 8px; font-size: 12px; color: var(--palido); }
 .as-razon summary { cursor: pointer; font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
-.as-razon > div { margin-top: 5px; padding: 6px 0 6px 10px; border-left: 2px solid var(--regla); line-height: 1.5; max-height: 220px; overflow-y: auto; }
+.as-razon > div { margin-top: 5px; padding: 6px 0 6px 10px; border-left: 2px solid var(--regla); line-height: 1.5; max-height: 220px; overflow-y: auto;
+  overflow-anchor: none; }   /* lo sigue asistente.js (`parchearRazon`): el anclaje del navegador lo movería por su cuenta */
+
+/* el duende trabajando (1.1.67): entre la conversación y el campo, cuando la respuesta tarda */
+.as-trabajo { flex: none; display: flex; align-items: center; gap: 10px; margin: 0 12px 6px; padding: 2px 12px 2px 4px; min-height: 40px;
+  border-radius: 8px; background: color-mix(in srgb, var(--foco) 6%, transparent); animation: as-trabajo-entra .22s ease-out; }
+.as-trabajo[hidden] { display: none; }
+@keyframes as-trabajo-entra { from { opacity: 0; transform: translateY(4px); } }
+.as-trabajo-duende { flex: none; position: relative; display: flex; align-items: center; justify-content: center; width: 30px; height: 36px; color: var(--foco); }
+.as-trabajo-duende.con-marco { width: 76px; height: 76px; }
+.as-trabajo-duende.con-marco > svg { display: none; }
+.as-duende-marco { display: block; width: 76px; height: 76px; border: 0; background: transparent; pointer-events: none; color-scheme: normal; }
+.as-trabajo-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 10.5px var(--mono); letter-spacing: .06em;
+  text-transform: uppercase; color: var(--tenue); }
+html[data-estilo] .as-trabajo { background: color-mix(in srgb, var(--foco) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foco) 22%, transparent); }
+html[data-estilo] .as-trabajo-txt { color: var(--foco); }
+html[data-estilo="synthwave"] .as-trabajo-txt { text-shadow: 0 0 6px var(--foco-halo); }
+html[data-estilo="synthwave"] .as-duende-marco { filter: drop-shadow(0 0 6px var(--foco-halo)); }
 
 /* pensando: tres puntos */
 .as-pensando { display: flex; gap: 4px; padding: 4px 2px 12px; }
@@ -360,7 +377,7 @@ html[data-estilo="synthwave"] .as-dlg { border-color: color-mix(in srgb, var(--f
 html[data-estilo="synthwave"] .as-cab-ic { filter: drop-shadow(0 0 5px var(--foco-halo)); }
 
 @media (prefers-reduced-motion: reduce) {
-  .as-pensando i, .as-giro, .as-riel-punto, .as-ia.vivo .as-md > :last-child::after, .as-dlg .tiembla { animation: none; }
+  .as-pensando i, .as-giro, .as-riel-punto, .as-ia.vivo .as-md > :last-child::after, .as-dlg .tiembla, .as-trabajo { animation: none; }
 }
 
 /* el aviso de guardado de los diálogos, cuando algo no se pudo guardar */
@@ -462,8 +479,9 @@ body.con-asistente.asistente-plegado .gd-modal-capa, body.con-asistente.asistent
 
 /* ---------- el saldo de APIMart en la cabecera (1.1.60) ---------- */
 .as-cab-fila2 { align-items: center; gap: 6px; }
-.as-cab-fila2 .as-modelo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.as-saldo { flex: none; height: 18px; margin-left: 0; padding: 0 7px; border: 1px solid var(--borde); border-radius: 9px; background: var(--papel); color: var(--tenue);
+/* el modelo y el chip encogen con elipsis, el chip antes (1.1.61: con el chip `flex: none` el modelo se cortaba en «deepseek…») */
+.as-cab-fila2 .as-modelo { flex: 0 1 auto; min-width: 4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-saldo { flex: 0 3 auto; min-width: 3.5em; overflow: hidden; text-overflow: ellipsis; height: 18px; margin-left: 0; padding: 0 6px; border: 1px solid var(--borde); border-radius: 9px; background: var(--papel); color: var(--tenue);
   font: 500 10px var(--mono); letter-spacing: .02em; white-space: nowrap; cursor: pointer; }
 .as-saldo:hover { border-color: var(--foco-linea); color: var(--foco); }
 .as-saldo[hidden] { display: none; }

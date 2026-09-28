@@ -175,10 +175,13 @@ textarea.lz-instr::placeholder { color: var(--palido); }
 .lz-seg-ctl button.on { background: var(--foco-suave); color: var(--foco); }
 
 /* pie: el estado y, a la derecha, la salida (con su punto en el borde) */
-.lz-npie { position: relative; display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 5px 16px 5px 10px; border-top: 1px solid var(--regla); flex-wrap: wrap; }
+.lz-npie { position: relative; display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px calc(22px + var(--lz-outn, 0) * 6.5px) 5px 10px; border-top: 1px solid var(--regla); flex-wrap: wrap; }
 .lz-ncuerpo:empty + .lz-npie, .lz-ins + .lz-npie { border-top: 0; }
-.lz-out { position: static; margin-left: auto; font: 500 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); white-space: nowrap; }
-.lz-out .lz-dot { right: -7px; top: 17px; }
+/* la salida, en la primera fila del pie aunque este baje a otras (el sitio se lo deja el `padding-right` de arriba, con `--lz-outn`,
+   sus letras); su punto, a su altura y en el borde del nodo (1.1.61: en el flujo, la etiqueta bajaba a la segunda fila y el punto
+   se quedaba arriba) */
+.lz-out { position: absolute; top: 0; right: 16px; height: 34px; font: 500 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--palido); white-space: nowrap; }
+.lz-out .lz-dot { right: -23px; }
 .lz-estado { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px 0 7px; border-radius: 11px; font: 500 11px var(--sans); white-space: nowrap;
   color: var(--tenue); background: var(--lienzo); border: 1px solid var(--regla); }
 .lz-estado i { width: 7px; height: 7px; border-radius: 50%; background: var(--palido); }

@@ -353,3 +353,61 @@ test('fórmulas: editar_lienzo las pone por título, id o enlace; leer_lienzo la
   t = correr(ctx, 'ejecutar_nodo', { lienzo: 'Taller', nodo: g }).texto;
   assert.match(t, /Instrucción de Leo:\n  │ la escena de la playa/);
 });
+
+test('revisión del port · editar_lienzo: de «datos» solo los campos del tipo, y una imagen solo incrustada (ni en el modelo)', () => {
+  const p = proyecto();
+  correr(p.ctx, 'editar_proyecto', { operaciones: [{ op: 'crear_lienzo', contenedor: 'Temporada 1', nombre: 'Taller' }] });
+  assert.match(H.ejecutar(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'crear_nodo', tipo: 'imagen', datos: { src: 'https://ejemplo.com/espia.png?q=secreto' } }] }).error, /data:image/);
+  const r = correr(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [
+    { op: 'crear_nodo', tipo: 'texto', datos: { md: 'Idea', src: 'https://ejemplo.com/x.png', raro: { a: 1 } }, ref: 't' },
+    { op: 'crear_nodo', tipo: 'imagen', src: 'data:image/png;base64,' + PNG_PEQUENO, ref: 'i' }] });
+  const t = lienzo(p).nodos.find(n => n.id === r.datos.refs.t), i = r.datos.refs.i;
+  assert.deepEqual(Object.keys(t.datos), ['md'], 'lo que no es de su tipo, fuera');
+  assert.equal(t.datos.md, 'Idea');
+  assert.match(H.ejecutar(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: i, datos: { src: '//ejemplo.com/x.png' } }] }).error, /data:image/);
+  assert.match(lienzo(p).nodos.find(n => n.id === i).datos.src, /^data:image\/png/, 'no cambió');
+  /* el modelo tampoco guarda una dirección de fuera (un archivo tocado a mano, o de otra versión) */
+  const L = new C.Lienzo({ nodos: [{ id: 'a', tipo: 'imagen', x: 0, y: 0, datos: { src: 'https://ejemplo.com/x.png', alt: 'x' } }, { id: 'b', tipo: 'imagen', x: 0, y: 0, datos: { src: 'data:image/png;base64,AAAA' } }] });
+  assert.equal(L.nodo('a').datos.src, '');
+  assert.equal(L.nodo('b').datos.src, 'data:image/png;base64,AAAA');
+});
+
+test('revisión del port · completar_nodo: la nota por su id, su enlace o su título exacto, y la salida es la de su destino (ni especiales ni lo que entra)', () => {
+  const p = proyecto();
+  armado(p);
+  correr(p.ctx, 'editar_proyecto', { operaciones: [{ op: 'crear_esquema', contenedor: 'Temporada 1', nombre: 'Otro' }] });
+  correr(p.ctx, 'escribir_documento', { esquema: 'Otro', contenido: 'INT. CASA - NOCHE\n\nNada.' });
+  correr(p.ctx, 'escribir_documento', { esquema: 'Piloto', contenido: 'INT. PLAYA - DÍA\n\nMara llega.' });
+  const doc = p.docs.documentoEsquema(p.e.id);
+  const vieja = p.docs.guardarVersion(doc.id, 'Antes de Claude · vieja').version;   // de antes de pedirla: no es la de esta vez
+  vieja.guardada -= 2 * 3600e3; vieja.html = '<p>Otra cosa.</p>';
+  /* una operación resumir sobre «La playa», con destino la biblioteca Ideas */
+  const rr = correr(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [
+    { op: 'crear_nodo', tipo: 'nota', nota: 'La playa', ref: 'f' }, { op: 'crear_nodo', tipo: 'resumir', titulo: 'Resumen', destino: { biblioteca: 'Ideas' }, ref: 'r' },
+    { op: 'conectar', de: '$f', a: '$r', puerto: 'fuente' }] });
+  pedirTodo(p);
+  /* generar: el guion de su destino, no el de otro esquema */
+  assert.match(H.ejecutar(p.ctx, 'completar_nodo', { lienzo: 'Taller', nodo: 'Escena 1', salida: { tipo: 'documento', esquema: 'Otro' } }).error, /no es el de su destino/);
+  correr(p.ctx, 'completar_nodo', { lienzo: 'Taller', nodo: 'Escena 1', salida: { tipo: 'documento', esquema: 'Piloto' } });
+  assert.equal(lienzo(p).nodos.find(n => n.titulo === 'Escena 1').salida.versionId, undefined, 'la versión vieja no es de esta vez');
+  /* resumir: ni una nota que solo se parece, ni una plantilla, ni la que entra, ni una de otra biblioteca */
+  correr(p.ctx, 'editar_biblioteca', { biblioteca: 'Plantillas', operaciones: [{ op: 'crear_nota', titulo: 'Resumen de escena', contenido: 'Plantilla.' }] });
+  const otraBib = p.docs.crearSub(p.c.id, 'Otra').sub, fuera = p.docs.crearNota(otraBib.id, null, 'Resumen fuera').nota;
+  p.docs.guardarNota(fuera.id, { title: 'Resumen fuera', html: '<p>Algo.</p>', characters: {} });
+  const res = (nota) => H.ejecutar(p.ctx, 'completar_nodo', { lienzo: 'Taller', nodo: 'Resumen', salida: { tipo: 'nota', nota } });
+  assert.match(res('playa').error, /exactamente «playa»/);
+  assert.match(res('Resumen de escena').error, /es de «Plantillas»/);
+  assert.match(res('La playa').error, /de lo que entra en la operación/);
+  assert.match(res(fuera.id).error, /no está en la biblioteca de su destino/);
+  assert.match(res(doc.id).error, /es el guion de un esquema/);
+  const nueva = correr(p.ctx, 'editar_biblioteca', { biblioteca: 'Ideas', operaciones: [{ op: 'crear_nota', titulo: 'Resumen de la playa', contenido: 'Mara en la playa.', ref: 'n' }] }).datos.refs.n;
+  correr(p.ctx, 'completar_nodo', { lienzo: 'Taller', nodo: 'Resumen', salida: { tipo: 'nota', nota: 'Resumen de la playa' } });
+  assert.equal(lienzo(p).nodos.find(n => n.titulo === 'Resumen').salida.notaId, nueva);
+  /* rehacer generar escribiendo encima: su versión «Antes de…» es la de esta vez */
+  correr(p.ctx, 'escribir_documento', { esquema: 'Piloto', contenido: 'INT. PLAYA - NOCHE\n\nMara se va.' });
+  const ver = p.docs.documentoEsquema(p.e.id).versiones.at(-1);
+  assert.match(ver.nombre, /^Antes de Claude/);
+  assert.notEqual(ver.nombre, 'Antes de Claude · vieja');
+  correr(p.ctx, 'completar_nodo', { lienzo: 'Taller', nodo: 'Escena 1', salida: { tipo: 'documento', esquema: 'Piloto' } });
+  assert.equal(lienzo(p).nodos.find(n => n.titulo === 'Escena 1').salida.versionId, ver.id);
+});
