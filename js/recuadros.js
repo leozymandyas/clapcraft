@@ -171,15 +171,10 @@
     if (Ed.updateToolbar) Ed.updateToolbar();
   }
   const lineaVacia = () => { const p = document.createElement('p'); p.innerHTML = '<br>'; return p; };
-  const esBloqueTexto = n => !!(n && n.nodeType === 1 && /^(P|H[1-6])$/.test(n.tagName) && !n.classList.contains('ed-fijo'));
 
-  /* sustituye los bloques de primer nivel [a … b] por `nuevo` con un solo insertHTML (entra en Deshacer; ver doble.js) */
-  function reemplazar(a, b, nuevo) {
-    editor().focus({ preventScroll: true });
-    const r = document.createRange(); r.setStart(a, 0); r.setEnd(b, b.childNodes.length);
-    Ed.restoreSelection(r);
-    Ed.cmd('insertHTML', nuevo);
-  }
+  /* sustituye los bloques de primer nivel [a … b] por `nuevo` con un solo insertHTML (entra en Deshacer): `Ed.sustituir`
+     (js/sustituir.js) sabe hacerlo también al principio y al final del documento, donde Chrome se quedaba con el envoltorio */
+  const reemplazar = (a, b, nuevo) => Ed.sustituir([a, b], [nuevo]);
   const rcTras = antes => { const n = antes ? antes.nextElementSibling : editor().firstElementChild; return esRc(n) ? n : null; };
 
   /* un bloque del documento, limpio para ir dentro de un recuadro: sin clases de guion ni de selección, sin el chip de personaje;
@@ -277,23 +272,13 @@
     pintarHuecos();
     cambiado();
   };
-  /* Quita el recuadro y deja su texto en su sitio (con un solo insertHTML si hay un párrafo a cada lado; si no, a mano) */
+  /* Quita el recuadro y deja su texto en su sitio, con un solo insertHTML (`Ed.sustituir`: también al principio o al final del
+     documento, que antes se hacía a mano, fuera de Deshacer) */
   R.quitar = function (rc) {
     if (!esRc(rc) || !rc.isConnected) return;
     const dentro = Array.from(rc.childNodes).map(n => (n.nodeType === 1 ? n.outerHTML : n.nodeType === 3 && n.nodeValue.trim() ? '<p>' + Ed.escapeHtml(n.nodeValue) + '</p>' : '')).join('') || '<p><br></p>';
-    const n = (dentro.match(/<(p|h[1-6]|ul|ol|blockquote|pre|table)[\s>]/gi) || []).length || 1;
-    const antes = rc.previousElementSibling, despues = rc.nextElementSibling;
-    if (esBloqueTexto(antes) && esBloqueTexto(despues)) {
-      const i = Array.prototype.indexOf.call(editor().children, antes);
-      const limpio = x => { const c = x.cloneNode(true); c.classList.remove('blk-selected', 'selected'); if (!c.classList.length) c.removeAttribute('class'); return c.outerHTML; };
-      reemplazar(antes, despues, limpio(antes) + dentro + limpio(despues));
-      cursorEn(editor().children[i + n], true);
-    } else {
-      const t = document.createElement('template'); t.innerHTML = dentro;
-      const ultimo = t.content.lastElementChild;
-      rc.replaceWith(t.content);
-      cursorEn(ultimo, true);
-    }
+    const hechos = Ed.sustituir([rc], [dentro]);
+    cursorEn(hechos[hechos.length - 1], true);
     cambiado();
   };
 
@@ -404,11 +389,19 @@
 
   /* ---------- Enter, Retroceso y Supr ---------- */
   const menuAbierto = () => !!(Ed.slash && Ed.slash.open) || Array.from(document.querySelectorAll('.sug-menu, .char-menu')).some(m => !m.hidden);
+  /* lo que se cambia aquí a mano va con `Ed.screenplay.editar` (un solo insertHTML): entra en Deshacer */
+  const editar = (nodos, fn) => Ed.screenplay.editar(nodos, fn);
   function salir(rc, b) {
-    b.remove();
-    let n = rc.nextElementSibling;
-    if (!(n && n.tagName === 'P' && vacio(n) && !n.classList.contains('ed-fijo'))) { n = lineaVacia(); rc.after(n); }
-    cursorEn(n, false);
+    /* la línea vacía se quita con un `delete` desde el final de la de antes (un paso de Deshacer; con insertHTML sobre el recuadro
+       entero, Chrome metía el párrafo de delante dentro de él) y el cursor pasa a la línea de debajo, que se crea si no la hay */
+    const prev = b.previousElementSibling;
+    editor().focus({ preventScroll: true });
+    const r = document.createRange(); r.setStart(prev, prev.childNodes.length); r.setEnd(b, b.childNodes.length);
+    Ed.restoreSelection(r);
+    Ed.cmd('delete');
+    const n = rc.nextElementSibling;
+    if (n && n.tagName === 'P' && vacio(n) && !n.classList.contains('ed-fijo')) cursorEn(n, false);
+    else editar([rc], clon => { const p = lineaVacia(); clon(rc).after(p); return { nodo: p, offset: 0 }; });
     cambiado();
   }
   function onKeydown(e) {
@@ -431,15 +424,18 @@
       if (atras && b === rc.firstElementChild && enBorde(b, r, false)) {
         parar();
         if (vacio(rc)) {                                          // vacío del todo: fuera (en su lugar, una línea vacía)
-          const p = lineaVacia(); rc.replaceWith(p); cursorEn(p, false); cambiado();
-        } else if (vacio(b) && b.nextElementSibling) { const sig = b.nextElementSibling; b.remove(); cursorEn(sig, false); cambiado(); }
+          editar([rc], clon => { const c = clon(rc), p = lineaVacia(); c.replaceWith(p); return { nodo: p, offset: 0 }; }); cambiado();
+        } else if (vacio(b) && b.nextElementSibling) {
+          const sig = b.nextElementSibling;
+          editar([rc], clon => { const cb = clon(b), cs = clon(sig); cb.remove(); return { nodo: cs, offset: 0 }; }); cambiado();
+        }
         else { const prev = rc.previousElementSibling; if (prev && !prev.classList.contains('ed-fijo') && !esRc(prev)) cursorEn(prev, true); }
         return;
       }
       if (!atras && b === rc.lastElementChild && enBorde(b, r, true)) {   // no trae el bloque de debajo
         parar();
         const sig = rc.nextElementSibling;
-        if (sig && sig.tagName === 'P' && vacio(sig) && sig.nextElementSibling) { sig.remove(); cambiado(); }
+        if (sig && sig.tagName === 'P' && vacio(sig) && sig.nextElementSibling) { editar([rc, sig], clon => { const cb = clon(b), cs = clon(sig); cs.remove(); return { nodo: cb, fin: true }; }); cambiado(); }
         return;
       }
       return;
@@ -448,15 +444,17 @@
     const top = topDe(r.startContainer); if (!top || b !== top) return;
     if (atras && esRc(top.previousElementSibling) && enBorde(top, r, false)) {
       parar();
-      const prev = top.previousElementSibling;
-      if (vacio(top) && top.nextElementSibling) { top.remove(); cambiado(); }
-      cursorEn(prev.lastElementChild || prev, true);
+      const prev = top.previousElementSibling, ult = prev.lastElementChild || prev;
+      if (vacio(top) && top.nextElementSibling) {
+        editar([prev, top], clon => { const ct = clon(top), cu = clon(ult); ct.remove(); return { nodo: cu, fin: true }; });
+        cambiado();
+      } else cursorEn(ult, true);
       return;
     }
     if (!atras && esRc(top.nextElementSibling) && enBorde(top, r, true)) {
       parar();
-      const sig = top.nextElementSibling;
-      if (vacio(top)) { top.remove(); cambiado(); cursorEn(sig.firstElementChild || sig, false); }
+      const sig = top.nextElementSibling, pri = sig.firstElementChild || sig;
+      if (vacio(top)) { editar([top, sig], clon => { const ct = clon(top), cp = clon(pri); ct.remove(); return { nodo: cp, offset: 0 }; }); cambiado(); }
     }
   }
 
@@ -499,6 +497,8 @@
   const DENTRO = /^(P|UL|OL|H[1-6]|BLOCKQUOTE|PRE|TABLE|HR)$/;
   function normalizar() {
     const ed = editor(); if (!ed || !ed.querySelector('[data-rc]')) return;
+    /* nada mientras Chrome deshace o rehace: lo arreglado quedaría fuera del historial (y vaciaría Rehacer) */
+    if (Ed.screenplay && Ed.screenplay.enHistoria && Ed.screenplay.enHistoria()) return;
     let cambio = false;
     ed.querySelectorAll('div[data-rc]').forEach(rc => {
       if (rc.parentNode === ed) return;

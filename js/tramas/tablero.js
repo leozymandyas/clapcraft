@@ -2682,6 +2682,9 @@
 
   /* ---------- teclado ---------- */
   function onKeyDown(e) {
+    /* con el tablero escondido (ClapCraft en la vista Texto, Documentos o un lienzo) sus teclas no hacen nada (29-09-2026): con el
+       foco suelto en la página, Supr o Retroceso borraban lo elegido del tablero que no se veía y Cmd+Z deshacía el esquema */
+    if (!($board && $board.offsetParent)) { if (e.key === 'Escape') cerrarMenu(); return; }
     const cmd = e.metaKey || e.ctrlKey, enCampo = e.target instanceof Element && (e.target.matches('input,textarea') || e.target.isContentEditable);
     if (cmd && e.key.toLowerCase() === 'z' && !enCampo) { e.preventDefault(); e.shiftKey ? rehacer() : deshacer(); return; }
     if (cmd && e.key.toLowerCase() === 'y' && !enCampo) { e.preventDefault(); rehacer(); return; }

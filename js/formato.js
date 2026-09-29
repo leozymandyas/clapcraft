@@ -91,7 +91,7 @@
   }
 
   /* ---------- el menú de sugerencias (el mismo aspecto que el de personajes) ---------- */
-  let menu, items = [], index = 0, quitar = 0, activo = null;
+  let menu, items = [], index = 0, quitar = 0, activo = null, navegado = false;
   function construir() {
     menu = document.createElement('div');
     menu.className = 'ctx-menu char-menu sug-menu';
@@ -101,11 +101,11 @@
     menu.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) aceptar(+b.dataset.i); });
     document.addEventListener('mousedown', e => { if (!menu.hidden && !(e.target.closest && e.target.closest('.sug-menu'))) cerrar(); });
   }
-  function cerrar() { if (menu) menu.hidden = true; items = []; activo = null; }
+  function cerrar() { if (menu) menu.hidden = true; items = []; activo = null; navegado = false; }
   F.abierto = () => !!menu && !menu.hidden;
   function pintar() {
-    menu.innerHTML = '<div class="ctx-title">Sugerencias</div>' + items.map((x, i) =>
-      `<button type="button" data-i="${i}" class="${i === index ? 'active' : ''}"><span>${Ed.escapeHtml(x.trim())}</span>${i === 0 ? '<kbd>Tab</kbd>' : ''}</button>`).join('');
+    /* sin `innerHTML`: quitar nodos de la página en cada tecla hacía de cada letra un paso de Deshacer (ver Ed.pintarFilas) */
+    Ed.pintarFilas(menu, [{ titulo: 'Sugerencias' }].concat(items.map((x, i) => ({ texto: x.trim(), i, activa: i === index, kbd: i === 0 ? 'Tab' : '' }))));
     menu.hidden = false;
     const r = Ed.getRange();
     let rect = r ? r.getBoundingClientRect() : null;
@@ -132,7 +132,7 @@
     if (limpio(post.toString()).trim()) { cerrar(); return; }  // solo al final del bloque
     const s = sugerencias(b, antes);
     if (!s || !s.lista.length) { cerrar(); return; }
-    if (activo !== b || menu.hidden) index = 0;
+    if (activo !== b || menu.hidden) { index = 0; navegado = false; }
     activo = b; items = s.lista.slice(0, 8); quitar = s.quitar; index = Math.min(index, items.length - 1);
     pintar();
   }
@@ -144,9 +144,15 @@
   };
   F.onKeydown = function (e) {
     if (!menu || menu.hidden) return false;
-    if (e.key === 'ArrowDown') { e.preventDefault(); index = (index + 1) % items.length; pintar(); return true; }
-    if (e.key === 'ArrowUp') { e.preventDefault(); index = (index - 1 + items.length) % items.length; pintar(); return true; }
-    if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); aceptar(index); return true; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); navegado = true; index = (index + 1) % items.length; pintar(); return true; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); navegado = true; index = (index - 1 + items.length) % items.length; pintar(); return true; }
+    /* Tab acepta siempre; **Enter solo si se eligió con ↑/↓**: «int casa» + Enter se convertía en «INT. CASA DE MARA - » y
+       abría otro menú en lugar de pasar a la acción */
+    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); aceptar(index); return true; }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (navegado) { e.preventDefault(); aceptar(index); return true; }
+      cerrar(); return false;
+    }
     if (e.key === 'Escape') { e.preventDefault(); cerrar(); return true; }
     return false;
   };
@@ -160,8 +166,10 @@
     post.setStart(r.startContainer, r.startOffset); post.setEnd(b, b.childNodes.length);
     const despues = limpio(post.toString());
     /* los adornos del CSS no se teclean dos veces */
-    if ((kind === 'paren' && ((e.data === '(' && !antes.trim()) || (e.data === ')' && !despues.trim())))
-      || (kind === 'note' && ((e.data === '[' && !antes.trim()) || (e.data === ']' && !despues.trim())))) { e.preventDefault(); return; }
+    /* el cierre solo se bloquea si no queda ninguno abierto antes del cursor: «(sonríe (apenas))» se deja escribir */
+    const abiertos = (a, z) => { let n = 0; for (const ch of antes) { if (ch === a) n++; else if (ch === z && n > 0) n--; } return n; };
+    if ((kind === 'paren' && ((e.data === '(' && !antes.trim()) || (e.data === ')' && !despues.trim() && !abiertos('(', ')'))))
+      || (kind === 'note' && ((e.data === '[' && !antes.trim()) || (e.data === ']' && !despues.trim() && !abiertos('[', ']'))))) { e.preventDefault(); return; }
     /* int → INT., ext → EXT., int/ext → INT./EXT. al escribir el espacio (o el punto) del principio */
     if (kind === 'scene' && (e.data === ' ' || e.data === '.')) {
       const m = antes.match(/^(int\/ext|i\/e|int|ext)\.?$/i);
@@ -193,9 +201,17 @@
     }
     const [abre, cierra] = kind === 'paren' ? ['(', ')'] : kind === 'note' ? ['[', ']'] : [null, null];
     if (abre) {
+      /* solo los que sobran: «(en voz baja)» pegado pierde los dos; «sonríe (apenas)», ninguno (el suyo cierra uno de dentro) */
+      let n = 0, envuelve = texto[0] === abre && texto[texto.length - 1] === cierra, a = 0, z = 0;
+      for (let k = 0; k < texto.length; k++) {
+        const ch = texto[k];
+        if (ch === abre) { n++; a++; } else if (ch === cierra) { z++; if (n > 0) n--; if (n === 0 && k < texto.length - 1) envuelve = false; }
+      }
+      const quitaFin = texto[texto.length - 1] === cierra && (envuelve || z > a);
+      const quitaIni = texto[0] === abre && (envuelve || a > z);
       const ult = nodos.filter(x => x.nodeValue.trim()).pop(), pri = nodos.find(x => x.nodeValue.trim());
-      if (ult) { const v = ult.nodeValue.replace(/[\s\u00A0]+$/, ''); if (v.endsWith(cierra)) cambios.push([ult, v.length - 1, v.length, '']); }
-      if (pri) { const i0 = pri.nodeValue.search(/\S/); if (pri.nodeValue[i0] === abre) cambios.push([pri, i0, i0 + 1, '']); }
+      if (ult && quitaFin) { const v = ult.nodeValue.replace(/[\s\u00A0]+$/, ''); if (v.endsWith(cierra)) cambios.push([ult, v.length - 1, v.length, '']); }
+      if (pri && quitaIni) { const i0 = pri.nodeValue.search(/\S/); if (pri.nodeValue[i0] === abre) cambios.push([pri, i0, i0 + 1, '']); }
     }
     if (!cambios.length) return;
     arreglando = true;
@@ -227,10 +243,20 @@
     if (!editor()) return;
     construir();
     editor().addEventListener('beforeinput', antesDeEscribir);
+    /* **salir de un bloque** es llevar el cursor a otro: una selección que empieza o acaba en el mismo bloque (un doble clic en
+       «CORTE A», arrastrar dentro del paréntesis) no es salir, y un Deshacer o Rehacer tampoco (arreglar ahí metía otro «:» y
+       vaciaba la pila de Rehacer) */
     let ultimo = null;
+    const enHistoria = () => !!(Ed.screenplay && Ed.screenplay.enHistoria && Ed.screenplay.enHistoria());
     document.addEventListener('selectionchange', () => {
-      const b = bloqueActual();
       if (arreglando) return;
+      const r = Ed.getRange();
+      if (r && !r.collapsed && ultimo && editor().contains(r.startContainer)) {
+        const a = Ed.closestBlock(r.startContainer, editor()), z = Ed.closestBlock(r.endContainer, editor());
+        if (a === ultimo || z === ultimo) return;
+      }
+      const b = bloqueActual();
+      if (enHistoria()) { ultimo = b; return; }
       if (ultimo && b !== ultimo) { alSalir(ultimo); if (activo && b !== activo) cerrar(); }
       ultimo = b;
     });

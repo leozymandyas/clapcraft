@@ -26,6 +26,8 @@
   let documento = null;                          // { guardar(doc), alCambiar(), titulo } del documento abierto
   let conTira = false;                           // el documento es de un esquema: encima va su tira, de referencia
   let claveDoc = null;                           // qué documento hay en el editor (su nota), para recordar dónde se quedó
+  let claveCargada = null;                       // la nota cuyo texto está de verdad en el editor (sigue ahí tras cerrarlo)
+  let gesto = 0;                                 // cuándo desplazó o tecleó Leo en el marco por última vez (rueda, teclas, clic)
 
   const modelo = () => o.modelo();
   const guion = () => o.guion();
@@ -55,6 +57,8 @@
         tema(document.documentElement.dataset.theme === 'dark');
 
         w.document.addEventListener('keydown', onKey, true);
+        const marcaGesto = () => { gesto = Date.now(); };
+        ['wheel', 'keydown', 'mousedown', 'touchstart'].forEach(t => w.document.addEventListener(t, marcaGesto, { capture: true, passive: true }));
         w.document.addEventListener('selectionchange', () => apuntar(false));
         const ws = w.document.getElementById('workspace');
         if (ws) ws.addEventListener('scroll', () => apuntar(true), { passive: true });
@@ -115,12 +119,40 @@
     claveDoc = (op && op.clave) || null;
     if (E.characters && E.characters.setGlobal && o.elenco) E.characters.setGlobal(o.elenco());   // los personajes de todo el guion
     reponiendo = Date.now();
-    E.document.set({ title: doc.titulo || '', html: doc.html || '', characters: doc.characters || {} });
     const pos = claveDoc && posiciones.get(claveDoc);
-    if (pos) reponer(pos); else alPrincipio();
+    /* **El mismo documento no se vuelve a cargar** (29-09-2026, revisión del editor; Leo: «luego no puedo hacer Command+Z»): ir al
+       esquema y volver, cambiar de pestaña o pulsar su esquema en el árbol pasan por aquí con el documento que ya está en el editor.
+       `set` reescribe `#editor.innerHTML` y el historial de Chrome se queda apuntando a nodos que ya no existen: Cmd+Z no hacía
+       nada. Si es la misma nota y el editor tiene justo lo que ella guarda, se deja como está (con su Deshacer). */
+    if (claveDoc && claveDoc === claveCargada && mismoContenido(doc)) {
+      const ch = doc.characters || {};
+      if (E.characters && E.characters.export && JSON.stringify(E.characters.export()) !== JSON.stringify(ch)) E.characters.import(ch);
+      if (pos) reponer(pos);
+    } else {
+      E.document.set({ title: doc.titulo || '', html: doc.html || '', characters: doc.characters || {} });
+      claveCargada = claveDoc;
+      if (pos) reponer(pos); else alPrincipio();
+    }
     aplicarCabecera();
     render();
+    if (!enfocar() && E.focusEditor) E.focusEditor();
+  }
+  /* lo que hay en el editor es exactamente ese documento (texto y título) */
+  function mismoContenido(doc) {
+    if (!E) return false;
+    const g = E.document.get();
+    return g.html === (doc.html || '') && (g.title || '') === (doc.titulo || '');
+  }
+  /* El foco, de vuelta al editor, con el cursor donde estaba (`Ed.focusEditor` repone su último rango). Tras cerrar un menú de la
+     página (Versiones, Exportar), un diálogo o el panel flotante de la tira, el foco se quedaba en la página y lo que se escribía
+     se perdía (29-09-2026). Solo con un documento abierto y el marco a la vista. */
+  function enfocar() {
+    if (!E || !documento || !marco || !marco.offsetParent) return false;
+    /* el marco primero (desde la página, `contentWindow.focus()` no lo enfoca); dentro, el editor suele seguir siendo el elemento
+       activo del marco, así que `focusEditor` solo repone el cursor si hace falta */
+    try { marco.focus({ preventScroll: true }); } catch (_) {}
     if (E.focusEditor) E.focusEditor();
+    return document.activeElement === marco;
   }
   /* ---------- dónde se quedó cada documento (1.1.33) ----------
      Leo: «no se debe perder la línea en que estaba posicionado en el editor al hacer cambios de pestaña» (y cambiando de
@@ -164,8 +196,10 @@
       const s = dd.getSelection(); s.removeAllRanges(); s.addRange(r);
     }
     if (ws && p.top !== undefined) {
-      const top = p.top;
-      [0, 150, 450].forEach(ms => setTimeout(() => { if (claveDoc && posiciones.get(claveDoc) === p) ws.scrollTop = top; }, ms));
+      /* el cálculo de páginas mueve la hoja justo después de abrir: se vuelve a poner a los 150 y 450 ms, salvo si Leo ya la movió
+         (rueda, teclas, un clic): entonces la vista volvía atrás sola */
+      const top = p.top, t0 = Date.now();
+      [0, 150, 450].forEach(ms => setTimeout(() => { if (gesto > t0) return; if (claveDoc && posiciones.get(claveDoc) === p) ws.scrollTop = top; }, ms));
       ws.scrollTop = top;
     } else alPrincipio();
   }
@@ -277,11 +311,58 @@
     apuntar(false);
     if (E.characters && E.characters.setGlobal && o.elenco) E.characters.setGlobal(o.elenco());
     reponiendo = Date.now();
-    E.document.set({ title: doc.titulo || '', html: doc.html || '', characters: doc.characters || {} });
     const pos = claveDoc && posiciones.get(claveDoc);
+    /* cargar (en sitio o con `set`) enfoca el editor: si el foco estaba en otro sitio —un campo del marco (buscar) o de la página
+       (el asistente, mientras la IA cambia el documento)—, se le devuelve con lo que tenía elegido */
+    const w = marco.contentWindow, activo = w.document.activeElement, fuera = document.activeElement;
+    const selFuera = window.getSelection(), rFuera = fuera && fuera !== marco && selFuera.rangeCount ? selFuera.getRangeAt(0).cloneRange() : null;
+    if (!cargarEnSitio(doc)) {
+      E.document.set({ title: doc.titulo || '', html: doc.html || '', characters: doc.characters || {} });
+      claveCargada = claveDoc;
+    }
     if (pos) reponer(pos);
+    if (activo && activo !== w.document.body && activo !== E.editor && activo.isConnected && activo.focus) activo.focus({ preventScroll: true });
+    if (fuera && fuera !== marco && fuera !== document.body && fuera.isConnected && fuera.focus && document.activeElement !== fuera) {
+      fuera.focus({ preventScroll: true });
+      if (rFuera && fuera.isContentEditable) { try { selFuera.removeAllRanges(); selFuera.addRange(rFuera); } catch (_) {} }
+    }
     aplicarCabecera();
     render();
+  }
+  /* **Recargar sin perder el Deshacer** (29-09-2026): con `set` el historial se quedaba huérfano. Solo se cambian los bloques de
+     primer nivel que son distintos, con un solo `insertHTML` (`Ed.sustituir`, js/sustituir.js): lo de antes sigue en Deshacer y
+     Cmd+Z deshace el cambio de fuera (Claude, un personaje renombrado) como un paso. Si el editor no queda exactamente como el
+     documento, false (y se carga con `set`, como antes). */
+  function cargarEnSitio(doc) {
+    const ed = E.editor, html = doc.html || '';
+    if (!ed || !html.trim() || typeof E.sustituir !== 'function' || claveCargada !== claveDoc) return false;
+    const ponerTitulo = () => { const t = marco.contentDocument.getElementById('docTitle'); if (t && t.value !== (doc.titulo || '')) t.value = doc.titulo || ''; };
+    const ch = doc.characters || {};
+    const ponerPersonajes = () => { if (E.characters && E.characters.export && JSON.stringify(E.characters.export()) !== JSON.stringify(ch)) E.characters.import(ch); };
+    if (mismoContenido(doc)) { ponerPersonajes(); return true; }
+    if (E.document.get().html === html) { ponerTitulo(); ponerPersonajes(); return true; }
+    try {
+      if (E.blocks && E.blocks.clear) E.blocks.clear();
+      const d = marco.contentDocument, hijos = html => { const t = d.createElement('template'); t.innerHTML = html; return [...t.content.children].map(x => x.outerHTML); };
+      const viejo = hijos(E.document.get().html), nuevo = hijos(html), kids = [...ed.children];
+      /* los índices tienen que ser los de #editor: sin texto suelto en el primer nivel y con los mismos bloques */
+      const limpio = [...ed.childNodes].every(n => n.nodeType === 1 || (n.nodeType === 3 && !n.nodeValue.replace(/[\s\u200B]/g, '')) || n.nodeType === 8);
+      let tocados, nuevos;
+      if (!limpio || viejo.length !== kids.length || !kids.length || !nuevo.length) { tocados = kids; nuevos = nuevo.length ? nuevo : [html]; }
+      else {
+        let a = 0; while (a < viejo.length && a < nuevo.length && viejo[a] === nuevo[a]) a++;
+        let z = 0; while (z < viejo.length - a && z < nuevo.length - a && viejo[viejo.length - 1 - z] === nuevo[nuevo.length - 1 - z]) z++;
+        const vm = [a, viejo.length - z], nm = nuevo.slice(a, nuevo.length - z);
+        if (vm[1] > vm[0]) { tocados = kids.slice(vm[0], vm[1]); nuevos = nm; }
+        else if (a < kids.length) { tocados = [kids[a]]; nuevos = nm.concat(viejo[a]); }          // solo se añade: delante del siguiente
+        else { tocados = [kids[a - 1]]; nuevos = [viejo[a - 1]].concat(nm); }                    // o detrás del último
+      }
+      if (!tocados.length) return false;
+      E.sustituir(tocados, nuevos, { lineaFinal: false });   // exactamente el documento: sin la línea que pondría detrás de un recuadro final
+      if (E.db && E.db.mountAll && /class="[^"]*\bdb\b/.test(html)) E.db.mountAll();
+      ponerTitulo(); ponerPersonajes();
+      return E.document.get().html === html;
+    } catch (err) { console.error(err); return false; }
   }
   function cerrarDocumento() {
     if (!documento) return;
@@ -497,6 +578,7 @@
     modelo: () => modelo(),
     alCambiar: () => { render(); if (o.alCambiarTablero) o.alCambiarTablero(); },
     anclaDe, marcar: q => marcarFlot(q), conNodo: true,
+    volverFoco: () => enfocar(),                                 // cerrado con Enter, Esc o ×: se sigue escribiendo en el editor
     avisar: (t, accion) => { if (o.avisar) o.avisar(t, accion); },
     copiarEnlace: q => { if (o.copiarEnlaceFlot) o.copiarEnlaceFlot(q); },   // «Copiar enlace para Claude» del panel (1.1.52)
     dentro: el => !!(el.closest && el.closest('#hilo .hilo-nodo, #hilo .hilo-mas, #hilo .hilo-notas-enlace'))
@@ -852,14 +934,17 @@
   function versionEnBoton(nombre) {
     const d = marco && marco.contentDocument; if (!d) return;
     const e = d.querySelector('[data-cd-version]'); if (!e) return;
-    e.textContent = nombre || 'Versiones';
+    /* sin `textContent`: se llama tras cada guardado mientras se escribe, y quitar el texto de antes (un nodo del marco) cerraba la
+       agrupación de lo tecleado de Chrome (ver Ed.pintarFilas de js/utils.js) */
+    const v = nombre || 'Versiones', t = e.firstChild;
+    if (t && t.nodeType === 3 && t === e.lastChild) { if (t.nodeValue !== v) t.nodeValue = v; } else if (e.textContent !== v) e.textContent = v;
     const b = d.getElementById('cdVersiones'); if (b) b.classList.toggle('con-version', !!nombre);
   }
   function fijarTitulo(valor) {
     const t = marco && marco.contentDocument && marco.contentDocument.getElementById('docTitle'); if (!t) return;
     t.value = valor; t.dispatchEvent(new Event('input', { bubbles: true }));
   }
-  C.texto = { iniciar, saltar, volcar, render, tema, precargar: cargarEditor, fijarTitulo, versionEnBoton, enfocar: () => { if (E && E.focusEditor) E.focusEditor(); },
+  C.texto = { iniciar, saltar, volcar, render, tema, precargar: cargarEditor, fijarTitulo, versionEnBoton, enfocar,
     editor: () => E,
     abrirDocumento, cerrarDocumento, recargar, clave: () => (documento ? claveDoc : null), enDocumento: () => !!documento, conTira: () => conTira,
     /* enlaces (1.1.52): el tramo elegido en el editor y llevar el editor a uno */
@@ -867,7 +952,7 @@
     /* plantillas de nota (1.1.56): dónde está el cursor, el título del documento y poner una donde estaba el cursor */
     cursorGuardado, rectCursor, titulo: tituloDoc, insertarHtml,
     /* suelta el documento **sin guardarlo**: lo que hay en el editor ya no debe volver a su nota (al cargar una versión) */
-    soltar: () => { documento = null; if (claveDoc) posiciones.delete(claveDoc); },
+    soltar: () => { documento = null; if (claveDoc) posiciones.delete(claveDoc); claveCargada = null; },
     linea: () => lineaId, posicion: () => posicion,
     cerrar: () => { cerrarFlot(); volcar(); documento = null; conTira = false; posicion = null; lineaId = null; claveDoc = null; aplicarCabecera(); },
     cerrarPanel: () => cerrarFlot() };

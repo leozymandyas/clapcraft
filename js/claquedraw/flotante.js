@@ -101,7 +101,7 @@
       el = document.createElement('div'); el.className = 'hilo-flot'; el.setAttribute('role', 'dialog');
       document.body.appendChild(el);
       el.addEventListener('click', clic);
-      el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (menuColor()) cerrarMenu(); else cerrar(); } });
+      el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (menuColor()) cerrarMenu(); else cerrarYVolver(); } });
       el.addEventListener('keydown', teclas, true);             // antes que el Markdown del campo (Enter, Tab)
     }
     oirMarco(); seguirScroll();
@@ -160,6 +160,13 @@
     if (!el.contains(document.activeElement)) pintar();
     colocar(ancla || (ctx && ctx.anclaDe && ctx.anclaDe(que)));
   }
+  /* cerrado a propósito (Enter, Esc, ×, eliminar): el contexto puede devolver el foco a donde se escribía (la tira, al editor;
+     29-09-2026: si no, lo que se tecleaba después se perdía). Con un clic fuera no: ese clic ya se lleva el foco a su sitio. */
+  function cerrarYVolver() {
+    const c = ctx, abierto = !!que;
+    cerrar();
+    if (abierto && c && c.volverFoco) c.volverFoco();
+  }
   function cerrar() {
     if (!que) return;
     limpiar();
@@ -212,7 +219,7 @@
         }
         return;                                                   // en una nota, el salto de renglón del campo
       }
-      e.preventDefault(); e.stopPropagation(); cerrar(); return;
+      e.preventDefault(); e.stopPropagation(); cerrarYVolver(); return;
     }
     if (e.key === 'Tab' && !e.shiftKey && (que.tipo === 'nodo' || que.tipo === 'lugar')) {
       e.preventDefault(); e.stopPropagation();
@@ -342,7 +349,7 @@
     const tit = el.querySelector('[data-flot-tit]');
     tit.value = x.nombre || '';
     tit.addEventListener('input', () => { if (esLinea) m.editarLinea(x.id, { nombre: tit.value }); else m.editarActo(x.id, { nombre: tit.value }); cambio(); });
-    tit.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); cerrar(); } });
+    tit.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); cerrarYVolver(); } });
     const rango = el.querySelector('[data-flot-ancho]');
     if (rango) rango.addEventListener('input', () => {
       m.fijarAncho(x.id, +rango.value);
@@ -360,7 +367,7 @@
   }
   async function clic(e) {
     const m = ctx && ctx.modelo && ctx.modelo(); if (!m || !que) return;
-    if (e.target.closest('[data-flot-cerrar]')) { cerrar(); return; }
+    if (e.target.closest('[data-flot-cerrar]')) { cerrarYVolver(); return; }
     if (e.target.closest('[data-flot-enlace]')) { if (ctx.copiarEnlace) ctx.copiarEnlace(que); return; }
     const en = e.target.closest('[data-flot-enlace-nota]');
     if (en) { if (ctx.copiarEnlace) ctx.copiarEnlace({ tipo: 'nota', id: en.closest('[data-flot-nota]').dataset.flotNota }); return; }
@@ -422,7 +429,7 @@
       if (!await confirmar(texto, 'Eliminar')) return;
       const antes = instantanea();
       const r = m.borrarPunto(p.id); if (!r.ok) { avisar(r.aviso); return; }
-      cerrar(); cambio();
+      cerrarYVolver(); cambio();
       avisar(r.aviso || ((s ? m.forma(s.tipo) : m.nombre('nodo')) + ' eliminado'), deshacer(antes));
       return;
     }
@@ -449,7 +456,7 @@
     if (!d || oidos.has(d)) return;
     oidos.add(d); d.addEventListener('pointerdown', fuera, true);
   }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && que && !document.querySelector('#dlg[open]')) cerrar(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && que && !document.querySelector('#dlg[open]')) cerrarYVolver(); });
 
   C.flotante = { abrir, abrirNota, cerrar, refrescar, abierto: () => que, igual: q => mismoQue(que, q) && (que.marca || null) === (q.marca || null),
     mismoLugar, sitioDeNota, contexto: () => ctx, colocar: a => colocar(a) };

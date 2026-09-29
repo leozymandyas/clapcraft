@@ -66,29 +66,75 @@
     return k.parentNode === ed ? `#editor > :nth-child(${idx(k)})` : `#editor > :nth-child(${idx(k.parentNode)}) > :nth-child(${idx(k)})`;
   }
 
+  /* **Sin quitar nodos de la página** (29-09-2026): Chrome cierra la agrupación de lo tecleado —y cada letra pasa a ser un paso de
+     Deshacer— en cuanto se quita un nodo del documento fuera de un `execCommand`, aunque no sea del editor (ver Ed.pintarFilas).
+     Asignar `textContent` quita el texto de antes aunque sea el mismo: el contador de la barra lo hacía en cada cálculo, así que
+     escribiendo con pausas de más de 120 ms cada letra se deshacía sola. Aquí se cambia el texto que ya estaba. */
+  function ponerTexto(el, v) {
+    const t = el.firstChild;
+    if (t && t.nodeType === 3 && t === el.lastChild) { if (t.nodeValue !== v) t.nodeValue = v; return; }
+    if (!t) { el.appendChild(document.createTextNode(v)); return; }
+    el.textContent = v;
+  }
+
+  /* **Sin rehacer lo que no cambió** (29-09-2026, revisión del editor: con 184 páginas cada cálculo costaba 50-60 ms y se notaba un
+     tirón al parar de escribir; más de la mitad era quitar y volver a poner los márgenes de salto, que rehace la maqueta del documento
+     entero dos veces). Los bloques y las páginas del maquetador se calculan siempre (son baratos y no dependen de los márgenes), y lo
+     de pantalla solo depende de dónde empieza cada página (bloque y carácter), de lo que miden los bloques (alto, clase, estilo) y,
+     en un bloque partido por dentro, de su texto. Si nada de eso cambió desde el último cálculo (lo normal al teclear dentro de un
+     renglón), los márgenes y las rayas ya están bien y no se tocan. Los altos se miden con los márgenes puestos (no cambian el alto
+     de un bloque; en una lista partida, a lo sumo, hacen un cálculo de más). */
+  let ultimo = null;                               // { els, firma: [], pags } del último cálculo completo
+  function firmaDe(els, bloques, indices, prefijos, pags, extra) {
+    const f = [extra];
+    els.forEach(el => f.push(el.offsetHeight + '|' + el.className + '|' + (el.getAttribute('style') || '')));
+    pags.slice(1).forEach(pg => {
+      const x = pg.find(y => y.i !== undefined); if (!x) { f.push('-'); return; }
+      const off = x.desde - prefijos[x.i];
+      f.push(indices[x.i] + ':' + (off > 0 ? off + ':' + bloques[x.i].texto : ''));
+    });
+    return f;
+  }
+  const igual = (a, b) => { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  /* la altura del cursor en la pantalla (para que el typewriter no vea saltar la línea que se escribe) */
+  function altoCursor(ed) {
+    if (!Ed.page || !Ed.page.state || !Ed.page.state.typewriter || document.activeElement !== ed) return null;
+    const s = window.getSelection(); if (!s || !s.rangeCount) return null;
+    const r = s.getRangeAt(0); if (!ed.contains(r.startContainer)) return null;
+    let x = r.getClientRects()[0];
+    if (!x || !x.height) { const b = Ed.closestBlock ? Ed.closestBlock(r.startContainer, ed) : null; x = b && b.getBoundingClientRect(); }
+    return x && x.height ? x.top : null;
+  }
+
   function calcular() {
     pendiente = null;
     const ed = Ed.editor; if (!ed || !ed.isConnected || !ed.offsetWidth) return;   // escondido: se calcula al verse (ResizeObserver)
     const M = window.Claquedraw && window.Claquedraw.maquetar; if (!M) return;
-    /* posiciones naturales: sin los márgenes de salto (leer y volver a escribir ocurre antes de pintar).
-       El alto mínimo de la hoja (otra hoja de estilos) se queda mientras se mide: si se quitara, la hoja
-       encogería, el navegador recortaría el desplazamiento y al volver la vista saltaría al escribir.
-       Por lo mismo se guarda y se devuelve el desplazamiento del área de trabajo. */
-    const ws = document.getElementById('workspace'), desp = ws ? ws.scrollTop : 0;
-    const antes = estilo.textContent;
-    estilo.textContent = '';
     const cs = getComputedStyle(ed);
     const lh = num(cs.lineHeight) || num(cs.fontSize) * 1.5 || 24;
     const padT = num(cs.paddingTop), padB = num(cs.paddingBottom), bordeT = num(cs.borderTopWidth), bordeB = num(cs.borderBottomWidth);
-    /* los bloques, como para el PDF (la portada es una hoja aparte, sin número y fuera de la cuenta) */
+    /* los bloques, como para el PDF (la portada es una hoja aparte, sin número y fuera de la cuenta). Nada de esto depende de los
+       márgenes de salto, así que se lee antes de quitarlos */
     const hijos = Array.from(ed.children).filter(k => k.offsetParent !== null);   // sin los ocultos
     const portadaEl = hijos[0] && hijos[0].matches('.portada') ? hijos[0] : null;
     const els = M.elementos(hijos.filter(k => k !== portadaEl));
+    const numerar = ed.classList.contains('numerar-escenas'), quitaNotas = sinNotas();
     const { bloques, indices, prefijos } = M.bloquesDe(els, {
-      numerar: ed.classList.contains('numerar-escenas'), sinNotas: sinNotas(),
+      numerar, sinNotas: quitaNotas,
       fijo: el => Math.ceil(el.offsetHeight / lh - 0.2)              // una tabla o una imagen: su alto en renglones
     });
     const pags = M.paginar(bloques);
+    const firma0 = firmaDe(els, bloques, indices, prefijos, pags, [lh, padT, padB, ed.offsetWidth, numerar, quitaNotas, !!portadaEl, portadaEl ? portadaEl.offsetHeight : 0].join('|'));
+    if (ultimo && igual(ultimo.els, els) && igual(ultimo.firma, firma0)) { actualizarContador(pags.length); return; }   // en pantalla, nada cambió
+    /* posiciones naturales: sin los márgenes de salto (leer y volver a escribir ocurre antes de pintar).
+       El alto mínimo de la hoja (otra hoja de estilos) se queda mientras se mide: si se quitara, la hoja
+       encogería, el navegador recortaría el desplazamiento y al volver la vista saltaría al escribir.
+       Por lo mismo se guarda y se devuelve el desplazamiento del área de trabajo; y con el typewriter, la línea que se escribe
+       se queda a la misma altura (si un salto de página la movía, bajaba de golpe unos 250 px al hacer una pausa). */
+    const ws = document.getElementById('workspace'), desp = ws ? ws.scrollTop : 0;
+    const yCursor = ws ? altoCursor(ed) : null;
+    const antes = estilo.textContent;
+    ponerTexto(estilo, '');
     /* dónde empieza cada página: `null`, antes de un elemento; un número, a mitad de él (en ese carácter de su texto) */
     const cortes = new Map();
     const cortar = (el, off) => { if (!cortes.has(el)) cortes.set(el, []); cortes.get(el).push(off); };
@@ -126,10 +172,12 @@
     const limite = Math.max(fin, inicio + minimoHoja);
     finales.push(limite + padB);                         // la última hoja, completa aunque esté casi vacía
     const nuevo = reglas.join('\n');
-    estilo.textContent = nuevo;
+    ponerTexto(estilo, nuevo);
     const minimo = `#editor { min-height: ${Math.ceil(limite + padB + bordeT + bordeB)}px !important; }`;
-    if (alto.textContent !== minimo) alto.textContent = minimo;
+    if (alto.textContent !== minimo) ponerTexto(alto, minimo);
     if (ws && ws.scrollTop !== desp) ws.scrollTop = desp;
+    if (yCursor !== null) { const y = altoCursor(ed); if (y !== null && Math.abs(y - yCursor) > 1) ws.scrollTop += y - yCursor; }
+    ultimo = { els, firma: firma0, pags: pags.length };
     const firma = saltos.map(x => Math.round(x.y) + (x.dentro ? 'd' : '')).join(',');
     if (nuevo === antes && !!portadaEl === portada && capa.dataset.firma === firma) { actualizarContador(pags.length); return; }   // nada cambió
     portada = !!portadaEl;
@@ -141,7 +189,7 @@
   function actualizarContador(n) {
     total = n;
     if (contador) {
-      contador.textContent = total + (total === 1 ? ' página' : ' páginas') + ' · ≈ ' + total + ' min';
+      ponerTexto(contador, total + (total === 1 ? ' página' : ' páginas') + ' · ≈ ' + total + ' min');
       contador.title = 'Páginas de guion (Carta, Courier 12 pt, ~' + LINEAS + ' líneas) · una página ≈ un minuto en pantalla';
     }
   }
@@ -149,25 +197,32 @@
   /* los huecos entre hojas y el número de cada hoja **arriba a la derecha, «2.», sin el de la primera** (especificación de
      guion, Leo 17-09-2026; antes iba abajo y desde la primera) */
   function pintar(saltos, finales, base) {
-    const huecos = saltos.map(s => {
-      const el = document.createElement('div');
+    /* se reutilizan los elementos de antes y los que sobran se esconden: quitar nodos de la página cerraría la agrupación de lo
+       tecleado de Chrome (ver ponerTexto) */
+    const huecos = capa._huecos || (capa._huecos = []), numeros = capa._numeros || (capa._numeros = []);
+    const pieza = (lista, k, clase) => {
+      if (!lista[k]) { const el = document.createElement(clase === 'pag-num' ? 'span' : 'div'); el.appendChild(document.createTextNode('')); capa.appendChild(el); lista[k] = el; }
+      const el = lista[k]; el.style.display = ''; return el;
+    };
+    saltos.forEach((s, k) => {
+      const el = pieza(huecos, k, 'pag-salto');
       el.className = 'pag-salto' + (s.dentro ? ' dentro' : '');
       el.style.top = (base + s.y) + 'px';
-      if (!s.dentro) el.style.height = HUECO + 'px';
-      return el;
+      el.style.height = s.dentro ? '' : HUECO + 'px';
     });
+    for (let k = saltos.length; k < huecos.length; k++) huecos[k].style.display = 'none';
     /* con portada, esa hoja no cuenta: la primera del guion es la 1 (sin número) y la siguiente, la «2.» */
     const quita = portada ? 1 : 0;
-    const numeros = finales.slice(1 + quita).map((y, j) => {
-      const i = j + 1 + quita, n = document.createElement('span');
-      n.className = 'pag-num'; n.textContent = (i + 1 - quita) + '.';
+    const nums = finales.slice(1 + quita);
+    nums.forEach((y, j) => {
+      const i = j + 1 + quita, n = pieza(numeros, j, 'pag-num');
+      n.className = 'pag-num'; n.firstChild.nodeValue = (i + 1 - quita) + '.';
       n.title = 'Página ' + (i + 1 - quita) + ' de ' + (finales.length - quita);
       /* arriba de su hoja: justo tras el hueco que la separa de la anterior (o tras la raya, si una página larga se corta) */
       const s = saltos[i - 1];
       n.style.top = (base + (s ? s.y + (s.dentro ? 0 : HUECO) : y)) + 'px';
-      return n;
     });
-    capa.replaceChildren(...huecos, ...numeros);
+    for (let k = nums.length; k < numeros.length; k++) { numeros[k].style.display = 'none'; numeros[k].firstChild.nodeValue = ''; }
     capa.dataset.hojas = String(finales.length);
   }
 
@@ -177,7 +232,7 @@
     pendiente = setTimeout(calcular, 120);
   };
   P.total = () => total;
-  P.recalcular = calcular;
+  P.recalcular = () => { ultimo = null; calcular(); };
 
   function iniciar() {
     const ed = Ed.editor, wrap = document.getElementById('pageWrap');

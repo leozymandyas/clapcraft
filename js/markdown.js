@@ -4,55 +4,95 @@
   const md = { enabled: true };
   Ed.md = md;
 
-  /* ---------- Atajos de bloque: se activan al escribir un espacio tras el marcador ---------- */
-  /* Chrome anida <ul>/<blockquote> dentro del <p> vacío al usar execCommand, así que
-     listas y citas se construyen a mano en el DOM. */
-  function toList(block, tag) {
-    const li = document.createElement('li');
-    while (block.firstChild) li.appendChild(block.firstChild);
-    if (!li.firstChild) li.appendChild(document.createElement('br'));
-    const prev = block.previousElementSibling;
-    if (prev && prev.tagName === tag) { prev.appendChild(li); block.remove(); }
-    else { const list = document.createElement(tag); list.appendChild(li); block.replaceWith(list); }
-    Ed.setCaret(li, 0);
+  /* ---------- Atajos de bloque: se activan al escribir un espacio tras el marcador ----------
+     Chrome anida <ul>/<blockquote> dentro del <p> vacío al usar execCommand, así que listas y citas se arman en un clon y
+     entran con un solo insertHTML (`Ed.screenplay.editar`, que usa `Ed.sustituir`): así entran en Deshacer. Hasta el
+     29-09-2026 se hacían a mano en el DOM y «- item» + Deshacer dejaba una viñeta vacía para siempre. */
+  const editar = (nodos, fn) => (Ed.screenplay && Ed.screenplay.editar ? Ed.screenplay.editar(nodos, fn) : null);
+  /* quita los primeros `n` caracteres del texto de un elemento (el marcador «- », «> »…) */
+  function quitarInicio(el, n) {
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let t; const vacios = [];
+    while (n > 0 && (t = w.nextNode())) { const k = Math.min(n, t.nodeValue.length); t.nodeValue = t.nodeValue.slice(k); n -= k; if (!t.nodeValue) vacios.push(t); }
+    vacios.forEach(x => x.remove());
+    /* sin texto, el bloque lleva su <br> (un <p></p> vacío hacía que Chrome escribiera fuera de él) */
+    if (!el.textContent.replace(/\u200B/g, '') && !el.querySelector('br, img')) el.appendChild(document.createElement('br'));
   }
-  function toQuote(block) {
+  function listaEn(c, tag) {                                   // en el clon: el bloque pasa a una viñeta (con la lista de antes si es igual)
+    const li = document.createElement('li');
+    if (c.tagName === 'PRE') li.innerHTML = Ed.escapeHtml(c.textContent).replace(/\n/g, '<br>');
+    else while (c.firstChild) li.appendChild(c.firstChild);
+    if (!li.textContent.replace(/\u200B/g, '') && !li.querySelector('br, img')) li.appendChild(document.createElement('br'));
+    const prev = c.previousElementSibling;
+    if (prev && prev.tagName === tag) { prev.appendChild(li); c.remove(); }
+    else { const list = document.createElement(tag); list.appendChild(li); c.replaceWith(list); }
+    return li;
+  }
+  function citaEn(c) {
+    if (!c.firstChild) c.appendChild(document.createElement('br'));
+    const prev = c.previousElementSibling;
+    if (prev && prev.tagName === 'BLOCKQUOTE') prev.appendChild(c);
+    else { const bq = document.createElement('blockquote'); c.replaceWith(bq); bq.appendChild(c); }
+    return c;
+  }
+  function toList(block, tag, quitar) {
     const prev = block.previousElementSibling;
-    if (!block.firstChild) block.appendChild(document.createElement('br'));
-    if (prev && prev.tagName === 'BLOCKQUOTE') { prev.appendChild(block); }
-    else { const bq = document.createElement('blockquote'); block.replaceWith(bq); bq.appendChild(block); }
-    Ed.setCaret(block, 0);
+    editar(prev ? [prev, block] : [block], clon => {
+      const c = clon(block); if (!c) return false;
+      if (quitar) quitarInicio(c, quitar);
+      return { nodo: listaEn(c, tag), offset: 0 };
+    });
+  }
+  function toQuote(block, quitar) {
+    const prev = block.previousElementSibling;
+    editar(prev ? [prev, block] : [block], clon => {
+      const c = clon(block); if (!c) return false;
+      if (quitar) quitarInicio(c, quitar);
+      if (c.tagName !== 'P') { const p = document.createElement('p'); while (c.firstChild) p.appendChild(c.firstChild); c.replaceWith(p); return { nodo: citaEn(p), offset: 0 }; }
+      return { nodo: citaEn(c), offset: 0 };
+    });
+  }
+  function toHeading(block, nivel, quitar) {
+    editar([block], clon => {
+      const c = clon(block); if (!c) return false;
+      if (quitar) quitarInicio(c, quitar);
+      const h = document.createElement('h' + nivel);
+      while (c.firstChild) h.appendChild(c.firstChild);
+      if (!h.textContent.replace(/\u200B/g, '') && !h.querySelector('br, img')) h.appendChild(document.createElement('br'));
+      c.replaceWith(h);
+      return { nodo: h, offset: 0 };
+    });
   }
   /* Saca un bloque vacío fuera de su cita (partiéndola si hace falta) */
   function exitQuote(block) {
     const bq = block.closest('blockquote');
-    const target = block === bq ? null : block;
-    if (!target) {
-      const p = document.createElement('p');
-      p.appendChild(document.createElement('br'));
-      bq.after(p);
-      if (!bq.textContent.trim()) bq.remove();
-      Ed.setCaret(p, 0);
-      return;
-    }
-    if (target.nextSibling) {
-      const rest = document.createElement('blockquote');
-      while (target.nextSibling) rest.appendChild(target.nextSibling);
-      bq.after(rest);
-    }
-    bq.after(target);
-    if (!bq.firstChild) bq.remove();
-    Ed.setCaret(target, 0);
+    editar([bq], clon => {
+      const cbq = clon(bq), cb = clon(block); if (!cbq || !cb) return false;
+      if (cb === cbq) {
+        const p = document.createElement('p'); p.appendChild(document.createElement('br'));
+        cbq.after(p);
+        if (!cbq.textContent.trim()) cbq.remove();
+        return { nodo: p, offset: 0 };
+      }
+      if (cb.nextSibling) {
+        const rest = document.createElement('blockquote');
+        while (cb.nextSibling) rest.appendChild(cb.nextSibling);
+        cbq.after(rest);
+      }
+      cbq.after(cb);
+      if (!cbq.firstChild) cbq.remove();
+      return { nodo: cb, offset: 0 };
+    });
   }
 
   md.toList = toList;
   md.toQuote = toQuote;
 
+  /* cada regla recibe cuántos caracteres del principio son el marcador (se quitan en el mismo paso) */
   const BLOCK_RULES = [
-    { re: /^(#{1,6}) $/, run: m => Ed.cmd('formatBlock', 'h' + m[1].length) },
-    { re: /^[-*+] $/, run: (m, block) => toList(block, 'UL') },
-    { re: /^1[.)] $/, run: (m, block) => toList(block, 'OL') },
-    { re: /^> $/, run: (m, block) => toQuote(block) }
+    { re: /^(#{1,6}) $/, run: (m, block, n) => toHeading(block, m[1].length, n) },
+    { re: /^[-*+] $/, run: (m, block, n) => toList(block, 'UL', n) },
+    { re: /^1[.)] $/, run: (m, block, n) => toList(block, 'OL', n) },
+    { re: /^> $/, run: (m, block, n) => toQuote(block, n) }
   ];
 
   /* ---------- Atajos en línea: se activan al escribir el carácter de cierre ---------- */
@@ -88,19 +128,9 @@
           /* ni en un elemento de guion: «- Ya sé…» es un guion de interrupción y «- Andrés…» una toma de montaje (especificación
              de guion); convertirlos en lista, título o cita rompía el formato */
           if (Ed.screenplay && Ed.screenplay.kindOf(block)) return;
-          const r = Ed.getRange();
-          const del = document.createRange();
-          del.setStart(block, 0);
-          del.setEnd(r.startContainer, r.startOffset);
-          Ed.restoreSelection(del);
-          Ed.cmd('delete');
-          /* un bloque vacío sin <br> hace que Chrome anide la lista/cita dentro del párrafo */
-          if (!block.textContent && !block.querySelector('br, img')) {
-            block.appendChild(document.createElement('br'));
-            Ed.setCaret(block, 0);
-          }
-          rule.run(m, block);
-          editor.dispatchEvent(new Event('input', { bubbles: true }));
+          /* el marcador se quita y el bloque se convierte con un solo insertHTML (un paso de Deshacer: vuelve a «- ») */
+          rule.run(m, block, ctx.text.length);
+          if (Ed.afterChange) Ed.afterChange();
           return;
         }
         return;
@@ -178,16 +208,19 @@
       const nothingAfter = afterR.toString().replace(/\u200B/g, '') === '' && !afterR.cloneContents().querySelector('br:not(:last-child)');
       if (emptyLine && nothingAfter && text.replace(/\u200B/g, '') !== '') {
         e.preventDefault();
-        const p = document.createElement('p');
-        p.innerHTML = '<br>';
-        block.after(p);
-        /* quita la línea vacía final */
-        let last = block.lastChild;
-        while (last && ((last.nodeType === 1 && last.tagName === 'BR') || (last.nodeType === 3 && !last.nodeValue.replace(/\u200B/g, '')))) { const prev = last.previousSibling; last.remove(); last = prev; }
-        if (last && last.nodeType === 3) last.nodeValue = last.nodeValue.replace(/\n+$/, '');
-        if (last && last.nodeType === 1 && last.tagName === 'BR') last.remove();
-        if (!block.textContent.replace(/\u200B/g, '') && !block.querySelector('br')) block.remove();
-        Ed.setCaret(p, 0);
+        editar([block], clon => {
+          const c = clon(block); if (!c) return false;
+          const p = document.createElement('p');
+          p.innerHTML = '<br>';
+          c.after(p);
+          /* quita la línea vacía final */
+          let last = c.lastChild;
+          while (last && ((last.nodeType === 1 && last.tagName === 'BR') || (last.nodeType === 3 && !last.nodeValue.replace(/\u200B/g, '')))) { const prev = last.previousSibling; last.remove(); last = prev; }
+          if (last && last.nodeType === 3) last.nodeValue = last.nodeValue.replace(/\n+$/, '');
+          if (last && last.nodeType === 1 && last.tagName === 'BR') last.remove();
+          if (!c.textContent.replace(/\u200B/g, '') && !c.querySelector('br')) c.remove();
+          return { nodo: p, offset: 0 };
+        });
         notify();
         return true;
       }
@@ -199,22 +232,30 @@
     if (!md.enabled || block.tagName === 'LI') return false;
     const trimmed = full.trim();
 
-    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+    /* un elemento de guion no se convierte: «---» o «```» ahí son texto del guion */
+    const deGuion = Ed.screenplay && Ed.screenplay.kindOf(block);
+    if (!deGuion && /^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
       e.preventDefault();
-      const hr = document.createElement('hr');
-      const p = document.createElement('p');
-      p.innerHTML = '<br>';
-      block.replaceWith(hr, p);
-      Ed.setCaret(p, 0);
+      editar([block], clon => {
+        const c = clon(block); if (!c) return false;
+        const hr = document.createElement('hr');
+        const p = document.createElement('p');
+        p.innerHTML = '<br>';
+        c.replaceWith(hr, p);
+        return { nodo: p, offset: 0 };
+      });
       notify();
       return true;
     }
-    if (/^```\w*$/.test(trimmed)) {
+    if (!deGuion && /^```\w*$/.test(trimmed)) {
       e.preventDefault();
-      const pre = document.createElement('pre');
-      pre.appendChild(document.createElement('br'));
-      block.replaceWith(pre);
-      Ed.setCaret(pre, 0);
+      editar([block], clon => {
+        const c = clon(block); if (!c) return false;
+        const pre = document.createElement('pre');
+        pre.appendChild(document.createElement('br'));
+        c.replaceWith(pre);
+        return { nodo: pre, offset: 0 };
+      });
       notify();
       return true;
     }

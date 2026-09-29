@@ -123,11 +123,18 @@
 
   /* ---------- la comparación ---------- */
   let capa = null;
-  function cerrar() { if (capa) { capa.remove(); capa = null; } }
-  /* `a`: la versión (nombre y html); `b`: lo de ahora (nombre y html). */
-  function abrirComparacion(a, b) {
-    cerrar();
+  let alCerrar = null;                                   // quien abrió la comparación: al cerrarla (29-09-2026, el foco vuelve al editor)
+  function cerrar() {
+    if (!capa) return;
+    capa.remove(); capa = null;
+    const fn = alCerrar; alCerrar = null;
+    if (fn) { try { fn(); } catch (err) { console.error(err); } }
+  }
+  /* `a`: la versión (nombre y html); `b`: lo de ahora (nombre y html). `op.alCerrar`: al cerrarla. */
+  function abrirComparacion(a, b, op) {
+    if (capa) { capa.remove(); capa = null; alCerrar = null; }
     const filas = comparar(a.html, b.html), r = resumen(filas);
+    alCerrar = (op && op.alCerrar) || null;
     capa = document.createElement('div');
     capa.className = 'vs-capa';
     capa.innerHTML = `<div class="vs-caja" role="dialog" aria-label="Comparar versiones">

@@ -22,7 +22,7 @@
      pero no se guarda en el documento */
   let global = {};
   C.export = () => JSON.parse(JSON.stringify(registry));
-  C.import = obj => { registry = obj && typeof obj === 'object' ? JSON.parse(JSON.stringify(obj)) : {}; if (Ed.editor) C.refresh(); };
+  C.import = obj => { registry = obj && typeof obj === 'object' ? JSON.parse(JSON.stringify(obj)) : {}; if (Ed.editor) C.refresh(true); };
 
   const clean = s => String(s || '').replace(/\u200B/g, '').replace(/\s+/g, ' ').trim();
   /* **Un doble espacio suelta el personaje** (Leo, 16-09-2026): lo que va detrás es una anotación («V.O.»,
@@ -91,82 +91,95 @@
 
   /* ---------- el nombre en su chip y la anotación en texto normal ----------
      Con el personaje soltado (doble espacio), «MARA» se queda en un `span.ch-nom` (el que lleva el color) y «(V.O.)»
-     detrás, como texto corriente (Leo, 16-09-2026). Sin anotación, el bloque vuelve a ser texto suelto. */
-  function offsetCursor(b) {                                  // dónde está el cursor dentro del texto del bloque
-    const r = Ed.getRange();
-    if (!r || !r.collapsed || !b.contains(r.startContainer)) return null;
-    const pre = document.createRange();
-    pre.selectNodeContents(b); pre.setEnd(r.startContainer, r.startOffset);
-    return pre.toString().length;
-  }
-  function ponerCursor(b, off) {                              // y devolverlo al mismo sitio tras rehacer el bloque
-    if (off == null) return;
-    const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
-    let visto = 0, n;
-    while ((n = w.nextNode())) {
-      const largo = n.nodeValue.length;
-      if (visto + largo >= off) { const r = document.createRange(); r.setStart(n, off - visto); r.collapse(true); Ed.restoreSelection(r); return; }
-      visto += largo;
-    }
-    const r = document.createRange(); r.selectNodeContents(b); r.collapse(false); Ed.restoreSelection(r);
-  }
-  function separar(b, editando) {
-    const txt = b.textContent.replace(/\u200B/g, '');
-    const span = b.querySelector(':scope > .ch-nom');
-    /* soltado pero sin anotación y ya fuera del bloque: se recoge el doble espacio y vuelve a ser solo el nombre */
-    if (C.suelto(txt) && !editando && !txt.split(DOBLE).slice(1).join('').trim()) {
+     detrás, como texto corriente (Leo, 16-09-2026). **El span solo lo pone `soltar`, con execCommand** (entra en Deshacer):
+     rehacer el bloque a mano mientras se escribe (al salir de él, en cada tecla) dejaba el historial de Chrome descolocado y
+     Deshacer duplicaba el nombre («MARAMARA», «ANA ANA»). Lo que sobra (el doble espacio sin anotación, un span sin doble
+     espacio) se recoge al guardar (`C.limpiarHtml`, en `Ed.document.get`) y al cargar (`separar`, antes de que haya historial). */
+  const ZW = /\u200B/g;
+  /* al cargar: el nombre a su chip si hay anotación; sin ella, solo el nombre; sin doble espacio, sin chip */
+  function separar(b) {
+    const txt = b.textContent.replace(ZW, '');
+    const span = b.querySelector(':scope > .ch-nom, :scope > .ch-nom-x');
+    if (C.suelto(txt) && !txt.split(DOBLE).slice(1).join('').trim()) {
       const solo = soloNombre(txt);
       if (b.textContent !== solo) b.textContent = solo;
-      return true;
+      return;
     }
-    if (!C.suelto(txt)) {                                     // sin doble espacio no hay anotación: texto suelto
-      if (!span) return false;
-      const off = offsetCursor(b);
-      b.textContent = txt;
-      ponerCursor(b, off);
-      return true;
-    }
+    if (!C.suelto(txt)) { if (span) b.textContent = txt; return; }
     const nombre = soloNombre(txt), resto = txt.slice(nombre.length);
-    if (span && span.textContent === nombre && b.childNodes.length === 2 && b.lastChild.nodeType === 3 && b.lastChild.nodeValue === resto) return false;
-    const off = offsetCursor(b);
+    if (span && span.className === 'ch-nom' && span.textContent === nombre && b.childNodes.length === 2 && b.lastChild.nodeType === 3 && b.lastChild.nodeValue === resto) return;
     const s = document.createElement('span');
     s.className = 'ch-nom'; s.textContent = nombre;
     b.textContent = '';
     b.appendChild(s);
     b.appendChild(document.createTextNode(resto));
-    ponerCursor(b, off);
-    return true;
   }
+  /* mientras se escribe, sin tocar la estructura: si se borró el doble espacio, el span deja de ser chip (solo su clase, que no
+     descoloca el historial: el nodo sigue siendo el mismo) y vuelve a serlo si el doble espacio vuelve */
+  function ajustarChip(b) {
+    const span = b.querySelector(':scope > .ch-nom, :scope > .ch-nom-x'); if (!span) return;
+    const cls = C.suelto(b.textContent) ? 'ch-nom' : 'ch-nom-x';
+    if (span.className !== cls) span.className = cls;
+  }
+  /* en un clon o un HTML (nunca en el documento vivo): el personaje soltado sin anotación vuelve a ser solo el nombre, y un chip
+     sin doble espacio, texto. Lo usan `lineaTras` de screenplay.js (Enter al final del nombre, en el mismo paso) y `limpiarHtml`. */
+  C.recoger = function (b) {
+    if (!b || !b.classList || !b.classList.contains('sp-character')) return b;
+    const txt = b.textContent.replace(ZW, '');
+    if (C.suelto(txt) && !txt.split(DOBLE).slice(1).join('').trim()) { b.textContent = soloNombre(txt); return b; }
+    if (!C.suelto(txt)) b.querySelectorAll('.ch-nom, .ch-nom-x').forEach(s => { while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s); s.remove(); });
+    else b.querySelectorAll('.ch-nom-x').forEach(s => { s.className = 'ch-nom'; });
+    return b;
+  };
+  /* el HTML que se guarda: los personajes recogidos y ningún chip fuera de un personaje */
+  C.limpiarHtml = function (html) {
+    if (!html || !/ch-nom|sp-character/.test(html)) return html;
+    const t = document.createElement('template'); t.innerHTML = html;
+    t.content.querySelectorAll('p.sp-character').forEach(C.recoger);
+    t.content.querySelectorAll('.ch-nom, .ch-nom-x').forEach(s => {
+      if (s.parentNode && s.parentNode.classList && s.parentNode.classList.contains('sp-character')) return;
+      while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s); s.remove();
+    });
+    const caja = document.createElement('div'); caja.appendChild(t.content);
+    return caja.innerHTML;
+  };
 
   /* ---------- colorear los bloques de personaje ---------- */
+  function sinColor(block) {
+    block.removeAttribute('data-ch'); block.style.removeProperty('--chl'); block.style.removeProperty('--chd');
+    if (block.hasAttribute('style') && !block.style.length) block.removeAttribute('style');
+  }
   function paint(block, allowRegister) {
     const name = clean(soloNombre(block.textContent));
     const k = key(name);
-    if (!k) { block.style.removeProperty('--chl'); block.style.removeProperty('--chd'); block.removeAttribute('data-ch'); return; }
+    if (!k) { sinColor(block); return; }
     /* el bloque que se está escribiendo solo se colorea si ya coincide con un personaje conocido */
     const r = registry[k] || (allowRegister && k.length >= 2 ? C.register(name) : null);
-    if (!r) { block.removeAttribute('data-ch'); block.style.removeProperty('--chl'); block.style.removeProperty('--chd'); return; }
+    if (!r) { sinColor(block); return; }
     const [, light, dark] = C.PALETTE[r.color];
-    if (block.dataset.ch !== String(r.color)) {
+    if (block.dataset.ch !== String(r.color) || block.style.getPropertyValue('--chl') !== light) {
       block.dataset.ch = r.color;
       block.style.setProperty('--chl', light);
       block.style.setProperty('--chd', dark);
     }
   }
-  C.refresh = function () {
+  C.refresh = function (carga) {
     const editing = document.activeElement === editor() ? currentCharBlock() : null;
     const bloques = $$('p.sp-character', editor());
+    /* al cargar (antes de que haya historial) se arregla la estructura; después, solo el color y la clase del chip */
+    if (carga === true) bloques.forEach(separar);
     /* un nombre que ya no está en ningún bloque de personaje sale del registro: así una errata que llegó a
        registrarse (al salir del bloque antes de corregirla) no se queda como personaje */
     const vivos = new Set(bloques.map(b => key(b.textContent)).filter(Boolean));
     Object.keys(registry).forEach(k => { if (!vivos.has(k)) delete registry[k]; });
-    bloques.forEach(b => { separar(b, b === editing); paint(b, b !== editing); });
+    bloques.forEach(b => { ajustarChip(b); paint(b, b !== editing); });
     /* los bloques que dejaron de ser personaje pierden el color */
-    $$('[data-ch]:not(.sp-character)', editor()).forEach(b => { b.removeAttribute('data-ch'); b.style.removeProperty('--chl'); b.style.removeProperty('--chd'); });
-    /* un bloque que dejó de ser personaje (Tab cambia de elemento) tampoco se queda con el chip del nombre dentro */
-    $$('p:not(.sp-character) > .ch-nom', editor()).forEach(s => s.replaceWith(document.createTextNode(s.textContent)));
+    $$('[data-ch]:not(.sp-character)', editor()).forEach(sinColor);
+    /* un bloque que dejó de ser personaje ya no lleva el chip dentro (screenplay.js lo quita al cambiarlo); si queda alguno
+       (un documento de antes, formatBlock), al cargar se quita y, si no, no se ve (el CSS lo pinta solo en un personaje) */
+    if (carga === true) $$('p:not(.sp-character) > .ch-nom, p:not(.sp-character) > .ch-nom-x', editor()).forEach(s => s.replaceWith(document.createTextNode(s.textContent)));
   };
-  C.schedule = Ed.debounce(C.refresh, 250);
+  C.schedule = Ed.debounce(() => C.refresh(), 250);
 
   /* ---------- sugerencias ---------- */
   let menu, items = [], index = 0, activeBlock = null;
@@ -197,6 +210,10 @@
       const pre = document.createRange(); pre.selectNodeContents(b); pre.setEnd(r.startContainer, r.startOffset);
       const antes = pre.toString();
       if (!antes.trim() || !/[ \u00A0]$/.test(antes)) return;   // solo justo detrás de un espacio
+      /* **solo al final del nombre**: en medio («ANA | LUZ», «MARA | (V.O.)») soltar sustituía el bloque por lo de delante del
+         cursor y se perdía lo de detrás. Ahí el espacio, el punto o el paréntesis se escriben como siempre. */
+      const post = document.createRange(); post.selectNodeContents(b); post.setStart(r.startContainer, r.startOffset);
+      if (post.toString().replace(/[\u200B\u00A0\s]/g, '')) return;
       /* «LAURA (V.O.)»: un paréntesis tras el nombre abre su extensión (especificación de guion, Leo 17-09-2026) */
       if (e.data === '(') { e.preventDefault(); soltar(b, clean(antes)); Ed.cmd('insertText', '('); return; }
       if (e.data !== ' ' && !/^\.\s?$/.test(e.data)) return;     // el segundo espacio, o el punto que pone macOS
@@ -225,11 +242,13 @@
     if (exacto && !items.length) items = [{ name: exacto, plano: true }].concat(EXTENSIONES.map(x => ({ name: exacto, ext: x })));
     if (!items.length) { close(); return; }
     index = Math.min(index, items.length - 1);
-    menu.innerHTML = '<div class="ctx-title">' + (items[0].plano ? 'Extensión' : 'Personajes') + '</div>' + items.map((it, i) => {
+    /* sin `innerHTML`: quitar nodos de la página en cada tecla hacía de cada letra del nombre un paso de Deshacer (ver
+       Ed.pintarFilas) */
+    Ed.pintarFilas(menu, [{ titulo: items[0].plano ? 'Extensión' : 'Personajes' }].concat(items.map((it, i) => {
       const col = C.colorOf(it.name);
       const txt = it.plano ? 'Sin extensión' : it.name.toUpperCase() + (it.ext ? ' (' + it.ext + ')' : '');
-      return `<button type="button" data-i="${i}" class="${i === index ? 'active' : ''}"><span><i class="char-dot" style="background:${col ? col[2] : '#888'}"></i>${Ed.escapeHtml(txt)}</span>${i === 0 && !it.plano ? '<kbd>Tab</kbd>' : ''}</button>`;
-    }).join('');
+      return { texto: txt, i, activa: i === index, punto: col ? col[2] : '#888', kbd: i === 0 && !it.plano ? 'Tab' : '' };
+    })));
     menu.hidden = false;
     const r = Ed.getRange();
     let rect = r ? r.getBoundingClientRect() : null;
@@ -252,7 +271,6 @@
     /* va de una vez y en HTML: con `insertText` Chrome recorta los espacios del final al sustituir el bloque entero
        (y sin doble espacio el personaje seguiría creciendo con lo que se escriba detrás). Los espacios van duros. */
     Ed.cmd('insertHTML', '<span class="ch-nom">' + Ed.escapeHtml(nom) + '</span>&nbsp;&nbsp;');
-    separar(block, true);
     paint(block, true);
     const fin = document.createRange();
     fin.selectNodeContents(block); fin.collapse(false);
@@ -276,8 +294,8 @@
     const b = currentCharBlock();
     if (!b) { if (!menu.hidden) close(); return; }
     /* con el personaje ya soltado (doble espacio) no se sugiere: lo que se escribe es la anotación */
-    if (C.suelto(b.textContent)) { separar(b, true); paint(b, true); close(); return; }   // el nombre a su chip, lo demás texto normal
-    if (b.querySelector(':scope > .ch-nom')) separar(b, true);                            // se borró el doble espacio: vuelve a ser uno
+    ajustarChip(b);                                                                    // sin tocar la estructura (ver arriba)
+    if (C.suelto(b.textContent)) { paint(b, true); close(); return; }
     const q = clean(b.textContent);
     if (!q) { close(); return; }
     activeBlock = b;
@@ -297,4 +315,11 @@
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
+
+  /* lo que se guarda va recogido (ver `C.limpiarHtml`): así el DOM no se toca mientras se escribe */
+  if (Ed.document && Ed.document.get && !Ed.document.get.conPersonajes) {
+    const get = Ed.document.get;
+    Ed.document.get = function () { const d = get.apply(this, arguments); if (d && typeof d.html === 'string') d.html = C.limpiarHtml(d.html); return d; };
+    Ed.document.get.conPersonajes = true;
+  }
 })(window.Ed);

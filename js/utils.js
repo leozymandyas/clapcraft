@@ -76,7 +76,49 @@ window.Ed = window.Ed || {};
 
   Ed.pxToPt = px => Math.round(px * 0.75 * 2) / 2;
 
-  Ed.escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /* **Nunca quitar nodos de la página mientras se escribe.** Chrome cierra la agrupación de lo tecleado —y cada letra pasa a
+     ser un paso de Deshacer— en cuanto se quita un nodo del documento fuera de un `execCommand`
+     (FrameSelection::NodeWillBeRemoved → TypingCommand::CloseTyping), aunque sea de un menú que no tiene nada que ver con el
+     editor: repintar el menú de sugerencias con `innerHTML` en cada tecla partía «CORTE A» en seis pasos (29-09-2026). Añadir
+     nodos, cambiar atributos o el `nodeValue` de un texto no la cierra (asignar `textContent` sí: quita el texto de antes).
+     `Ed.pintarFilas(menu, filas)` pinta las filas de un menú reutilizando sus nodos; las que sobran se esconden y se vacían
+     (sin texto ni `data-i`). filas: `{ titulo }` o `{ texto, i, activa, kbd, punto }` (punto: el color del `.char-dot`). */
+  Ed.pintarFilas = function (menu, filas) {
+    const slots = menu._filas || (menu._filas = []);
+    const txt = el => el.firstChild || el.appendChild(document.createTextNode(''));
+    const ver = (el, v) => { const d = v ? '' : 'none'; if (el.style.display !== d) el.style.display = d; };
+    const poner = (nodo, v) => { if (nodo.nodeValue !== v) nodo.nodeValue = v; };
+    filas.forEach((f, k) => {
+      let s = slots[k];
+      if (!s) {
+        const tit = document.createElement('div'); tit.className = 'ctx-title'; txt(tit);
+        const btn = document.createElement('button'); btn.type = 'button';
+        const span = document.createElement('span'), punto = document.createElement('i'); punto.className = 'char-dot';
+        const texto = document.createTextNode(''); span.append(punto, texto);
+        const kbd = document.createElement('kbd'); txt(kbd);
+        btn.append(span, kbd);
+        menu.append(tit, btn);
+        s = slots[k] = { tit, btn, punto, texto, kbd };
+      }
+      const esTit = f.titulo != null;
+      ver(s.tit, esTit); poner(txt(s.tit), esTit ? String(f.titulo) : '');
+      ver(s.btn, !esTit);
+      if (esTit || f.i == null) s.btn.removeAttribute('data-i'); else s.btn.dataset.i = String(f.i);
+      const clase = !esTit && f.activa ? 'active' : '';
+      if (s.btn.className !== clase) s.btn.className = clase;
+      poner(s.texto, esTit ? '' : String(f.texto == null ? '' : f.texto));
+      ver(s.kbd, !esTit && !!f.kbd); poner(txt(s.kbd), !esTit && f.kbd ? String(f.kbd) : '');
+      ver(s.punto, !esTit && !!f.punto); s.punto.style.background = !esTit && f.punto ? f.punto : '';
+    });
+    for (let k = filas.length; k < slots.length; k++) {
+      const s = slots[k];
+      ver(s.tit, false); poner(txt(s.tit), '');
+      ver(s.btn, false); s.btn.removeAttribute('data-i'); if (s.btn.className) s.btn.className = '';
+      poner(s.texto, ''); poner(txt(s.kbd), ''); s.punto.style.background = '';
+    }
+  };
+
+  Ed.escapeHtml = s =>String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   Ed.escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -107,8 +149,36 @@ window.Ed = window.Ed || {};
     if (neutro(st.backgroundColor)) st.removeProperty('background-color');
     if (!st.length) el.removeAttribute('style');
   }
+  /* Lo copiado de un personaje trae el color de su etiqueta (el fondo claro y la letra oscura de un mismo tono de la paleta, o
+     al revés en modo oscuro) clavado en un style: al pegarlo quedaba el chip pintado a mano. Se quita cuando el color y el
+     fondo son la pareja de un tono (en el mismo elemento o en uno de sus antepasados) y dentro de un bloque de personaje;
+     un resaltado o un color de letra sueltos de la paleta se quedan. La paleta: Ed.TONOS (editor.js) o la de characters.js. */
+  function paleta() {
+    const t = Ed.TONOS || (Ed.characters && Ed.characters.PALETTE) || [];
+    const m = new Map();
+    t.forEach((x, i) => { m.set(String(x[1]).toLowerCase(), i); m.set(String(x[2]).toLowerCase(), i); });
+    return m;
+  }
+  const hexDe = v => { const m = String(v || '').match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/); return m ? '#' + m.slice(1, 4).map(n => (+n).toString(16).padStart(2, '0')).join('') : String(v || '').trim().toLowerCase(); };
+  function quitarChips(doc) {
+    const pal = paleta(); if (!pal.size) return;
+    const tono = v => { const h = hexDe(v); return pal.has(h) ? pal.get(h) : -1; };
+    const quitar = (el, p) => { el.style.removeProperty(p); if (!el.style.length) el.removeAttribute('style'); };
+    doc.querySelectorAll('[style]').forEach(el => {
+      const t = tono(el.style.color);
+      if (t < 0) return;
+      for (let a = el; a && a.nodeType === 1; a = a.parentElement) {
+        if (a.style && tono(a.style.backgroundColor) === t && hexDe(a.style.backgroundColor) !== hexDe(el.style.color)) { quitar(a, 'background-color'); quitar(el, 'color'); return; }
+      }
+    });
+    doc.querySelectorAll('.sp-character, .sp-character [style]').forEach(el => {
+      if (tono(el.style.color) >= 0) quitar(el, 'color');
+      if (tono(el.style.backgroundColor) >= 0) quitar(el, 'background-color');
+    });
+  }
   Ed.sanitizeHtml = function (html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
+    quitarChips(doc);
     doc.querySelectorAll('script, style, link, meta, iframe, object, embed, form, input, textarea, select, button, noscript, title').forEach(n => n.remove());
     doc.querySelectorAll('*').forEach(el => {
       for (const attr of Array.from(el.attributes)) {

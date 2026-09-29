@@ -65,8 +65,9 @@ La interfaz está en español; los comentarios del código también.
   **Para probarlo en el panel**: las teclas del panel llegan como `keydown` pero sin su acción de edición (Retroceso no
   borra, Cmd+A no selecciona); se prueba con `KeyboardEvent`/`InputEvent('beforeinput')`/`ClipboardEvent` sintéticos
   y, si no se previenen, `execCommand('delete')` como haría Chrome.
-- Interlineado, sangría y operaciones de bloques modifican el DOM fuera de `execCommand` y no entran en
-  Ctrl+Z (limitación conocida).
+- Interlineado y sangría modifican el DOM fuera de `execCommand` y no entran en Ctrl+Z (limitación conocida). **Todo lo
+  demás sí entra desde la 1.1.69** (ver «1.1.69: revisión del editor»): nada del editor puede tocar los hijos de `#editor`
+  a mano durante la edición; se hace con `Ed.sustituir` / `Ed.screenplay.editar` (js/sustituir.js).
 - **Fusiones y spans de estilo** (14-09-2026): al unir dos bloques distintos (Retroceso al principio, Supr al
   final, escribir o borrar sobre una selección de varios) y en `insertHTML`/`insertText`/`delete` por
   `execCommand`, Chrome envolvía el texto en `<span style="background-color; color; font-size">` con los
@@ -77,7 +78,8 @@ La interfaz está en español; los comentarios del código también.
   `font-size`, el control de tamaño). El formato propio y el Deshacer se conservan. Quedan `<span>` sin
   atributos, inofensivos.
 - **Pegar**: `Ed.sanitizeHtml` quita fuente, tamaño, interlineado, mayúsculas, márgenes y colores neutros
-  (negro, gris, blanco: en oscuro el texto no se veía); se quedan los colores con tono y `--chl/--chd`.
+  (negro, gris, blanco: en oscuro el texto no se veía); se quedan los colores con tono y `--chl/--chd`, salvo la pareja de color de un chip de personaje (1.1.69: pegar lo
+  copiado de un personaje dejaba su color clavado).
 - **Especificación de formato de guion** (Leo, 17-09-2026, `especificacion-formato-guion.md`, 1.1.13; manda sobre lo anterior
   del guion). Elementos (`Ed.screenplay.KINDS`): scene, **subscene** (encabezado secundario, negrita, sin número), action,
   character, paren, dialogue, transition, shot, **act** (centrado, subrayado; empieza página nueva salvo el primero tras solo
@@ -88,7 +90,9 @@ La interfaz está en español; los comentarios del código también.
   francesa para su «(»), diálogo 7,5 (2,25 in; 42 de ancho); `sp-dialogue:has(+ .sp-paren)` va pegado. Los mismos valores en
   exportar.js (PDF: 1,8 / 1,2 / 0,75 in desde el margen de 1,5; Word, en twips) y en `FORMATOS` de maquetar.js. Enter (`NEXT`) y Tab (`TAB`: acción→personaje, personaje/diálogo→
   paréntesis; los demás siguen el ciclo de `ORDEN`) según la tabla de la especificación; **Enter en un elemento vacío abre el
-  menú «/»** (`Ed.slash.abrirAqui`: escribe la «/» y la quita si se cierra con Esc o un clic fuera). Ctrl+1…6 (`atajo` en
+  menú «/»** (`Ed.slash.abrirAqui({ alVacio, marcar })`; desde la 1.1.69 sin escribir la «/»: lo tecleado va a la consulta,
+  con el grupo Guion primero y «Acción» marcada, y un Enter sin consulta cierra el menú y deja la línea como estaba —antes
+  un segundo Enter abría el selector de imagen—). Ctrl+1…6 (`atajo` en
   `KINDS`; solo Ctrl, no Cmd). `js/formato.js`: «int/ext» → «INT./EXT.» en `beforeinput`, no deja teclear los «( )» / «[ ]»
   que ya pinta el CSS, «:» al salir de una transición, `data-izq` a «FADE IN:», el menú de sugerencias `.sug-menu` (lugares y
   momentos de las escenas usadas, secundarios, transiciones, tomas y actos; va antes que el de «/» en el `keydown`) y
@@ -171,9 +175,11 @@ La interfaz está en español; los comentarios del código también.
   **Y el color es solo del nombre** (Leo, 16-09-2026: «el personaje debe mantener su color de etiqueta y luego lo que
   escriba, en texto normal»): `separar(b, editando)` en characters.js deja el nombre en un `span.ch-nom` y la anotación detrás,
   como texto suelto; el chip pasa al span y el bloque se queda sin fondo (`p.sp-character[data-ch]:has(> .ch-nom)` en
-  css/editor.css). Se parte en cuanto se teclea el segundo espacio (`C.onInput`) y también al cargar un documento
-  (`refresh`), y **se deshace solo** si se borra el doble espacio; el cursor se conserva por su posición en el texto
-  (`offsetCursor`/`ponerCursor`), porque el bloque se rehace entero. `renombrarEn` sigue escribiendo texto plano: el
+  css/editor.css). **Desde la 1.1.69 el bloque no se rehace mientras se edita** (rehacerlo con `textContent` dejaba el
+  Deshacer huérfano: «MARAMARA»): el span lo pone `soltar` en su `insertHTML`, borrar el doble espacio solo cambia su clase
+  (`ch-nom` ↔ `ch-nom-x`), Enter al final recoge lo sobrante en el mismo paso (`C.recoger`) y lo demás se limpia al cargar
+  (`refresh(true)` desde `import`) y al serializar (`C.limpiarHtml`, que envuelve `Ed.document.get`). **Soltar solo al final
+  del nombre**: un espacio, «.» o «(» en medio se escriben normal (antes se perdía lo de detrás, «LUZ» o «(V.O.)»). `renombrarEn` sigue escribiendo texto plano: el
   span lo vuelve a poner `refresh` al abrir. Un bloque que deja de ser personaje pierde el span.
 - El corrector no marca los nombres de personajes ni las palabras de un nombre (`Ed.characters.has` mira el
   registro y el elenco del guion). La B de la cinta no se enciende por la negrita de estilo de un encabezado.
@@ -208,6 +214,11 @@ La interfaz está en español; los comentarios del código también.
   líneas en blanco que hagan falta (`insertHTML` de `<p><br></p>`, así entra en Deshacer), hasta 80. Para contarlas,
   **el alto de renglón se multiplica por el `zoom` de `.page-wrap`**: los estilos vienen sin él y las coordenadas del
   clic, con él, y mezclarlos dejaba el cursor muy por encima. Si el último bloque ya está en blanco, cuenta como una.
+  **Desde la 1.1.69 va al soltar sin arrastrar** (`Ed.clicEnHueco`, en el `mouseup`; arrastrar ahí dibuja el rectángulo de
+  bloques) y detrás de una lista, tabla, código, cita o recuadro las líneas van fuera de ese bloque (antes el `<p>` caía
+  dentro del último `li`). Un clic en el margen a la altura del texto o en el gris de al lado de la hoja pone el cursor en
+  esa línea (`Ed.cursorEnPunto(x, y)`: `caretRangeFromPoint` con la x recortada a la caja del bloque de esa altura); antes
+  el cursor se quedaba donde estaba (o iba al final del documento) y la vista saltaba allí.
 - El asa de bloque (`js/blocks.js`, `+ ⋮⋮`) va sin fondo y **sigue a la línea donde está el cursor**
   (`selectionchange`), no al ratón; se queda a la vista. El primer bloque de la hoja no lleva margen
   superior y los encabezados (`sp-scene` 12 pt, `h1–h3`) tienen poco: el margen se veía como un salto de
@@ -2661,6 +2672,74 @@ prueba en vivo.
   `test:equipo-ui` (132 en total: exportar con el diálogo sustituido y sus mods, «otro equipo» con el almacén y los mods vacíos,
   importar por el menú, añadir con sus mods y el retrato con ellos, Deshacer que también los quita, reemplazar, un archivo que no es de
   duendes, un JSON roto, cancelar, uno de ClapBook y soltar).
+
+## 1.1.69: revisión del editor (Deshacer, borrados y bloques)
+
+Leo, 29-09-2026: «cuando hay algo escrito e intento editar cosas, es difícil hacerlo porque se borran cosas que no quiero o luego
+no puedo hacer Command+Z. También cuando selecciono bloques para eliminarlo, a veces borra otras cosas. En general la experiencia de
+ese editor es mala». Equipo de agentes: cuatro que reprodujeron en Electron con ratón y teclado de verdad (Deshacer, borrados,
+bloques, experiencia general; más de 40 fallos), tres que arreglaron con archivos repartidos (bloques y clics; guion; integración
+con ClapCraft), uno que unificó el reemplazo de bloques y uno que escribió la prueba de regresión.
+
+- **La regla**: nada del editor toca los hijos de `#editor` fuera de `execCommand` mientras se edita (Chrome deja su historial
+  huérfano y Cmd+Z deshace otra cosa, nada o duplica texto). **`js/sustituir.js`** (se carga tras editor.js) tiene el núcleo
+  `Ed.reemplazar` y encima `Ed.sustituir(tocados, nuevos, op)` (hijos de #editor → elementos o HTML, devuelve los hijos nuevos;
+  `op.cursor`, `op.lineaFinal`), `Ed.sustituirBloque`, `Ed.htmlLimpio`, `Ed.setCaretText`/`Ed.caretTextOffset`; en screenplay.js,
+  `Ed.screenplay.editar(nodos, fn)` (clona, `fn` cambia el clon) usa el mismo núcleo. Cómo lo hace: recorta lo que no cambió y
+  hace **un** `insertHTML` sobre un rango que empieza al principio de un párrafo y acaba al final de otro (con un rango que
+  empieza o acaba en un `div`, una lista o un párrafo vacío, Chrome anida un `<p>` en otro, conserva el envoltorio o funde el
+  vecino con un diálogo o un recuadro); nunca cruza un bloque no editable (`contenteditable=false`, `.ed-fijo`, `.db`); en el
+  principio del documento o tras un fijo pone un párrafo de sacrificio (`p[data-sac]`) que el `insertHTML` se lleva (Deshacer lo
+  devuelve y un oyente de `historyUndo` lo quita; `execCommand('redo')` va envuelto para reponerlo antes); un párrafo vacío final
+  tras un `div` se escribe con `\u200B` y recupera su `<br>`; la línea detrás del último recuadro, doble, tabla o `.db` la pone el
+  núcleo, dentro del paso (`normalizar` de recuadros.js y doble.js no hacen nada durante Deshacer/Rehacer). Validado con matrices
+  en Electron (972 casos de guion y 6300 de bloques, con Deshacer y Rehacer idénticos). Lo usan blocks.js, screenplay.js (tipo de
+  bloque: Tab, Mayús+Tab, Ctrl+1…6, Enter, «/»), markdown.js (lista, cita, título, «---», «```»), characters.js, doble.js,
+  recuadros.js, table.js, el tamaño de letra de editor.js y `cargarEnSitio` de texto.js.
+- **Selección de bloques** (js/blocks.js): **arrastrar entre dos párrafos, triple clic y clic + Mayús+clic son selección de
+  texto** (antes el `mouseup` la convertía en bloques enteros y Retroceso los borraba; el triple clic se llevaba además el de
+  abajo). Los bloques se eligen con Esc, el asa, el rectángulo (arrastrando desde el lienzo o debajo del último bloque) y
+  Mayús+clic con bloques ya elegidos. Borrar, duplicar, mover (Cmd+Shift+↑/↓, arrastre del asa), convertir, cortar y el «+» del
+  asa son un paso de Deshacer (`Ed.blocks.ops` para las pruebas). Esc guarda dónde estaba el cursor: una letra o Enter sueltan la
+  selección y actúan ahí; Esc en un `li` elige el `li` (en una celda, su `tr`; en un recuadro, su párrafo), un segundo Esc el
+  contenedor. La selección se suelta en `selectionchange` con un rango en el editor, en Deshacer/Rehacer y al cargar
+  (`Ed.blocks.clear()`); copiar y cortar van por los eventos `copy`/`cut` (en Electron son `role` del menú); `blk-selected` no se
+  guarda. `moveGroup` no pasa por encima de la portada.
+- **Editor** (editor.js): `Ed.recortarSeleccion()` en `beforeinput` y al pegar: una selección que acaba al principio del bloque
+  siguiente (triple clic, Mayús+↓) se recorta al fin del anterior (si no, lo escrito se fundía con el de abajo y tomaba su tipo).
+  `isEmpty` con `textContent`. `typewriterScroll` no salta con un `mousedown` cancelado. `.fusionando` iguala también
+  `text-indent`, `word-spacing` y `font-variant` (el paréntesis tras un personaje dejaba `<span style="text-indent">`).
+- **Guion**: Retroceso con una línea vacía de guion encima (o Supr con una detrás) la quita y el bloque conserva su tipo; «)» y
+  «]» se teclean si hay uno abierto; `alSalir` no actúa con una selección dentro del bloque ni durante Deshacer/Rehacer
+  (`Ed.screenplay.enHistoria()`); **las sugerencias de lugar aceptan con Tab, y con Enter solo tras ↑/↓** («int casa» + Enter se
+  volvía «INT. CASA DE MARA - »); Enter en medio del nombre de un personaje pasa al diálogo; menú «/» y personajes, arriba en sus
+  secciones.
+- **ClapCraft**: `abrirDocumento` no recarga si el editor ya tiene esa nota con su html y su título (`claveCargada`): volver del
+  esquema o de otra pestaña ya no borra el historial. `recargar` (Claude, un personaje renombrado) sustituye solo el tramo que
+  cambió con `Ed.sustituir` (`cargarEnSitio`; si no cuadra, `set` como antes): lo de Claude se deshace como un paso. `historia()`
+  → `historiaMarco`: con el foco en un campo del marco deshace ese campo; si no, suelta los bloques, enfoca el editor y repite
+  el `execCommand` mientras `#editor` no cambie (hasta 20: pasos muertos de los `<input>` del marco o de un `set`).
+  `C.texto.enfocar()` devuelve el foco tras Versiones, Exportar, Insertar plantilla (`disparadorEn`), la comparación de versiones
+  y el panel flotante de la tira (`cerrarYVolver`, Enter/Esc/×); y con el editor delante y el foco en nada, una tecla de escribir
+  lo devuelve antes. `reponer` no pisa un desplazamiento del usuario. El tablero escondido no atiende teclas.
+- **Páginas**: con typewriter, `calcular` corrige el `scrollTop` por lo que se movió el cursor (en un límite de página la línea
+  bajaba 249 px al pausar); `firmaDe` evita rehacer los márgenes si no cambió nada de lo que se ve (184 páginas: de ~60 a ~15 ms
+  por tecla); `P.recalcular()` fuerza el cálculo completo.
+- **Lo tecleado se deshacía letra a letra** (la causa más escondida): Chrome deja de agrupar lo tecleado en un paso de Deshacer
+  en cuanto **se quita un nodo de cualquier sitio de la página** fuera de un `execCommand`, aunque no sea del editor; asignar
+  `innerHTML` o `textContent` cuenta (quita los nodos de antes). Añadir nodos, cambiar atributos o el `nodeValue` de un texto no
+  cortan. Lo hacían los menús de sugerencias de formato.js, characters.js y slash.js al repintarse en cada tecla y, lo más grave,
+  el contador `#fbPaginas`, `#pagEstilo`/`#pagAlto` y los saltos de paginas.js a los 120 ms de cada pausa (con pausas, cada letra
+  de cualquier párrafo era un paso), y el botón de Versiones de texto.js. Ahora `Ed.pintarFilas(menu, filas)` (utils.js) reutiliza
+  las filas de un menú y esconde las que sobran, y paginas.js (`ponerTexto`, `pintar`) y texto.js cambian el `nodeValue` y
+  reutilizan nodos. **Regla: nada que se repinte mientras se escribe en el editor puede quitar nodos** (ni en la página de
+  ClapCraft mientras se escribe en la ventana de una nota: no revisado aún).
+- **Pruebas**: `npm run test:editor` (`pruebas/editor-electron.js`, 297 comprobaciones, ~6 min, en ClapCraft y en index.html
+  solo; contra el código de la 1.1.68 fallan 146): selección de texto, bloques, Deshacer del guion, que no se pierda texto,
+  clics y lo propio de ClapCraft. Argumento = filtro de grupo; `PARTE=app|editor`. Deshacer en ClapCraft por el `click()` del
+  MenuItem (Cmd+Z con `sendInputEvent` no hace nada: lo resuelve el menú); en index.html solo, `webContents.undo()`.
+- **Queda**: interlineado, sangría y los atributos de un recuadro (título, tipo, color) siguen fuera de Deshacer; copiar y cortar
+  bloques con el `role` del menú de Electron solo se probó con `ClipboardEvent` sintéticos (el portapapeles real es el de Leo).
 
 ## Claude: acceso desde Cowork y Claude Code (1.1.49)
 

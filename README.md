@@ -5,7 +5,7 @@ nodos), escribes el texto de cada paso en un **editor de guion** y organizas el 
 **bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
 navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-**Versión 1.1.68**
+**Versión 1.1.69**
 
 ## Instalar
 

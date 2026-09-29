@@ -186,7 +186,8 @@
   document.addEventListener('selectionchange', () => requestAnimationFrame(updateToolbar));
 
   /* ---------- cambios, estadísticas y autoguardado ---------- */
-  const isEmpty = () => !editor.innerText.trim() && !editor.querySelector('img, table, hr');
+  /* textContent y no innerText: innerText obliga a maquetar en cada tecla */
+  const isEmpty = () => !editor.textContent.replace(/[\s\u200B\u00A0]/g, '') && !editor.querySelector('img, table, hr, .db, .portada, div[data-rc]');
 
   const autosave = Ed.debounce(() => {
     try {
@@ -238,8 +239,43 @@
     else return false;
     return !trozo.toString().replace(/\u200B/g, '');
   }
+  /* Una selección de varios bloques que acaba al principio del siguiente sin coger nada de él (el triple clic, Mayús+↓ desde
+     el principio de una línea) se llevaba ese bloque al escribir o borrar: lo escrito se fundía con él y tomaba su tipo
+     («Nueva acciónMARA» dentro del personaje). Se recorta el final al fin del bloque anterior; lo demás lo hace el navegador,
+     que lee la selección después de este evento. */
+  const RECORTAR = /^(insertText|insertReplacementText|insertFromPaste|insertFromDrop|insertParagraph|insertLineBreak|delete)/;
+  function finDelAnterior(b) {
+    const w = document.createTreeWalker(editor, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    w.currentNode = b;
+    let n = w.previousNode();
+    while (n && b.contains(n)) n = w.previousNode();
+    while (n && n !== editor) {
+      const blk = n.nodeType === 1 && Ed.BLOCK_TAGS.has(n.tagName) && !n.querySelector('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, td, th, div') ? n : Ed.closestBlock(n, editor);
+      if (blk && !blk.contains(b)) return blk;
+      n = w.previousNode();
+    }
+    return null;
+  }
+  Ed.recortarSeleccion = function () {
+    const s = window.getSelection();
+    if (!s || !s.rangeCount || s.isCollapsed) return false;
+    const r = s.getRangeAt(0);
+    if (!editor.contains(r.startContainer) || !editor.contains(r.endContainer)) return false;
+    const a = Ed.closestBlock(r.startContainer, editor), z = Ed.closestBlock(r.endContainer, editor);
+    if (!a || !z || a === z || z.contains(a)) return false;
+    const trozo = document.createRange(); trozo.setStart(z, 0); trozo.setEnd(r.endContainer, r.endOffset);
+    if (trozo.toString().replace(/\u200B/g, '') || trozo.cloneContents().querySelector('img, table, hr')) return false;
+    const prev = finDelAnterior(z);
+    if (!prev || !editor.contains(prev)) return false;
+    const nr = r.cloneRange();
+    try { nr.setEnd(prev, prev.childNodes.length); } catch (_) { return false; }
+    if (nr.collapsed) return false;
+    s.removeAllRanges(); s.addRange(nr);
+    return true;
+  };
   editor.addEventListener('beforeinput', e => {
     if (e.target !== editor && e.target.closest && e.target.closest('.db')) return;
+    if (RECORTAR.test(e.inputType || '')) Ed.recortarSeleccion();
     if (esFusion(e)) { editor.classList.add('fusionando'); setTimeout(() => editor.classList.remove('fusionando'), 0); }
   });
 
@@ -277,6 +313,41 @@
   }
 
   /* ---------- tamaño de letra ---------- */
+  /* Con texto elegido, el tamaño se pone en una copia de los bloques tocados y entra con un solo insertHTML (Ed.sustituir):
+     antes se cambiaban a mano los <font size=7> de execCommand por <span> y Deshacer dejaba un <span></span> vacío. */
+  function tamanoEnSeleccion(pt) {
+    const r = Ed.getRange(); if (!r || r.collapsed || !editor.contains(r.startContainer) || !Ed.sustituir) return;
+    const tope = n => { let x = n.nodeType === 3 ? n.parentNode : n; while (x && x.parentNode !== editor) x = x.parentNode; return x && x.parentNode === editor ? x : null; };
+    const a = tope(r.startContainer), z = tope(r.endContainer); if (!a || !z) return;
+    const kids = [...editor.children], bloques = kids.slice(kids.indexOf(a), kids.indexOf(z) + 1);
+    if (bloques.some(b => b.getAttribute('contenteditable') === 'false' || b.matches('.db') || b.querySelector('.db, [contenteditable="false"]'))) return;
+    /* posiciones de la selección en el texto seguido de esos bloques */
+    const pos = (n, o) => { const x = document.createRange(); x.setStart(a, 0); x.setEnd(n, o); return x.toString().length; };
+    const desde = pos(r.startContainer, r.startOffset), hasta = pos(r.endContainer, r.endOffset);
+    if (hasta <= desde) return;
+    const copias = bloques.map(b => b.cloneNode(true));
+    const tc = [];
+    copias.forEach(b => { const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); while (w.nextNode()) tc.push(w.currentNode); });
+    let t = 0;
+    tc.forEach(x => {
+      const i = t, f = t + x.length; t = f;
+      const s0 = Math.max(desde, i) - i, s1 = Math.min(hasta, f) - i;
+      if (s1 <= s0) return;
+      let nodo = x;
+      if (s1 < nodo.length) nodo.splitText(s1);
+      if (s0 > 0) nodo = nodo.splitText(s0);
+      const sp = document.createElement('span'); sp.style.fontSize = pt + 'pt';
+      nodo.replaceWith(sp); sp.appendChild(nodo);   // el más de dentro: manda sobre el tamaño que tuviera alrededor
+    });
+    const hechos = Ed.sustituir(bloques, copias);
+    if (!hechos.length) return;
+    /* se vuelve a elegir lo mismo */
+    const tn = [];
+    hechos.forEach(b => { const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); while (w.nextNode()) tn.push(w.currentNode); });
+    const punto = off => { let q = 0; for (const x of tn) { if (off <= q + x.length) return [x, off - q]; q += x.length; } const u = tn[tn.length - 1]; return u ? [u, u.length] : [hechos[0], 0]; };
+    const nr = document.createRange(); nr.setStart(...punto(desde)); nr.setEnd(...punto(hasta));
+    Ed.restoreSelection(nr);
+  }
   function setFontSize(pt) {
     pt = Math.min(200, Math.max(6, Math.round(pt * 2) / 2));
     Ed.focusEditor();
@@ -287,25 +358,7 @@
       Ed.cmd('insertHTML', `<span id="${id}" style="font-size:${pt}pt">&#8203;</span>`);
       const span = editor.querySelector('#' + id);
       if (span) { span.removeAttribute('id'); Ed.setCaret(span.firstChild, 1); }
-    } else {
-      document.execCommand('styleWithCSS', false, false);
-      document.execCommand('fontSize', false, '7');
-      document.execCommand('styleWithCSS', false, true);
-      const spans = [];
-      editor.querySelectorAll('font[size="7"]').forEach(f => {
-        const s = document.createElement('span');
-        s.style.fontSize = pt + 'pt';
-        while (f.firstChild) s.appendChild(f.firstChild);
-        f.replaceWith(s);
-        spans.push(s);
-      });
-      if (spans.length) {
-        const r = document.createRange();
-        r.setStartBefore(spans[0]);
-        r.setEndAfter(spans[spans.length - 1]);
-        Ed.restoreSelection(r);
-      }
-    }
+    } else tamanoEnSeleccion(pt);
     $('#fontSize').value = pt;
     afterChange();
   }
@@ -562,7 +615,9 @@
   });
 
   function loadDocument({ html, title, characters }) {
+    if (Ed.blocks && Ed.blocks.clear) Ed.blocks.clear();   // lo elegido era del documento de antes
     editor.innerHTML = html && html.trim() ? html : '<p><br></p>';
+    editor.querySelectorAll('.blk-selected').forEach(n => { n.classList.remove('blk-selected'); if (!n.classList.length) n.removeAttribute('class'); });
     if (Ed.db) Ed.db.mountAll();
     if (Ed.characters) Ed.characters.import(characters || {});
     titleInput.value = title || '';
@@ -576,10 +631,15 @@
      Ed.document.get()  → { title, html, characters }  (html sin la interfaz de las bases de datos)
      Ed.document.set(doc) carga un documento; Ed.document.onChange(fn) avisa tras cada cambio. */
   const changeListeners = [];
+  /* la marca de bloque elegido (blocks.js) no es del documento */
+  const sinMarcas = h => h.replace(/\sclass="([^"]*\bblk-selected\b[^"]*)"/g, (m, c) => { const k = c.split(/\s+/).filter(x => x && x !== 'blk-selected'); return k.length ? ` class="${k.join(' ')}"` : ''; });
+  /* una línea en blanco escrita con un espacio de ancho cero (Ed.reemplazar, js/sustituir.js, detrás de un diálogo doble o un
+     recuadro al final) se guarda con su <br> */
+  const SOLO_ZW = /(<p\b[^>]*>)\u200B(<\/p>)/g;
   Ed.document = {
     get: () => ({
       title: titleInput.value,
-      html: Ed.cleanHtml(Ed.db ? Ed.db.stripped(editor) : editor.innerHTML),
+      html: sinMarcas(Ed.cleanHtml(Ed.db ? Ed.db.stripped(editor) : editor.innerHTML)).replace(SOLO_ZW, '$1<br>$2'),
       characters: Ed.characters ? Ed.characters.export() : {}
     }),
     set: doc => { loadDocument(doc || {}); dirty = false; },
@@ -678,7 +738,7 @@
 
   /* ---------- selector de color (paleta pastel + gotero) ---------- */
   /* Paleta del proyecto: 16 tonos con par claro (marcatextos) y oscuro (letra) */
-  const TONES = [
+  const TONES = Ed.TONOS = [
     ['Azul', '#DBE8FF', '#1A4A86'], ['Verde', '#D8F2DF', '#11643D'], ['Terracota', '#FFE3D5', '#9C3F14'], ['Violeta', '#EAE0FF', '#5326AB'],
     ['Ámbar', '#FFEEC9', '#875408'], ['Rosa', '#FFE0EA', '#A51A5A'], ['Teal', '#D2F0ED', '#0A6663'], ['Oliva', '#E8F4CD', '#4C6B0F'],
     ['Índigo', '#E2E2FF', '#33359C'], ['Coral', '#FFE3DD', '#A83A26'], ['Ciruela', '#F9DCF6', '#8B2280'], ['Arena', '#F4E8CF', '#6F5722'],
@@ -879,8 +939,12 @@
     const delta = (rect.top + rect.height / 2) - (ws.top + ws.height / 2);
     if (Math.abs(delta) > 2) workspace.scrollBy({ top: delta, behavior: 'auto' });
   }
+  Ed.typewriterScroll = typewriterScroll;
   editor.addEventListener('keyup', e => { if (/^Arrow|^(Home|End|PageUp|PageDown)$/.test(e.key)) typewriterScroll(); });
-  editor.addEventListener('mouseup', () => setTimeout(typewriterScroll, 0));
+  /* un clic cuyo mousedown se canceló (el asa, un bloque elegido, el hueco) no movió el cursor: no se desplaza la hoja */
+  let mdCancelado = false;
+  document.addEventListener('mousedown', e => { mdCancelado = e.defaultPrevented; });
+  editor.addEventListener('mouseup', () => { if (!mdCancelado) setTimeout(typewriterScroll, 0); });
 
   workspace.addEventListener('wheel', e => {
     if (!(e.ctrlKey || e.metaKey)) return;
@@ -888,16 +952,41 @@
     Ed.page.zoomBy(Math.max(-0.1, Math.min(0.1, -e.deltaY * 0.005)));
   }, { passive: false });
 
-  /* clic en el fondo gris: coloca el cursor al final del documento */
-  workspace.addEventListener('mousedown', e => {
-    if (e.target !== workspace && e.target !== $('#pageWrap')) return;
-    e.preventDefault();
-    editor.focus();
+  /* ---------- clics fuera del texto (los recibe blocks.js, que decide si es un clic o el rectángulo de selección) ----------
+     Ed.cursorEnPunto(x, y): el cursor en el bloque de esa altura (o el más cercano), con la x recortada a su caja: un clic en
+     el margen al lado de una línea estrecha (un personaje, un paréntesis) o en el hueco de un salto de página lo deja ahí. */
+  Ed.cursorEnPunto = function (x, y) {
+    const bloques = [...editor.children].filter(b => b.isContentEditable && b.getClientRects().length);
+    if (!bloques.length) return false;
+    let mejor = null, dist = Infinity;
+    for (const b of bloques) {
+      const c = b.getBoundingClientRect(), d = y < c.top ? c.top - y : y > c.bottom ? y - c.bottom : 0;
+      if (d < dist) { dist = d; mejor = b; }
+      if (!d) break;
+    }
+    const c = mejor.getBoundingClientRect();
+    const yy = Math.min(Math.max(y, c.top + 2), Math.max(c.top + 2, c.bottom - 2));
+    const xx = Math.min(Math.max(x, c.left + 1), Math.max(c.left + 1, c.right - 1));
+    let r = document.caretRangeFromPoint ? document.caretRangeFromPoint(xx, yy) : null;
+    const n = r && (r.startContainer.nodeType === 3 ? r.startContainer.parentElement : r.startContainer);
+    if (!r || !n || !mejor.contains(n) || !n.isContentEditable) { r = document.createRange(); r.selectNodeContents(mejor); r.collapse(y < c.top + c.height / 2); }
+    editor.focus({ preventScroll: true });
+    Ed.restoreSelection(r);
+    typewriterScroll();
+    return true;
+  };
+  /* clic en el lienzo gris a un lado de la hoja: el cursor a esa altura; por debajo de todo, al final del documento */
+  Ed.clicFuera = function (x, y) {
+    const u = editor.lastElementChild;
+    const hoja = editor.getBoundingClientRect();
+    if (u && y <= u.getBoundingClientRect().bottom && Ed.cursorEnPunto(Math.min(Math.max(x, hoja.left), hoja.right), y)) return;
+    editor.focus({ preventScroll: true });
     const r = document.createRange();
     r.selectNodeContents(editor);
     r.collapse(false);
     Ed.restoreSelection(r);
-  });
+    typewriterScroll();
+  };
 
   /* ---------- teclado ---------- */
   editor.addEventListener('keydown', e => {
@@ -1012,6 +1101,7 @@
     if (img) { e.preventDefault(); insertImageFile(img); return; }
     const html = cd.getData('text/html');
     const text = cd.getData('text/plain');
+    if (html || text) Ed.recortarSeleccion();   // una selección que acaba al principio del bloque siguiente no se lo lleva
     if (html) { e.preventDefault(); Ed.cmd('insertHTML', Ed.sanitizeHtml(html)); if (Ed.db) Ed.db.mountAll(); }
     else if (text) { e.preventDefault(); insertPlainText(text); }
   });
@@ -1043,24 +1133,33 @@
     const zoom = parseFloat(getComputedStyle(editor.parentElement || editor).zoom) || 1;
     return (alto + (ref ? parseFloat(cs.marginBottom) || 0 : 0)) * zoom;
   }
-  editor.addEventListener('mousedown', e => {
-    if (e.button !== 0 || e.target !== editor || !editor.isContentEditable) return;   // solo el hueco de la hoja
+  /* lo llama blocks.js al soltar un clic (sin arrastrar: arrastrando es el rectángulo de selección) en el hueco de la hoja */
+  Ed.clicEnHueco = function (x, y) {
+    if (!editor.isContentEditable) return;
     const ultimo = editor.lastElementChild; if (!ultimo) return;
     const caja = ultimo.getBoundingClientRect();
-    if (e.clientY <= caja.bottom + 2) return;              // el hueco está debajo de todo lo escrito
-    e.preventDefault();
-    const vacio = b => !b.textContent.trim() && !b.querySelector('img, table, .db, hr');
+    if (y <= caja.bottom + 2) { Ed.cursorEnPunto(x, y); return; }   // el hueco está debajo de todo lo escrito
+    const vacio = b => !b.textContent.replace(/[\s\u200B]/g, '') && !b.querySelector('img, table, .db, hr');
+    const simple = ultimo.matches('p, h1, h2, h3, h4, h5, h6') && ultimo.isContentEditable && !ultimo.classList.contains('ed-fijo');
     const linea = altoDeLinea(ultimo);
-    let faltan = Math.max(0, Math.round((e.clientY - caja.bottom) / linea));
-    if (vacio(ultimo)) faltan--;                           // el último, si está en blanco, ya es una de esas líneas
+    let faltan = Math.max(0, Math.round((y - caja.bottom) / linea));
+    if (simple && vacio(ultimo)) faltan--;                 // el último, si está en blanco, ya es una de esas líneas
     faltan = Math.min(faltan, MAX_LINEAS);
-    const r = document.createRange();
-    r.selectNodeContents(ultimo); r.collapse(false);
-    Ed.restoreSelection(r);
-    editor.focus();
-    if (faltan > 0) Ed.cmd('insertHTML', '<p><br></p>'.repeat(faltan));   // con execCommand, para que entre en Deshacer
+    editor.focus({ preventScroll: true });
+    if (!simple) {
+      /* detrás de una lista, una tabla, un código, una cita o un recuadro: las líneas van detrás del bloque (antes el <p> se
+         metía dentro del último elemento de la lista) */
+      const hechos = Ed.sustituir([ultimo], [ultimo, ...Array(Math.max(1, faltan)).fill('<p><br></p>')]);
+      const u = hechos[hechos.length - 1] || editor.lastElementChild;
+      if (u) Ed.setCaret(u, 0);
+    } else {
+      const r = document.createRange();
+      r.selectNodeContents(ultimo); r.collapse(false);
+      Ed.restoreSelection(r);
+      if (faltan > 0) Ed.cmd('insertHTML', '<p><br></p>'.repeat(faltan));   // con execCommand, para que entre en Deshacer
+    }
     Ed.afterChange();
-  });
+  };
 
   /* ---------- arranque ---------- */
   function init() {

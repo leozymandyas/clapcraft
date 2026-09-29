@@ -69,15 +69,9 @@
   const grupoAntes = g => { const p = g[0].previousElementSibling; return p && /^(character|paren|dialogue)$/.test(kind(p) || '') ? grupoDe(p) : null; };
   const grupoDespues = g => { const n = g[g.length - 1].nextElementSibling; return n && kind(n) === 'character' ? grupoDe(n) : null; };
 
-  /* sustituye los bloques de primer nivel [a … b] por `nuevo` con un solo insertHTML (entra en Deshacer). Chrome reemplaza
-     limpio si la selección va del principio de un párrafo al final de otro; empezando en el propio diálogo doble, se queda
-     con su envoltorio. */
-  function reemplazar(a, b, nuevo) {
-    editor().focus({ preventScroll: true });
-    const r = document.createRange(); r.setStart(a, 0); r.setEnd(b, b.childNodes.length);
-    Ed.restoreSelection(r);
-    Ed.cmd('insertHTML', nuevo);
-  }
+  /* sustituye los bloques de primer nivel [a … b] por `nuevo` con un solo insertHTML (entra en Deshacer): `Ed.sustituir`
+     (js/sustituir.js) sabe hacerlo también al principio y al final del documento, donde Chrome se quedaba con el envoltorio */
+  const reemplazar = (a, b, nuevo) => Ed.sustituir([a, b], [nuevo]);
   /* el diálogo doble que quedó justo donde estaba `ref` (el que sigue a `antes`, o el primero) */
   const dobleTras = antes => { const n = antes ? antes.nextElementSibling : editor().firstElementChild; return n && n.classList.contains('sp-doble') ? n : editor().querySelector(':scope > .sp-doble'); };
 
@@ -104,25 +98,20 @@
     const d = dobleTras(antes);
     if (d) cursorEn(parrafos(columnas(d)[0])[0], false);
   }
-  /* en dos diálogos seguidos: el de la izquierda y luego el de la derecha */
-  D.separar = function (d) {
+  /* en dos diálogos seguidos: el de la izquierda y luego el de la derecha (con un solo insertHTML: `Ed.sustituir` ya se ocupa de
+     que haya un párrafo a cada lado, así que también entra en Deshacer al principio o al final del documento) */
+  D.separar = function (d, quitar) {
     if (!d || !d.isConnected) return;
     /* una columna vacía del todo no deja nada; de las otras se quitan las líneas vacías (salvo la primera) */
-    const piezas = columnas(d).filter(c => !parrafos(c).every(vacio)).map(c => parrafos(c).filter((p, i) => i === 0 || !vacio(p)).map(limpio).join('')).join('')
+    const piezas = columnas(d).filter(c => !parrafos(c).every(vacio)).map(c => parrafos(c).filter((p, i) => p !== quitar && (i === 0 || !vacio(p))).map(limpio).join('')).join('')
       || '<p class="sp-action"><br></p>';
-    const antes = d.previousElementSibling, despues = d.nextElementSibling;
-    const n = (piezas.match(/<p[\s>]/g) || []).length;
-    if (antes && despues && antes.tagName === 'P' && despues.tagName === 'P') {
-      const i = Array.prototype.indexOf.call(editor().children, antes);
-      reemplazar(antes, despues, limpio(antes) + piezas + limpio(despues));
-      cursorEn(editor().children[i + n], true);                  // al final de lo que era la columna de la derecha
-    } else {
-      /* sin un párrafo a cada lado no se puede con insertHTML (se quedaba el envoltorio): a mano, fuera de Deshacer */
-      const t = document.createElement('template'); t.innerHTML = piezas;
+    const hechos = Ed.screenplay.editar([d], clon => {
+      const cd = clon(d), t = document.createElement('template'); t.innerHTML = piezas;
       const ultimo = t.content.lastElementChild;
-      d.replaceWith(t.content);
-      cursorEn(ultimo, true);
-    }
+      cd.replaceWith(t.content);
+      return { nodo: ultimo, fin: true };                          // al final de lo que era la columna de la derecha
+    });
+    if (!hechos) cursorEn(d, true);
     cambiado();
   };
   /* «Diálogo doble»: juntar, poner uno en blanco o, dentro de uno, separarlo */
@@ -142,25 +131,41 @@
     cambiado();
   };
 
-  /* ---------- Enter dentro de una columna (lo llama screenplay.js) ---------- */
-  /* salir de una columna: de la izquierda a la derecha; de la derecha, a una acción debajo del bloque */
-  function salir(col) {
+  /* ---------- Enter dentro de una columna (lo llama screenplay.js) ----------
+     Todo con `Ed.screenplay.editar` (el diálogo doble entero se vuelve a escribir con un solo insertHTML): quitar una línea
+     vacía, abrir el diálogo o salir a una acción entran en Deshacer. */
+  const editar = (nodos, fn) => Ed.screenplay.editar(nodos, fn);
+  const lineaNueva = k => Ed.screenplay.nuevaLinea(k);
+  /* quita una línea vacía de una columna (no la primera) con un `delete` desde el final de la de antes: un paso de Deshacer */
+  function quitarLinea(b) {
+    const prev = b.previousElementSibling; if (!prev) return;
+    editor().focus({ preventScroll: true });
+    const r = document.createRange(); r.setStart(prev, prev.childNodes.length); r.setEnd(b, b.childNodes.length);
+    Ed.restoreSelection(r);
+    Ed.cmd('delete');
+  }
+  /* salir de una columna: de la izquierda a la derecha; de la derecha, a una acción debajo del bloque. `quitar`: la línea vacía
+     de la que se sale, que sobra (se quita antes, con su propio paso de Deshacer) */
+  function salir(col, quitar) {
     const d = col.parentNode, cols = columnas(d);
+    if (quitar && quitar.isConnected) {
+      if (col !== cols[0] && parrafos(col).every(vacio)) { D.separar(d, quitar); return; }
+      quitarLinea(quitar);
+    }
     if (col === cols[0] && cols[1]) {
       const ps = parrafos(cols[1]);
       cursorEn(ps.find(vacio) || ps[0], !ps.some(vacio));
+      cambiado();
       return;
     }
     /* la derecha vacía del todo: el bloque vuelve a ser un diálogo normal */
     if (parrafos(col).every(vacio)) { D.separar(d); return; }
-    let n = d.nextElementSibling;
-    if (!(n && n.tagName === 'P' && vacio(n) && !n.classList.contains('ed-fijo'))) {
-      n = document.createElement('p'); n.innerHTML = '<br>';
-      d.after(n);
-    }
-    Array.from(n.classList).forEach(k => { if (k.startsWith('sp-')) n.classList.remove(k); });
-    n.classList.add('sp-action');
-    cursorEn(n, false);
+    const n = d.nextElementSibling;
+    if (n && n.tagName === 'P' && vacio(n) && !n.classList.contains('ed-fijo')) {
+      /* la línea vacía de debajo pasa a acción (solo ella: con el rango justo, Chrome no se lía) */
+      if (Ed.screenplay.kindOf(n) === 'action') cursorEn(n, false);
+      else editar([n], clon => { const c = Ed.screenplay.aplicarEn(clon(n), 'action'); return { nodo: c, offset: 0 }; });
+    } else editar([d], clon => { const cd = clon(d), p = lineaNueva('action'); cd.after(p); return { nodo: p, offset: 0 }; });
     cambiado();
   }
   D.onEnter = function (e, block) {
@@ -171,20 +176,17 @@
     e.preventDefault();
     if (vacio(block)) {
       /* una línea vacía (un paréntesis o un diálogo de más): se quita y se sale de la columna */
-      if (parrafos(col).length > 1 && block !== parrafos(col)[0]) block.remove();
-      salir(col);
+      salir(col, parrafos(col).length > 1 && block !== parrafos(col)[0] ? block : null);
       return true;
     }
     const sig = block.nextElementSibling;
     if (sig && sig.tagName === 'P' && vacio(sig)) { cursorEn(sig, false); return true; }   // el diálogo en blanco que ya estaba
     if (k === 'character' || k === 'paren') {
-      Ed.cmd('insertParagraph');
-      const r2 = Ed.getRange(), nb = r2 && Ed.closestBlock(r2.startContainer, editor());
-      if (nb && nb !== block) { Ed.screenplay.aplicar(nb, 'dialogue'); Ed.setCaret(nb, 0); }
+      editar([block], clon => { const c = clon(block), n = lineaNueva('dialogue'); c.after(n); return { nodo: n, offset: 0 }; });
       cambiado();
       return true;
     }
-    salir(col);
+    salir(col, null);
     return true;
   };
 
@@ -204,10 +206,10 @@
         parar();
         if (col === cols[0]) {
           if (cols.every(c => parrafos(c).every(vacio))) {             // vacío del todo: fuera (en su lugar, una línea vacía)
-            let p = d.nextElementSibling;
-            if (p && p.tagName === 'P' && vacio(p)) d.remove();
-            else { p = document.createElement('p'); p.innerHTML = '<br>'; d.replaceWith(p); }
-            cursorEn(p, false); cambiado();
+            const p = d.nextElementSibling;
+            if (p && p.tagName === 'P' && vacio(p) && !p.classList.contains('ed-fijo')) editar([d, p], clon => { const cd = clon(d), cp = clon(p); cd.remove(); return { nodo: cp, offset: 0 }; });
+            else editar([d], clon => { const cd = clon(d), np = lineaNueva(null); cd.replaceWith(np); return { nodo: np, offset: 0 }; });
+            cambiado();
           } else { const prev = d.previousElementSibling; if (prev && !prev.classList.contains('ed-fijo')) cursorEn(prev, true); }
         } else if (ps.every(vacio)) D.separar(d);                      // la derecha vacía: un diálogo normal
         else cursorEn(parrafos(cols[0]).pop(), true);
@@ -222,14 +224,20 @@
     if (atras && top.previousElementSibling && top.previousElementSibling.classList.contains('sp-doble') && enBorde(top, r, false) && b === top) {
       parar();
       const d = top.previousElementSibling, fin = parrafos(columnas(d).pop()).pop();
-      if (vacio(top) && top.nextElementSibling) { top.remove(); cambiado(); }
-      cursorEn(fin, true);
+      if (vacio(top) && top.nextElementSibling) {
+        editar([d, top], clon => { const ct = clon(top), cf = clon(fin); ct.remove(); return { nodo: cf, fin: true }; });
+        cambiado();
+      } else cursorEn(fin, true);
       return;
     }
     if (!atras && top.nextElementSibling && top.nextElementSibling.classList.contains('sp-doble') && enBorde(top, r, true) && b === top) {
       parar();
       const d = top.nextElementSibling;
-      if (vacio(top)) { top.remove(); cambiado(); cursorEn(parrafos(columnas(d)[0])[0], false); }
+      if (vacio(top)) {
+        const pri = parrafos(columnas(d)[0])[0];
+        editar([top, d], clon => { const ct = clon(top), cp = clon(pri); ct.remove(); return { nodo: cp, offset: 0 }; });
+        cambiado();
+      }
     }
   }
 
@@ -276,6 +284,8 @@
   function nuevaCol(contenido) { const c = document.createElement('div'); c.className = 'sp-col'; c.innerHTML = contenido === undefined ? VACIA : contenido; return c; }
   function normalizar() {
     const ed = editor(); if (!ed || !ed.querySelector('.sp-doble, .sp-col')) return;
+    /* nada mientras Chrome deshace o rehace: lo arreglado quedaría fuera del historial (y vaciaría Rehacer) */
+    if (Ed.screenplay && Ed.screenplay.enHistoria && Ed.screenplay.enHistoria()) return;
     let cambio = false;
     ed.querySelectorAll('.sp-doble').forEach(d => { if (d.parentNode !== ed) { desenvolver(d); cambio = true; } });   // uno dentro de otro
     ed.querySelectorAll('.sp-col').forEach(c => { if (!(c.parentNode && c.parentNode.classList && c.parentNode.classList.contains('sp-doble'))) { desenvolver(c); cambio = true; } });

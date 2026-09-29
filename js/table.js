@@ -28,28 +28,56 @@
   const newCell = tag => { const c = document.createElement(tag); c.innerHTML = '<br>'; return c; };
   const rowsOf = table => Array.from(table.querySelectorAll('tr'));
 
+  /* **Los cambios de la tabla entran en Deshacer** (29-09-2026): filas y columnas se añadían, quitaban y movían a mano en el DOM y
+     Cmd+Z deshacía otra cosa. Ahora se cambia un clon de la tabla y se pone con un solo insertHTML (`Ed.screenplay.editar`).
+     `cambiar(t, m)` recibe el clon (`m(n)` da el clon de un nodo de la tabla) y devuelve [fila, columna] de la celda donde va el
+     cursor (o nada); `alFinal` pone el cursor al final de esa celda. Sin `editar`, a mano como antes. */
+  function enClon(table, cambiar, alFinal) {
+    let foco = null;
+    const S = Ed.screenplay;
+    if (!S || !S.editar || table.parentNode !== editor()) { foco = cambiar(table, n => n); ponerEn(table, foco, alFinal); return table; }
+    const hechos = S.editar([table], clon => { foco = cambiar(clon(table), n => clon(n)); });
+    const t = hechos && hechos.find(x => x && x.tagName === 'TABLE') || null;
+    if (t) ponerEn(t, foco, alFinal);
+    return t;
+  }
+  function ponerEn(table, foco, alFinal) {
+    if (!foco || !table) return;
+    const row = rowsOf(table)[foco[0]]; if (!row) return;
+    const cell = row.children[Math.min(foco[1], row.children.length - 1)];
+    if (alFinal) caretEnd(cell); else focusCell(cell);
+  }
+  const indiceFila = (t, row) => rowsOf(t).indexOf(row);
+
   /* ---------- insertar (2 columnas × 2 filas, con encabezado) ---------- */
   T.insert = function (cols = 2, rows = 2) {
     Ed.focusEditor();
     const r = Ed.getRange();
     if (!r) return;
-    const table = document.createElement('table');
+    const table = document.createElement('table'), tbody = document.createElement('tbody');
+    table.appendChild(tbody);
     for (let i = 0; i < rows; i++) {
       const tr = document.createElement('tr');
       for (let j = 0; j < cols; j++) tr.appendChild(newCell(i === 0 ? 'th' : 'td'));
-      table.appendChild(tr);
+      tbody.appendChild(tr);
     }
     const after = document.createElement('p');
     after.innerHTML = '<br>';
     const block = Ed.closestBlock(r.startContainer, editor());
-    if (block && block.parentElement === editor() && !block.closest('table')) {
-      const empty = !block.textContent.trim() && !block.querySelector('img');
-      block.after(table, after);
-      if (empty) block.remove();
+    const S = Ed.screenplay;
+    let ancla = block && block.parentElement === editor() && !block.closest('table') ? block : null;
+    if (!ancla && S && S.editar && editor().lastElementChild) ancla = editor().lastElementChild;
+    if (ancla && S && S.editar) {
+      /* con un solo insertHTML (entra en Deshacer): detrás del bloque del cursor, o en su lugar si está vacío */
+      const empty = ancla === block && !block.textContent.trim() && !block.querySelector('img');
+      const hechos = S.editar([ancla], clon => { const b = clon(ancla); b.after(table, after); if (empty) b.remove(); });
+      const t = hechos && hechos.find(x => x && x.tagName === 'TABLE');
+      focusCell(t && t.querySelector('th, td'));
     } else {
-      editor().append(table, after);
+      if (ancla) { const empty = !ancla.textContent.trim() && !ancla.querySelector('img'); ancla.after(table, after); if (empty) ancla.remove(); }
+      else editor().append(table, after);
+      focusCell(table.querySelector('th, td'));
     }
-    focusCell(table.querySelector('th, td'));
     changed();
     T.update();
   };
@@ -57,88 +85,101 @@
   /* ---------- filas ---------- */
   T.addRow = function (where, ctx) {
     const c = ctx || T.cellCtx(); if (!c) return;
-    const nr = document.createElement('tr');
-    Array.from(c.row.children).forEach(() => nr.appendChild(newCell('td')));
-    where === 'above' ? c.row.before(nr) : c.row.after(nr);
-    focusCell(nr.children[Math.min(c.idx, nr.children.length - 1)]);
+    enClon(c.table, (t, m) => {
+      const row = m(c.row), nr = document.createElement('tr');
+      Array.from(row.children).forEach(() => nr.appendChild(newCell('td')));
+      where === 'above' ? row.before(nr) : row.after(nr);
+      return [indiceFila(t, nr), c.idx];
+    });
     changed(); T.update();
   };
   T.addRowEnd = function (table) {
-    const rows = rowsOf(table); const last = rows[rows.length - 1];
-    const nr = document.createElement('tr');
-    Array.from(last.children).forEach(() => nr.appendChild(newCell('td')));
-    last.after(nr);
-    focusCell(nr.firstElementChild);
+    enClon(table, t => {
+      const rows = rowsOf(t), last = rows[rows.length - 1];
+      const nr = document.createElement('tr');
+      Array.from(last.children).forEach(() => nr.appendChild(newCell('td')));
+      last.after(nr);
+      return [rows.length, 0];
+    });
     changed(); T.update();
   };
   T.deleteRow = function (ctx) {
     const c = ctx || T.cellCtx(); if (!c) return;
     if (c.rows.length <= 1) return T.deleteTable(c);
-    const next = c.row.nextElementSibling || c.row.previousElementSibling;
-    c.row.remove();
-    focusCell(next && next.children[Math.min(c.idx, next.children.length - 1)]);
+    enClon(c.table, (t, m) => {
+      const row = m(c.row), i = indiceFila(t, row);
+      row.remove();
+      return [Math.min(i, rowsOf(t).length - 1), c.idx];
+    });
     changed(); T.update();
   };
   T.moveRowTo = function (table, from, to) {
     const rows = rowsOf(table);
     if (from === to || !rows[from] || to < 0 || to >= rows.length) return;
-    const row = rows[from];
-    const ref = rows[to];
-    to > from ? ref.after(row) : ref.before(row);
-    focusCell(row.children[0]);
+    enClon(table, t => {
+      const rs = rowsOf(t), row = rs[from], ref = rs[to];
+      to > from ? ref.after(row) : ref.before(row);
+      return [to, 0];
+    });
     changed(); T.update();
   };
   T.moveRow = function (dir, ctx) {
     const c = ctx || T.cellCtx(); if (!c) return;
     const target = c.rowIdx + dir;
     if (target < 0 || target >= c.rows.length) return;
+    const idx = c.idx;
     T.moveRowTo(c.table, c.rowIdx, target);
-    focusCell(c.cell);
+    const t = T.cellCtx(); if (t) ponerEn(t.table, [target, idx]);
   };
 
   /* ---------- columnas ---------- */
   T.addCol = function (where, ctx) {
     const c = ctx || T.cellCtx(); if (!c) return;
-    let target = null;
-    rowsOf(c.table).forEach(tr => {
-      const ref = tr.children[Math.min(c.idx, tr.children.length - 1)];
-      const nc = newCell(ref && ref.tagName === 'TH' ? 'th' : 'td');
-      if (!ref) tr.appendChild(nc); else where === 'left' ? ref.before(nc) : ref.after(nc);
-      if (tr === c.row) target = nc;
+    enClon(c.table, t => {
+      rowsOf(t).forEach(tr => {
+        const ref = tr.children[Math.min(c.idx, tr.children.length - 1)];
+        const nc = newCell(ref && ref.tagName === 'TH' ? 'th' : 'td');
+        if (!ref) tr.appendChild(nc); else where === 'left' ? ref.before(nc) : ref.after(nc);
+      });
+      return [c.rowIdx, where === 'left' ? c.idx : c.idx + 1];
     });
-    focusCell(target);
     changed(); T.update();
   };
   T.addColEnd = function (table) {
-    let first = null;
-    rowsOf(table).forEach(tr => { const nc = newCell(tr.firstElementChild && tr.firstElementChild.tagName === 'TH' ? 'th' : 'td'); tr.appendChild(nc); if (!first) first = nc; });
-    focusCell(first);
+    let n = 0;
+    enClon(table, t => {
+      rowsOf(t).forEach(tr => { const nc = newCell(tr.firstElementChild && tr.firstElementChild.tagName === 'TH' ? 'th' : 'td'); tr.appendChild(nc); n = tr.children.length - 1; });
+      return [0, n];
+    });
     changed(); T.update();
   };
   T.deleteCol = function (ctx) {
     const c = ctx || T.cellCtx(); if (!c) return;
     if (c.row.children.length <= 1) return T.deleteTable(c);
-    rowsOf(c.table).forEach(tr => { const cell = tr.children[c.idx]; if (cell) cell.remove(); });
-    focusCell(c.row.children[Math.min(c.idx, c.row.children.length - 1)]);
+    enClon(c.table, t => {
+      rowsOf(t).forEach(tr => { const cell = tr.children[c.idx]; if (cell) cell.remove(); });
+      return [c.rowIdx, c.idx];
+    });
     changed(); T.update();
   };
   T.moveColTo = function (table, from, to) {
     const n = table.querySelector('tr').children.length;
     if (from === to || to < 0 || to >= n) return;
-    let focus = null;
-    rowsOf(table).forEach(tr => {
-      const cell = tr.children[from]; const ref = tr.children[to];
-      if (!cell || !ref) return;
-      to > from ? ref.after(cell) : ref.before(cell);
-      if (!focus) focus = cell;
+    enClon(table, t => {
+      rowsOf(t).forEach(tr => {
+        const cell = tr.children[from]; const ref = tr.children[to];
+        if (!cell || !ref) return;
+        to > from ? ref.after(cell) : ref.before(cell);
+      });
+      return [0, to];
     });
-    focusCell(focus);
     changed(); T.update();
   };
   T.moveCol = function (dir, ctx) {
     const c = ctx || T.cellCtx(); if (!c) return;
-    T.moveColTo(c.table, c.idx, c.idx + dir);
-    focusCell(c.cell);
+    const target = c.idx + dir, fila = c.rowIdx;
+    T.moveColTo(c.table, c.idx, target);
+    const t = T.cellCtx(); if (t) ponerEn(t.table, [fila, target]);
   };
 
   T.deleteTable = function (ctx) {
@@ -150,18 +191,21 @@
   function removeTable(table) {
     const prev = table.previousElementSibling;
     const next = table.nextElementSibling;
-    table.remove();
     const target = prev || next;
-    if (target && Ed.BLOCK_TAGS.has(target.tagName) && !target.querySelector('table')) {
-      const r = document.createRange();
-      r.selectNodeContents(target);
-      r.collapse(!prev);
-      Ed.restoreSelection(r);
+    const vale = target && Ed.BLOCK_TAGS.has(target.tagName) && !target.querySelector('table');
+    const S = Ed.screenplay;
+    if (S && S.editar && table.parentNode === editor()) {
+      /* en un solo paso de Deshacer: sin la tabla (y con una línea en su lugar si no queda dónde escribir) */
+      S.editar([table], clon => {
+        const t = clon(table);
+        if (vale) { t.remove(); return; }
+        const p = document.createElement('p'); p.innerHTML = '<br>'; t.replaceWith(p); return { nodo: p, offset: 0 };
+      });
+      if (vale && target.isConnected) { const r = document.createRange(); r.selectNodeContents(target); r.collapse(!prev); Ed.restoreSelection(r); }
     } else {
-      const p = document.createElement('p');
-      p.innerHTML = '<br>';
-      next ? next.before(p) : editor().appendChild(p);
-      Ed.setCaret(p, 0);
+      table.remove();
+      if (vale) { const r = document.createRange(); r.selectNodeContents(target); r.collapse(!prev); Ed.restoreSelection(r); }
+      else { const p = document.createElement('p'); p.innerHTML = '<br>'; next ? next.before(p) : editor().appendChild(p); Ed.setCaret(p, 0); }
     }
     changed(); T.update();
   }
@@ -203,10 +247,8 @@
         if (rowEmpty(c.row)) {
           /* fila vacía: se borra; si era la única, se quita la tabla */
           if (c.rows.length <= 1) { removeTable(c.table); return true; }
-          const prev = c.row.previousElementSibling;
-          const next = c.row.nextElementSibling;
-          c.row.remove();
-          if (prev) caretEnd(prev.children[prev.children.length - 1]); else focusCell(next.children[0]);
+          const i = c.rowIdx, arriba = !!c.row.previousElementSibling;
+          enClon(c.table, (t, m) => { m(c.row).remove(); return arriba ? [i - 1, Infinity] : [0, 0]; }, arriba);
           changed(); T.update();
           return true;
         }
@@ -223,10 +265,8 @@
       e.preventDefault();
       if (rowEmpty(c.row)) {
         if (c.rows.length <= 1) { removeTable(c.table); return true; }
-        const next = c.row.nextElementSibling;
-        const prev = c.row.previousElementSibling;
-        c.row.remove();
-        if (next) focusCell(next.children[Math.min(c.idx, next.children.length - 1)]); else caretEnd(prev.children[prev.children.length - 1]);
+        const i = c.rowIdx, abajo = !!c.row.nextElementSibling;
+        enClon(c.table, (t, m) => { m(c.row).remove(); return abajo ? [i, c.idx] : [i - 1, Infinity]; }, !abajo);
         changed(); T.update();
         return true;
       }
@@ -244,9 +284,13 @@
       if (!prev || prev.tagName !== 'TABLE') return false;
       e.preventDefault();
       const empty = !block.textContent.replace(/\u200B/g, '').trim() && !block.querySelector('img');
-      if (empty && block.nextElementSibling) block.remove();
-      const cells = prev.querySelectorAll('td, th');
-      caretEnd(cells[cells.length - 1]);
+      let tabla = prev;
+      if (empty && block.nextElementSibling && Ed.screenplay && Ed.screenplay.editar) {
+        const hechos = Ed.screenplay.editar([prev, block], clon => { clon(block).remove(); });
+        tabla = (hechos && hechos[0] && hechos[0].tagName === 'TABLE') ? hechos[0] : prev;
+      } else if (empty && block.nextElementSibling) block.remove();
+      const cells = tabla.isConnected ? tabla.querySelectorAll('td, th') : [];
+      if (cells.length) caretEnd(cells[cells.length - 1]);
       changed(); T.update();
       return true;
     }

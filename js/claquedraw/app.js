@@ -2198,7 +2198,25 @@
      Un esquema tiene un documento y dentro suyo sus versiones: el botón «Versiones» de la barra inferior del editor
      abre la lista (js/claquedraw/versiones.js), «Guardar versión…» pide el nombre en el modal de siempre y se puede
      comparar cualquiera con lo que hay ahora. */
-  const disparadorEn = rect => ({ getBoundingClientRect: () => rect, classList: { add() {}, remove() {} }, focus() {} });
+  /* **El foco vuelve al editor** (29-09-2026, revisión del editor; Leo: «se borran cosas que no quiero»): los menús del editor
+     (Versiones, Exportar, Insertar plantilla) se abren en la página y se llevan el foco; al cerrarlos, el foco se quedaba en la
+     página y lo que se escribía después se perdía (o Supr llegaba al tablero escondido). El disparador de mentira de esos menús
+     devuelve el foco al editor cuando el gestor se lo pide (Esc: `devolverFoco`) y, al cerrarse el menú de cualquier otro modo, si
+     el foco se ha quedado en nada (un clic en una opción o en un hueco; no si el clic se lo llevó a otro sitio). */
+  function algoEncima() {
+    return !!document.querySelector('dialog[open], .gd-pop, .vs-capa, .hc-capa, .dn-capa, .cd-capa, .eq-capa, .hilo-flot:not([hidden])')
+      || document.body.classList.contains('con-ventana') || !!(window.Anotar && Anotar.abierto && Anotar.abierto());
+  }
+  function volverAlEditor() {
+    if (!editorDelante() || algoEncima()) return false;
+    return C.texto.enfocar();
+  }
+  /* tras un rato (lo que se abra después, un diálogo, ya estará; y la tecla que cerró el diálogo ya habrá acabado: su carácter no
+     debe caer en el editor): solo si el foco no está en ningún sitio que se vea (tras cerrar un diálogo, Chrome lo deja un momento
+     en su campo, ya escondido) */
+  const focoEnNada = () => { const a = document.activeElement; return !a || a === document.body || a === document.documentElement || !a.isConnected || !a.getClientRects().length; };
+  const volverSiNada = () => setTimeout(() => { if (focoEnNada()) volverAlEditor(); }, 80);
+  const disparadorEn = rect => ({ getBoundingClientRect: () => rect, classList: { add() {}, remove() { volverSiNada(); } }, focus() { volverAlEditor(); } });
   function notaAbiertaEnEditor() {
     const d = docs(); if (!d) return null;
     const nid = C.gestor.notaAbierta() || (C.texto.enDocumento() || vista.modo === 'texto' ? docId : null);
@@ -2219,7 +2237,7 @@
       cargar: async vid => {
         C.gestor.cerrarPop();
         const v = d.version(n.id, vid); if (!v) return;
-        if (!versionActual(n) && !await T.tablero.confirmar('¿Cargar «' + v.nombre + '»? Lo que has escrito y no has guardado como versión se pierde.', 'Cargar')) return;
+        if (!versionActual(n) && !await T.tablero.confirmar('¿Cargar «' + v.nombre + '»? Lo que has escrito y no has guardado como versión se pierde.', 'Cargar')) { volverSiNada(); return; }
         if (!tras(d.cargarVersion(n.id, vid))) return;
         C.texto.soltar();                                      // lo que quedó en el editor no debe volver a la nota
         abrirEnEditor();
@@ -2230,6 +2248,7 @@
         const lista = d.versionesDe(n.id);
         const r0 = await C.gestor.pedirNombre({ ceja: 'Versión de «' + n.titulo + '»', titulo: 'Guardar versión',
           pista: 'Por ejemplo, v1 o Primer borrador', boton: 'Guardar', valor: 'v' + (lista.length + 1) });
+        volverSiNada();
         if (!r0) return;
         if (!r0.nombre.trim()) { T.tablero.avisar('Escribe un nombre para la versión'); return; }
         const r = d.guardarVersion(n.id, r0.nombre);
@@ -2238,7 +2257,7 @@
       comparar: vid => {
         C.gestor.cerrarPop();
         const lista = d.versionesDe(n.id); if (!lista.length) return;
-        const abrir = v => C.versiones.abrirComparacion({ nombre: v.nombre, html: v.html }, { nombre: 'Ahora', html: n.html });
+        const abrir = v => C.versiones.abrirComparacion({ nombre: v.nombre, html: v.html }, { nombre: 'Ahora', html: n.html }, { alCerrar: volverSiNada });
         if (vid) { const v = d.version(n.id, vid); if (v) abrir(v); return; }
         if (lista.length === 1) { abrir(lista[0]); return; }
         C.gestor.menuLista(trigger, 'Comparar con la actual…', lista.map(v => ({ id: v.id, nombre: v.nombre })), id => abrir(d.version(n.id, id)));
@@ -2247,13 +2266,16 @@
         C.gestor.cerrarPop();
         const v = d.version(n.id, vid); if (!v) return;
         const r0 = await C.gestor.pedirNombre({ ceja: 'Versión de «' + n.titulo + '»', titulo: 'Renombrar la versión', boton: 'Renombrar', valor: v.nombre });
+        volverSiNada();
         if (!r0 || !r0.nombre.trim()) return;
         tras(d.renombrarVersion(n.id, vid, r0.nombre));
       },
       eliminar: async vid => {
         const v = d.version(n.id, vid); if (!v) return;
         C.gestor.cerrarPop();
-        if (!await T.tablero.confirmar('¿Eliminar la versión «' + v.nombre + '»? El documento de ahora no se toca.', 'Eliminar')) return;
+        const si = await T.tablero.confirmar('¿Eliminar la versión «' + v.nombre + '»? El documento de ahora no se toca.', 'Eliminar');
+        volverSiNada();
+        if (!si) return;
         const r = d.eliminarVersion(n.id, vid);
         if (tras(r)) T.tablero.avisar(r.aviso);
       }
@@ -2262,8 +2284,7 @@
 
   /* «Exportar» de la barra inferior del editor (dentro del marco): el menú se abre en la página, sobre el botón */
   function exportarDesdeEditor(rect) {
-    const disparador = { getBoundingClientRect: () => rect, classList: { add() {}, remove() {} }, focus() {} };
-    C.exportar.menu(disparador, documentoAExportar, T.tablero.avisar);
+    C.exportar.menu(disparadorEn(rect), documentoAExportar, T.tablero.avisar);
   }
 
   /* ---------- gestor de documentos (vista Documentos) ---------- */
@@ -2541,10 +2562,27 @@
     if (window.Anotar && Anotar.abierto()) { if (Anotar.editando()) Anotar[accion === 'undo' ? 'deshacer' : 'rehacer'](); return; }
     const marco = $('editorMarco'), a = document.activeElement;
     const enCampo = a && a !== document.body && a !== marco && (a.matches('input, textarea') || a.isContentEditable);
-    if (a === marco || (!enCampo && (vista.modo === 'texto' || document.body.classList.contains('nota-abierta')))) { const d = marco.contentDocument; if (d) d.execCommand(accion); }
+    if (a === marco || (!enCampo && (vista.modo === 'texto' || document.body.classList.contains('nota-abierta')))) historiaMarco(marco, accion);
     else if (enCampo) document.execCommand(accion);
     else if (vista.modo === 'lienzo') { if (lienzoMontado && C.lienzoUI && (!C.lienzoUI.activo || C.lienzoUI.activo())) C.lienzoUI[accion === 'undo' ? 'deshacer' : 'rehacer'](); }   // su historial (1.1.58)
     else if (vista.modo === 'esquema') tablero();
+  }
+  /* **Deshacer en el editor sin pasos muertos** (29-09-2026, revisión del editor; Leo: «luego no puedo hacer Command+Z»). El
+     historial de Chrome es del documento del marco entero: lo escrito en sus campos (buscar, reemplazar, el tamaño de letra, el
+     título) entra en el mismo, y tras cargar un documento quedan pasos que ya no tocan nada. Así, el primer Cmd+Z deshacía algo que
+     no se veía y parecía que no funcionaba. Con el foco en un campo del marco se deshace el campo, como siempre; si no, el foco va
+     al editor (con los bloques elegidos con el asa, se sueltan antes: con ellos no hay cursor) y se deshace hasta que el documento
+     cambie de verdad (20 pasos como mucho). */
+  function historiaMarco(marco, accion) {
+    const d = marco.contentDocument, w = marco.contentWindow, E = w && w.Ed; if (!d) return;
+    const ed = d.getElementById('editor'), fa = d.activeElement;
+    const campo = fa && fa !== d.body && fa !== ed && (fa.matches('input, textarea, select') || (fa.isContentEditable && !(ed && ed.contains(fa))));
+    if (campo || !ed) { d.execCommand(accion); return; }
+    if (E && E.blocks && typeof E.blocks.selected === 'function' && typeof E.blocks.clear === 'function' && E.blocks.selected().length) E.blocks.clear();
+    if (!C.texto.enfocar()) { try { w.focus(); } catch (_) {} if (E && E.focusEditor) E.focusEditor(); }
+    const antes = ed.innerHTML;
+    d.execCommand(accion);
+    for (let i = 1; i < 20 && ed.innerHTML === antes && d.queryCommandEnabled(accion); i++) d.execCommand(accion);
   }
   const deshacer = () => historia('undo', () => T.tablero.deshacer());
   const rehacer = () => historia('redo', () => T.tablero.rehacer());
@@ -2677,6 +2715,23 @@
   if (api && api.onMenu) api.onMenu(accion => {
     const fn = ordenes[accion]; if (fn) fn();
   });
+
+  /* **Con el editor delante y el foco en ningún sitio, la tecla va al editor** (29-09-2026): tras cerrar un menú o un aviso con el
+     ratón, el foco se queda en la página; lo que se escribía se perdía y Supr o las flechas podían llegar a otra cosa. Una tecla de
+     escribir o de moverse (sin Cmd, Ctrl ni Alt) devuelve antes el foco al editor: el carácter ya cae ahí; Retroceso, Supr, Enter y
+     las flechas solo devuelven el foco (no hacen nada más esa vez). */
+  const TECLAS_EDITOR = new Set(['Backspace', 'Delete', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
+  /* un clic en un panel de al lado (el asistente, el menú lateral) deja el foco suelto a propósito: las flechas o el espacio
+     desplazan ese panel y no deben ir al editor */
+  let ultimoClic = null;
+  document.addEventListener('pointerdown', e => { ultimoClic = e.target; }, true);
+  document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!focoEnNada()) return;
+    if (ultimoClic && ultimoClic.isConnected && ultimoClic.closest && ultimoClic.closest('#asistente, #gdSide, .gd-riel, .as-panel')) return;
+    if (e.key.length !== 1 && !TECLAS_EDITOR.has(e.key)) return;
+    if (volverAlEditor() && e.key.length !== 1) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
 
   /* Atajos en el navegador (en Electron los lleva el menú y no llegan aquí). */
   document.addEventListener('keydown', e => {
