@@ -120,7 +120,7 @@ app.whenReady().then(async () => {
     if (!Claquedraw.biblioteca.total()) { Claquedraw.app.nuevo(); await W(100); await Claquedraw.app.crearProyecto({ nombre: 'Sin título 1', plantilla: 'blanco' }); }
     for (let i = 0; i < 100 && !Claquedraw.gestor.documentos(); i++) await W(50); await W(600); return true;`);
   /* el guion de la pestaña abierta tal como lo serializa app.js */
-  const enPagina = () => js(`const g = Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()); return JSON.stringify({ app: 'clapcraft', formato: 4, nombre: g.nombre, documentos: g.documentos });`);
+  const enPagina = () => js(`const g = Claquedraw.biblioteca.guion(Claquedraw.app.abiertoId()); return JSON.stringify({ app: 'clapcraft', formato: 5, nombre: g.nombre, documentos: g.documentos });`);
   const indicador = () => js(`return document.getElementById('estadoGuardado').className;`);
   const mismo = async (p, que) => {
     const a = leerArchivo(p), b = await enPagina();
@@ -586,7 +586,7 @@ app.whenReady().then(async () => {
 
     /* ---------- 7. un archivo de una versión más nueva de ClapCraft: se lee, pero no se escribe (revisión del port a ClapBook: la
        1.1.55 abría los de la 1.1.60, con su mismo formato 2, y al autoguardar tiraba los lienzos y la memoria de estilo) ---------- */
-    comprobar('lo que escribe esta versión lleva el formato 4', JSON.parse(leerArchivo(CORTO).texto).formato === 4);
+    comprobar('lo que escribe esta versión lleva el formato 5', JSON.parse(leerArchivo(CORTO).texto).formato === 5);
     const FUTURO = path.join(TMP, 'Del futuro.clapcraft'), COPIA_FUT = path.join(TMP, 'Copia del futuro.clapcraft');
     { const x = JSON.parse(leerArchivo(CORTO).texto); x.formato = 99; x.nombre = 'Del futuro'; x.documentos.algoNuevo = { de: 'una versión más nueva' };
       fs.writeFileSync(FUTURO, zlib.gzipSync(JSON.stringify(x))); }
@@ -607,7 +607,7 @@ app.whenReady().then(async () => {
     rutaFija = COPIA_FUT;
     await js(`const p = Claquedraw.app.guardarComo(); await W(300); const b = document.querySelector('#dlg[open] #dlgOk'); if (b) b.click(); await p; await W(500);`);
     const cf = fs.existsSync(COPIA_FUT) ? JSON.parse(leerArchivo(COPIA_FUT).texto) : null;
-    comprobar('con otro nombre, una copia con el formato de esta versión y lo de aquí', cf && cf.formato === 4 && /Cambio en la del futuro/.test(JSON.stringify(cf.documentos)) && !cf.documentos.algoNuevo, cf ? 'formato ' + cf.formato : 'no se escribió');
+    comprobar('con otro nombre, una copia con el formato de esta versión y lo de aquí', cf && cf.formato === 5 && /Cambio en la del futuro/.test(JSON.stringify(cf.documentos)) && !cf.documentos.algoNuevo, cf ? 'formato ' + cf.formato : 'no se escribió');
     comprobar('y ya no está en «Solo lectura»', await js(`return document.getElementById('estadoGuardado').textContent !== 'Solo lectura';`));
     comprobar('el de la versión más nueva sigue intacto', fs.readFileSync(FUTURO).equals(bytesFuturo));
   } catch (err) {

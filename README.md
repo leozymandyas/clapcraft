@@ -5,7 +5,7 @@ nodos), escribes el texto de cada paso en un **editor de guion** y organizas el 
 **bibliotecas** y **personajes**. Funciona como app de escritorio (macOS, Windows, Linux) y en el
 navegador. Está hecho en JavaScript puro, sin frameworks ni paso de compilación.
 
-**Versión 1.1.67**
+**Versión 1.1.68**
 
 ## Instalar
 
@@ -309,6 +309,11 @@ columnas, nodos, saltos y notas, con las mismas reglas que el tablero—, pero t
   archivo nuevo, corrige los enlaces que haya dentro del proyecto y recuerda el nombre de antes, así que los enlaces que ya pegaste
   en Claude siguen llevando ahí. Una copia del archivo no se toma por un renombrado: toma su propio nombre y sus enlaces siguen
   apuntando al original.
+- **Los duendes del asistente** (el asistente con IA de la app de escritorio, **Claude › Duendes del asistente…**) viven en este
+  equipo, no dentro de un proyecto. Para llevarlos a otro equipo de cómputo está el **respaldo**: **Exportar respaldo…** (al pie de esa
+  ventana, o en el menú Claude) los guarda en un archivo «Duendes de ClapCraft AAAA-MM-DD.json» —con los disfraces y máscaras de los
+  mods del teatro que usan, y sin tu clave ni nada de la IA—, e **Importar respaldo…** (o soltar el archivo sobre la ventana) los trae
+  en el otro equipo: **Añadir a los míos** o **Reemplazar todos**, con «Deshacer» en el aviso. Vale también un respaldo de ClapBook.
 
 ## Atajos de teclado
 

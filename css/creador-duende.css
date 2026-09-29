@@ -3,6 +3,9 @@
    Claro, Oscuro, Synthwave y Vaporwave. */
 .cd-capa { position: fixed; inset: 38px 0 0 0; z-index: 72; display: flex; align-items: center; justify-content: center; padding: 3vh 24px;
   background: var(--backdrop, rgba(10, 10, 20, .45)); animation: gd-modal-capa .14s ease-out; font-family: var(--sans); }
+/* la capa es el contenedor de la forma estrecha: con el panel del asistente abierto la capa se estrecha y la ventana no (con
+   `@media` las filas se quedaban con su columna de 150 px y el valor entre ‹ › en 12 px; visto al portarlo a ClapBook) */
+.cd-capa { container: cdcapa / inline-size; }
 body.con-asistente .cd-capa { right: var(--as-ancho, 380px); }
 body.con-asistente.asistente-plegado .cd-capa { right: 40px; }
 .cd-ventana { width: min(1040px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--papel); color: var(--tinta);
@@ -19,6 +22,7 @@ body.con-asistente.asistente-plegado .cd-capa { right: 40px; }
 .cd-marco-caja { border: 1px solid var(--borde); border-radius: 6px; overflow: hidden; background: var(--panel); box-shadow: var(--sombra); }
 .cd-marco { display: block; width: 100%; aspect-ratio: 1 / 1; border: 0; background: transparent; transition: transform .22s ease; }
 .cd-marco.girado { transform: scaleX(-1); }
+.cd-girar[aria-pressed="true"] { background: var(--foco-suave); border-color: var(--foco-linea); color: var(--foco); }
 .cd-escena-acc { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
 .cd-girar { flex: none; height: 30px; }
 .cd-gesto-l, .cd-desc-l { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -84,12 +88,15 @@ html[data-estilo] .cd-pestana[aria-selected="true"] { box-shadow: inset 0 -2px 0
 html[data-estilo] .cd-valor:not(.serie) { box-shadow: var(--neon-brillo, none); }
 html[data-estilo] .cd-chip[aria-pressed="true"] { background: var(--sol, var(--foco)); border-color: transparent; color: var(--sol-tinta, var(--foco-sobre)); }
 
-@media (max-width: 760px) {
-  .cd-capa { padding: 8px; }
+@media (max-width: 760px) { .cd-capa { padding: 8px; } }
+@container cdcapa (max-width: 880px) {
   .cd-cuerpo { grid-template-columns: 1fr; overflow: auto; }
-  .cd-escena { border-right: 0; border-bottom: 1px solid var(--regla, var(--borde)); }
+  .cd-escena { border-right: 0; border-bottom: 1px solid var(--regla, var(--borde)); overflow: visible; }
   .cd-marco-caja { max-width: 260px; align-self: center; width: 100%; }
   .cd-fila { grid-template-columns: 1fr; }
+  .cd-filas { overflow: visible; }
+  .cd-pie { flex-wrap: wrap; }
+  .cd-error { flex-basis: 100%; order: -1; }
 }
 @media (prefers-reduced-motion: reduce) { .cd-marco { transition: none; } }
 

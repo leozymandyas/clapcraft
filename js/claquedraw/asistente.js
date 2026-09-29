@@ -79,6 +79,7 @@
     revertir_cambio: ['Revirtiendo un cambio', 'Revirtió un cambio'],
     mostrar_en_clapcraft: ['Enseñándotelo', 'Te lo enseñó'],
     usar_formula: ['Cargando la fórmula', 'Cargó la fórmula'],   // 1.1.60
+    trabajar_en_equipo: ['El equipo está trabajando', 'El equipo trabajó'],   // 1.1.68: el equipo de duendes
     recordar_estilo: ['Aprendiendo', 'Aprendió'],                // la memoria de estilo (1.1.60): «Aprendió: …», con su Deshacer
     olvidar_estilo: ['Olvidando', 'Olvidó']
   };
@@ -114,6 +115,10 @@
   const atajo = (tecla, shift) => (MAC ? '⌘' + (shift ? '⇧' : '') + tecla : 'Ctrl+' + (shift ? 'Shift+' : '') + tecla);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ic = (n, t = 16) => `<svg width="${t}" height="${t}" aria-hidden="true"><use href="#${n}"></use></svg>`;
+  /* 1.1.68: el altavoz del sonido (encendido y apagado) y el gorro de duende del botón «Duendes» (no están en el sprite) */
+  const SVG_SONIDO = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h2.4L8.5 3v10L4.9 10H2.5z" fill="currentColor" fill-opacity=".18"/><path d="M10.6 5.6a3.4 3.4 0 0 1 0 4.8M12.4 3.9a5.8 5.8 0 0 1 0 8.2"/></svg>';
+  const SVG_SONIDO_NO = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h2.4L8.5 3v10L4.9 10H2.5z" fill="currentColor" fill-opacity=".18"/><path d="M10.8 6.2l3.4 3.6M14.2 6.2l-3.4 3.6"/></svg>';
+  const SVG_DUENDE = '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3.5 9.5L8.6 1.6l3.9 7.9z" fill="currentColor" fill-opacity=".22"/><circle cx="8" cy="11.6" r="3"/><path d="M2.5 9.5h11"/></svg>';
   const corto = (s, n) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t; };
   const promesa = x => Promise.resolve().then(() => (typeof x === 'function' ? x() : x));
   function leerPref() { try { return JSON.parse(localStorage.getItem(CLAVE_PREF) || '{}') || {}; } catch (_) { return {}; } }
@@ -240,19 +245,32 @@
       /* para el permiso (revisión del port a ClapBook): un sustituir que se lleva mucho texto y un conectar que quita un cable de Leo
          piden permiso; lo miran herramientas.js sobre el proyecto de ahora (sin proyecto, se pregunta) */
       quitaAlSustituir: args => { const d = g.docs && g.docs(), H = C.herramientas; return !d || !H || !H.quitaAlSustituir || H.quitaAlSustituir(d, args).mucho; },
-      sustituyeCable: args => { const d = g.docs && g.docs(), H = C.herramientas; return !d || !H || !H.sustituyeCable || H.sustituyeCable(d, args); }
+      sustituyeCable: args => { const d = g.docs && g.docs(), H = C.herramientas; return !d || !H || !H.sustituyeCable || H.sustituyeCable(d, args); },
+      /* el equipo de duendes (1.1.68): la herramienta del maestro (la define el motor; la ejecuta `ejecutarEquipo`) y los especiales */
+      herramientasPropias: M.herramientaEquipo && EQ() && typeof EQ().trabajar === 'function' ? [M.herramientaEquipo(ejecutarEquipo)] : undefined,
+      especiales: datos ? undefined : dnVista(),
+      maestro: () => { const m = maestro(); return m ? { nombre: m.nombre } : null; }
     });
     /* lo que llega de una conversación que ya no es la del panel (Nueva conversación, u otro proyecto, a mitad) no se pinta */
     const suya = f => (x => { if (conv === c) f(x); });
     escuchar(c, 'alTexto', suya(alTexto));
     escuchar(c, 'alPaso', suya(alPaso));
     escuchar(c, 'alCoste', suya(alCoste));
+    if (typeof c.alTurno === 'function' || 'alTurno' in c) escuchar(c, 'alTurno', suya(alTurno));   // la mesa (1.1.68, §13)
+    if (typeof c.alPelea === 'function' || 'alPelea' in c) escuchar(c, 'alPelea', suya(x => alPelea(x)));   // y su pelea (§14)
     escuchar(c, 'alFin', () => {});           // el final lo da la promesa de `enviar`
     escuchar(c, 'alError', suya(e => { ultimoError = e || null; }));   // su código (clave, saldo, limite…) no viene en el final
     /* lo que borra pide permiso (revisión): una tarjeta en el panel con Permitir / Permitir en esta conversación / No */
     if (typeof c.alPermiso === 'function') c.alPermiso(pide => (conv === c ? pedirPermiso(pide) : 'no'));
     if (datos && typeof c.cargar === 'function') { try { c.cargar(datos); } catch (_) { /* conversación de otra versión: empieza de nuevo */ } }
     if (Array.isArray(c.formulas)) fxActivas = c.formulas.slice();   // las que tenía guardadas (o las que se eligieron antes de crearla)
+    /* los especiales (1.1.68): una conversación guardada trae los suyos, congelados; una nueva, los elegidos o los de partida */
+    if (datos) { dnActivos = Array.isArray(c.especiales) ? c.especiales.slice() : []; modoLocal = modoDe(c) || 'maestro'; }
+    else {
+      if (dnActivos === null) dnActivos = [];
+      if (typeof c.fijarEspeciales === 'function') { try { const r = c.fijarEspeciales(dnActivos); if (Array.isArray(r)) dnActivos = r.slice(); } catch (_) { /* motor de otra versión */ } }
+      ponerModoEnConv(c, modoLocal);                           // el que se eligió antes de crearla (1.1.68, §13)
+    }
     return c;
   }
 
@@ -273,9 +291,10 @@
     }
     if (!t && !o.razonamiento && !(acum && acum.trim())) return;
     ultimaNovedad = Date.now();                        // llega algo que se lee: el duende se va (si llevaba un rato)
-    if (!iaActual || iaActual.cerrado || (o.vuelta != null && iaActual.vuelta != null && o.vuelta !== iaActual.vuelta)) {
+    const quien = o.quien || null;                      // en la mesa (1.1.68, §13): de quién es este texto
+    if (!iaActual || iaActual.cerrado || (quien || null) !== (iaActual.quien || null) || (!quien && o.vuelta != null && iaActual.vuelta != null && o.vuelta !== iaActual.vuelta)) {
       if (iaActual) iaActual.vivo = false;
-      iaActual = { tipo: 'ia', texto: '', vivo: true, vuelta: o.vuelta }; items.push(iaActual);
+      iaActual = Object.assign({ tipo: 'ia', texto: '', vivo: true, vuelta: o.vuelta }, quien ? turnoDe(quien, o) : {}); items.push(iaActual);
     }
     if (o.razonamiento) iaActual.razon = (iaActual.razon || '') + o.razonamiento;
     if (acum !== null) iaActual.texto = acum; else iaActual.texto += t || '';
@@ -288,6 +307,8 @@
        imagenes) y «aviso» (pasa al plan B) */
     if (p.fase === 'preparando') { alTexto({ herramienta: p.herramienta || p.nombre }); return; }
     ultimaNovedad = Date.now();
+    /* un evento del equipo de duendes (1.1.68): ya lo pinta `ejecutarEquipo` (que lo recibe antes, con su color); aquí, nada más */
+    if (p.fase === 'equipo') return;
     if (p.fase === 'aviso') { if (iaActual) iaActual.cerrado = true; items.push({ tipo: 'aviso', texto: p.titulo || p.texto || '' }); repintarPronto(); return; }
     const id = p.id || p.llamada || (p.tool_call && p.tool_call.id) || null;
     let it = id ? items.find(i => i.tipo === 'paso' && i.id === id) : null;
@@ -311,6 +332,14 @@
       it.entrada = p.entrada || p.historial || (r && typeof r === 'object' ? (r.entrada || r.historial) : null) || null;
       it.imagenes = p.imagenes || (r && r.imagenes) || 0;
       if (p.descritas) { it.descritas = p.descritas; it.vision = p.vision || ''; }   // las describió el modelo de visión (1.1.60)
+      /* el paso del equipo (1.1.68): lo que dice el motor al acabar (sus eventos, si no los vio `ejecutarEquipo`) */
+      if (p.equipo && typeof p.equipo === 'object') {
+        it.equipo = it.equipo || { eventos: Array.isArray(p.eventos) ? p.eventos.slice() : [] };
+        it.equipo.enCurso = false;
+        if (p.equipo.ref) it.equipo.ref = p.equipo.ref;
+        if (!it.equipo.rondas && p.equipo.rondas) it.equipo.rondas = p.equipo.rondas;
+        if (it.equipo.problemas == null && p.equipo.correcciones != null) it.equipo.problemas = p.equipo.correcciones;
+      }
       olvidarIndice();                                  // pudo crear o renombrar algo: los ids, por su nombre de ahora
     }
     if (p.titulo && !/^Usando /.test(p.titulo)) it.titulo = p.titulo;
@@ -333,7 +362,8 @@
   /* el permiso para lo que borra: la tarjeta espera la respuesta de Leo (sin respuesta, no se hace) */
   function pedirPermiso(pide) {
     if (iaActual) iaActual.cerrado = true;
-    const it = { tipo: 'permiso', id: 'pm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), titulo: pide.titulo || '', motivos: (pide.motivos || []).slice(0, 8), estado: 'pendiente' };
+    const it = { tipo: 'permiso', id: 'pm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), titulo: corto(String(pide.titulo || ''), 300), motivos: (pide.motivos || []).slice(0, 8).map(m => corto(String(m || ''), 300)), estado: 'pendiente' };
+    /* `pide.args` puede traer el texto del equipo ya sustituido (hasta 60 000 caracteres, 1.1.68): no se pinta ni se guarda entero */
     const r = new Promise(res => { it._resolver = res; });
     items.push(it);
     if (panel && (panel.hidden || pref.plegado)) { abrir({ sinTutorial: true, foco: false }); avisar('El asistente te pide permiso antes de borrar algo'); }
@@ -361,6 +391,16 @@
     const eop = {};
     if (op.maxVueltas) eop.maxVueltas = op.maxVueltas;
     if (imgs.length) eop.imagenes = imgs.map(x => ({ data: x.data, mimeType: x.mimeType, nombre: x.nombre }));
+    if (op.equipo) eop.equipo = true;                          // «Ejecutar con IA» con duendes: el equipo solo en este mensaje (§13)
+    /* la mesa (1.1.68, §13): conversan los elegidos (un mensaje que empieza por @Nombre, solo esos) */
+    if (!op.equipo && !op.lienzo && modoLocal === 'mesa') {   // (el lienzo nunca va a la mesa)
+      const ps = mesaCfg.participantes;
+      const conPj = ps.some(p => p.papel === 'personaje');
+      if (ps.length < (conPj ? 1 : 2)) { avisar('Sienta al menos a dos duendes en la mesa, o llama a un personaje (el botón «Mesa»)'); abrir({ sinTutorial: true }); if (!dnPop) abrirDn(); return null; }
+      const soloA = soloDe(texto, ps);
+      return correr(c => (typeof c.enviarMesa === 'function' ? c.enviarMesa(texto, Object.assign({ participantes: ps.slice(), rondas: mesaCfg.rondas, resumen: mesaCfg.resumen }, mesaCfg.resumenSolo ? { resumenSolo: true } : {}, soloA.length ? { soloA } : {}, eop))
+        : c.enviar(texto, Object.keys(eop).length ? eop : undefined)), { yo: texto, visible: op.visible, mesa: true, imagenes: imgs.map(x => ({ src: x.mini || '', nombre: x.nombre })) });
+    }
     return correr(c => c.enviar(texto, Object.keys(eop).length ? eop : undefined), { yo: texto, visible: op.visible, imagenes: imgs.map(x => ({ src: x.mini || '', nombre: x.nombre })) });
   }
   /* manda (o reintenta) y pinta lo que pasa. `fn(conv)` → la promesa del motor; op: { yo (lo que se escribió), visible } */
@@ -370,12 +410,20 @@
     if (!hayClave()) { await leerConfig(); if (!hayClave()) { pintarTodo(); tutorial(); return null; } }
     if (enCurso) { avisar('El asistente aún está trabajando: espera a que termine o pulsa Detener'); return null; }
     if (g.hayProyecto && !g.hayProyecto()) { avisar('Abre un proyecto para trabajar con el asistente'); return null; }
+    if (!conv && EQ()) await leerEquipo();                     // los especiales de partida salen del equipo (1.1.68)
     if (!conv) conv = crearConversacion();
     if (!conv) { avisar('El motor del asistente no está cargado'); return null; }
     aplicarAConversacion();
     if (op.yo !== undefined && (op.yo || (op.imagenes && op.imagenes.length))) items.push(Object.assign({ tipo: 'yo', texto: op.visible || op.yo, fecha: Date.now() }, op.visible ? { enviado: op.yo } : {}, op.imagenes && op.imagenes.length ? { imagenes: op.imagenes } : {}));
     iaActual = null; enCurso = true;
     vigilarDuende(true);
+    ponerEstado('pensando');
+    /* la mesa: en el taller, los que se sientan (y el maestro si resume) */
+    if (op.mesa) {
+      const ps = mesaCfg.participantes.map(p => (p.papel === 'personaje' ? Object.assign({}, p, { duende: p.duende || null }) : p)), m = maestro();
+      if (mesaCfg.resumen && !ps.some(p => p.id === 'maestro')) ps.push(Object.assign({ papel: 'maestro' }, m || { id: 'maestro', nombre: nombreMaestro() }));
+      tallerEmpezar({ duendes: [] }, ps);
+    }
     pintarTodo(); abajo(true);
     let r = null; ultimoError = null;
     const desde = items.length, mia = conv;
@@ -388,6 +436,7 @@
     if (conv !== mia) return r;
     enCurso = false;
     vigilarDuende(false);
+    pintarVerMascota();
     if (iaActual) { iaActual.vivo = false; iaActual.cerrado = true; }
     r = r || { ok: false, motivo: 'error', error: 'La IA no contestó' };
     const motivo = r.motivo || (r.ok ? 'fin' : 'error');
@@ -401,6 +450,7 @@
     else if (motivo === 'vueltas' || motivo === 'llamadas') items.push({ tipo: 'aviso', texto: r.aviso || 'Se detuvo tras muchos pasos seguidos. Dile «sigue» si quieres que continúe.' });
     else if (motivo === 'rotos' || motivo === 'larga') items.push({ tipo: 'aviso', texto: r.aviso || 'Se detuvo.', accion: motivo === 'larga' ? 'nueva' : null });
     else if (motivo === 'clave') { if (op.yo) items.pop(); avisar(r.error || AVISO_CLAVE); }
+    else if (motivo === 'mesa') items.push({ tipo: 'aviso', texto: r.error || 'La mesa necesita de 2 a 6 duendes.' });
     else if (motivo === 'detenido') items.push({ tipo: 'aviso', texto: 'Detenido. Lo que ya hizo se queda (y se puede deshacer).' });
     else if (r.cortada) items.push({ tipo: 'aviso', texto: 'La respuesta se cortó por larga. Dile «sigue» si quieres el resto.' });
     iaActual = null;
@@ -410,6 +460,15 @@
     });
     items = items.filter(i => i.estado !== 'quitar');
     if (typeof r.coste === 'number') alCoste(r.gasto ? { coste: r.coste, tokens: r.gasto } : r.coste);
+    /* el duende maestro dice su respuesta en la mascota (1.1.68: globo y boca siempre; sonido solo con 🔊) */
+    /* la escena del error (§16): se queda hasta la siguiente respuesta buena; una buena la quita (salvo la huelga por saldo a 0) */
+    const esc16 = motivo === 'fin' ? null : escenaDeError(motivo, codigo);
+    if (motivo === 'fin') ponerEscena(huelgaSaldo ? 'huelga' : null);
+    else if (esc16) ponerEscena(esc16);
+    /* el estado, el de la escena: con 'error' encima, la huelga (o el tope, sin red…) se perdía al momento (visto al portarlo a ClapBook) */
+    ponerEstado(motivo === 'fin' ? 'contento' : esc16 || (motivo === 'error' ? 'error' : 'quieto'));
+    /* en la mesa ya habló cada uno en la mascota: el maestro no repite la última burbuja (la de otro duende) */
+    if (motivo === 'fin' && !op.mesa) { const ult = items.slice(desde).reverse().find(i => i.tipo === 'ia' && !i.quien && String(i.texto || '').trim()); if (ult) hablarMaestro(ult.texto); }
     pintarTodo(); abajo();
     guardar();
     refrescarSaldo();                                           // lo gastado ya se descontó
@@ -425,6 +484,9 @@
     if (enCurso) detener();
     soltarConv(); enCurso = false; items = []; iaActual = null; coste = { usd: 0, entrada: 0, salida: 0 };
     fxActivas = [];                                            // las fórmulas activas son de la conversación
+    dnActivos = null; cerrarDn();                              // y los duendes especiales: ninguno (1.1.68)
+    modoLocal = 'maestro'; mesaCfg = { participantes: [], rondas: 2, resumen: true, resumenSolo: false };   // una conversación nueva empieza con el maestro solo (§13)
+    alPelea(null, { sinLinea: true });                         // y sin pelea (§14)
     guardar();
     pintarTodo();
     if (campo) campo.focus();
@@ -437,17 +499,22 @@
     let datos = null;
     try { datos = conv && typeof conv.toJSON === 'function' ? conv.toJSON() : null; } catch (_) { datos = null; }
     /* con tope (revisión): los textos de los pasos y los razonamientos, acortados; si aún pasa de 300 KB, sin los turnos más viejos */
-    let todo = { version: 1, conversacion: datos, vista: limpio, coste, modelo: modeloActual(), fecha: Date.now() };
+    let todo = { version: 1, conversacion: datos, vista: limpio, coste, modelo: modeloActual(), fecha: Date.now(), modo: modoLocal, mesa: mesaCfg };
     const M = motor();
     try { if (M && M.compactarGuardado) todo = M.compactarGuardado(todo, { max: 300000 }); } catch (_) { /* tal cual */ }
-    try { g.guardarConversacion(items.length || fxActivas.length ? todo : null); } catch (_) { /* nada */ }   // (solo con fórmulas activas, también)
+    try { g.guardarConversacion(items.length || fxActivas.length || (conv && (dnActivos !== null || modoLocal !== 'maestro')) ? todo : null); } catch (_) { /* nada */ }   // (solo con fórmulas activas o duendes elegidos, también)
   }
   async function recargar() {
     if (enCurso) detener();
     soltarConv(); enCurso = false; items = []; iaActual = null; coste = { usd: 0, entrada: 0, salida: 0 }; cargada = true; fxActivas = [];
-    cerrarFx();
+    dnActivos = null; equipoVivo = null; modoLocal = 'maestro'; mesaCfg = { participantes: [], rondas: 2, resumen: true, resumenSolo: false };
+    cerrarFx(); cerrarDn();
     let d = null;
     if (g.cargarConversacion) { try { d = await g.cargarConversacion(); } catch (_) { d = null; } }
+    if (d && d.mesa && typeof d.mesa === 'object') {                  // la mesa de esta conversación (1.1.68, §13)
+      const ps = Array.isArray(d.mesa.participantes) ? d.mesa.participantes.filter(x => x && x.id) : [];
+      mesaCfg = { participantes: ps.slice(0, 6), rondas: [1, 2, 3].includes(+d.mesa.rondas) ? +d.mesa.rondas : 2, resumen: d.mesa.resumen !== false, resumenSolo: !!d.mesa.resumenSolo };
+    }
     if (d && Array.isArray(d.vista)) {
       items = d.vista.map(i => (i.tipo === 'paso' && i.estado === 'en-curso' ? Object.assign({}, i, { estado: 'cortado' }) : i.tipo === 'permiso' && i.estado === 'pendiente' ? Object.assign({}, i, { estado: 'sin-respuesta' }) : i));
       if (d.coste) coste = Object.assign({ usd: 0, entrada: 0, salida: 0 }, d.coste);
@@ -456,11 +523,16 @@
       /* sin lo que se veía (de otra versión): se rehace con lo que recuerda el motor */
       conv = crearConversacion(d.conversacion);
       const es = conv && typeof conv.entradas === 'function' ? conv.entradas() : [];
-      items = es.map(e => e.tipo === 'usuario' ? { tipo: 'yo', texto: e.texto } : e.tipo === 'asistente' ? { tipo: 'ia', texto: e.texto, cerrado: true }
+      items = es.map(e => e.tipo === 'usuario' ? { tipo: 'yo', texto: e.texto } : e.tipo === 'asistente' ? Object.assign({ tipo: 'ia', texto: e.texto, cerrado: true }, e.quien ? turnoDe(e.quien, e) : {}, e.revisa ? { revisa: true, problemas: +e.problemas || 0 } : {})
         : e.tipo === 'aviso' ? { tipo: 'aviso', texto: e.texto }
-        : { tipo: 'paso', id: e.id, nombre: e.herramienta, args: e.args || {}, estado: e.ok === false ? 'error' : 'hecho', titulo: e.titulo, texto: e.texto || e.error || '', entrada: e.historial || null, imagenes: e.imagenes || 0, descritas: e.descritas || 0, vision: e.vision || '' });
+        : Object.assign({ tipo: 'paso', id: e.id, nombre: e.herramienta, args: e.args || {}, estado: e.ok === false ? 'error' : 'hecho', titulo: e.titulo, texto: e.texto || e.error || '', entrada: e.historial || null, imagenes: e.imagenes || 0, descritas: e.descritas || 0, vision: e.vision || '' },
+          e.equipo ? { equipo: { eventos: Array.isArray(e.eventos) ? e.eventos.slice() : [], enCurso: false, rondas: e.equipo.rondas || 0, problemas: e.equipo.correcciones ?? null, huecos: e.equipo.huecos || 0, coste: e.equipo.coste || 0, ref: e.equipo.ref || null } } : {}));
       if (conv && conv.gasto) coste = { usd: +conv.gasto.coste || 0, entrada: (+conv.gasto.entrada || 0) + (+conv.gasto.cache || 0), salida: +conv.gasto.salida || 0 };
     }
+    /* el modo: el de la conversación (o, si el motor no lo guardó, el del panel) */
+    if (d && MODOS.includes(d.modo) && !modoDe(conv)) { modoLocal = d.modo; ponerModoEnConv(conv, modoLocal); }
+    /* una pelea que no se paró (hasta el siguiente mensaje de Leo) vuelve (§14) */
+    alPelea(conv && conv.pelea && Array.isArray(conv.pelea.entre) && conv.pelea.entre.length ? conv.pelea : null, { sinLinea: true });
     pintarTodo(); abajo(true);
   }
 
@@ -473,26 +545,35 @@
     } catch (_) { return {}; }
   }
   /* `op.texto`: el encargo que arma lienzo.js (con los enlaces); `op.alPaso(p)` sigue el progreso para pintarlo en el nodo */
+  /* ¿con el equipo? (1.1.68, §13): con duendes elegidos en esa operación (o en alguna de las del lienzo) o en el modo Equipo */
+  function conEquipoLienzo(lid, nodos) {
+    if (!EQ() || !motor() || typeof motor().herramientaEquipo !== 'function') return false;
+    if (modoLocal === 'equipo') return true;
+    try {
+      const d = g.docs && g.docs(), r = d && d.lienzo && d.lienzo(lid);
+      return !!(r && (r.lienzo.nodos || []).some(n => (!nodos || nodos.includes(n.id)) && n.datos && Array.isArray(n.datos.duendes) && n.datos.duendes.length));
+    } catch (_) { return false; }
+  }
   function ejecutarNodo(lid, nodoId, op = {}) {
-    const n = nombreNodo(lid, nodoId);
+    const n = nombreNodo(lid, nodoId), equipo = conEquipoLienzo(lid, [nodoId]);
     const visible = op.visible || ('Ejecuta el nodo ' + (n.nodo ? '«' + n.nodo + '»' : nodoId) + (n.lienzo ? ' del lienzo «' + n.lienzo + '»' : ''));
     const M = motor();
-    const texto = M && M.encargoNodo ? (op.texto ? op.texto.trim() + '\n\n' : '') + M.encargoNodo(lid, nodoId, op.enlace || null, { titulo: n.nodo, lienzo: n.lienzo })
+    const texto = M && M.encargoNodo ? (op.texto ? op.texto.trim() + '\n\n' : '') + M.encargoNodo(lid, nodoId, op.enlace || null, { titulo: n.nodo, lienzo: n.lienzo, equipo })
       : (op.texto ? op.texto + '\n\n' : visible + '.\n\n')
         + `Hazlo así: pide su encargo con ejecutar_nodo (lienzo: "${lid}", nodo: "${nodoId}"), escribe su salida con las herramientas que diga el encargo y termina con completar_nodo (con la salida, o con el error si no se pudo). Al acabar, dime en una o dos frases qué hiciste.`;
     progreso = { lid, nodoId, alPaso: op.alPaso };
-    return mandar(texto, { visible, maxVueltas: op.maxVueltas }).finally(() => { progreso = null; });
+    return mandar(texto, { visible, maxVueltas: op.maxVueltas, equipo, lienzo: true }).finally(() => { progreso = null; });
   }
   /* `op.texto`: el encargo de lienzo.js (las elegidas, con sus enlaces); `op.nodos`: cuáles (sin ellos, todas las pendientes);
      `op.maxVueltas`: más herramientas para muchas operaciones (lo pone app.js) */
   function ejecutarLienzo(lid, op = {}) {
-    const n = nombreNodo(lid, null);
+    const n = nombreNodo(lid, null), equipo = conEquipoLienzo(lid, op.nodos || null);
     const visible = op.visible || ('Ejecuta todo el lienzo' + (n.lienzo ? ' «' + n.lienzo + '»' : ''));
     const M = motor();
-    const texto = M && M.encargoLienzo ? M.encargoLienzo(lid, { lienzo: n.lienzo, enlace: op.enlace || null, nodos: op.nodos || null, texto: op.texto || null }) : (op.texto ? op.texto + '\n\n' : visible + '.\n\n')
+    const texto = M && M.encargoLienzo ? M.encargoLienzo(lid, { lienzo: n.lienzo, enlace: op.enlace || null, nodos: op.nodos || null, texto: op.texto || null, equipo }) : (op.texto ? op.texto + '\n\n' : visible + '.\n\n')
       + `Hazlo así: lee el lienzo con leer_lienzo (lienzo: "${lid}") y, en el orden de sus cables, haz cada operación pendiente: ejecutar_nodo, escribir su salida con las herramientas que diga su encargo y completar_nodo. Si una falla, márcala con su error y sigue con las que no dependan de ella. Al acabar, resume qué hiciste.`;
     progreso = { lid, nodoId: null, alPaso: op.alPaso };
-    return mandar(texto, { visible, maxVueltas: op.maxVueltas }).finally(() => { progreso = null; });
+    return mandar(texto, { visible, maxVueltas: op.maxVueltas, equipo, lienzo: true }).finally(() => { progreso = null; });
   }
 
   /* ====================================================================
@@ -506,25 +587,35 @@
       <header class="as-cab">
         <span class="as-cab-ic">${ic('ic-asistente', 16)}</span>
         <div class="as-cab-tit">
-          <span class="as-cab-fila"><span class="as-rotulo">Asistente IA</span><span class="as-coste" data-as-coste></span></span>
+          <span class="as-cab-fila"><span class="as-rotulo as-maestro" data-as-maestro title="Asistente IA: tu duende maestro, que coordina al equipo de duendes">El duende maestro</span><span class="as-coste" data-as-coste></span></span>
           <span class="as-cab-fila as-cab-fila2"><button type="button" class="as-modelo" data-as-ajustes title="Cambiar el modelo"></button><button type="button" class="as-saldo" data-as-saldo hidden></button></span>
         </div>
+        <button type="button" class="icono as-sonido" data-as-sonido aria-pressed="false" title="Sonido: que los duendes «hablen» al contestar (apagado)" aria-label="Sonido de los duendes">${SVG_SONIDO_NO}</button>
         <button type="button" class="icono" data-as-memoria title="Memoria de estilo: las reglas de tono y forma que la IA aprende de tus correcciones" aria-label="Memoria de estilo">${ic('ic-edit', 15)}</button>
         <button type="button" class="icono" data-as-nueva title="Nueva conversación" aria-label="Nueva conversación">${ic('ic-plus', 16)}</button>
         <button type="button" class="icono" data-as-ajustes title="Configurar el asistente" aria-label="Configurar el asistente">${ic('ic-ajustes', 16)}</button>
         <button type="button" class="icono" data-as-plegar title="Plegar el panel" aria-label="Plegar el panel">${ic('ic-chev-r', 16)}</button>
         <button type="button" class="icono" data-as-cerrar title="Cerrar el asistente (${atajo('I', true)})" aria-label="Cerrar el asistente">${ic('ic-close', 16)}</button>
       </header>
+      <div class="as-mascota" data-as-mascota title="El duende maestro · clic: te saluda"><div class="as-mascota-sitio" data-as-mascota-sitio aria-hidden="true"></div><button type="button" class="as-enlace-btn as-mascota-ver" data-as-ver-taller title="Ver a los duendes trabajando en el taller" hidden>${SVG_DUENDE}Ver trabajar</button><button type="button" class="as-enlace-btn as-mascota-recargar" data-as-web="panel" title="Abrir tu panel de APIMart para recargar saldo" hidden>Recargar saldo</button></div>
       <div class="as-cuerpo" data-as-cuerpo aria-live="polite"></div>
       <div class="as-trabajo" data-as-trabajo role="status" hidden><span class="as-trabajo-duende" data-as-duende>${ic('ic-asistente', 18)}</span><span class="as-trabajo-txt" data-as-trabajo-txt></span></div>
       <footer class="as-pie" data-as-pie>
         <div class="as-enlaces" data-as-enlaces hidden></div>
+        <div class="as-modos" data-as-modos role="radiogroup" aria-label="Quién contesta" hidden>
+          <button type="button" role="radio" data-as-modo="maestro" title="Maestro: contesta solo el duende maestro (de partida)">Maestro</button>
+          <button type="button" role="radio" data-as-modo="equipo" title="Equipo: el maestro encarga lo largo (escenas, notas, fragmentos) a su equipo de duendes, que lo escribe, lo revisa y lo corrige">Equipo</button>
+          <button type="button" role="radio" data-as-modo="mesa" title="Mesa: varios duendes conversan entre ellos sobre lo que les pidas (solo leen el proyecto; no escriben nada)">Mesa</button>
+          <span class="as-modos-nota" data-as-modos-nota></span>
+        </div>
         <div class="as-fx" data-as-fx hidden></div>
+        <div class="as-fx as-dn" data-as-dn hidden></div>
         <div class="as-campo">
           <div class="as-editor" data-as-campo contenteditable="true" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="Pídele algo sobre tu proyecto…" aria-label="Mensaje para el asistente"></div>
           <div class="as-campo-fila">
             <button type="button" class="as-adjuntar" data-as-adjuntar title="Adjuntar una imagen (también pegándola o soltándola en el campo)" aria-label="Adjuntar una imagen">${ic('ic-imagen', 15)}</button>
             <button type="button" class="as-fx-boton" data-as-fx-abrir title="Fórmulas: activar una para toda la conversación o insertar su texto (también «/» al principio del mensaje)" aria-haspopup="true">${ic('ic-formula', 13)}<span>Fórmulas</span></button>
+            <button type="button" class="as-fx-boton as-dn-boton" data-as-dn-abrir title="Duendes especiales: los que revisan o transforman lo que escribe el equipo en esta conversación" aria-haspopup="true">${SVG_DUENDE}<span>Duendes</span></button>
             <span class="as-pista">Enter manda · Mayús+Enter, otro renglón · / fórmulas</span>
             <button type="button" class="as-mandar" data-as-mandar title="Mandar (Enter)" aria-label="Mandar">${ic('ic-mandar', 16)}</button>
             <button type="button" class="as-detener" data-as-detener title="Detener" aria-label="Detener" hidden>${ic('ic-detener', 14)}<span>Detener</span></button>
@@ -564,6 +655,8 @@
     });
     /* un clic fuera cierra la lista de las fórmulas */
     document.addEventListener('pointerdown', e => { if (fxPop && !fxPop.contains(e.target) && !e.target.closest('[data-as-fx-abrir]')) cerrarFx(); }, true);
+    document.addEventListener('pointerdown', e => { if (dnPop && !dnPop.contains(e.target) && !e.target.closest('[data-as-dn-abrir]')) cerrarDn(); }, true);
+    document.addEventListener('pointerdown', e => { if (pjPop && !pjPop.contains(e.target) && !e.target.closest('[data-as-pj-menu]')) cerrarPj(); }, true);
     aplicarAncho();
     const btn = document.getElementById('asistenteBtn');
     if (btn) btn.addEventListener('click', () => alternar());
@@ -595,6 +688,8 @@
     aplicarPlegado();
     document.body.classList.add('con-asistente');
     const btn = document.getElementById('asistenteBtn'); if (btn) { btn.classList.add('on'); btn.setAttribute('aria-pressed', 'true'); }
+    montarMascota();                                           // la primera vez que se abre (ver `montarMascota`)
+    sonidoAlDia(); pausarMascota();
     if (!cargada) recargar();
     if (!estaba) leerConfig().then(() => {
       pintarTodo(); refrescarSaldo();
@@ -608,10 +703,16 @@
     pref.abierto = false; guardarPref();
     document.body.classList.remove('con-asistente');
     const btn = document.getElementById('asistenteBtn'); if (btn) { btn.classList.remove('on'); btn.setAttribute('aria-pressed', 'false'); }
+    cerrarFx(); cerrarDn(); cerrarPj();                        // sus menús no se quedan abiertos para la próxima vez
+    sonidoAlDia(); pausarMascota();
   }
   function alternar() { if (!panel) return; if (panel.hidden) abrir(); else if (pref.plegado) { pref.plegado = false; guardarPref(); aplicarPlegado(); } else cerrar(); }
   function plegar(v) { pref.plegado = v !== undefined ? !!v : !pref.plegado; guardarPref(); aplicarPlegado(); if (!pref.plegado && campo) campo.focus(); }
-  function aplicarPlegado() { if (panel) panel.classList.toggle('plegado', !!pref.plegado); document.body.classList.toggle('asistente-plegado', !!pref.plegado); }
+  function aplicarPlegado() {
+    if (panel) panel.classList.toggle('plegado', !!pref.plegado); document.body.classList.toggle('asistente-plegado', !!pref.plegado);
+    if (pref.plegado && duendeMarco) conDuendes(duendeMarco, D => { if (D.callar) D.callar(); });   // plegado, la mascota no se ve: calla
+    sonidoAlDia(); pausarMascota();
+  }
   /* «Mandar al asistente» (el botón de enlace de las cabeceras): abre el panel y deja el texto en el campo, para seguir escribiendo */
   function insertar(texto) {
     abrir({ sinTutorial: true });
@@ -653,6 +754,18 @@
       inp.click();
     }
     else if (b.matches('[data-as-fx-quitar]')) fijarFx(fxActivas.filter(x => x !== b.dataset.asFxQuitar));
+    /* el equipo de duendes (1.1.68): los especiales de la conversación, el taller y el sonido */
+    else if (b.matches('[data-as-dn-abrir]')) { if (dnPop) cerrarDn(); else abrirDn(); }
+    else if (b.matches('[data-as-modo]')) ponerModo(b.dataset.asModo);
+    else if (b.matches('[data-as-pj-menu]')) { if (pjPop) cerrarPj(); else abrirMenuPj(b.dataset.asPjMenu); }
+    else if (b.matches('[data-as-pj-rehacer-chip]')) {
+      const id = b.dataset.asPjRehacerChip, x = mesaCfg.participantes.find(q => q.id === id), n = x && participantePj(x.personaje || id.slice(3), { modelo: x.modelo, temperatura: x.temperatura });
+      if (n) { mesaCfg.participantes = mesaCfg.participantes.map(q => (q.id === id ? n : q)); cacheHuellaPj.clear(); pintarDn(); guardar(); }
+    }
+    else if (b.matches('[data-as-dn-quitar]')) fijarLista(listaModo().filter(x => x.id !== b.dataset.asDnQuitar));
+    else if (b.matches('[data-as-dn-ver]')) abrirDuendesUI({ id: b.dataset.asDnVer });
+    else if (b.matches('[data-as-ver-taller]')) abrirTaller();
+    else if (b.matches('[data-as-sonido]')) ponerSonido(!pref.sonido);
     else if (b.matches('[data-as-fx-ver]')) { if (g.abrirFormula) g.abrirFormula(b.dataset.asFxVer); }
   }
   const itemDe = el => { const k = el.closest('[data-as-item]'); return k ? items[+k.dataset.asItem] : null; };
@@ -1142,6 +1255,814 @@
     setTimeout(() => { const f = buscar || pop.querySelector('button'); if (f && fxPop === pop) f.focus({ preventScroll: true }); }, 0);
   }
 
+  /* ---------- el equipo de duendes (1.1.68) ----------
+     Leo, 28-09-2026: «El asistente IA es un duende también, que sea "El duende maestro" y es el duende por defecto en el chat… Que
+     puedan seleccionarse duendes especiales en el asistente de IA y que adopten la personalidad que se le dio anteriormente, no la
+     cambian a lo largo de la conversación… mientras trabajan que se vea en el asistente una opción para verlos trabajar». El equipo
+     (los datos y el trabajo) es de js/claquedraw/equipo.js (`C.equipo`), su gestión de js/claquedraw/equipo-ui.js (`C.equipoUI`) y la
+     escena del taller, de duendes.html (`Duendes.taller`). Aquí:
+     · **Los especiales de la conversación**: el botón «Duendes» (junto a «Fórmulas») abre la lista con buscador; marcar varios, en
+       orden. Se **congelan al elegirlos** (`C.equipo.instantanea`) y van a `conv.fijarEspeciales`: editar después su ficha no cambia
+       esta conversación (su chip lo dice: «como al elegirlo»). **El formateador va elegido de partida** en cada conversación nueva
+       (`dnActivos === null` = «los de partida», que se deciden al crear la conversación, cuando el equipo ya se leyó).
+     · **La herramienta del maestro**, `trabajar_en_equipo` (la define el motor, `herramientaEquipo`): `ejecutarEquipo` resuelve las
+       fuentes con las herramientas de siempre en modo lectura, arma lo que el proyecto ya conoce (`conocidos`) y llama a
+       `C.equipo.trabajar` con el transporte del asistente, lo que queda del tope y el Detener de la conversación. Cada evento del
+       equipo va a su paso (una línea por evento, con el chip del color de la ropa del duende; el enojo en rojo), a la franja del
+       duende trabajando y al taller.
+     · **El taller** («Ver trabajar»): una ventana flotante, no modal, con la escena de duendes.html (`?embebido=1&taller=1`), un solo
+       marco creado una vez. Se mueve por su cabecera, se escala por su esquina (16:9), Esc o × la cierran y se recuerda abierta.
+     · **El sonido** (🔊 en la cabecera, apagado de partida): al terminar una respuesta, el duende maestro «habla» sus primeras
+       palabras en su voz (`Duendes.hablar`, en el taller si está abierto o en el marco de la franja); en el taller, los globos
+       hablan. Con la ventana escondida o el panel cerrado, nada suena. */
+  const EQ = () => C.equipo || null;
+  const HERR_EQUIPO = 'trabajar_en_equipo';
+  const PAPEL_TXT = { maestro: 'Maestro', lector: 'Lector', escritor: 'Escritor', coordinador: 'Coordinador', especial: 'Especial' };
+  const ROL_TXT = { revisar: 'Revisa', transformar: 'Transforma' };
+  /* el color de un duende sin aspecto propio (el de su papel) */
+  const COLOR_PAPEL = { maestro: '#6141C9', lector: '#2F7FC1', escritor: '#2E9E6B', coordinador: '#4A4E5A', especial: '#C9772B' };
+  let equipoCache = null;                                      // el último que se leyó (si la UI de duendes no está)
+  function equipoAhora() {
+    let e = null;
+    try { e = g.equipo ? g.equipo() : null; } catch (_) { e = null; }
+    if (!e && C.equipoUI && typeof C.equipoUI.equipo === 'function') { try { e = C.equipoUI.equipo(); } catch (_) { e = null; } }
+    if (!e) e = equipoCache;
+    const E = EQ();
+    if (!e && E && typeof E.porDefecto === 'function') { try { e = equipoCache = E.porDefecto(); } catch (_) { e = null; } }
+    return e && Array.isArray(e.duendes) ? e : null;
+  }
+  /* lee el equipo si aún no se leyó (al arrancar, el almacén contesta con retraso) */
+  async function leerEquipo() {
+    if (!g.leerEquipo) return equipoAhora();
+    try { const e = await g.leerEquipo(); if (e && Array.isArray(e.duendes)) equipoCache = e; } catch (_) { /* el de partida */ }
+    return equipoAhora();
+  }
+  const duendesDe = e => (e && Array.isArray(e.duendes) ? e.duendes : []);
+  function maestro() {
+    const E = EQ(), e = equipoAhora();
+    try { if (E && E.maestro && e) { const m = E.maestro(e); if (m) return m; } } catch (_) { /* a mano */ }
+    return duendesDe(e).find(d => d.papel === 'maestro') || null;
+  }
+  const nombreMaestro = () => (maestro() && maestro().nombre) || 'El duende maestro';
+  function especialesEquipo() {
+    const E = EQ(), e = equipoAhora(); if (!e) return [];
+    try { if (E && E.especiales) return E.especiales(e) || []; } catch (_) { /* a mano */ }
+    return duendesDe(e).filter(d => d.papel === 'especial');
+  }
+  function instantanea(d) {
+    const E = EQ();
+    try { if (E && E.instantanea) return E.instantanea(d) || null; } catch (_) { /* a mano */ }
+    return { id: d.id, nombre: d.nombre, personalidad: d.personalidad || '', rol: d.rol || 'revisar', veto: !!d.veto, modelo: d.modelo || null, temperatura: d.temperatura ?? null,
+      voz: d.voz || null, duende: d.duende ? JSON.parse(JSON.stringify(d.duende)) : null, enojon: !!d.enojon, fijadaEn: Date.now() };
+  }
+  /* su aspecto: el suyo o el de su papel (`C.equipo.aspectoDe`: el formateador de fábrica lleva el suyo) */
+  function aspecto(d) { const E = EQ(); try { if (E && E.aspectoDe) return E.aspectoDe(d); } catch (_) { /* el suyo */ } return (d && d.duende) || null; }
+  const colorDuende = d => { const a = aspecto(d); return (a && (a.cloth || a.hatCol || a.cape)) || COLOR_PAPEL[(d && d.papel) || 'especial'] || COLOR_PAPEL.especial; };
+  function vozDe(d) { const E = EQ(); try { if (E && E.vozDe) return E.vozDe(d); } catch (_) { /* la suya */ } return (d && (d.voz || (d.duende && d.duende.voz))) || null; }
+  const primeraLinea = t => (String(t || '').split('\n').find(l => l.trim()) || '').trim();
+
+  /* ---------- los especiales de la conversación ---------- */
+  let dnActivos = null;              // las instantáneas elegidas para el modo Equipo; null = ninguna (aún sin tocar)
+  let dnPop = null;
+  function dnPartida() { const f = especialesEquipo().find(d => d.id === 'formateador'), x = f && instantanea(f); return x ? [x] : []; }
+  const dnVista = () => (dnActivos === null ? [] : dnActivos.slice());
+
+  /* ---------- quién contesta: Maestro · Equipo · Mesa (1.1.68, §13) ----------
+     Leo: «Yo debo decidir cuándo se usan o no [el] agent team de duendes; por defecto solo contesta el duende maestro» y «quiero poder
+     poner a más de un duende en el asistente, para colaborar o discutir entre ellos». El control de tres posiciones sobre el campo:
+     **Maestro** (de partida en cada conversación nueva; sin el equipo), **Equipo** (el maestro encarga lo largo a su equipo; al pasar a
+     él sin especiales, se elige el formateador) y **Mesa** (los duendes elegidos conversan en el chat, cada uno con su burbuja, por
+     turnos y en rondas, y el maestro resume; solo leen). El modo es de la conversación (`conv.fijarModo`, en lo guardado); los de la
+     mesa (participantes, rondas, resumen) van con lo que guarda el panel. */
+  const MODOS = ['maestro', 'equipo', 'mesa'];
+  let modoLocal = 'maestro';
+  let mesaCfg = { participantes: [], rondas: 2, resumen: true, resumenSolo: false };
+  /* el modo de una conversación del motor (el nombre de su campo, sin confundirlo con el de las herramientas: tools/texto) */
+  function modoDe(c) {
+    if (!c) return null;
+    for (const k of ['modoDuendes', 'modoConversacion', 'modoChat', 'quien', 'modo']) { const v = c[k]; if (typeof v === 'string' && MODOS.includes(v)) return v; }
+    return null;
+  }
+  const modoActual = () => modoLocal;
+  function ponerModoEnConv(c, m) {
+    if (!c) return;
+    if (typeof c.fijarModo === 'function') { try { c.fijarModo(m); } catch (e) { console.error('fijarModo:', e); } }
+  }
+  function ponerModo(m) {
+    if (!MODOS.includes(m) || !EQ()) return;
+    if (enCurso) { avisar('Espera a que termine (o pulsa Detener) para cambiar quién contesta'); pintarModos(); return; }
+    modoLocal = m;
+    if (!conv) conv = crearConversacion();
+    ponerModoEnConv(conv, m);
+    /* al pasar a Equipo sin especiales, el formateador */
+    if (m === 'equipo' && !dnVista().length) fijarDn(dnPartida());
+    cerrarDn();
+    pintarModos(); pintarDn(); guardar();
+    if (m === 'mesa' && mesaCfg.participantes.length < 2) setTimeout(() => { if (modoLocal === 'mesa' && !dnPop) abrirDn(); }, 0);   // quiénes conversan
+  }
+  function pintarModos() {
+    const caja = panel && panel.querySelector('[data-as-modos]'); if (!caja) return;
+    caja.hidden = !EQ();
+    caja.querySelectorAll('[data-as-modo]').forEach(b => { const on = b.dataset.asModo === modoLocal; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+    const nota = caja.querySelector('[data-as-modos-nota]');
+    if (nota) { nota.textContent = modoLocal === 'mesa' ? plural(mesaCfg.rondas, 'ronda', 'rondas') + (mesaCfg.resumen ? ' · resume el maestro' : '') : ''; nota.title = nota.textContent; }
+    if (panel) panel.dataset.modo = modoLocal;
+  }
+  /* la lista de chips del modo: los especiales (Equipo) o los de la mesa */
+  const listaModo = () => (modoLocal === 'mesa' ? mesaCfg.participantes.slice() : dnVista());
+  function fijarLista(l) { if (modoLocal === 'mesa') fijarMesa(l); else fijarDn(l); }
+  function fijarMesa(l) {
+    const vistos = new Set();
+    mesaCfg.participantes = (l || []).filter(x => x && x.id && !vistos.has(x.id) && vistos.add(x.id)).slice(0, 6);
+    pintarDn(); marcarDn(); pintarModos(); guardar();
+  }
+  /* los fijos también se sientan a la mesa (con su papel como personalidad) y el maestro, como moderador */
+  const PERSONALIDAD_FIJA = {
+    maestro: 'Eres el duende maestro: moderas la mesa. Ordenas la conversación, preguntas lo que falta y no das tu opinión antes que los demás.',
+    lector: 'Eres el lector del equipo: te fijas en lo que dicen de verdad las fuentes del proyecto y señalas lo que falta o no cuadra con ellas.',
+    escritor: 'Eres la escritora del equipo: propones cómo escribirlo, con ejemplos concretos de escenas, diálogos o frases.',
+    coordinador: 'Eres el coordinador del equipo: exiges que todo salga de lo que Leo ya escribió y vetas lo que se inventa o se contradice.'
+  };
+  function participanteDe(d) {
+    if (!d) return null;
+    const E = EQ();
+    try { if (E && typeof E.participante === 'function') { const x = E.participante(d); if (x) return x; } } catch (_) { /* a mano */ }
+    if (d.papel === 'especial') return instantanea(d);
+    return { id: d.id, nombre: d.nombre || PAPEL_TXT[d.papel] || 'Duende', papel: d.papel, personalidad: PERSONALIDAD_FIJA[d.papel] || '', rol: 'revisar', veto: false,
+      modelo: d.modelo || null, temperatura: d.temperatura ?? null, voz: vozDe(d), duende: aspecto(d), enojon: !!d.enojon, fijadaEn: Date.now() };
+  }
+  /* «@Nombre …» al principio del mensaje: solo contestan esos (uno o varios; con o sin el artículo: «@crítica» vale por «La crítica») */
+  function soloDe(texto, ps) {
+    const ids = []; let t = String(texto || '');
+    const sinArt = n => planoFx(n).replace(/^(el|la|los|las)\s+/, '');
+    for (;;) {
+      const m = /^\s*@/.exec(t); if (!m) break;
+      const resto = planoFx(t.slice(m[0].length));
+      let mejor = null, largo = 0;
+      ps.forEach(p => [planoFx(p.nombre || ''), sinArt(p.nombre || '')].forEach(n => {
+        if (n && resto.startsWith(n) && !/[\p{L}\p{N}]/u.test(resto.charAt(n.length) || ' ') && n.length > largo) { mejor = p; largo = n.length; }
+      }));
+      if (!mejor) break;
+      if (!ids.includes(mejor.id)) ids.push(mejor.id);
+      t = t.slice(m[0].length + largo).replace(/^[\s,y]+(?=@)/i, '');
+    }
+    return ids;
+  }
+  /* quién habla en un turno de la mesa: su nombre, su papel y su color (de la mesa, o del equipo) */
+  function turnoDe(quien, o) {
+    const x = mesaCfg.participantes.find(p => p.id === quien) || duendesDe(equipoAhora()).find(d => d.id === quien) || null;
+    const papel = (o && o.papel) || (x && x.papel) || (quien === 'maestro' ? 'maestro' : /^pj:/.test(quien) ? 'personaje' : 'especial');
+    if (papel === 'personaje') return { quien, nombre: (o && o.nombre) || (x && x.nombre) || 'Personaje', papel, color: colorPj((x && x.personaje) || String(quien).slice(3)), ronda: o && o.ronda != null ? o.ronda : null, resumen: false };
+    return { quien, nombre: (o && o.nombre) || (x && x.nombre) || (quien === 'maestro' ? nombreMaestro() : 'Duende'), papel, color: colorDuende(Object.assign({ papel }, x || {})), ronda: o && o.ronda != null ? o.ronda : null, resumen: !!(o && o.resumen) };
+  }
+  /* §17: ¿es el turno del coordinador que revisa? (el motor lo dice con `corrige`; si no, por su id) */
+  const revisaTurno = (t, q) => !!(t && (t.revisa === true || t.corrige === true || t.quien === ID_COORD || (q && q.papel === 'coordinador')));
+  /* lo que dice en la mascota: su primera corrección (la primera línea de viñeta o la primera frase) */
+  function primeraCorreccion(md) {
+    const l = String(md || '').split('\n').map(x => x.trim()).filter(Boolean), v = l.find(x => /^([-*•]|\d+[.)])\s+/.test(x));
+    return primerasPalabras((v || l[0] || '').replace(/^([-*•]|\d+[.)])\s+/, ''));
+  }
+  /* un turno de la mesa: empieza (su burbuja, viva), termina (lo dice en la mascota y en el taller) o falla */
+  function alTurno(t) {
+    if (!t || !t.quien) return;
+    ultimaNovedad = Date.now();
+    const q = turnoDe(t.quien, t);
+    const x = mesaCfg.participantes.find(p => p.id === t.quien) || duendesDe(equipoAhora()).find(d => d.id === t.quien) || null;
+    if (t.fase === 'empieza') {
+      if (iaActual) { iaActual.vivo = false; iaActual.cerrado = true; }
+      iaActual = Object.assign({ tipo: 'ia', texto: '', vivo: true }, q, revisaTurno(t, q) ? { revisa: true } : {}); items.push(iaActual);
+      tallerEvento({ quien: t.quien, papel: q.papel, nombre: q.nombre, accion: 'escribir', texto: 'Pensando qué decir…', ronda: t.ronda });
+    } else if (t.fase === 'termina') {
+      const it = iaActual && iaActual.quien === t.quien ? iaActual : [...items].reverse().find(i => i.tipo === 'ia' && i.quien === t.quien);
+      if (it) { if (typeof t.texto === 'string' && t.texto.trim() && !String(it.texto || '').trim()) it.texto = t.texto; it.vivo = false; it.cerrado = true; }
+      /* §17: el coordinador revisa lo dicho; con problemas, su burbuja lo marca y entra enojado a la mascota con la primera corrección */
+      const revisa = revisaTurno(t, q), nProb = Math.max(0, Math.round(+t.problemas || 0));
+      if (it && revisa) { it.revisa = true; it.problemas = nProb; }
+      const dicho = revisa && nProb > 0 ? primeraCorreccion(t.texto || (it && it.texto) || '') : primerasPalabras(t.texto || (it && it.texto) || '');
+      if (revisa && nProb > 0 && dicho) tallerEvento({ quien: t.quien, papel: q.papel, nombre: q.nombre, accion: 'enojo', texto: dicho, ronda: t.ronda });
+      if (dicho) {
+        tallerEvento({ quien: t.quien, papel: q.papel, nombre: q.nombre, accion: 'hablar', texto: dicho, ronda: t.ronda });
+        const esMaestro = t.quien === 'maestro' || q.papel === 'maestro';
+        decirMascota({ quien: esMaestro ? 'maestro' : t.quien, nombre: q.nombre, duende: esMaestro ? maestroMasc().duende : q.papel === 'personaje' ? (x && x.duende) || null : x ? aspecto(Object.assign({ papel: q.papel }, x)) : null,
+          voz: esMaestro ? maestroMasc().voz : x ? vozDe(x) : null, texto: dicho, sonido: sonidoActivo() && !tallerAbierto(), emo: revisa && nProb > 0 ? 'enojado' : undefined });
+      }
+    } else if (t.fase === 'error') {
+      const err = t.error || t.texto || '';
+      const it = iaActual && iaActual.quien === t.quien && !String(iaActual.texto || '').trim() ? iaActual : null;
+      if (it) { items = items.filter(i => i !== it); iaActual = null; }            // su burbuja vacía se va
+      items.push({ tipo: 'aviso', texto: q.nombre + ' no pudo contestar' + (err ? ': ' + corto(err, 160) : '') });
+      tallerEvento({ quien: t.quien, papel: q.papel, nombre: q.nombre, accion: 'error', texto: 'No pude contestar', ronda: t.ronda });
+    }
+    repintarPronto();
+  }
+  /* ---------- los personajes en la mesa (1.1.68, §15: Leo, «poder llamar duendes de los personajes, para que interpreten su papel y
+     pueda ir preguntándole cosas; también se puede configurar qué modelo se usa») ----------
+     El participante lo arma el asistente desde el proyecto y lo congela `C.equipo.participante({ tipo: 'personaje', … })`: su hoja (su
+     biblioteca, «Hoja de personaje» primero, en texto), lo que el proyecto dice de él (sus diálogos y lo que se dice de él donde se le
+     nombra, y sus nodos en los esquemas), su duende de Personajes y su voz. Su modelo y su temperatura se cambian en su chip y se
+     recuerdan por personaje y proyecto en las preferencias de esta máquina; «↻» lo vuelve a armar si su hoja cambió. */
+  const MODELO_PJ = 'deepseek-v4-flash', TEMP_PJ = 0.8;
+  const docsPj = () => docsFx();
+  function personajesProyecto() { const d = docsPj(); try { return d && d.elenco ? d.elenco().filter(p => p && p.id && p.nombre) : []; } catch (_) { return []; } }
+  function colorPj(pid) {
+    const d = docsPj(); let p = null; try { p = d && d.personaje ? d.personaje(pid) : null; } catch (_) { p = null; }
+    const par = p && C.PALETA_ETIQUETAS && C.PALETA_ETIQUETAS[p.color];
+    return par ? (document.documentElement.dataset.theme === 'dark' ? par[1] : par[2]) : COLOR_PAPEL.especial;
+  }
+  function duendePj(pid) { const d = docsPj(); try { const t = d && d.datos && d.datos.teatro; return (t && t.duendes && t.duendes[pid]) || null; } catch (_) { return null; } }
+  const modeloCorto = m => String(m || '').replace(/^deepseek-/, '');
+  function clavePj() { try { const pr = g.proyecto ? g.proyecto() : null; return (pr && (pr.archivo || pr.id)) || 'sin-proyecto'; } catch (_) { return 'sin-proyecto'; } }
+  function prefPj(pid) { const t = pref.personajes && pref.personajes[clavePj()]; return (t && t[pid]) || {}; }
+  function guardarPrefPj(pid, cambios) {
+    pref.personajes = Object.assign({}, pref.personajes);
+    const k = clavePj(); pref.personajes[k] = Object.assign({}, pref.personajes[k]);
+    pref.personajes[k][pid] = Object.assign({}, pref.personajes[k][pid], cambios);
+    guardarPref();
+  }
+  const textoDe = html => { const V = C.conversor; try { return V && V.aTexto ? V.aTexto(html || '') : String(html || '').replace(/<[^>]+>/g, ' '); } catch (_) { return ''; } };
+  function hojaPj(pid) {
+    const d = docsPj(); if (!d || !d.hojaPersonaje) return '';
+    let h; try { h = d.hojaPersonaje(pid); } catch (_) { return ''; }
+    return (h.notas || []).map(n => '## ' + (n.titulo || 'Sin título') + '\n' + textoDe(n.html).trim()).filter(Boolean).join('\n\n').slice(0, 6000);
+  }
+  /* lo que el proyecto dice de él: primero sus diálogos, después donde se le nombra, y sus nodos en los esquemas */
+  function contextoPj(pid, nombre) {
+    const d = docsPj(); if (!d) return '';
+    const k = planoFx(nombre), suyos = [], nombra = [], nodos = [];
+    let ms = []; try { ms = d.menciones ? d.menciones(pid) : []; } catch (_) { ms = []; }
+    ms.forEach(m => {
+      let html = '';
+      try { const n = d.nota && d.nota(m.id); html = n ? n.html : m.eid && d.documentoEsquema ? ((d.documentoEsquema(m.eid) || {}).html || '') : ''; } catch (_) { html = ''; }
+      const donde = '[' + (m.ruta || m.titulo || 'nota') + ']';
+      textoDe(html).split(/\n\s*\n/).forEach(par => {
+        const t = par.trim(), pl = planoFx(t); if (!t || !pl.includes(k)) return;
+        (pl.startsWith(k) ? suyos : nombra).push(donde + ' ' + t);
+      });
+    });
+    try {
+      (d.esquemasDePersonaje ? d.esquemasDePersonaje(pid) : []).forEach(x => {
+        const r = d.esquema(x.eid), md = r && r.esquema && r.esquema.datos; if (!md) return;
+        (md.lineas || []).filter(l => l.personaje === pid).forEach(l => {
+          (md.puntos || []).filter(p => p.lineaId === l.id && p.titulo).sort((a, b) => (a.col || 0) - (b.col || 0))
+            .forEach(p => nodos.push('[esquema «' + x.nombre + '»] ' + p.titulo + (p.descripcion ? ': ' + corto(p.descripcion, 200) : '')));
+        });
+      });
+    } catch (_) { /* lo que haya */ }
+    const partes = [];
+    if (suyos.length) partes.push('LO QUE DICE Y HACE:\n' + suyos.join('\n\n'));
+    if (nombra.length) partes.push('DONDE SE LE NOMBRA:\n' + nombra.join('\n\n'));
+    if (nodos.length) partes.push('SUS MOMENTOS EN LOS ESQUEMAS:\n' + nodos.join('\n'));
+    return partes.join('\n\n').slice(0, 10000);
+  }
+  const huellaPj = (hoja, ctx) => { let h = 2166136261; const t = String(hoja) + '\u0000' + String(ctx); for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+  /* el participante de un personaje (congelado), con su modelo y su temperatura recordados (o los de `cambios`) */
+  function participantePj(pid, cambios) {
+    const d = docsPj(); let p = null; try { p = d && d.personaje ? d.personaje(pid) : null; } catch (_) { p = null; }
+    if (!p) { avisar('Ese personaje ya no está en el proyecto'); return null; }
+    const pr = Object.assign({}, prefPj(pid), cambios || {}), du = duendePj(pid);
+    let proy = null; try { const x = g.proyecto ? g.proyecto() : null; proy = x && x.nombre; } catch (_) { proy = null; }
+    const datos = { tipo: 'personaje', personaje: pid, nombre: p.nombre, hoja: hojaPj(pid), contexto: contextoPj(pid, p.nombre), proyecto: proy,
+      modelo: pr.modelo || MODELO_PJ, temperatura: pr.temperatura != null ? +pr.temperatura : TEMP_PJ, voz: (du && du.voz) || null, duende: du, fijadaEn: Date.now() };
+    const E = EQ();
+    try { if (E && typeof E.participante === 'function') { const x = E.participante(datos); if (x) return x; } } catch (e) { console.error('participante:', e); }
+    return Object.assign({ id: 'pj:' + pid, papel: 'personaje' }, datos);
+  }
+  /* ¿su hoja o lo que el proyecto dice de él cambió desde que se le llamó? (para «↻»; con caché de unos segundos) */
+  const cacheHuellaPj = new Map();
+  function cambioPj(x) {
+    const pid = x.personaje || String(x.id).slice(3), c = cacheHuellaPj.get(pid);
+    let h = c && Date.now() - c.t < 4000 ? c.h : null;
+    if (!h) { h = huellaPj(hojaPj(pid), contextoPj(pid, x.nombre)); cacheHuellaPj.set(pid, { h, t: Date.now() }); }
+    return h !== huellaPj(x.hoja || '', x.contexto || '');
+  }
+  /* el menú de su chip: el modelo (con su precio), la temperatura y «↻» */
+  let pjPop = null;
+  function cerrarPj() { if (pjPop) { pjPop.remove(); pjPop = null; } }
+  function abrirMenuPj(id) {
+    cerrarDn(); cerrarPj();
+    const x = mesaCfg.participantes.find(p => p.id === id); if (!x) return;
+    const pid = x.personaje || id.slice(3), ms = modelos();
+    const pop = document.createElement('div');
+    pop.className = 'gd-pop as-fx-pop as-pj-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'El modelo de ' + x.nombre);
+    pop.innerHTML = `<div class="gd-pop-tit">${esc(x.nombre)} <span>· su modelo (se recuerda para este personaje)</span></div>`
+      + `<div class="as-fx-lista">${ms.map(m => `<div class="as-fx-fila"><button type="button" class="as-fx-op${m.id === x.modelo ? ' on' : ''}" role="menuitemradio" aria-checked="${m.id === x.modelo}" data-as-pj-modelo="${esc(m.id)}"><span class="as-fx-check">${ic('ic-check', 11)}</span><span class="as-fx-txt"><b>${esc(m.id)}</b><em>${esc(precioTxt(m))}${m.nota ? ' · ' + esc(m.nota) : ''}</em></span><small></small></button></div>`).join('')}</div>`
+      + `<div class="gd-pop-sep"></div><label class="as-pj-temp">Temperatura <input type="range" min="0" max="1.5" step="0.1" value="${esc(x.temperatura != null ? x.temperatura : TEMP_PJ)}" data-as-pj-temp> <b data-as-pj-temp-v>${esc(String(x.temperatura != null ? x.temperatura : TEMP_PJ).replace('.', ','))}</b></label>`
+      + `<div class="gd-pop-sep"></div><button type="button" class="as-fx-admin" data-as-pj-rehacer>${ic('ic-reset', 13)}<span>↻ Volver a leer su hoja y lo que dice de él el proyecto</span></button>`;
+    panel.querySelector('[data-as-pie]').appendChild(pop);
+    pjPop = pop;
+    const reponer = cambios => {
+      const nuevo = participantePj(pid, cambios); if (!nuevo) return;
+      mesaCfg.participantes = mesaCfg.participantes.map(p => (p.id === id ? nuevo : p));
+      cacheHuellaPj.delete(pid); pintarDn(); guardar();
+    };
+    pop.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.matches('[data-as-pj-modelo]')) { guardarPrefPj(pid, { modelo: b.dataset.asPjModelo }); reponer({ modelo: b.dataset.asPjModelo }); cerrarPj(); return; }
+      if (b.matches('[data-as-pj-rehacer]')) { reponer(); cerrarPj(); avisar('«' + x.nombre + '» vuelve con su hoja de ahora'); }
+    });
+    pop.addEventListener('input', e => { if (e.target.matches('[data-as-pj-temp]')) pop.querySelector('[data-as-pj-temp-v]').textContent = String(e.target.value).replace('.', ','); });
+    pop.addEventListener('change', e => { if (e.target.matches('[data-as-pj-temp]')) { const t = +e.target.value; guardarPrefPj(pid, { temperatura: t }); reponer({ temperatura: t }); } });
+    pop.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarPj(); if (campo) cursorAlFinal(); } });
+    setTimeout(() => { const f = pop.querySelector('.as-fx-op.on') || pop.querySelector('button'); if (f && pjPop === pop) f.focus({ preventScroll: true }); }, 0);
+  }
+  const candidatosMesa = () => { const e = duendesDe(equipoAhora()); return e.filter(d => d.papel === 'especial').concat(e.filter(d => d.papel !== 'especial')); };
+  /* ¿cambió su ficha desde que se eligió? (su chip lo dice; esta conversación sigue con la de entonces) */
+  const CAMPOS_DN = ['nombre', 'personalidad', 'rol', 'veto', 'modelo', 'temperatura', 'voz', 'enojon', 'duende'];
+  function cambioDn(x) {
+    const d = especialesEquipo().find(y => y.id === x.id);
+    if (!d) return 'ya no está en el equipo';
+    const E = EQ(), eq = equipoAhora();
+    if (E && E.cambiado && eq) { try { return E.cambiado(x, eq) ? 'su ficha cambió después' : null; } catch (_) { /* a mano */ } }
+    const ahora = instantanea(d);
+    return CAMPOS_DN.some(k => JSON.stringify(ahora[k] ?? null) !== JSON.stringify(x[k] ?? null)) ? 'su ficha cambió después' : null;
+  }
+  /* cambia los de la conversación (se crea si aún no hay) y lo guardado */
+  function fijarDn(lista) {
+    const vistos = new Set();
+    dnActivos = (lista || []).filter(x => x && x.id && !vistos.has(x.id) && vistos.add(x.id));
+    if (!conv) conv = crearConversacion();
+    if (conv && typeof conv.fijarEspeciales === 'function') { try { const r = conv.fijarEspeciales(dnActivos); if (Array.isArray(r)) dnActivos = r.slice(); } catch (_) { /* motor de otra versión */ } }
+    else if (conv) conv.especiales = dnActivos.slice();
+    pintarDn(); marcarDn(); guardar();
+  }
+  function pintarDn() {
+    const caja = panel && panel.querySelector('[data-as-dn]'); if (!caja) return;
+    const b = panel.querySelector('[data-as-dn-abrir]'), mesa = modoLocal === 'mesa';
+    /* sin el equipo en esta versión, ni el botón; con el maestro solo, tampoco (el equipo no trabaja) */
+    if (b) { b.hidden = !EQ() || modoLocal === 'maestro'; const t = b.querySelector('span'); if (t) t.textContent = mesa ? 'Mesa' : 'Duendes'; }
+    const lista = EQ() && modoLocal !== 'maestro' ? listaModo() : [];
+    if (b) b.classList.toggle('on', !!lista.length);
+    caja.hidden = !lista.length;
+    caja.classList.toggle('mesa', mesa);
+    if (!lista.length) { caja.innerHTML = ''; return; }
+    caja.innerHTML = (mesa ? `<span class="as-fx-rot" title="Conversan en la mesa, por turnos y en este orden, con la personalidad que tenían al elegirlos">Mesa</span>`
+      : `<span class="as-fx-rot" title="Revisan o transforman lo que escribe el equipo en esta conversación, en este orden, con la personalidad que tenían al elegirlos">Duendes</span>`) + lista.map(x => {
+      const nom = x.nombre || 'Duende';
+      /* un personaje (§15): su color de etiqueta, su modelo y el menú para cambiarlo; «↻» si su hoja cambió */
+      if (x.papel === 'personaje') {
+        const cambio = cambioPj(x), pid = x.personaje || String(x.id).slice(3);
+        return `<span class="as-fx-chip as-dn-chip as-pj-chip${cambio ? ' cambiado' : ''}" style="--dc:${esc(colorPj(pid))}" data-as-dn-id="${esc(x.id)}"><button type="button" class="as-fx-nom" data-as-pj-menu="${esc(x.id)}" title="${esc(nom + ' (personaje) · ' + x.modelo + ', temperatura ' + x.temperatura + ' · clic: cambiar su modelo')}"><i class="as-dn-punto" aria-hidden="true"></i><span>${esc(corto(nom, 28))} <em>${esc(modeloCorto(x.modelo))}</em></span></button>`
+          + (cambio ? `<button type="button" class="as-fx-x as-pj-rehacer" data-as-pj-rehacer-chip="${esc(x.id)}" title="Su hoja o lo que dice de él el proyecto cambió: volver a leerlo" aria-label="Volver a leer la hoja de «${esc(nom)}»">↻</button>` : '')
+          + `<button type="button" class="as-fx-x" data-as-dn-quitar="${esc(x.id)}" title="Quitarlo de la mesa" aria-label="Quitar a «${esc(nom)}» de la mesa">${ic('ic-close', 10)}</button></span>`;
+      }
+      const cambio = x.papel && x.papel !== 'especial' ? null : cambioDn(x);
+      const tit = nom + (x.personalidad ? ': ' + corto(primeraLinea(x.personalidad), 140) : '') + (cambio ? ' (como al elegirlo: ' + cambio + ')' : '');
+      return `<span class="as-fx-chip as-dn-chip${cambio ? ' cambiado' : ''}" style="--dc:${esc(colorDuende(Object.assign({ papel: 'especial' }, x)))}" data-as-dn-id="${esc(x.id)}"><button type="button" class="as-fx-nom" data-as-dn-ver="${esc(x.id)}" title="${esc(tit)}"><i class="as-dn-punto" aria-hidden="true"></i><span>${esc(corto(nom, 32))}${cambio ? ' <em>(como al elegirlo)</em>' : ''}</span></button>`
+        + `<button type="button" class="as-fx-x" data-as-dn-quitar="${esc(x.id)}" title="Quitarlo de la conversación" aria-label="Quitar a «${esc(nom)}» de la conversación">${ic('ic-close', 10)}</button></span>`;
+    }).join('');
+  }
+  function cerrarDn(volver) { if (!dnPop) return; dnPop.remove(); dnPop = null; if (volver && campo) cursorAlFinal(); }
+  function marcarDn() {
+    if (!dnPop) return;
+    const ids = listaModo().map(x => x.id);
+    dnPop.querySelectorAll('[data-as-dn-op]').forEach(b => { const i = ids.indexOf(b.dataset.asDnOp); b.classList.toggle('on', i >= 0); b.setAttribute('aria-checked', String(i >= 0)); b.querySelector('small').textContent = i >= 0 ? String(i + 1) : ''; });
+    const c = dnPop.querySelector('[data-as-mesa-coord]'); if (c) c.checked = ids.includes(ID_COORD);
+  }
+  /* el coordinador del equipo (§17: se le puede invitar a la mesa a revisar lo que se dice) */
+  const ID_COORD = 'coordinador';
+  const coordinadorEquipo = () => duendesDe(equipoAhora()).find(d => d.id === ID_COORD) || null;
+  function abrirDuendesUI(op) {
+    cerrarDn();
+    if (g.abrirDuendes) { try { g.abrirDuendes(op || {}); return; } catch (_) { /* sigue */ } }
+    if (C.equipoUI && C.equipoUI.abrir) C.equipoUI.abrir(op || {});
+    else avisar('La gestión de los duendes no está en esta versión');
+  }
+  /* la lista: buscador; marcar uno lo añade (congelado) al final; «Nuevo duende especial…» y «Administrar duendes…» */
+  async function abrirDn() {
+    if (!panel) return;
+    cerrarFx(); cerrarDn();
+    await leerEquipo();
+    const mesa = modoLocal === 'mesa';
+    const es = mesa ? candidatosMesa() : especialesEquipo();
+    const pop = document.createElement('div');
+    pop.className = 'gd-pop as-fx-pop as-dn-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', mesa ? 'La mesa de duendes' : 'Duendes especiales');
+    const sub = d => (d.papel && d.papel !== 'especial' ? (d.papel === 'maestro' ? 'modera' : PAPEL_TXT[d.papel] || '') : (ROL_TXT[d.rol] || '') + (d.rol === 'revisar' && d.veto ? ' · veta' : ''));
+    const linea = d => (d.papel && d.papel !== 'especial' ? ((EQ() && EQ().EN_LA_MESA) || PERSONALIDAD_FIJA)[d.id] || PERSONALIDAD_FIJA[d.papel] || '' : d.personalidad);
+    const filas = es.map(d => `<div class="as-fx-fila" data-as-fx-fila data-busca="${esc(planoFx((d.nombre || '') + ' ' + (linea(d) || '')))}">`
+      + `<button type="button" class="as-fx-op" role="menuitemcheckbox" data-as-dn-op="${esc(d.id)}" title="${mesa ? 'Sentarlo a la mesa' : 'Elegirlo para esta conversación'} (se queda con la personalidad de ahora)"><span class="as-fx-check">${ic('ic-check', 11)}</span><i class="as-dn-punto" style="--dc:${esc(colorDuende(d))}" aria-hidden="true"></i>`
+      + `<span class="as-fx-txt"><b>${esc(d.nombre || 'Duende')} <span class="as-dn-rol">${esc(sub(d))}</span></b><em>${esc(corto(primeraLinea(linea(d)), 80) || 'Sin personalidad escrita')}</em></span><small></small></button></div>`).join('');
+    /* §15: los personajes del proyecto, en su propia sección (con el color de su etiqueta) */
+    const pjs = mesa ? personajesProyecto() : [];
+    const filasPj = pjs.length ? `<div class="as-fx-grupo">Personajes <span>· para entrevistarlos (con uno basta)</span></div>` + pjs.map(p => `<div class="as-fx-fila" data-as-fx-fila data-busca="${esc(planoFx(p.nombre || ''))}">`
+      + `<button type="button" class="as-fx-op" role="menuitemcheckbox" data-as-dn-op="pj:${esc(p.id)}" title="Llamarlo a la mesa: interpreta su papel con su hoja y lo que el proyecto dice de él"><span class="as-fx-check">${ic('ic-check', 11)}</span><i class="as-dn-punto" style="--dc:${esc(colorPj(p.id))}" aria-hidden="true"></i>`
+      + `<span class="as-fx-txt"><b>${esc(p.nombre || 'Personaje')} <span class="as-dn-rol">personaje · ${esc(modeloCorto(prefPj(p.id).modelo || MODELO_PJ))}</span></b><em>${esc(duendePj(p.id) ? 'Con su duende de Personajes' : 'Sin duende propio: el teatro le pone uno')}</em></span><small></small></button></div>`).join('') : '';
+    const ajustes = mesa ? `<div class="gd-pop-sep"></div><div class="as-mesa-ajustes"><span>Rondas</span><span class="as-seg as-mesa-rondas" role="radiogroup">${[1, 2, 3].map(n => `<button type="button" role="radio" data-as-mesa-rondas="${n}" class="${mesaCfg.rondas === n ? 'on' : ''}" aria-checked="${mesaCfg.rondas === n}" title="${n === 1 ? 'Cada uno dice lo suyo una vez' : 'En la ' + (n === 2 ? 'segunda' : 'segunda y la tercera') + ' se contestan entre ellos'}">${n}</button>`).join('')}</span>`
+      + `<label class="as-mesa-resume"><input type="checkbox" data-as-mesa-resumen${mesaCfg.resumen ? ' checked' : ''}> El maestro resume</label>`
+      + `<label class="as-mesa-resume" title="En una entrevista (contesta uno solo), el maestro no resume salvo que lo marques"><input type="checkbox" data-as-mesa-resumen-solo${mesaCfg.resumenSolo ? ' checked' : ''}> también si contesta uno solo</label>`
+      + (coordinadorEquipo() ? `<label class="as-mesa-resume as-mesa-coord" title="El coordinador habla el último de cada ronda: contrasta lo que dijeron los demás con el proyecto y dice lo que no se sostiene (lo mismo que elegirlo en la lista)"><input type="checkbox" data-as-mesa-coord${mesaCfg.participantes.some(x => x.id === ID_COORD) ? ' checked' : ''}> Invitar al coordinador (revisa lo que se dice)</label>` : '') + `</div>` : '';
+    pop.innerHTML = (mesa ? `<div class="gd-pop-tit">La mesa <span>· de 2 a 6 duendes (o un personaje), en este orden</span></div>` : `<div class="gd-pop-tit">Duendes especiales <span>· en esta conversación</span></div>`)
+      + (es.length > 5 ? `<input type="search" class="as-fx-buscar" placeholder="Buscar un duende" aria-label="Buscar un duende">` : '')
+      + `<div class="as-fx-lista">${(filas + filasPj) || '<div class="gd-pop-vacio">Aún no hay duendes especiales. Créalos con «Nuevo duende especial…»: revisan o transforman lo que escribe el equipo, con la personalidad que les des.</div>'}</div>`
+      + ajustes
+      + `<div class="gd-pop-sep"></div><button type="button" class="as-fx-admin" data-as-dn-nuevo>${ic('ic-plus', 13)}<span>Nuevo duende especial…</span></button>`
+      + `<button type="button" class="as-fx-admin" data-as-dn-admin>${SVG_DUENDE}<span>Administrar duendes…</span></button>`;
+    panel.querySelector('[data-as-pie]').appendChild(pop);
+    dnPop = pop;
+    marcarDn();
+    const buscar = pop.querySelector('.as-fx-buscar');
+    pop.addEventListener('change', e => {
+      if (e.target.matches('[data-as-mesa-resumen]')) { mesaCfg.resumen = !!e.target.checked; pintarModos(); guardar(); }
+      if (e.target.matches('[data-as-mesa-resumen-solo]')) { mesaCfg.resumenSolo = !!e.target.checked; guardar(); }
+      /* §17: invitar al coordinador es lo mismo que elegirlo en la lista (va al final: el motor lo hace hablar el último de cada ronda) */
+      if (e.target.matches('[data-as-mesa-coord]')) {
+        const ahora = listaModo(), esta = ahora.some(x => x.id === ID_COORD), c = coordinadorEquipo();
+        if (e.target.checked && !esta && c) {
+          if (ahora.length >= 6) { e.target.checked = false; avisar('A la mesa se sientan seis duendes como mucho'); return; }
+          fijarMesa(ahora.concat(participanteDe(c)));
+        } else if (!e.target.checked && esta) fijarMesa(ahora.filter(x => x.id !== ID_COORD));
+      }
+    });
+    if (buscar) buscar.addEventListener('input', () => { const q = planoFx(buscar.value); pop.querySelectorAll('[data-as-fx-fila]').forEach(f => { f.hidden = !!q && !f.dataset.busca.includes(q); }); });
+    pop.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.matches('[data-as-dn-op]')) {
+        const id = b.dataset.asDnOp, ahora = listaModo(), d = es.find(x => x.id === id);
+        const nueva = /^pj:/.test(id) ? (ahora.some(x => x.id === id) ? null : participantePj(id.slice(3))) : d && (mesa ? participanteDe(d) : instantanea(d));
+        if (mesa && !ahora.some(x => x.id === id) && ahora.length >= 6) { avisar('A la mesa se sientan seis duendes como mucho'); return; }
+        fijarLista(ahora.some(x => x.id === id) ? ahora.filter(x => x.id !== id) : nueva ? ahora.concat(nueva) : ahora);
+        return;
+      }
+      if (b.matches('[data-as-mesa-rondas]')) {
+        mesaCfg.rondas = +b.dataset.asMesaRondas || 2;
+        pop.querySelectorAll('[data-as-mesa-rondas]').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', String(on)); });
+        pintarModos(); guardar(); return;
+      }
+      if (b.matches('[data-as-dn-nuevo]')) { abrirDuendesUI({ nuevo: true }); return; }
+      if (b.matches('[data-as-dn-admin]')) abrirDuendesUI({});
+    });
+    pop.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarDn(true); return; }
+      const ops = [...pop.querySelectorAll('[data-as-fx-fila]')].filter(f => !f.hidden).map(f => f.querySelector('[data-as-dn-op]')), i = ops.indexOf(document.activeElement);
+      if (e.target === buscar && e.key === 'Enter') { e.preventDefault(); if (ops[0]) ops[0].click(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (e.key === 'ArrowUp' && i <= 0 && buscar) { buscar.focus(); return; }
+        const sig = ops[i < 0 ? 0 : Math.max(0, Math.min(ops.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]; if (sig) sig.focus();
+      }
+    });
+    setTimeout(() => { const f = buscar || pop.querySelector('button'); if (f && dnPop === pop) f.focus({ preventScroll: true }); }, 0);
+  }
+
+  /* ---------- trabajar en equipo: la herramienta del maestro ---------- */
+  let equipoVivo = null;             // el trabajo en marcha: { it (su paso), conv, eventos }
+  const MAX_EVENTOS = 240;
+  /* el paso de la llamada (lo puso `alPaso` al empezar; si no, se pone aquí) */
+  function pasoEquipo(ctx) {
+    const id = ctx && (ctx.llamada || ctx.id);
+    let it = id ? items.find(i => i.tipo === 'paso' && i.id === id) : null;
+    if (!it) it = [...items].reverse().find(i => i.tipo === 'paso' && i.nombre === HERR_EQUIPO && i.estado === 'en-curso') || null;
+    if (!it) {
+      if (iaActual) iaActual.cerrado = true;
+      it = { tipo: 'paso', id: id || 'eq' + Date.now().toString(36), nombre: HERR_EQUIPO, args: {}, estado: 'en-curso', abierto: false };
+      items.push(it);
+    }
+    return it;
+  }
+  /* una fuente: lo que el maestro pasó (enlace, id, título de una nota, o la operación de un lienzo) → { etiqueta, texto } o { falta } */
+  const leerHerr = async (nombre, args) => {
+    if (!g.ejecutar) return null;
+    let r = null; try { r = await g.ejecutar(nombre, args, { lectura: true, origen: origen() }); } catch (e) { r = { ok: false, error: (e && e.message) || String(e) }; }
+    return r && r.ok !== false && String(r.texto || '').trim() ? String(r.texto) : null;
+  };
+  /* los duendes que Leo eligió en una operación del lienzo (§11 del contrato: `datos.duendes`, instantáneas) */
+  function duendesDeOperacion(lid, nodoId) {
+    try {
+      const d = docsFx(), r = d && d.lienzo && d.lienzo(lid), n = r && (r.lienzo.nodos || []).find(x => x.id === nodoId);
+      return n && n.datos && Array.isArray(n.datos.duendes) ? n.datos.duendes.filter(x => x && x.id) : [];
+    } catch (_) { return []; }
+  }
+  async function resolverFuente(f) {
+    const d = docsFx(), E = C.enlaces;
+    if (f && typeof f === 'object') {
+      if (typeof f.texto === 'string') return f.texto.trim() ? { etiqueta: String(f.etiqueta || 'Texto'), texto: f.texto } : null;   // ya resuelta (otra salida del equipo)
+      if (f.lienzo && f.nodo) {
+        const lid = String(f.lienzo), nid = String(f.nodo), n = nombreNodo(lid, nid), t = await leerHerr('ejecutar_nodo', { lienzo: lid, nodo: nid });
+        return t ? { etiqueta: 'Operación ' + (n.nodo ? '«' + n.nodo + '»' : nid) + (n.lienzo ? ' del lienzo «' + n.lienzo + '»' : ''), texto: t, duendes: duendesDeOperacion(lid, nid) } : { falta: 'la operación ' + nid + ' del lienzo' };
+      }
+      f = f.enlace || f.id || f.nota || f.esquema || f.biblioteca || '';
+    }
+    const s = String(f || '').trim(); if (!s) return null;
+    let ref = null;
+    try { ref = E && E.esEnlace(s) ? E.leer(s) : E && d ? E.porId(d, s) : null; } catch (_) { ref = null; }
+    let et = ''; try { et = ref && d && E.etiqueta ? E.etiqueta(d, ref, {}) : ''; } catch (_) { et = ''; }
+    let t = null;
+    let duendes = null;
+    if (ref && ref.tipo === 'lienzo' && ref.nodo) { t = await leerHerr('ejecutar_nodo', { lienzo: ref.id, nodo: ref.nodo }); duendes = duendesDeOperacion(ref.id, ref.nodo); }
+    else if (ref && ref.tipo === 'documento') t = await leerHerr('leer_documento', Object.assign({ esquema: ref.esquema || ref.id }, ref.bloques ? { desde: ref.bloques[0], hasta: ref.bloques[1] } : {}));
+    else if (ref && ref.tipo === 'nota' && !ref.esquema) t = await leerHerr('leer_documento', Object.assign({ nota: ref.id }, ref.bloques ? { desde: ref.bloques[0], hasta: ref.bloques[1] } : {}));
+    else if (ref && ref.tipo === 'esquema') {
+      /* la estructura y, si lo tiene, su guion (leer_esquema no lo trae: la escritora tiene que saber lo que ya está escrito) */
+      t = await leerHerr('leer_esquema', { esquema: ref.id });
+      const g2 = t ? await leerHerr('leer_documento', { esquema: ref.id }) : null;
+      if (g2) t += '\n\nSU GUION:\n' + g2;
+    }
+    else if (ref && ref.tipo === 'biblioteca') t = await leerHerr('leer_biblioteca', { biblioteca: ref.id, contenido: true });
+    else if (ref && E && E.esEnlace(s)) t = await leerHerr('ver_enlace', { enlace: s });
+    else if (ref) t = await leerHerr('ver_enlace', { enlace: E.crear(proyectoSlug(), ref) });
+    else {
+      /* ni enlace ni id: el nombre de un esquema (su estructura y su guion), el título de una nota o el nombre de una biblioteca
+         (las herramientas los buscan por su nombre). En vivo, el maestro pasaba «Piloto» y el equipo trabajaba sin fuentes. */
+      t = await leerHerr('leer_esquema', { esquema: s });
+      if (t) {
+        et = 'Esquema «' + s + '»';
+        const g2 = await leerHerr('leer_documento', { esquema: s });
+        if (g2) t += '\n\nSU GUION:\n' + g2;
+      }
+      if (!t) { t = await leerHerr('leer_documento', { nota: s }); if (t) et = 'Nota «' + s + '»'; }
+      if (!t) { t = await leerHerr('leer_biblioteca', { biblioteca: s, contenido: true }); if (t) et = 'Biblioteca «' + s + '»'; }
+    }
+    return t ? Object.assign({ etiqueta: et || s, texto: t }, duendes && duendes.length ? { duendes } : {}) : { falta: et || s };
+  }
+  function proyectoSlug() {
+    try { const pr = g.proyecto ? g.proyecto() : null; return (pr && (pr.enlace || (pr.nombre && C.enlaces.slug(pr.nombre)))) || 'proyecto'; } catch (_) { return 'proyecto'; }
+  }
+  /* los nombres que el proyecto ya tiene (lo demás que salga en el texto, las comprobaciones lo miran) */
+  function conocidos() {
+    const d = docsFx(), out = { personajes: [], nombres: [] }; if (!d) return out;
+    try { out.personajes = d.elenco().map(p => p.nombre).filter(Boolean); } catch (_) { /* sin elenco */ }
+    const nom = new Set(), pon = x => { const t = String(x || '').trim(); if (t && t.length <= 120) nom.add(t); };
+    try {
+      (d.datos.contenedores || []).forEach(c => {
+        pon(c.nombre);
+        (c.subs || []).forEach(s => pon(s.nombre));
+        (c.lienzos || []).forEach(l => pon(l.nombre));
+        (c.esquemas || []).forEach(e => {
+          pon(e.nombre); const md = e.datos || {};
+          (md.lineas || []).forEach(l => pon(l.nombre)); (md.actos || []).forEach(a => pon(a.nombre)); (md.puntos || []).forEach(p => pon(p.titulo));
+        });
+      });
+    } catch (_) { /* lo que se pudo */ }
+    out.nombres = [...nom].slice(0, 3000);
+    return out;
+  }
+  /* guion o prosa: el que diga el maestro; si no, prosa si lo que entra son notas, y si no, guion */
+  function formatoDe(args, fuentes) {
+    if (args.formato === 'guion' || args.formato === 'prosa') return args.formato;
+    return fuentes.length && fuentes.every(f => /^Nota /.test(f.etiqueta || '')) ? 'prosa' : 'guion';
+  }
+  /* el que habla en un evento: su nombre y su color (del equipo, o de las instantáneas de la conversación) */
+  function quienDe(ev, especiales) {
+    const x = (especiales || []).find(s => s.id === ev.quien) || duendesDe(equipoAhora()).find(d => d.id === ev.quien) || null;
+    return { nombre: ev.nombre || (x && x.nombre) || PAPEL_TXT[ev.papel] || 'Duende', color: colorDuende(Object.assign({ papel: ev.papel || (x && x.papel) }, x || {})) };
+  }
+  /* un evento del equipo: a su paso, a la franja y al taller */
+  function alEventoEquipo(it, ev, especiales) {
+    if (!ev || typeof ev !== 'object') return;
+    const q = quienDe(ev, especiales);
+    const e = { quien: ev.quien || null, papel: ev.papel || null, nombre: q.nombre, color: q.color, accion: String(ev.accion || 'hablar'), texto: corto(ev.texto || '', 160), ronda: ev.ronda ?? null };
+    const eq = it.equipo;
+    if (eq) {
+      eq.eventos.push(e); if (eq.eventos.length > MAX_EVENTOS) eq.eventos.splice(0, eq.eventos.length - MAX_EVENTOS);
+      if (ev.ronda != null) eq.rondas = Math.max(eq.rondas || 0, +ev.ronda || 0);
+      if (e.accion === 'rechazar' || e.accion === 'corregir') eq.correcciones = (eq.correcciones || 0) + 1;
+      if (e.accion === 'enojo') eq.enojos = (eq.enojos || 0) + 1;
+    }
+    ultimaNovedad = Date.now();
+    tallerEvento(ev);
+    eventoMascota(ev, especiales);
+    revisarDuende();
+    repintarPronto();
+  }
+  /* Lo que ejecuta la herramienta del maestro (el motor le da forma al resultado para el modelo y guarda el texto para
+     `{{equipo:…}}`). `ctx`: el de la llamada (`llamada`, su id; y `detenido`, si el motor lo da) */
+  async function ejecutarEquipo(args, ctx) {
+    const E = EQ(), M = motor();
+    if (!E || typeof E.trabajar !== 'function') return { ok: false, error: 'El equipo de duendes no está en esta versión de ClapCraft: escribe tú el texto.' };
+    args = args || {};
+    const instruccion = String(args.instruccion || '').trim();
+    if (!instruccion) return { ok: false, error: 'Falta «instruccion»: qué tiene que escribir el equipo.' };
+    const mia = conv, it = pasoEquipo(ctx);
+    if (args && typeof args === 'object' && Object.keys(args).length) it.args = args;
+    it.equipo = { eventos: [], enCurso: true, desde: Date.now(), rondas: 0, correcciones: 0 };
+    equipoVivo = { it, conv: mia };
+    repintarPronto(); pintarVerMascota();                      // «Ver trabajar» en la mascota, al momento (no al siguiente vistazo)
+    try {
+      const eq = equipoAhora() || await leerEquipo();
+      const deConv = mia && Array.isArray(mia.especiales) ? mia.especiales.slice() : dnVista();
+      tallerEmpezar(eq, deConv);
+      /* las fuentes, leídas (en paralelo no: g.ejecutar vuelca el editor en cada una) */
+      const lista = (Array.isArray(args.fuentes) ? args.fuentes : args.fuentes ? [args.fuentes] : []).slice(0, 16);
+      const fuentes = [], faltan = [], deOperacion = [];
+      for (const f of lista) {
+        if (mia && mia._detener) break;
+        const x = await resolverFuente(f);
+        if (x && x.texto) fuentes.push({ etiqueta: x.etiqueta, texto: x.texto }); else if (x && x.falta) faltan.push(x.falta);
+        if (x && x.duendes) deOperacion.push(...x.duendes);
+      }
+      /* los de una operación del lienzo van delante de los de la conversación, sin repetir */
+      const vistos = new Set(), especiales = deOperacion.concat(deConv).filter(x => x && x.id && !vistos.has(x.id) && vistos.add(x.id));
+      if (deOperacion.length) {
+        tallerActores(actoresDe(eq, especiales));
+        it.equipo.deOperacion = deOperacion.filter((x, k, a) => a.findIndex(y => y.id === x.id) === k).map(x => ({ nombre: x.nombre || 'Duende', color: colorDuende(Object.assign({ papel: 'especial' }, x)) }));
+        repintarPronto();
+      }
+      /* lo de la conversación (el motor lo da hecho en `ctx.trabajo`: transporte, precio, tope, Detener, el gasto en vivo); si no, aquí */
+      const T0 = ctx && ctx.trabajo && typeof ctx.trabajo === 'object' ? ctx.trabajo : {};
+      const tope = () => (mia && mia.tope != null ? +mia.tope : cfg && cfg.tope != null ? +cfg.tope : TOPE_DEFECTO);
+      const gastado = () => (mia && mia.gasto && +mia.gasto.coste) || 0;
+      /* el gasto de cada llamada del equipo, a la conversación al momento (su coste en la cabecera, y el tope lo cuenta) */
+      const sumar = typeof T0.alGasto === 'function' ? T0.alGasto : ctx && typeof ctx.sumarGasto === 'function' ? x => ctx.sumarGasto(x) : null;
+      const alGasto = sumar ? x => { if (it.equipo) it.equipo.coste = (+it.equipo.coste || 0) + (+(x && x.coste) || 0); try { sumar(x); } catch (_) { /* el motor lo suma al final */ } } : undefined;
+      const quedan = typeof T0.quedan === 'function' ? T0.quedan
+        : () => { const t = tope(); return t > 0 ? Math.max(0, t - gastado()) : Infinity; };
+      const detenido = typeof T0.detenido === 'function' ? T0.detenido : ctx && typeof ctx.detenido === 'function' ? ctx.detenido : () => !!(mia && (mia._detener || conv !== mia));
+      const suyo = typeof T0.alEvento === 'function' ? T0.alEvento : null;
+      const r = await E.trabajar(Object.assign({ transporte: g.transporte, precio: M && M.precioDe ? M.precioDe : undefined }, T0, {
+        equipo: eq, especiales, instruccion, fuentes,
+        formato: formatoDe(args, fuentes), modo: args.modo === 'libre' || args.modo === 'fiel' ? args.modo : (eq && eq.modo) || 'fiel',
+        conocidos: conocidos(), quedan, detenido, alGasto,
+        alEvento: ev => { if (suyo) { try { suyo(ev); } catch (_) { /* del motor */ } } if (conv === mia) alEventoEquipo(it, ev, especiales); }
+      })) || { ok: false, error: 'El equipo no contestó' };
+      const inf = r.informe || {};
+      Object.assign(it.equipo, { enCurso: false, ok: r.ok !== false, rondas: inf.rondas ?? it.equipo.rondas, problemas: Array.isArray(inf.problemas) ? inf.problemas.length : null,
+        huecos: Array.isArray(inf.huecos) ? inf.huecos.length : 0, inventado: Array.isArray(inf.inventado) ? inf.inventado.length : 0,
+        especiales: Array.isArray(inf.especiales) ? inf.especiales.map(s => ({ nombre: s.nombre, accion: s.accion })) : [],
+        coste: r.gasto && typeof r.gasto.coste === 'number' ? r.gasto.coste : it.equipo.coste, faltan, error: r.ok === false ? String(r.error || '') : null });
+      if (faltan.length && r && typeof r === 'object') r.faltan = faltan;
+      return r;
+    } catch (e) {
+      Object.assign(it.equipo, { enCurso: false, ok: false, error: (e && e.message) || String(e) });
+      return { ok: false, error: 'El equipo falló: ' + ((e && e.message) || e) };
+    } finally {
+      if (equipoVivo && equipoVivo.it === it) equipoVivo = null;
+      tallerFin();
+      repintarPronto(); pintarVerMascota();
+    }
+  }
+
+  /* ---------- el taller: la ventana flotante con los duendes trabajando ---------- */
+  const TALLER = { min: 320, max: 1100, defecto: 560 };
+  let taller = null, tallerMarco = null, tallerListo = false, tallerCola = [], tallerActoresUlt = null;
+  function actoresDe(eq, especiales) {
+    const fijos = duendesDe(eq).filter(d => d.papel !== 'especial');
+    const lista = fijos.concat((especiales || []).map(x => Object.assign({ papel: 'especial' }, x)));
+    return lista.map(d => ({ id: d.id, nombre: d.nombre || PAPEL_TXT[d.papel] || 'Duende', papel: d.papel || 'especial', duende: aspecto(d), voz: vozDe(d), enojon: !!d.enojon }));
+  }
+  const sonidoActivo = () => !!pref.sonido && !document.hidden && !!panel && !panel.hidden && !pref.plegado;   // plegado a riel, tampoco
+  function conDuendes(f, fn) {
+    if (!f) return false;
+    const ya = () => { let w = null; try { w = f.contentWindow; } catch (_) { return null; } return w && w.Duendes ? w.Duendes : null; };
+    const D = ya();
+    if (D) { try { fn(D); } catch (e) { console.error('Duendes:', e); } return true; }
+    f.addEventListener('load', () => { const D2 = ya(); if (D2) { try { fn(D2); } catch (e) { console.error('Duendes:', e); } } }, { once: true });
+    return true;
+  }
+  function tallerAbierto() { return !!(taller && !taller.hidden); }
+  function colocarTaller() {
+    if (!taller) return;
+    const t = pref.taller || {}, vw = innerWidth, vh = innerHeight;
+    const w = Math.max(TALLER.min, Math.min(TALLER.max, vw - 24, +t.w || TALLER.defecto));
+    const h = Math.round(w * 9 / 16) + 34;
+    const panelW = panel && !panel.hidden ? panel.getBoundingClientRect().width : 0;
+    let x = t.x != null ? +t.x : vw - panelW - w - 16, y = t.y != null ? +t.y : 58;
+    x = Math.max(8, Math.min(vw - w - 8, x)); y = Math.max(8, Math.min(vh - h - 8, y));
+    taller.style.width = w + 'px'; taller.style.left = x + 'px'; taller.style.top = y + 'px';
+  }
+  function crearTaller() {
+    if (taller) return taller;
+    taller = document.createElement('div');
+    taller.className = 'as-taller'; taller.hidden = true; taller.tabIndex = -1;
+    taller.setAttribute('role', 'dialog'); taller.setAttribute('aria-label', 'El taller de los duendes');
+    taller.innerHTML = `<div class="as-taller-cab" data-as-taller-mover><span class="as-taller-tit">${SVG_DUENDE}<span>El taller de los duendes</span></span><span class="as-taller-est" data-as-taller-est></span>`
+      + `<button type="button" class="icono" data-as-taller-cerrar title="Cerrar (Esc)" aria-label="Cerrar el taller">${ic('ic-close', 14)}</button></div>`
+      + `<div class="as-taller-escena"></div><div class="as-taller-asa" data-as-taller-asa title="Arrastra para cambiar el tamaño · doble clic: el de partida"></div>`;
+    document.body.appendChild(taller);
+    tallerMarco = document.createElement('iframe');
+    tallerMarco.className = 'as-taller-marco'; tallerMarco.title = 'Los duendes del equipo trabajando'; tallerMarco.tabIndex = -1;
+    tallerMarco.setAttribute('scrolling', 'no');
+    tallerMarco.addEventListener('load', () => {
+      tallerListo = true;
+      const cola = tallerCola.splice(0);
+      conDuendes(tallerMarco, D => {
+        if (D.taller) D.taller({ actores: tallerActoresUlt || actoresDe(equipoAhora(), dnVista()), sonido: sonidoActivo() });
+        if (D.tallerEvento) cola.forEach(ev => { try { D.tallerEvento(ev); } catch (_) { /* ese no */ } });
+        if (peleaVista && D.pelea) D.pelea(peleaVista);                // la pelea de la mesa, si la hay (§14)
+        if (escena && D.escena) D.escena(escena);                       // y la escena del último error (§16)
+        if (D.pausa) D.pausa(!tallerAbierto());                         // escondido, no se anima
+      });
+    });
+    tallerMarco.src = 'duendes.html?embebido=1&taller=1&tema=' + temaMarco();
+    taller.querySelector('.as-taller-escena').appendChild(tallerMarco);
+    taller.addEventListener('click', e => { if (e.target.closest('[data-as-taller-cerrar]')) cerrarTaller(); });
+    /* con el foco en el taller (no es modal), Esc lo cierra y las teclas sin Cmd/Ctrl no siguen hasta el tablero (Supr borraba el nodo
+       elegido debajo); los atajos de la app, sí */
+    taller.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarTaller(); return; }
+      if (!e.metaKey && !e.ctrlKey) e.stopPropagation();
+    });
+    taller.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      const asa = e.target.closest('[data-as-taller-asa]'), mover = !asa && e.target.closest('[data-as-taller-mover]') && !e.target.closest('button');
+      if (!asa && !mover) return;
+      e.preventDefault();
+      try { taller.focus({ preventScroll: true }); } catch (_) { /* nada */ }
+      const r0 = taller.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+      document.body.classList.add('as-taller-moviendo');
+      const mov = ev => {
+        pref.taller = Object.assign({}, pref.taller);
+        if (asa) pref.taller.w = Math.round(r0.width + (ev.clientX - x0));
+        else { pref.taller.x = Math.round(r0.left + ev.clientX - x0); pref.taller.y = Math.round(r0.top + ev.clientY - y0); }
+        if (asa) { pref.taller.x = Math.round(r0.left); pref.taller.y = Math.round(r0.top); }
+        colocarTaller();
+      };
+      const fin = () => { document.removeEventListener('pointermove', mov); document.removeEventListener('pointerup', fin); document.removeEventListener('pointercancel', fin); document.body.classList.remove('as-taller-moviendo'); guardarPref(); };
+      document.addEventListener('pointermove', mov); document.addEventListener('pointerup', fin); document.addEventListener('pointercancel', fin);
+    });
+    taller.addEventListener('dblclick', e => { if (e.target.closest('[data-as-taller-asa]')) { pref.taller = Object.assign({}, pref.taller, { w: TALLER.defecto }); colocarTaller(); guardarPref(); } });
+    addEventListener('resize', () => { if (tallerAbierto()) colocarTaller(); });
+    /* Esc sin nada con el foco (tras un clic en el tablero, por ejemplo) también la cierra; con el foco en un campo o un menú, es suyo */
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !tallerAbierto()) return;
+      const a = document.activeElement;
+      if (a && a !== document.body && !taller.contains(a)) return;
+      if (document.querySelector('dialog[open]')) return;
+      e.preventDefault(); cerrarTaller();
+    });
+    return taller;
+  }
+  function abrirTaller(op) {
+    crearTaller();
+    taller.hidden = false;
+    if (tallerListo) conDuendes(tallerMarco, D => { if (D.pausa) D.pausa(false); });
+    colocarTaller();
+    pref.taller = Object.assign({}, pref.taller, { abierto: true }); guardarPref();
+    tallerActores();
+    pintarTaller();
+    if (!(op && op.sinFoco)) { try { taller.focus({ preventScroll: true }); } catch (_) { /* nada */ } }
+    return true;
+  }
+  function cerrarTaller() {
+    if (!taller || taller.hidden) return false;
+    taller.hidden = true;
+    if (tallerListo) conDuendes(tallerMarco, D => { if (D.callar) D.callar(); if (D.pausa) D.pausa(true); });
+    pref.taller = Object.assign({}, pref.taller, { abierto: false }); guardarPref();
+    if (campo && panel && !panel.hidden && document.activeElement === document.body) { try { campo.focus({ preventScroll: true }); } catch (_) { /* nada */ } }
+    return true;
+  }
+  /* los actores: el equipo y los especiales de la conversación (o los del trabajo en marcha) */
+  function tallerActores(actores) {
+    if (actores) tallerActoresUlt = actores;
+    else if (!equipoVivo || !tallerActoresUlt) tallerActoresUlt = actoresDe(equipoAhora(), conv && Array.isArray(conv.especiales) ? conv.especiales : dnVista());
+    if (taller && tallerListo) conDuendes(tallerMarco, D => { if (D.taller) D.taller({ actores: tallerActoresUlt, sonido: sonidoActivo() }); });
+  }
+  function tallerEmpezar(eq, especiales) {
+    tallerCola = [];
+    tallerActores(actoresDe(eq, especiales));
+    pintarTaller();
+  }
+  function tallerEvento(ev) {
+    if (taller && tallerListo) conDuendes(tallerMarco, D => { if (D.tallerEvento) D.tallerEvento(ev); });
+    else { tallerCola.push(ev); if (tallerCola.length > 30) tallerCola.shift(); }
+    pintarTaller(ev);
+  }
+  function tallerFin() { if (!taller) tallerCola = []; pintarTaller(); }
+  function pintarTaller(ev) {
+    const s = taller && taller.querySelector('[data-as-taller-est]'); if (!s) return;
+    const it = equipoVivo && equipoVivo.it, eqi = it && it.equipo;
+    const u = ev || (eqi && eqi.eventos[eqi.eventos.length - 1]);
+    s.textContent = eqi && eqi.enCurso ? (u ? corto((u.nombre || quienDe(u).nombre) + ': ' + (u.texto || ''), 90) : 'El equipo está trabajando…') : 'Esperando trabajo';
+    s.classList.toggle('enojo', !!(eqi && eqi.enCurso && u && (u.accion === 'enojo' || u.accion === 'rechazar')));
+  }
+
+  /* ---------- el sonido ---------- */
+  function pintarSonido() {
+    const b = panel && panel.querySelector('[data-as-sonido]'); if (!b) return;
+    const on = !!pref.sonido;
+    b.innerHTML = on ? SVG_SONIDO : SVG_SONIDO_NO;
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+    b.title = on ? 'Sonido encendido: los duendes «hablan» al contestar (clic: apagarlo)' : 'Sonido apagado (clic: que los duendes «hablen» al contestar, como en el teatro)';
+  }
+  /* el sonido de los marcos, al día: con la ventana escondida o el panel cerrado, callan (lo que estaba sonando también) */
+  function sonidoAlDia() {
+    const on = sonidoActivo();
+    if (taller && tallerListo) conDuendes(tallerMarco, D => { if (D.sonido) D.sonido(on); if (!on && D.callar) D.callar(); });
+    if (duendeMarco) conDuendes(duendeMarco, D => { if (D.sonido) D.sonido(on); if (!on && D.callar) D.callar(); });
+  }
+  function ponerSonido(on) {
+    pref.sonido = !!on; guardarPref(); pintarSonido();
+    const s = sonidoActivo();
+    if (taller && tallerListo) conDuendes(tallerMarco, D => { if (D.sonido) D.sonido(s); if (!s && D.callar) D.callar(); });
+    if (duendeMarco) conDuendes(duendeMarco, D => { if (D.sonido) D.sonido(s); if (!s && D.callar) D.callar(); });
+    avisar(on ? 'Sonido encendido: los duendes hablan al contestar' : 'Sonido apagado');
+  }
+  /* las primeras palabras de una respuesta, sin marcas (lo que «dice» el duende) */
+  function primerasPalabras(md) {
+    const t = String(md || '').replace(/```[\s\S]*?```/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#>*_`~=|]/g, ' ').replace(/\s+/g, ' ').trim();
+    const frase = (/^.{12,}?[.!?…](?=\s|$)/.exec(t) || [t])[0];   // la primera frase (y no más de 24 palabras)
+    return corto(frase.split(' ').slice(0, 24).join(' '), 150);
+  }
+  /* el maestro habla al terminar una respuesta (solo con el sonido encendido y el panel a la vista) */
+  let hablados = 0;
+  /* §12: el maestro **dice** siempre su respuesta en la mascota (globo y boca); suena solo con 🔊. Con el taller abierto y sonido, la
+     voz va en el taller (el maestro de allí habla) y la mascota la dice sin sonido, para que no suene dos veces */
+  function hablarMaestro(texto) {
+    const t = primerasPalabras(texto); if (!t) return false;
+    const m = maestroMasc(), suena = sonidoActivo(), enTaller = suena && tallerAbierto() && tallerListo;
+    if (enTaller) { hablados++; conDuendes(tallerMarco, D => { if (D.hablar) D.hablar({ texto: t, voz: m.voz, quien: m.id }); }); }
+    else if (suena) hablados++;
+    return decirMascota({ quien: 'maestro', nombre: m.nombre, voz: m.voz, texto: t, sonido: suena && !enTaller });
+  }
+
   /* ---------- el duende trabajando (1.1.67, Leo: «Quiero ver un duende genérico trabajando en el asistente de IA cuando las tareas
      están tardando en procesarse») ----------
      El motor del teatro en un marco pequeño (`duendes.html?embebido=1&retrato=1&trabajo=1`: un duende genérico que teclea, lee,
@@ -1163,12 +2084,19 @@
   function queHace() {
     if (!enCurso || !panel || panel.hidden) return null;
     if (items.some(i => i.tipo === 'permiso' && i.estado === 'pendiente')) return null;      // espera a Leo: no está trabajando
+    /* el equipo trabajando (1.1.68): sale al momento y dice quién hace qué */
+    if (iaActual && iaActual.vivo && iaActual.quien) return corto(iaActual.nombre + ' está hablando…', 80);   // la mesa
+    const eqi = equipoVivo && equipoVivo.it && equipoVivo.it.equipo;
+    if (eqi && eqi.enCurso) { const u = eqi.eventos[eqi.eventos.length - 1]; return u ? corto(u.nombre + ': ' + (u.texto || u.accion), 80) : 'El equipo se pone a trabajar…'; }
     const paso = [...items].reverse().find(i => i.tipo === 'paso' && i.estado === 'en-curso');
     if (Date.now() - ultimaNovedad < (paso ? ESPERA_PASO : ESPERA_DUENDE)) return null;
     return paso ? corto(conNombres(tituloPaso(paso)), 60) + '…' : 'Pensando…';
   }
   function revisarDuende() {
     if (!enCurso) { vigilarDuende(false); return; }
+    const conPaso = !!(equipoVivo || items.some(i => i.tipo === 'paso' && i.estado === 'en-curso'));
+    if (!items.some(i => i.tipo === 'permiso' && i.estado === 'pendiente')) ponerEstado(conPaso ? 'trabajando' : 'pensando');
+    pintarVerMascota();
     const t = queHace();
     if (t) ponerDuende(true, t);
     else if (duendeVisible && (Date.now() - duendeDesde >= MINIMO_DUENDE || items.some(i => i.tipo === 'permiso' && i.estado === 'pendiente'))) ponerDuende(false);
@@ -1178,27 +2106,165 @@
     if (on) {
       if (!duendeVisible) { duendeDesde = Date.now(); marcoDuende(caja); }
       const r = caja.querySelector('[data-as-trabajo-txt]'); if (r.textContent !== texto) r.textContent = texto;
+      const eqi = equipoVivo && equipoVivo.it && equipoVivo.it.equipo, u = eqi && eqi.enCurso ? eqi.eventos[eqi.eventos.length - 1] : null;
+      r.classList.toggle('enojo', !!(u && (u.accion === 'enojo' || u.accion === 'rechazar')));
+      caja.classList.toggle('equipo', !!(eqi && eqi.enCurso));
       caja.hidden = false;
     } else caja.hidden = true;
     if (duendeVisible !== !!on) { duendeVisible = !!on; repintarPronto(); }   // los tres puntos se van o vuelven
   }
-  function marcoDuende(caja) {
-    const sitio = caja.querySelector('[data-as-duende]');
-    if (duendeMarco) { try { const w = duendeMarco.contentWindow; if (w && w.Duendes && w.Duendes.tema) w.Duendes.tema(temaMarco()); } catch (_) { /* aún cargando */ } return; }
-    if (menosMovimiento()) return;                       // solo el rótulo (y el icono)
-    const f = document.createElement('iframe');
-    f.className = 'as-duende-marco'; f.title = 'Un duende trabajando'; f.tabIndex = -1;
-    f.setAttribute('aria-hidden', 'true'); f.setAttribute('scrolling', 'no');
-    f.addEventListener('load', () => prepararMarcoDuende(f));
-    f.src = 'duendes.html?embebido=1&retrato=1&trabajo=1&tema=' + temaMarco();
-    sitio.appendChild(f); duendeMarco = f; sitio.classList.add('con-marco');
+  /* 1.1.68: el duende de la franja ya no es un marco propio: el duende maestro vive en la mascota (arriba del panel) y la franja se
+     queda con el rótulo (y «Ver trabajar»). El tema de los marcos (la mascota y el taller) sigue al de la app con un
+     `MutationObserver` sobre `data-theme` (`iniciar`): antes solo se ponía al día al salir la franja, y cambiar de tema con el panel
+     abierto dejaba la mascota y el taller en el de antes. */
+  function marcoDuende() { temaMarcos(); }
+  function temaMarcos() {
+    const t = temaMarco();
+    [duendeMarco, tallerMarco].forEach(f => { if (f) conDuendes(f, D => { if (D.tema) D.tema(t); }); });
   }
-  /* al cargar: sin sonido (el motor, con `?retrato=1&trabajo=1`, ya sale trabajando sobre fondo transparente y sin marco) */
-  function prepararMarcoDuende(f) {
-    let w = null;
-    try { w = f.contentWindow; } catch (_) { return; }
-    const D = w && w.Duendes; if (!D) return;
-    try { if (D.detener) D.detener(); } catch (_) { /* sin sonido de todos modos */ }
+
+  /* ---------- la mascota (1.1.68, §12: Leo, «Agrega al asistente de IA un recuadro en la parte superior para ver "hablar" a los
+     duendes. Siempre se ve el duende y funciona como una especie de mascota. Mejora su "lipsync".») ----------
+     Un recuadro de ~110 px bajo la cabecera con un solo marco (`duendes.html?embebido=1&mascota=1`), creado una vez y nunca quitado
+     del documento (quitarlo lo recargaría): el duende maestro siempre a la vista, con vida propia. Sigue al asistente (`pensando` al
+     mandar, `trabajando` con pasos en curso o el equipo, `contento` al terminar y luego `quieto`, `error` si falla); **al terminar una
+     respuesta la dice** (`Duendes.decir`: globo y boca siempre; sonido solo con 🔊) y, con el equipo trabajando, cada evento con texto
+     lo dice su duende, que entra al recuadro (el enojo, enojado; la cola es del motor). Un clic lo hace saludar. Con «reducir
+     movimiento», el icono (y el marco escondido, solo para la voz). Plegado a riel, no se ve (como todo el panel). **Se monta la
+     primera vez que se abre el panel** (`abrir`), no al arrancar: duendes.html pide sus fuentes a Google Fonts, y cada arranque de
+     ClapCraft salía a la red aunque Leo no usara la IA (visto al portarlo a ClapBook). */
+  let estadoMasc = null, tQuieto = null;
+  function montarMascota() {
+    const caja = panel && panel.querySelector('[data-as-mascota]'); if (!caja || duendeMarco) return;
+    const sitio = caja.querySelector('[data-as-mascota-sitio]'), quieta = menosMovimiento();
+    const f = document.createElement('iframe');
+    f.className = 'as-mascota-marco'; f.title = 'El duende maestro'; f.tabIndex = -1;
+    f.setAttribute('aria-hidden', 'true'); f.setAttribute('scrolling', 'no');
+    if (quieta) { f.style.display = 'none'; sitio.innerHTML = ic('ic-asistente', 26); caja.classList.add('quieta'); }
+    f.addEventListener('load', () => prepararMascota(f));
+    f.src = 'duendes.html?embebido=1&mascota=1&tema=' + temaMarco();
+    sitio.appendChild(f); duendeMarco = f;
+    caja.addEventListener('click', e => { if (!e.target.closest('button')) saludarMascota(); });
+  }
+  const maestroMasc = () => { const m = maestro(); return { id: m ? m.id : 'maestro', nombre: m ? m.nombre : 'El duende maestro', duende: m ? aspecto(m) : null, voz: vozDe(m) || 'normal' }; };
+  function prepararMascota(f) {
+    conDuendes(f, D => {
+      if (D.mascota) D.mascota({ maestro: maestroMasc(), sonido: sonidoActivo() });
+      else if (D.retrato) { const m = maestroMasc(); D.retrato({ duende: m.duende, nombre: m.nombre, fondo: 'transparente' }); }   // un motor sin mascota: su retrato
+      const e = estadoMasc; estadoMasc = null; ponerEstado(e || 'quieto');
+      if (peleaVista && D.pelea) D.pelea(peleaVista);                  // la pelea de la mesa, si la hay (§14)
+    });
+    pausarMascota();
+  }
+  /* ---------- la pelea de la mesa (1.1.68, §14: Leo, «si la discusión es muy fuerte, exista una animación de pelea entre los
+     duendes; se dejan de pelear hasta mi próxima respuesta») ----------
+     El motor dice cuándo empieza (`alPelea({ entre, nivel, ronda })`, otra vez si se suma alguien) y cuándo acaba (`alPelea(null)`, al
+     siguiente mensaje de Leo). Aquí: `Duendes.pelea` en la mascota y en el taller (también al cargar cualquiera de los dos o al
+     recargar la conversación, con `conv.pelea`), y una línea en el chat cuando empieza («💥 «A» y «B» se pelean»). */
+  let peleaVista = null;             // lo que se le pasa al motor del teatro: { entre: [{ id, nombre, duende, voz }], nivel } o null
+  function alPelea(x, op) {
+    op = op || {};
+    const lista = x && Array.isArray(x.entre) ? x.entre.map(e => (typeof e === 'string' ? { id: e } : e)).filter(e => e && e.id) : [];
+    if (!lista.length) {
+      const habia = !!peleaVista; peleaVista = null;
+      if (habia) [duendeMarco, tallerMarco].forEach(f => { if (f) conDuendes(f, D => { if (D.pelea) D.pelea(null); }); });
+      return;
+    }
+    const antes = peleaVista ? peleaVista.entre.map(e => e.id).join('|') : '';
+    const entre = lista.map(e => {
+      const q = turnoDe(e.id, { nombre: e.nombre, papel: e.papel });
+      const d = mesaCfg.participantes.find(p => p.id === e.id) || duendesDe(equipoAhora()).find(y => y.id === e.id) || null;
+      return { id: e.id, nombre: q.nombre, papel: q.papel, duende: e.id === 'maestro' ? maestroMasc().duende : q.papel === 'personaje' ? (d && d.duende) || null : d ? aspecto(Object.assign({ papel: q.papel }, d)) : null, voz: e.id === 'maestro' ? maestroMasc().voz : d ? vozDe(d) : null };
+    });
+    peleaVista = { entre, nivel: [1, 2, 3].includes(+x.nivel) ? +x.nivel : 1 };
+    [duendeMarco, tallerMarco].forEach(f => { if (f) conDuendes(f, D => { if (D.pelea) D.pelea(peleaVista); }); });
+    const ahora = entre.map(e => e.id).join('|');
+    if (!op.sinLinea && ahora !== antes) {
+      const n = entre.map(e => '«' + e.nombre + '»');
+      items.push({ tipo: 'pelea', texto: (n.length > 1 ? n.slice(0, -1).join(', ') + ' y ' + n[n.length - 1] : n[0]) + ' se pelean', nivel: peleaVista.nivel });
+      repintarPronto();
+    }
+  }
+  /* el aspecto (y la voz) del maestro, al día */
+  function vestirMaestro() {
+    if (!duendeMarco) return;
+    conDuendes(duendeMarco, D => { if (D.mascota) D.mascota({ maestro: maestroMasc(), sonido: sonidoActivo() }); else if (D.retrato) { const m = maestroMasc(); D.retrato({ duende: m.duende, nombre: m.nombre, fondo: 'transparente' }); } });
+  }
+  /* ---------- las escenas de los estados (1.1.68, §16: Leo, «Si ya no hubiera saldo de tokens, que se vea una animación de duendes en
+     huelga, y otras animaciones divertidas») ----------
+     Según el error de la última respuesta, la mascota (y el taller) pasa a una escena que se queda hasta la siguiente respuesta buena:
+     huelga (sin saldo), tope (el de la conversación o el del día), sin-clave, sin-red, saturado (429) o error. Mientras trabaja, se ve
+     trabajar; al acabar vuelve la escena si sigue la causa. La huelga sale también sola con el saldo de APIMart por debajo de 0,01 USD
+     y se levanta al volver el saldo; con ella, la mascota lleva «Recargar saldo». */
+  let escena = null, huelgaSaldo = false;
+  function escenaDeError(motivo, codigo) {
+    if (motivo === 'tope') return 'tope';
+    if (motivo === 'detenido' || motivo === 'ocupada' || motivo === 'clave' || motivo === 'vacio') return null;
+    const c = String(codigo == null ? '' : codigo), h = /^\d{3}$/.test(c) ? +c : null;
+    if (c === 'saldo' || h === 402) return 'huelga';
+    if (c === 'topeDiario' || c === 'tope') return 'tope';          // (el tope de gasto a mitad de la mesa llega con su código)
+    if (c === 'clave' || c === 'sinClave' || c === 'claveIlegible' || h === 401) return 'sin-clave';
+    if (c === 'red' || c === 'tiempo') return 'sin-red';
+    if (c === 'limite' || h === 429) return 'saturado';
+    return motivo === 'error' ? 'error' : null;
+  }
+  function ponerEscena(e) {
+    e = e || null;
+    const cambio = e !== escena; escena = e;
+    const c = panel && panel.querySelector('[data-as-mascota]');
+    if (c) { c.dataset.escena = e || ''; const b = c.querySelector('.as-mascota-recargar'); if (b) b.hidden = e !== 'huelga'; }
+    if (!cambio) return;
+    if (!enCurso) { const x = estadoMasc; estadoMasc = null; ponerEstado(e || (x && !ESCENAS.includes(x) ? x : 'quieto')); }
+    if (taller && tallerListo) conDuendes(tallerMarco, D => { if (D.escena) D.escena(e); });
+  }
+  const ESCENAS = ['huelga', 'tope', 'sin-clave', 'sin-red', 'saturado', 'error'];
+  function ponerEstado(e) {
+    if (!e) return;
+    if (!enCurso && escena && !ESCENAS.includes(e)) e = escena;   // sin trabajar, la escena manda (hasta la siguiente respuesta buena)
+    if (e === estadoMasc) return;
+    estadoMasc = e;
+    clearTimeout(tQuieto);
+    if (panel) { const c = panel.querySelector('[data-as-mascota]'); if (c) c.dataset.estado = e; }
+    /* en una escena (§16), los del equipo que entran con el maestro llevan su aspecto (los fijos, en su orden: lector, escritora, coordinador) */
+    const conQuien = ESCENAS.includes(e) ? { actores: actoresDe(equipoAhora(), []).filter(x => x.papel !== 'maestro').sort((x, y) => (e === 'tope' ? (y.papel === 'coordinador') - (x.papel === 'coordinador') : 0)) } : undefined;
+    if (duendeMarco) conDuendes(duendeMarco, D => { if (D.mascotaEstado) D.mascotaEstado(e, conQuien); });
+    /* lo de un momento vuelve a quieto solo */
+    if (e === 'contento' && !enCurso) tQuieto = setTimeout(() => { if (!enCurso) ponerEstado('quieto'); }, 6000);
+  }
+  /* decir algo en la mascota: `op` = { quien, nombre, duende, voz, texto, emo, sonido } (sin `D.decir`, con sonido, `hablar`) */
+  let dichos = 0;
+  function decirMascota(op) {
+    if (!duendeMarco || !panel || panel.hidden || pref.plegado || !op || !String(op.texto || '').trim()) return false;
+    dichos++;
+    return conDuendes(duendeMarco, D => {
+      if (D.decir) { try { const r = D.decir(op); if (r && typeof r.catch === 'function') r.catch(() => {}); } catch (e) { console.error('Duendes.decir:', e); } }
+      else if (op.sonido && D.hablar) D.hablar({ texto: op.texto, voz: op.voz, emo: op.emo });
+    });
+  }
+  /* la mascota no se anima mientras no se ve (el panel cerrado o plegado, la ventana escondida): Chromium sigue dando fotogramas a un
+     marco con `display: none` y pintaba a 60 por segundo sin que nadie la viera */
+  function pausarMascota() {
+    const quieta = document.hidden || !panel || panel.hidden || !!pref.plegado;
+    if (duendeMarco) conDuendes(duendeMarco, D => { if (D.pausa) D.pausa(quieta); });
+  }
+  function pintarVerMascota() {
+    const b = panel && panel.querySelector('.as-mascota-ver'); if (!b) return;
+    const on = !!(enCurso && equipoVivo);
+    if (b.hidden === on) b.hidden = !on;
+  }
+  function saludarMascota() {
+    const m = maestroMasc();
+    ponerEstado(enCurso ? estadoMasc : 'contento');
+    decirMascota({ quien: 'maestro', nombre: m.nombre, voz: m.voz, texto: enCurso ? 'Sigo en ello…' : '¡Hola! Soy ' + m.nombre.replace(/^El /, 'el ') + '.', emo: 'saluda', sonido: sonidoActivo() });
+  }
+  /* un evento del equipo con texto: lo dice su duende en la mascota (con el taller abierto y sonido, ya suena allí) */
+  function eventoMascota(ev, especiales) {
+    if (!ev || !ev.texto) return;
+    const x = (especiales || []).find(s => s.id === ev.quien) || duendesDe(equipoAhora()).find(d => d.id === ev.quien) || null;
+    const esMaestro = !ev.quien || ev.quien === 'maestro' || ev.papel === 'maestro';
+    decirMascota({ quien: esMaestro ? 'maestro' : ev.quien, nombre: ev.nombre || (x && x.nombre) || '', duende: x ? aspecto(Object.assign({ papel: ev.papel || 'especial' }, x)) : null,
+      voz: x ? vozDe(x) : null, texto: ev.texto, emo: ev.accion === 'enojo' || ev.accion === 'rechazar' ? 'enojado' : ev.accion === 'aprobar' ? 'feliz' : undefined,
+      sonido: sonidoActivo() && !tallerAbierto() });
   }
 
   /* ---------- pintar ---------- */
@@ -1208,7 +2274,7 @@
   }
   function pintarTodo() {
     if (!panel) return;
-    pintarCabecera(); pintarBotones(); pintarFx();
+    pintarCabecera(); pintarBotones(); pintarFx(); pintarModos(); pintarDn();
     if (!hayTransporte()) { cuerpo.innerHTML = bienvenidaHtml('navegador'); return; }
     if (cfg && !hayClave() && !items.length) { cuerpo.innerHTML = bienvenidaHtml('sin-clave'); return; }
     if (!items.length) { cuerpo.innerHTML = bienvenidaHtml('vacio'); return; }
@@ -1291,7 +2357,13 @@
   function pintarCabecera() {
     if (!panel) return;
     const m = modeloActual();
-    panel.querySelectorAll('.as-modelo').forEach(b => { b.textContent = hayTransporte() ? m : 'App de escritorio'; });
+    /* «deepseek-» va aparte: en la cabecera estrecha se esconde (css/asistente.css) y queda «v4-flash» */
+    panel.querySelectorAll('.as-modelo').forEach(b => {
+      const t = hayTransporte() ? m : 'App de escritorio', pre = /^deepseek-/i.test(t) ? t.slice(0, 9) : '';
+      const html = pre ? `<span class="as-modelo-pre">${esc(pre)}</span>${esc(t.slice(9))}` : esc(t);
+      if (b.innerHTML !== html) b.innerHTML = html;
+      b.title = 'Cambiar el modelo (' + t + ')';
+    });
     const c = panel.querySelector('[data-as-coste]');
     const tope = cfg && cfg.tope != null ? cfg.tope : TOPE_DEFECTO;
     const desconocido = !!(cfg && cfg.precioModelo && cfg.precioModelo.desconocido);
@@ -1303,6 +2375,9 @@
       + (desconocido ? ' No se sabe el precio de este modelo: se cuenta con uno alto, por prudencia.' : '')
       + (cfg && cfg.topeDiario ? ' Hoy: ' + usd(cfg.gastoHoy || 0) + ' de ' + usd(cfg.topeDiario) + ' (tope diario).' : '');
     const punto = panel.querySelector('[data-as-riel-punto]'); if (punto) punto.hidden = !enCurso;
+    /* el duende maestro (1.1.68): su nombre (Leo puede cambiárselo) */
+    const mae = panel.querySelector('[data-as-maestro]'); if (mae) { const n = nombreMaestro(); if (mae.textContent !== n) mae.textContent = n; }
+    pintarSonido();
     pintarSaldo();
   }
   /* ---------- el saldo de APIMart (1.1.60, Leo: «que se puedan poner en el asistente de IA mis créditos restantes en APIMart») ----------
@@ -1326,6 +2401,12 @@
       let r = null;
       try { r = await g.transporte.saldo(forzar ? { forzar: true } : undefined); } catch (_) { r = null; }
       saldoIA = r && r.ok && Number.isFinite(+r.saldo) ? r : null;
+      /* §16: sin saldo, huelga (aunque aún no haya fallado nada); con saldo otra vez, se levanta */
+      if (saldoIA) {
+        const sin = +saldoIA.saldo < 0.01;
+        if (sin && !huelgaSaldo) { huelgaSaldo = true; ponerEscena('huelga'); }
+        else if (!sin && huelgaSaldo) { huelgaSaldo = false; if (escena === 'huelga') ponerEscena(null); }
+      }
       pidiendoSaldo = null; pintarSaldo();
       return saldoIA;
     })();
@@ -1376,6 +2457,7 @@
     return `<div class="as-bienvenida as-bv-vacio">
         <span class="as-bv-ic">${ic('ic-asistente', 26)}</span>
         <h3>¿En qué te ayudo?</h3>
+        <p class="as-bv-nota">Soy ${esc(nombreMaestro())}: te contesto yo y, para escribir guion o notas largas, pongo a trabajar a mi equipo de duendes.</p>
         <p>Veo lo que tienes abierto en ClapCraft. Pega un enlace (${atajo('C', true)} copia el de lo que tienes delante) para decirme exactamente de qué hablas.</p>
         <div class="as-sugerencias">${sug.map(s => `<button type="button" class="as-sug" data-as-sugerencia="${esc(s)}">${esc(s)}</button>`).join('')}</div>
       </div>`;
@@ -1387,9 +2469,14 @@
       const razon = it.razon && it.razon.trim() ? `<details class="as-razon"${(it.razonAbierto !== undefined ? it.razonAbierto : it.vivo && !String(it.texto || '').trim()) ? ' open' : ''}><summary>Razonamiento</summary><div>${esc(it.razon.trim()).replace(/\n/g, '<br>')}</div></details>` : '';
       const hay = String(it.texto || '').trim();
       const copiar = hay && !it.vivo && g.copiarTexto ? `<button type="button" class="as-copiar" data-as-copiar title="Copiar la respuesta" aria-label="Copiar la respuesta">${ic('ic-docs', 13)}</button>` : '';
-      return hay || razon ? `<div class="as-msg as-ia${it.vivo ? ' vivo' : ''}"${d}>${razon}${hay ? `<div class="as-md">${chipsDeIds(mdHtml(it.texto.trim()))}</div>` : ''}${copiar}</div>` : '';
+      /* en la mesa (1.1.68, §13): su nombre y el chip de su color; mientras piensa, su burbuja ya está (con los tres puntos) */
+      const quien = it.quien ? `<div class="as-mesa-quien"><span class="as-eq-chip" style="--dc:${esc(it.color || COLOR_PAPEL.especial)}">${esc(corto(it.nombre || 'Duende', 32))}</span>${it.revisa ? `<span class="as-mesa-rol as-mesa-revisa${it.problemas > 0 ? ' con-problemas' : ''}" title="${esc(it.problemas > 0 ? plural(it.problemas, 'cosa que no se sostiene', 'cosas que no se sostienen') : 'Revisa lo que se dijo contra el proyecto')}">revisa${it.problemas > 0 ? ' · ' + esc(it.problemas) : ''}</span>` : ''}${it.resumen ? '<span class="as-mesa-rol">resume</span>' : it.ronda > 1 ? `<span class="as-mesa-rol">ronda ${esc(it.ronda)}</span>` : ''}</div>` : '';
+      const espera = it.quien && it.vivo && !hay && !razon ? '<div class="as-pensando" aria-label="Pensando"><i></i><i></i><i></i></div>' : '';
+      /* una burbuja de la mesa que se quedó vacía (el duende leyó antes de hablar: lo suyo va en la siguiente) no se pinta (en vivo) */
+      return hay || razon || (quien && it.vivo) ? `<div class="as-msg as-ia${it.vivo ? ' vivo' : ''}${it.quien ? ' as-mesa' : ''}${it.revisa ? ' revisa' + (it.problemas > 0 ? ' con-problemas' : '') : ''}"${d}${it.quien ? ` style="--dc:${esc(it.color || COLOR_PAPEL.especial)}"` : ''}>${quien}${razon}${espera}${hay ? `<div class="as-md">${chipsDeIds(mdHtml(it.texto.trim()))}</div>` : ''}${copiar}</div>` : '';
     }
     if (it.tipo === 'paso') return pasoHtml(it, i);
+    if (it.tipo === 'pelea') return `<div class="as-pelea nivel-${esc(it.nivel || 1)}"${d} role="note"><span aria-hidden="true">💥</span><span>${esc(it.texto)}</span></div>`;
     if (it.tipo === 'aviso') return `<div class="as-nota-sis"${d}>${ic('ic-aviso', 14)}<span>${esc(it.texto)}</span>${it.accion === 'ajustes' ? '<button type="button" class="as-enlace-btn" data-as-ajustes>Configurar</button>' : it.accion === 'nueva' ? '<button type="button" class="as-enlace-btn" data-as-nueva>Nueva conversación</button>' : ''}</div>`;
     if (it.tipo === 'permiso') {
       const hecho = it.estado !== 'pendiente';
@@ -1434,7 +2521,44 @@
     if (ops && ESCRIBEN.has(it.nombre)) t += ' (' + ops + (ops === 1 ? ' cambio' : ' cambios') + ')';
     return t;
   }
+  /* el paso del equipo (1.1.68): «El equipo trabajó (2 rondas · 3 correcciones)» y, desplegado, una línea por evento con el chip
+     del duende (el color de su ropa); el enojo, en rojo. Mientras trabaja, «Ver trabajar» */
+  const ACCION_TXT = { empezar: 'encarga', leer: 'lee', escribir: 'escribe', revisar: 'revisa', enojo: 'se enoja', aprobar: 'aprueba', rechazar: 'rechaza',
+    corregir: 'corrige', entregar: 'entrega', hablar: 'dice', error: 'falla', fin: 'recibe' };
+  const plural = (n, a, b) => n + ' ' + (n === 1 ? a : b);
+  function pasoEquipoHtml(it, i) {
+    const q = it.equipo || { eventos: [] }, curso = it.estado === 'en-curso' && q.enCurso !== false;
+    /* los eventos que vienen del motor (una conversación guardada) no traen su color: el del duende */
+    q.eventos = (q.eventos || []).map(e => (e.color && e.nombre ? e : Object.assign({}, e, quienDe(e))));
+    const rondas = +q.rondas || 0, corr = q.problemas != null ? q.problemas : (+q.correcciones || 0);
+    const cab = curso ? 'El equipo está trabajando…'
+      : it.estado === 'error' || q.ok === false ? 'El equipo no pudo terminar'
+      : 'El equipo trabajó' + (rondas || corr ? ' (' + [rondas ? plural(rondas, 'ronda', 'rondas') : '', plural(corr, 'corrección', 'correcciones')].filter(Boolean).join(' · ') + ')' : '');
+    const u = q.eventos[q.eventos.length - 1];
+    const est = curso ? '<span class="as-giro" aria-label="Trabajando"></span>'
+      : it.estado === 'error' || q.ok === false ? `<span class="as-paso-est error">${ic('ic-aviso', 12)}Falló</span>`
+      : it.estado === 'cortado' ? '<span class="as-paso-est">Cortado</span>' : `<span class="as-paso-est ok">${ic('ic-check', 12)}</span>`;
+    const ultimo = curso && u ? `<div class="as-eq-ultimo${u.accion === 'enojo' || u.accion === 'rechazar' ? ' enojo' : ''}"><span class="as-eq-chip" style="--dc:${esc(u.color || COLOR_PAPEL.especial)}">${esc(corto(u.nombre, 24))}</span><span>${esc(u.texto || ACCION_TXT[u.accion] || '')}</span></div>` : '';
+    const ver = curso ? `<span class="as-paso-acc"><button type="button" class="as-enlace-btn" data-as-ver-taller>${SVG_DUENDE}Ver trabajar</button></span>` : '';
+    /* los duendes que Leo eligió en la operación del lienzo (van delante de los de la conversación) */
+    const op = (q.deOperacion || []).length ? `<div class="as-eq-op"><span>De la operación:</span>${q.deOperacion.map(x => `<span class="as-eq-chip" style="--dc:${esc(x.color)}">${esc(corto(x.nombre, 24))}</span>`).join('')}</div>` : '';
+    let det = '';
+    if (it.abierto) {
+      const evs = q.eventos.map(e => `<li class="as-eq-ev ${esc(e.accion)}"><span class="as-eq-chip" style="--dc:${esc(e.color || COLOR_PAPEL.especial)}">${esc(corto(e.nombre, 24))}</span><span class="as-eq-acc">${esc(ACCION_TXT[e.accion] || e.accion)}</span><span class="as-eq-txt">${esc(e.texto || '')}</span></li>`).join('');
+      const pie = [q.huecos ? plural(q.huecos, 'hueco', 'huecos') + ' por falta de datos' : '', q.inventado ? plural(q.inventado, 'cosa inventada', 'cosas inventadas') + ' (marcadas ⟦ ⟧)' : '',
+        (q.faltan || []).length ? 'No encontró: ' + q.faltan.map(x => '«' + x + '»').join(', ') : '', typeof q.coste === 'number' && q.coste > 0 ? 'Gastó ' + usd(q.coste) : '', q.error ? q.error : ''].filter(Boolean);
+      det = `<div class="as-paso-det as-eq-det">${it.args && it.args.instruccion ? `<div class="as-det-rot">El encargo</div><p class="as-eq-encargo">${esc(corto(it.args.instruccion, 600))}</p>` : ''}`
+        + (evs ? `<div class="as-det-rot">Cómo trabajó</div><ol class="as-eq-evs">${evs}</ol>` : '<div class="as-det-nota">Aún no hay nada que contar.</div>')
+        + (pie.length ? `<div class="as-det-nota">${pie.map(esc).join(' · ')}</div>` : '') + '</div>';
+    }
+    return `<div class="as-paso as-paso-equipo ${it.estado}${curso ? ' trabajando' : ''}${it.abierto ? ' abierto' : ''}${(+q.enojos || 0) ? ' con-enojo' : ''}" data-as-item="${i}">
+      <div class="as-paso-fila">
+        <button type="button" class="as-paso-cab" data-as-paso-plegar aria-expanded="${it.abierto ? 'true' : 'false'}">${ic('ic-chev-r', 12)}<span class="as-paso-ic">${SVG_DUENDE}</span><span class="as-paso-tit">${esc(cab)}</span></button>
+        ${est}
+      </div>${op}${ultimo}${ver}${det}</div>`;
+  }
   function pasoHtml(it, i) {
+    if (it.nombre === HERR_EQUIPO) return pasoEquipoHtml(it, i);
     const escribe = ESCRIBEN.has(it.nombre);
     const est = it.estado === 'en-curso' ? '<span class="as-giro" aria-label="Trabajando"></span>'
       : it.estado === 'error' ? `<span class="as-paso-est error">${ic('ic-aviso', 12)}Falló</span>`
@@ -1531,8 +2655,10 @@
     return ref ? nombreDeRef(ref) : null;
   }
   const RE_ID = /(«\s?)?(?<![\p{L}\p{N}_:/.@#-])([A-Za-z0-9][A-Za-z0-9_:-]*[A-Za-z0-9]|[A-Za-z0-9])(?![\p{L}\p{N}_]|[:-][\p{L}\p{N}])(\s?»)?/gu;
-  const CLASE_ANTES = /(?:^|[^\p{L}])(?:nodos?|tramas?|actos?|notas?|saltos?|eventos?|momentos?|relaci[oó]n|relaciones|cuadros?|rombos?|segmentos?|secciones|secci[oó]n|id|ids)\s*(?:[:(«"'`]\s*)?$/iu;
-  const fuerte = t => t.includes(':') || (t.length >= 6 && /\d/.test(t) && /[a-z]/i.test(t));
+  const CLASE_ANTES = /(?:^|[^\p{L}])(?:nodos?|tramas?|actos?|notas?|saltos?|eventos?|momentos?|relaci[oó]n|relaciones|cuadros?|rombos?|segmentos?|secciones|secci[oó]n|bibliotecas?|esquemas?|contenedor(?:es)?|personajes?|lienzos?|carpetas?|grupos?|id|ids)\s*(?:[:(«"'`]\s*)?$/iu;
+  /* uno largo sin cifras también (un id de la app puede no llevar ninguna: «dmulqzxrwvquyv»; ninguna palabra de verdad es exactamente
+     un id de 10 letras o más del proyecto) — la prueba fallaba 1 de cada 16 veces por el azar del id */
+  const fuerte = t => t.includes(':') || (t.length >= 6 && /\d/.test(t) && /[a-z]/i.test(t)) || (t.length >= 10 && /^[a-z0-9]+$/.test(t));
   /* ¿vale este token como id? → la referencia, o null. `antes`: el texto de delante (para los cortos) */
   function idValido(t, antes, I) {
     const ref = I.get(t); if (!ref) return null;
@@ -1637,15 +2763,22 @@
   function alDesplazarCuerpo() {
     if (Math.abs(cuerpo.scrollTop - autoTop) < 1) return;            // lo movió `abajo`
     autoTop = -1;
-    pegadoAbajo = alFinal(cuerpo, 4);
+    pegadoAbajo = alFinal(cuerpo, 4) || (bajandoConRueda() && alFinal(cuerpo, 48));
   }
+  /* un gesto de la rueda hacia abajo reciente: el desplazamiento suave aún va de camino y lo que llega lo deja unos píxeles por encima
+     del final (sin esto, un trozo que llegaba justo al final del gesto dejaba a Leo suelto: fallaba 1 de cada 4 veces la prueba) */
+  let ruedaAbajoEn = 0;
+  const bajandoConRueda = () => Date.now() - ruedaAbajoEn < 900;
   /* lo mismo para la caja del razonamiento (el `scroll` no burbujea: se oye en captura desde `cuerpo`) */
   function alDesplazarCaja(e) {
     const dv = e.target;
     if (dv === cuerpo || !dv.matches || !dv.matches('.as-razon > div')) return;
     if (dv._auto !== undefined && Math.abs(dv.scrollTop - dv._auto) < 1) return;   // lo movió `parchearRazon`
     dv._auto = undefined;
-    dv._sigue = alFinal(dv, 8);
+    const bajando = bajandoConRueda() && alFinal(dv, 48);
+    dv._sigue = alFinal(dv, 8) || bajando;
+    /* solo al bajar con la rueda se lleva al final (subiendo, llevarlo cortaría el desplazamiento suave de Leo) */
+    if (bajando && !alFinal(dv, 1)) { dv.scrollTop = dv.scrollHeight; dv._auto = dv.scrollTop; }
   }
   /* la rueda hacia arriba suelta el final al momento (antes de que llegue el siguiente trozo); si es sobre el razonamiento y este aún
      puede subir, lo que se suelta es él, no la conversación. Hacia abajo, al acabar el gesto cerca del final (48 px), se engancha:
@@ -1654,11 +2787,13 @@
   function alRuedaCuerpo(e) {
     const r = e.target.closest && e.target.closest('.as-razon > div');
     if (e.deltaY < 0) {
+      ruedaAbajoEn = 0;                                   // sube: lo de «bajando» se acabó
       if (r && r.scrollTop > 0) { r._sigue = false; return; }
       if (cuerpo.scrollTop > 0) pegadoAbajo = false;
       return;
     }
     if (e.deltaY === 0) return;
+    ruedaAbajoEn = Date.now();
     clearTimeout(ruedaAbajo);
     ruedaAbajo = setTimeout(() => {
       if (r && r.isConnected && r._sigue === false && alFinal(r, 48)) { r._sigue = true; r.scrollTop = r.scrollHeight; r._auto = r.scrollTop; }
@@ -2051,6 +3186,25 @@
     if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (pegadoAbajo) abajo(); }).observe(cuerpo);
     leerConfig().then(() => { pintarTodo(); if (pref.abierto) abrir({ foco: false, sinTutorial: true, desplegar: false }); });
     if (g.transporte && typeof g.transporte.alCambioConfig === 'function') g.transporte.alCambioConfig(c => { cfg = c; pintarTodo(); });
+    /* el equipo de duendes (1.1.68): leerlo, oír sus cambios (el nombre y el aspecto del maestro, los chips «como al elegirlo»,
+       los actores del taller), el sonido que calla con la ventana escondida y el taller que se dejó abierto */
+    leerEquipo().then(() => { pintarTodo(); vestirMaestro(); if (pref.taller && pref.taller.abierto && hayTransporte()) abrirTaller({ sinFoco: true }); });
+    const alEquipo = e => { if (e && Array.isArray(e.duendes)) equipoCache = e; pintarCabecera(); pintarDn(); marcarDn(); vestirMaestro(); if (!equipoVivo) tallerActores(); };
+    try {
+      if (g.alCambioEquipo) g.alCambioEquipo(alEquipo);
+      else if (C.equipoUI && typeof C.equipoUI.alCambio === 'function') C.equipoUI.alCambio(alEquipo);
+    } catch (_) { /* sin avisos: se lee al abrir la lista */ }
+    document.addEventListener('visibilitychange', () => { sonidoAlDia(); pausarMascota(); });
+    if (typeof MutationObserver === 'function') new MutationObserver(temaMarcos).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    /* Esc con el foco dentro del marco del taller o de la mascota: el motor lo cuenta aquí (se comprueba de quién es); en la mascota
+       (tras un clic en ella el foco se queda en su marco), vuelve al campo */
+    addEventListener('message', e => {
+      const x = e.data; if (!x || typeof x !== 'object') return;
+      if (x.tipo === 'duendes-taller' && x.tecla === 'Escape' && tallerMarco && e.source === tallerMarco.contentWindow) { cerrarTaller(); return; }
+      if (x.tipo === 'duendes-mascota' && x.tecla === 'Escape' && duendeMarco && e.source === duendeMarco.contentWindow && campo && panel && !panel.hidden) {
+        try { campo.focus({ preventScroll: true }); } catch (_) { /* nada */ }
+      }
+    });
   }
 
   C.asistente = {
@@ -2062,6 +3216,11 @@
     citar,
     abierto: () => !!(panel && !panel.hidden),
     trabajando: () => enCurso,
+    /* el equipo de duendes (1.1.68): los especiales de la conversación, el taller y el sonido */
+    especialesActivos: () => dnVista(), activarEspeciales: lista => fijarDn(lista), repintarDuendes: () => { pintarCabecera(); pintarDn(); marcarDn(); vestirMaestro(); if (!equipoVivo) tallerActores(); },
+    abrirTaller, cerrarTaller, tallerAbierto, sonido: v => { if (v === undefined) return !!pref.sonido; ponerSonido(!!v); return !!pref.sonido; },
+    ejecutarEquipo,
+    _equipo: () => ({ vivo: !!equipoVivo, hablados, dichos, estado: estadoMasc, escena, huelgaSaldo, dn: dnActivos, tallerListo, tallerCola: tallerCola.length }),
     /* para las pruebas y para app.js: el estado de lo que se ve */
     /* para las pruebas (1.1.67): enseñar o esconder el duende trabajando a mano, y en qué está */
     _duende: (on, texto) => { if (on === undefined) return { visible: duendeVisible, texto: (panel && panel.querySelector('[data-as-trabajo-txt]') || {}).textContent || '' }; ponerDuende(!!on, texto || 'Pensando…'); return null; },

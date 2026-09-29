@@ -3,7 +3,10 @@
    avatar y sus características, por ejemplo en Stardew Valley), los elementos disponibles para la personalización vienen de los
    elementos del motor y de sus mods».
    · Se abre desde la tarjeta «Duende» de la biblioteca de un personaje (gestor.js, `tarjetaDuende`): `C.creadorDuende.abrir(pid,
-     ganchos)`, con `ganchos = { nombre, duende, mods, guardar(datos) → { ok, error? }, avisar }`.
+     ganchos)`, con `ganchos = { nombre, duende, mods, guardar(datos) → { ok, error? }, avisar, alCerrar?, rotulo?, textoQuitar? }`.
+     Desde la 1.1.68 también el aspecto de los duendes del asistente (equipo-ui.js): el id no tiene por qué ser de un personaje (no se
+     usa para nada más que para saber cuál se edita), `guardar(null)` le quita el aspecto (vuelve al de su papel), `rotulo` cambia el
+     «Creador de duendes» de la cabecera y `textoQuitar` lo que explica «Quitar duende».
    · A la izquierda, el retrato animado (duendes.html?embebido=1&retrato=1): cada cambio va a `Duendes.previa(duende)` (sin rehacer
      el marco); si el motor aún no la tiene, a `Duendes.retrato`. Debajo, girarlo, probar un gesto y una descripción.
    · A la derecha, las categorías de `C.teatroMods.catalogoDuende(mods)` (del motor y de los mods): por rasgo, ‹ › con el nombre de
@@ -122,7 +125,7 @@
       { id: 'ropa', n: 'Ropa', filas: [L('prenda', LISTAS.prenda, { color: { campo: 'cloth', colores: PALETAS.ropa } }), K('cloth2', PALETAS.ropa),
         L('bajo', LISTAS.bajo, { color: { campo: 'pants', colores: PALETAS.ropa } }), L('calzado', LISTAS.calzado, { color: { campo: 'shoes', colores: PALETAS.ropa } }),
         L('pat', P.pat || [], { color: { campo: 'patCol', colores: PALETAS.ropa } }), L('long', P.long || []), K('cape', PALETAS.ropa), K('capeIn', PALETAS.ropa)] },
-      { id: 'sombrero', n: 'Sombrero', filas: [L('hat', (P.hat || []).concat(LISTAS.sombrerosNuevos), { color: { campo: 'hatCol', colores: PALETAS.ropa } })] },
+      { id: 'sombrero', n: 'Sombrero', filas: [L('hat', (P.hat || []).concat(LISTAS.sombrerosNuevos.filter(x => !(P.hat || []).includes(x))), { color: { campo: 'hatCol', colores: PALETAS.ropa } })] },
       { id: 'accesorios', n: 'Accesorios', filas: [{ campo: 'accesorios', tipo: 'multi', opciones: LISTAS.accesorios.map(op) }, L('acc', (R.acc || []).filter(x => x !== 'nada')), L('prop', P.prop || [])] },
       { id: 'disfraz', n: 'Disfraz', filas: [{ campo: 'vestuario', tipo: 'lista', opciones: (F.vestuarios || []).filter(x => x !== 'ninguno').map(op).concat(deMods('vestuarios')) }] },
       { id: 'animal', n: 'Animal', filas: [{ campo: 'animal', tipo: 'lista', opciones: LISTAS.animales.filter(x => (F.mascaras || LISTAS.animales).includes(x)).map(op).concat(deMods('mascaras')) }] },
@@ -153,7 +156,7 @@
   const LEGADO = { ojos: 'bigEyes', nariz: 'nose', vello: 'beard', marcas: 'blush' };
 
   /* ---------- la ventana ---------- */
-  let capa = null, estado = null;
+  let capa = null, estado = null, obsTema = null;
   function tema() {
     const t = document.documentElement.dataset.theme;
     return t === 'dark' || t === 'light' ? t : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -179,13 +182,13 @@
     capa = document.createElement('div');
     capa.className = 'cd-capa';
     capa.innerHTML = `<div class="cd-ventana" role="dialog" aria-modal="true" aria-label="Creador de duendes">
-      <div class="cd-cab"><span class="cd-rotulo">Creador de duendes</span><span class="cd-nombre"></span><span class="cd-hueco"></span>
+      <div class="cd-cab"><span class="cd-rotulo"></span><span class="cd-nombre"></span><span class="cd-hueco"></span>
         <button type="button" class="icono cd-cerrar" aria-label="Cerrar sin guardar" title="Cerrar sin guardar (Esc)">×</button></div>
       <div class="cd-cuerpo">
         <div class="cd-escena">
           <div class="cd-marco-caja"><iframe class="cd-marco" title="Vista previa del duende" tabindex="-1"></iframe></div>
           <div class="cd-escena-acc">
-            <button type="button" class="btn cd-girar" title="Girar el retrato (mirar al otro lado)">⟲ Girar</button>
+            <button type="button" class="btn cd-girar" aria-pressed="false" title="Girar el retrato (mirar al otro lado)">⟲ Girar</button>
             <label class="cd-gesto-l"><span class="cd-mini">Gesto</span><select class="cd-gesto" aria-label="Probar un gesto"><option value="">Quieto</option></select></label>
           </div>
           <label class="cd-desc-l"><span class="cd-mini">Descripción (opcional)</span><textarea class="cd-desc" rows="3" maxlength="400" placeholder="Cómo es, en pocas palabras"></textarea></label>
@@ -206,6 +209,7 @@
         <button type="button" class="btn primario cd-guardar">Guardar</button>
       </div></div>`;
     q('.cd-nombre').textContent = nombre;
+    q('.cd-rotulo').textContent = g.rotulo || 'Creador de duendes';
     q('.cd-desc').value = estado.d.descripcion || '';
     /* los gestos que el motor sabe actuar, y los de los mods */
     const sel = q('.cd-gesto'), T = Tm();
@@ -220,6 +224,7 @@
     /* «Quitar duende» (solo si ya tenía uno): el primer clic pide confirmación en el propio botón, el segundo lo quita */
     const quitar = q('.cd-quitar');
     quitar.hidden = !(estado.inicial && estado.inicial !== '{}' && estado.inicial !== 'null');
+    if (g.textoQuitar) quitar.title = g.textoQuitar;
     quitar.addEventListener('click', () => {
       if (!quitar.classList.contains('seguro')) { quitar.classList.add('seguro'); quitar.textContent = '¿Quitar? Otra vez para confirmar'; return; }
       const res = estado.g.guardar ? estado.g.guardar(null) : { ok: false, error: 'No se puede quitar aquí' };
@@ -242,8 +247,9 @@
       if (e.target.matches('.cd-propio')) cambiar(f.dataset.campo, e.target.value, { juntar: 'propio:' + f.dataset.campo });
       else if (e.target.matches('.cd-rango')) cambiar(f.dataset.campo, Number(e.target.value), { juntar: 'rango:' + f.dataset.campo });
     });
-    /* lo que se pulsa aquí no llega a la app de debajo (el tablero de tramas oye en document) */
-    for (const t of ['click', 'dblclick', 'contextmenu', 'pointerdown', 'mousedown', 'wheel']) capa.addEventListener(t, e => e.stopPropagation());
+    /* lo que se pulsa aquí no llega a la app de debajo (el tablero de tramas oye en document; `keyup` también, como en «Duendes del
+       asistente»: las teclas ya se cortan en `teclas`, pero su `keyup` seguía hasta el tablero) */
+    for (const t of ['click', 'dblclick', 'contextmenu', 'pointerdown', 'mousedown', 'wheel', 'keyup']) capa.addEventListener(t, e => e.stopPropagation());
     /* el retrato */
     const f = q('.cd-marco');
     f.addEventListener('load', () => { estado && (estado.listo = true); retrato(true); ajustarMarco(); });
@@ -251,6 +257,9 @@
     document.body.appendChild(capa);
     document.body.classList.add('con-creador');
     window.addEventListener('keydown', teclas, true);
+    /* el retrato sigue al tema de la app (cambiarlo con el creador abierto lo dejaba en el de antes) */
+    obsTema = new MutationObserver(() => { try { const D = q('.cd-marco').contentWindow.Duendes; if (D && D.tema) D.tema(tema()); } catch (_) {} });
+    obsTema.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     requestAnimationFrame(() => { const b = q('.cd-pestanas [aria-selected="true"]'); if (b) b.focus(); });
     return true;
   }
@@ -486,6 +495,7 @@
     if (!capa) return;
     clearTimeout(esperaRetrato);
     try { q('.cd-marco').contentWindow.Duendes.detener(); } catch (_) {}
+    if (obsTema) { obsTema.disconnect(); obsTema = null; }
     window.removeEventListener('keydown', teclas, true);
     capa.remove(); capa = null;
     const g = estado && estado.g; estado = null;
@@ -496,7 +506,8 @@
   /* ---------- el teclado ----------
      Todo pasa por aquí (en captura en window) y se corta: así nada llega a la app de debajo. Lo que es del navegador (Tab, Enter y
      espacio en un botón, escribir en la descripción, las flechas de la lista de gestos) sigue igual. En una fila: ← → cambian el
-     valor (en una de varias, mueven el cursor y espacio la marca), ↑ ↓ pasan de fila; en las pestañas, ← → cambian de categoría. */
+     valor (en una de varias, mueven el cursor y espacio la marca), ↑ ↓ pasan de fila; en las pestañas, ← → cambian de categoría. Esc
+     cierra sin guardar; ⌘S guarda el duende; ⌘W cierra. */
   function teclas(e) {
     if (!capa) return;
     /* el panel del asistente queda a la vista al lado: lo que se teclea en él es suyo (Enter manda, Esc no cierra el creador) */
@@ -508,6 +519,8 @@
     if (mod && !e.altKey && (k === 'z' || k === 'Z') && !enTexto) { e.preventDefault(); if (e.shiftKey) rehacer(); else deshacer(); return; }
     if (mod && !e.altKey && (k === 'y' || k === 'Y') && !enTexto) { e.preventDefault(); rehacer(); return; }
     if (mod && (k === 's' || k === 'S')) { e.preventDefault(); guardar(); return; }
+    /* ⌘W cierra sin guardar (en Electron llega por el menú: `cerrarLoDeDelante` de app.js; aquí, en el navegador) */
+    if (mod && !e.altKey && (k === 'w' || k === 'W')) { e.preventDefault(); cerrar(); return; }
     if (k === 'Tab' && !mod) {
       const l = enfocables(); if (!l.length) return;
       const i = l.indexOf(a);

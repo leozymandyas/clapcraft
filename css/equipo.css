@@ -1,0 +1,143 @@
+/* Los duendes del asistente (1.1.68, js/claquedraw/equipo-ui.js): una ventana sobre la app, bajo la franja, con el modo del equipo
+   arriba, la lista de duendes a la izquierda y la ficha del elegido (su retrato animado y sus campos) a la derecha. Solo tokens de la
+   piel: vale en Claro, Oscuro, Synthwave y Vaporwave. Va bajo el creador de duendes (z 72), que se abre encima para su aspecto. */
+.eq-capa { position: fixed; inset: 38px 0 0 0; z-index: 71; display: flex; align-items: center; justify-content: center; padding: 3vh 24px;
+  background: var(--backdrop, rgba(10, 10, 20, .45)); animation: gd-modal-capa .14s ease-out; font-family: var(--sans); }
+/* la forma estrecha va por el ancho de la capa (que se estrecha con el panel del asistente abierto), no por el de la ventana */
+.eq-capa { container: eqcapa / inline-size; }
+body.con-asistente .eq-capa { right: var(--as-ancho, 380px); }
+body.con-asistente.asistente-plegado .eq-capa { right: 40px; }
+body.con-equipo #aviso { z-index: 95; }                  /* «Deshacer» de un duende eliminado, encima de la ventana */
+.eq-ventana { width: min(980px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--papel); color: var(--tinta);
+  border: 1px solid var(--borde); border-radius: 8px; box-shadow: var(--sombra-modal); overflow: hidden; }
+.eq-hueco { flex: 1; }
+.eq-cab { flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 16px 12px 10px 22px; }
+.eq-cab .dlg-titulo { margin: 7px 0 0; }
+.eq-rot { font: 500 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido); }
+
+/* ---------- el modo del equipo ---------- */
+.eq-modo { flex: none; padding: 0 22px 12px; border-bottom: 1px solid var(--regla); }
+.eq-modo-fila { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.eq-modo-txt { flex: 1; min-width: 200px; font-size: 12.5px; line-height: 1.4; color: var(--tenue); }
+.eq-rondas { display: inline-flex; align-items: center; gap: 8px; }
+.eq-rondas select, .eq-campo select { height: 30px; padding: 0 6px; border: 1px solid var(--borde); border-radius: 4px; background: var(--lienzo); color: var(--tinta); font: 13px var(--sans); }
+.eq-modo-nota { margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--palido); }
+.eq-seg button:focus-visible, .eq-rondas select:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+
+/* ---------- el cuerpo: lista | ficha ---------- */
+.eq-cuerpo { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+.eq-lista { display: flex; flex-direction: column; min-height: 0; background: var(--lienzo); border-right: 1px solid var(--regla); }
+.eq-items { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; }
+.eq-grupo-t { display: flex; align-items: center; gap: 6px; margin: 8px 6px 4px; font: 500 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--palido); }
+.eq-grupo-t:first-child { margin-top: 2px; }
+.eq-grupo-t span { letter-spacing: 0; color: var(--palido); }
+.eq-vacio { margin: 2px 6px 6px; font-size: 12px; line-height: 1.45; color: var(--palido); }
+.eq-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 44px; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px;
+  background: none; color: var(--tinta); font: 13px var(--sans); text-align: left; cursor: pointer; }
+.eq-item:hover { background: var(--hover); }
+.eq-item.on { background: var(--papel); border-color: var(--borde); box-shadow: inset 3px 0 0 var(--foco); }
+.eq-item:focus-visible { outline: 2px solid var(--foco); outline-offset: -1px; }
+.eq-chip { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--eq-c); color: #fff;
+  font: 600 13px var(--sans); text-shadow: 0 1px 0 rgba(0, 0, 0, .35); box-shadow: inset 0 0 0 2px color-mix(in srgb, #000 18%, transparent); }
+.eq-item-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.eq-item-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.eq-item-m { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 10.5px var(--mono); color: var(--palido); }
+.eq-candado { flex: none; display: flex; color: var(--palido); }
+.eq-nuevo { flex: none; margin: 8px; height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
+
+.eq-ficha { min-height: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; padding: 16px 22px; overflow-y: auto; }
+.eq-retrato { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 0; align-self: start; }   /* se queda a la vista al bajar por la ficha */
+.eq-marco-caja { border: 1px solid var(--borde); border-radius: 6px; overflow: hidden; background: var(--panel); box-shadow: var(--sombra); }
+.eq-marco { display: block; width: 100%; aspect-ratio: 1 / 1; border: 0; background: transparent; }
+.eq-retrato-acc { display: flex; flex-wrap: wrap; gap: 6px; }
+.eq-retrato-acc .btn { height: 30px; padding: 0 10px; font-size: 12.5px; display: inline-flex; align-items: center; gap: 5px; }
+.eq-retrato-acc .eq-aspecto { flex: 1 1 100%; justify-content: center; }
+.eq-retrato-acc .btn[hidden] { display: none; }
+
+.eq-campos { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.eq-f-cab { display: flex; align-items: center; gap: 4px; min-height: 26px; }
+.eq-f-cab .icono { width: 26px; height: 26px; font-size: 14px; }
+.eq-f-cab .icono:disabled { opacity: .35; cursor: default; }
+.eq-papel { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--foco-suave); color: var(--foco);
+  font: 500 10.5px var(--mono); letter-spacing: .04em; }
+.eq-papel.fijo { background: var(--lienzo); color: var(--tenue); border: 1px solid var(--regla); }
+.eq-campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.eq-campo .eq-rot b { font: 500 11px var(--mono); letter-spacing: 0; text-transform: none; color: var(--tinta); margin-left: 4px; }
+.eq-campo input[type=text], .eq-campo textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--borde); border-radius: 4px; background: var(--lienzo);
+  color: var(--tinta); font: 13.5px var(--sans); outline: none; }
+.eq-campo input[type=text] { height: 34px; padding: 0 11px; }
+.eq-campo textarea { padding: 8px 11px; line-height: 1.45; resize: vertical; min-height: 110px; }
+.eq-campo input[type=text]:focus, .eq-campo textarea:focus, .eq-campo select:focus { border-color: var(--foco); box-shadow: 0 0 0 3px var(--foco-halo); outline: none; }
+.eq-campo input[type=range] { width: 100%; margin: 2px 0; accent-color: var(--foco); }
+.eq-campo input[type=range]:disabled { opacity: .45; }
+.eq-cuenta { float: right; letter-spacing: 0; text-transform: none; }
+.eq-nota { font-size: 11.5px; line-height: 1.4; color: var(--palido); }
+.eq-nota code { padding: 0 4px; border-radius: 3px; background: var(--lienzo); border: 1px solid var(--regla); font: 400 11px var(--mono); color: var(--tinta); }
+.eq-explica { margin: 0; padding: 10px 12px; border: 1px dashed var(--regla-fuerte, var(--borde)); border-radius: 6px; font-size: 13px; line-height: 1.5; color: var(--tenue); }
+.eq-dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.eq-casilla { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--tinta); cursor: pointer; }
+.eq-casilla input { accent-color: var(--foco); }
+.eq-roles { display: flex; flex-direction: column; gap: 6px; }
+.eq-rol { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px 7px 30px; border: 1px solid var(--borde); border-radius: 6px; background: var(--papel);
+  color: var(--tinta); font: 13px var(--sans); text-align: left; cursor: pointer; position: relative; }
+.eq-rol::before { content: ''; position: absolute; left: 10px; top: 10px; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--borde-fuerte, var(--borde)); background: var(--papel); }
+.eq-rol.on { border-color: var(--foco-linea, var(--foco)); background: var(--foco-suave); }
+.eq-rol.on::before { border-color: var(--foco); background: radial-gradient(circle, var(--foco) 45%, transparent 50%); }
+.eq-rol b { font-weight: 500; }
+.eq-rol span { font-size: 11.5px; color: var(--tenue); line-height: 1.35; }
+.eq-rol:hover { background: var(--hover); }
+.eq-rol.on:hover { background: var(--foco-suave); }
+.eq-rol:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+.eq-peligro { padding-top: 4px; border-top: 1px solid var(--regla); }
+.eq-eliminar { height: 30px; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--peligro); }
+.eq-eliminar.seguro { background: var(--peligro); border-color: var(--peligro); color: #fff; }
+
+.eq-pie { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 22px 14px; border-top: 1px solid var(--regla); }
+.eq-pie .btn { height: 32px; padding: 0 16px; font-size: 13px; }
+/* el respaldo: exportar e importar los duendes (a otro equipo de cómputo) */
+.eq-pie { flex-wrap: wrap; }
+.eq-respaldo { display: flex; gap: 6px; }
+.eq-pie .eq-respaldo .btn { height: 30px; padding: 0 11px; gap: 6px; font-size: 12.5px; color: var(--tenue); }
+.eq-pie .eq-respaldo .btn:hover { color: var(--tinta); }
+/* soltar un .json encima: la ventana lo dice */
+.eq-ventana { position: relative; }
+.eq-soltar { display: none; position: absolute; inset: 6px; z-index: 3; place-items: center; border: 2px dashed var(--foco); border-radius: 6px;
+  background: color-mix(in srgb, var(--papel) 88%, transparent); color: var(--foco); font: 500 14px var(--sans); pointer-events: none; }
+.eq-ventana.soltando .eq-soltar { display: grid; }
+/* la pregunta de importar: dentro de la ventana, encima de todo lo suyo */
+.eq-preg-capa { position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: var(--backdrop); animation: gd-modal-capa .12s ease-out; }
+.eq-preg { width: min(560px, 100%); max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 18px 22px 16px; background: var(--papel); color: var(--tinta);
+  border: 1px solid var(--borde); border-radius: 6px; box-shadow: var(--sombra-modal); animation: gd-modal .14s ease-out; }
+.eq-preg .dlg-titulo { margin: 6px 0 10px; overflow-wrap: anywhere; }
+.eq-preg p { margin: 0 0 10px; font-size: 13px; line-height: 1.5; }
+.eq-preg-aviso { padding: 8px 10px; border-radius: 5px; background: var(--foco-suave); color: var(--tinta); }
+.eq-preg-ops { margin: 0 0 10px; padding: 0 0 0 18px; font-size: 13px; line-height: 1.5; color: var(--tenue); }
+.eq-preg-ops li + li { margin-top: 6px; }
+.eq-preg-ops b { font-weight: 500; color: var(--tinta); }
+.eq-preg-bot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 6px; }
+.eq-preg-bot .btn { height: 32px; padding: 0 14px; font-size: 13px; }
+.eq-error { font-size: 12.5px; color: var(--peligro); }
+.eq-error:empty { display: none; }
+/* con un error al pie (un respaldo que no vale), «✓ Guardado…» se aparta: que el error quepa en la fila */
+.eq-error:not(:empty) { flex: 1 1 220px; min-width: 0; }
+.eq-error:not(:empty) ~ .eq-guardado { display: none; }
+.eq-guardado { font: 400 11px var(--mono); color: var(--palido); }
+
+/* ---------- los temas neón ---------- */
+html[data-estilo] .eq-item.on { box-shadow: inset 3px 0 0 var(--foco), var(--neon-brillo, none); }
+html[data-estilo="synthwave"] .eq-chip { box-shadow: 0 0 8px color-mix(in srgb, var(--eq-c) 60%, transparent); }
+html[data-estilo="synthwave"] .eq-marco-caja { box-shadow: var(--sombra), 0 0 14px var(--foco-halo); }
+html[data-estilo] .eq-rol.on { box-shadow: 0 0 0 1px var(--foco), 0 0 12px var(--foco-halo); }
+
+/* estrecha (con `@container`: con el asistente abierto a lo ancho la capa se estrecha y la ventana no; con `@media` la ficha se
+   quedaba en dos columnas apretadas). En una columna se desplaza el cuerpo entero (la ficha, sin alto propio, se cortaba) */
+@media (max-width: 760px) { .eq-capa { padding: 8px; } }
+@container eqcapa (max-width: 800px) {
+  .eq-cuerpo { grid-template-columns: 1fr; overflow-y: auto; }
+  .eq-lista { border-right: 0; border-bottom: 1px solid var(--regla); max-height: 180px; }
+  .eq-ficha { grid-template-columns: 1fr; overflow: visible; }
+  .eq-retrato { max-width: 200px; position: static; }
+  .eq-dos { grid-template-columns: 1fr; }
+  .eq-respaldo { flex: 1 1 100%; }
+}

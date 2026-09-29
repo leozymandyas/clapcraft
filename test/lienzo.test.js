@@ -566,3 +566,78 @@ test('normalizar: idempotente con lienzos vivos y en la papelera; un proyecto si
   assert.equal(JSON.stringify(C.normalizarDocumentos(vacio.toJSON())), JSON.stringify(vacio.toJSON()));
   assert.ok(!JSON.stringify(vacio.toJSON()).includes('lienzo'));
 });
+
+/* ---------- los duendes de una operación (1.1.68) ---------- */
+const DN = (id, extra) => Object.assign({ id, nombre: 'Duende ' + id, personalidad: 'Soy ' + id + '.', rol: 'transformar', modelo: 'deepseek-v4-pro', temperatura: 0.3, voz: 'grave', fijadaEn: 5 }, extra || {});
+
+test('duendes de una operación: instantáneas saneadas, en orden, la clave solo si hay', () => {
+  const m = lienzo();
+  const op = m.crearNodo('generar', 0, 0, { instruccion: 'x' }).nodo;
+  assert.ok(!('duendes' in op.datos));
+  const sucio = DN('formateador', { nombre: '<b>El</b>  formateador', personalidad: 'Ordena\u0001 <i>todo</i>' + 'y'.repeat(5000), veto: true, duende: { hat: 'punta' }, enojon: true, raro: 1, temperatura: '9', voz: 'nada de esto' });
+  m.editarNodo(op.id, { datos: { duendes: [sucio, DN('maestro'), { id: '' }, 'texto', DN('formateador'), DN('d-2', { rol: 'revisar', veto: true, modelo: 'no vale nada' })] } });
+  const ds = m.nodo(op.id).datos.duendes;
+  assert.deepEqual(ds.map(d => d.id), ['formateador', 'd-2'], 'sin los fijos, los vacíos ni los repetidos, en su orden');
+  assert.equal(ds[0].nombre, 'El formateador');
+  assert.ok(!/[<>\u0001]/.test(ds[0].personalidad) && ds[0].personalidad.length === 4000, 'sin HTML, sin control y recortada');
+  assert.deepEqual(Object.keys(ds[0]), ['id', 'nombre', 'personalidad', 'rol', 'veto', 'modelo', 'temperatura', 'voz', 'fijadaEn'], 'sin aspecto ni campos raros');
+  assert.equal(ds[0].veto, false, 'un duende que transforma no veta');
+  assert.equal(ds[0].temperatura, 2); assert.equal(ds[0].voz, null);
+  assert.equal(ds[1].veto, true); assert.equal(ds[1].modelo, null);
+  /* seis como mucho */
+  m.editarNodo(op.id, { datos: { duendes: [1, 2, 3, 4, 5, 6, 7, 8].map(i => DN('d-' + i)) } });
+  assert.equal(m.nodo(op.id).datos.duendes.length, L.MAX_DUENDES);
+  /* [] la quita */
+  m.editarNodo(op.id, { datos: { duendes: [] } });
+  assert.ok(!('duendes' in m.nodo(op.id).datos));
+  /* idempotente */
+  m.editarNodo(op.id, { datos: { duendes: [sucio] } });
+  const una = JSON.stringify(m.toJSON());
+  assert.equal(JSON.stringify(new L(JSON.parse(una)).toJSON()), una);
+  /* entradas: no tienen */
+  const t = m.crearNodo('texto', 0, 0, { md: 'a', duendes: [DN('d-1')] }).nodo;
+  assert.ok(!('duendes' in t.datos));
+});
+
+test('cambiar los duendes deja la operación desactualizada (instrucción); reescribir con uno que transforma no necesita tono', () => {
+  const m = lienzo();
+  const e = m.crearNodo('texto', 0, 0, { md: 'Una idea' }).nodo;
+  const op = m.crearNodo('reescribir', 300, 0, {}).nodo;
+  m.conectar(e.id, op.id, 'fuente');
+  assert.ok(m.faltan(op.id).some(f => /tono/.test(f.aviso)));
+  m.editarNodo(op.id, { datos: { duendes: [DN('d-1', { rol: 'revisar' })] } });
+  assert.ok(m.faltan(op.id).some(f => /tono/.test(f.aviso)), 'uno que solo revisa no es un tono');
+  m.editarNodo(op.id, { datos: { duendes: [DN('d-1')] } });
+  assert.deepEqual(m.faltan(op.id), []);
+  assert.ok(m.pedir(op.id).ok);
+  assert.ok(m.completar(op.id, { tipo: 'nota', notaId: 'nt1' }).ok);
+  assert.equal(m.desactualizado(op.id), null);
+  const casos = [
+    [DN('d-1'), DN('d-2')],                                   // añadir
+    [DN('d-2'), DN('d-1')],                                   // reordenar
+    [DN('d-1', { personalidad: 'Otra', fijadaEn: 9 })]       // actualizar la instantánea
+  ];
+  casos.forEach(ds => {
+    const x = lienzo(m.toJSON());
+    x.editarNodo(op.id, { datos: { duendes: ds } });
+    assert.equal(x.desactualizado(op.id), 'instruccion');
+  });
+  const y = lienzo(m.toJSON()); y.editarNodo(op.id, { datos: { duendes: [] } });
+  assert.equal(y.desactualizado(op.id), 'instruccion', 'quitarlos también');
+  const z = lienzo(m.toJSON()); z.editarNodo(op.id, { datos: { duendes: [DN('d-1')] } });
+  assert.equal(z.desactualizado(op.id), null, 'la misma instantánea: al día');
+});
+
+test('los duendes viajan: copiar y pegar, y el archivo (documentos)', () => {
+  const m = lienzo();
+  const op = m.crearNodo('prompt', 0, 0, { instruccion: 'Hazlo', duendes: [DN('formateador'), DN('d-7', { rol: 'revisar', veto: true })] }).nodo;
+  const r = m.duplicar([op.id]);
+  assert.deepEqual(m.nodo(r.ids[0]).datos.duendes, op.datos.duendes);
+  const d = docs(); const c = d.crearContenedor('A').contenedor;
+  const l = d.crearLienzo(c.id, 'L').lienzo;
+  assert.ok(d.guardarLienzo(l.id, m).ok);
+  const vuelta = docs(JSON.parse(JSON.stringify(C.normalizarDocumentos(d.toJSON()))));
+  const n2 = vuelta.modeloLienzo(l.id).nodo(op.id);
+  assert.deepEqual(n2.datos.duendes, op.datos.duendes);
+  assert.equal(JSON.stringify(C.normalizarDocumentos(d.toJSON())), JSON.stringify(d.toJSON()));
+});

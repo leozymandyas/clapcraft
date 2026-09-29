@@ -139,6 +139,7 @@
      alVista(v), vista (la que se dejó, opcional) y proyecto() (el nombre de los enlaces, opcional). */
   function montar(id, ganchos) {
     if (!iniciar() || !L()) return false;
+    oirEquipo();
     volcar();
     g = ganchos || {};
     const d = docs(), r = d && d.lienzo ? d.lienzo(id) : null;
@@ -544,7 +545,7 @@
     const faltan = m.faltan(n.id).filter(f => f.que !== 'previa');
     const conFx = Array.isArray(d.formulas) && d.formulas.length;
     return `<textarea class="lz-instr" data-lz-dato="instruccion" rows="2" placeholder="${esc(conFx ? PLACEHOLDER_FX : PLACEHOLDER[n.tipo] || 'Instrucción')}">${esc(d.instruccion || '')}</textarea>`
-      + formulasHtml(n)
+      + `<div class="lz-fx">${formulasBoton(n)}${duendesBoton(n)}${formulasChips(n)}<span class="lz-dn-chips">${duendesChips(n)}</span></div>`
       + `<div class="lz-opts">${filas.join('')}</div>`
       + (faltan.length ? `<div class="lz-falta">${ic('ic-aviso', 12)}<span>${esc(faltan.map(f => f.aviso).join(' · '))}</span></div>` : '')
       + (n.tipo === 'traducir' ? `<datalist id="lz-idiomas">${IDIOMAS.map(i => `<option value="${i}">`).join('')}</datalist>` : '');
@@ -1003,6 +1004,14 @@
     if (fq) { const xs = (n.datos.formulas || []).slice(); xs.splice(+fq.dataset.lzFxQuitar, 1); ponerFormulas(id, xs); return; }
     const fa = t.closest('[data-lz-fx-abrir]');
     if (fa) { abrirFormula(fa.dataset.lzFxAbrir); return; }
+    /* los duendes de la operación (1.1.68): elegir, quitar uno, actualizar su instantánea, abrir su ficha */
+    if (t.closest('[data-lz-dn-elegir]')) { volcar(); elegirDuendes(id, t.closest('[data-lz-dn-elegir]')); return; }
+    const dq = t.closest('[data-lz-dn-quitar]');
+    if (dq) { const xs = (n.datos.duendes || []).slice(); xs.splice(+dq.dataset.lzDnQuitar, 1); ponerDuendes(id, xs); return; }
+    const du = t.closest('[data-lz-dn-actualizar]');
+    if (du) { actualizarDuende(id, +du.dataset.lzDnActualizar); return; }
+    const da = t.closest('[data-lz-dn-abrir]');
+    if (da) { abrirFicha(da.dataset.lzDnAbrir); return; }
     if (t.closest('[data-lz-elegir]')) { elegirRef(n.tipo, t.closest('[data-lz-elegir]'), ref => { m.editarNodo(id, { datos: ref }); cambio(); }); return; }
     if (t.closest('[data-lz-imagen]')) { elegirImagen(src => { m.editarNodo(id, { datos: { src } }); cambio(); }); return; }
     const ab = t.closest('[data-lz-abrir]');
@@ -1233,15 +1242,19 @@
      cambiarlo deja la operación desactualizada. */
   const ID_BIB_FX = () => C.ID_BIB_FORMULAS || 'formulas:biblioteca';
   const resolverFx = ids => { const d = docs(); return d && d.resolverFormulas ? d.resolverFormulas(ids || []) : (ids || []).map(id => ({ id, rota: true, motivo: 'Esa fórmula ya no existe' })); };
-  function formulasHtml(n) {
+  /* el botón y los chips van en la misma fila que los de los duendes (1.1.68): [Fórmula] [Duendes] chips… */
+  function formulasBoton(n) {
     const ids = Array.isArray(n.datos.formulas) ? n.datos.formulas : [];
-    const chips = resolverFx(ids).map((f, i) => {
+    return `<button type="button" class="lz-fx-boton${ids.length ? ' con' : ''}" data-lz-fx-elegir title="Elegir fórmulas: prompts reutilizables de «Fórmulas» (formato, tono, reglas…) que se combinan con lo escrito">${ic('ic-formula', 12)}<span>Fórmula</span>${ic('ic-chev-d', 10)}</button>`;
+  }
+  function formulasChips(n) {
+    const ids = Array.isArray(n.datos.formulas) ? n.datos.formulas : [];
+    return resolverFx(ids).map((f, i) => {
       const nom = f.rota ? (f.titulo ? f.titulo : 'Fórmula que ya no está') : f.titulo || 'Sin título';
       const tit = f.rota ? (f.motivo || 'Esa fórmula ya no existe') + ' · se pedirá sin ella' : 'Abrir la fórmula «' + nom + '»';
       return `<span class="lz-fx-chip${f.rota ? ' roto' : ''}"><button type="button" class="lz-fx-nom"${f.rota ? ' disabled' : ` data-lz-fx-abrir="${esc(f.id)}"`} title="${esc(tit)}">${ic(f.rota ? 'ic-aviso' : 'ic-formula', 11)}<span>${esc(nom)}</span></button>`
         + `<button type="button" class="lz-fx-x" data-lz-fx-quitar="${i}" title="Quitar la fórmula" aria-label="Quitar la fórmula «${esc(nom)}»">${ic('ic-close', 10)}</button></span>`;
     }).join('');
-    return `<div class="lz-fx"><button type="button" class="lz-fx-boton${ids.length ? ' con' : ''}" data-lz-fx-elegir title="Elegir fórmulas: prompts reutilizables de «Fórmulas» (formato, tono, reglas…) que se combinan con lo escrito">${ic('ic-formula', 12)}<span>Fórmula</span>${ic('ic-chev-d', 10)}</button>${chips}</div>`;
   }
   function ponerFormulas(id, ids) {
     const limpias = [...new Set((ids || []).map(String).filter(Boolean))];
@@ -1352,6 +1365,124 @@
     ids.forEach(k => { const n = m.nodo(k); if (n && esOp(n)) resolverFx(n.datos.formulas).filter(f => f.rota).forEach(f => rotas.push(f.titulo ? '«' + f.titulo + '»' : 'una que ya no existe')); });
     if (!rotas.length) return;
     setTimeout(() => avisar((rotas.length === 1 ? 'La fórmula ' + rotas[0] + ' ya no está' : 'Las fórmulas ' + rotas.join(', ') + ' ya no están') + ': se pide sin ' + (rotas.length === 1 ? 'ella' : 'ellas')), 2600);
+  }
+
+  /* ---------- los duendes de una operación (1.1.68) ----------
+     Leo: «Que los duendes se puedan seleccionar en los bloques de IA del lienzo para salidas con la personalidad del duende». Junto a
+     «Fórmula», el botón «Duendes»: la lista de los duendes especiales del asistente (los de `C.equipoUI.equipo()`, globales), varios
+     en orden, sin cerrarla. Cada elegido es una **instantánea** de su ficha (`C.equipo.instantanea`, sin su aspecto; lienzo-modelo.js
+     la sanea): así la personalidad con la que sale la salida no cambia si Leo edita después el duende. Un chip por cada uno (su color
+     de ropa, su nombre —el clic abre su ficha—, «↻» si la ficha cambió desde que se eligió, que la actualiza, y ×). Cambiarlos deja
+     la operación desactualizada (su huella de datos). Sin el equipo (otra página, o sin equipo-ui.js), la lista lo dice. */
+  const IC_DUENDE = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.6 1.6 4.2 11.6h8.2L9.9 5.2"/><path d="M9.9 5.2l2.6-1.1"/><path d="M2.6 11.8c1.2 1.4 3.2 2.2 5.4 2.2s4.2-.8 5.4-2.2"/></svg>';
+  const E = () => C.equipo || null;
+  function equipoActual() { try { return C.equipoUI && C.equipoUI.equipo ? C.equipoUI.equipo() : null; } catch (_) { return null; } }
+  function especialesDe(eq) {
+    if (!eq || !Array.isArray(eq.duendes)) return [];
+    try { if (E() && E().especiales) return E().especiales(eq) || []; } catch (_) {}
+    return eq.duendes.filter(d => d && d.papel === 'especial');
+  }
+  /* la instantánea de una ficha, ya como la guarda el lienzo (sin aspecto) */
+  function instantaneaDe(d) {
+    const x = E() && E().instantanea ? E().instantanea(d) : null;
+    const base = Object.assign({}, x || d, { fijadaEn: (x && x.fijadaEn) || Date.now() });
+    return L().sanearDuende ? L().sanearDuende(base) : null;
+  }
+  /* ¿la ficha cambió desde que se eligió? (sin contar cuándo se eligió) */
+  function fichaCambiada(inst, ficha) {
+    if (!ficha) return false;
+    const a = instantaneaDe(ficha); if (!a) return false;
+    return ['nombre', 'personalidad', 'rol', 'veto', 'modelo', 'temperatura', 'voz'].some(k => JSON.stringify(a[k] ?? null) !== JSON.stringify(inst[k] ?? null));
+  }
+  const ROL_DN = { transformar: 'Transforma el texto', revisar: 'Revisa' };
+  const rolDn = x => (x.rol === 'transformar' ? ROL_DN.transformar : x.veto ? 'Revisa y puede vetar' : ROL_DN.revisar);
+  function colorDn(ficha) {
+    let a = null; try { a = ficha && E() && E().aspectoDe ? E().aspectoDe(ficha) : ficha && ficha.duende; } catch (_) { a = null; }
+    return a && /^#[0-9a-f]{6}$/i.test(a.cloth || '') ? a.cloth : 'var(--foco)';
+  }
+  const primeraLinea = t => (String(t || '').split('\n').find(l => l.trim()) || '').trim();
+  function duendesBoton(n) {
+    const ds = Array.isArray(n.datos.duendes) ? n.datos.duendes : [];
+    return `<button type="button" class="lz-fx-boton lz-dn-boton${ds.length ? ' con' : ''}" data-lz-dn-elegir title="Elegir duendes: la salida sale con la personalidad de tus duendes especiales (los del asistente)">${IC_DUENDE}<span>Duendes</span>${ic('ic-chev-d', 10)}</button>`;
+  }
+  function duendesChips(n) {
+    const ds = Array.isArray(n.datos.duendes) ? n.datos.duendes : [], eq = equipoActual(), esp = especialesDe(eq);
+    return ds.map((x, i) => {
+      const ficha = esp.find(d => d.id === x.id) || null, cambio = fichaCambiada(x, ficha);
+      const tit = rolDn(x) + (x.personalidad ? ' · ' + primeraLinea(x.personalidad).slice(0, 160) : '')
+        + (!ficha && eq ? ' · ya no está en tu equipo: se usa como era al elegirlo' : cambio ? ' · su ficha cambió: se usa como era al elegirlo' : '');
+      return `<span class="lz-dn-chip${!ficha && eq ? ' suelto' : ''}${cambio ? ' cambio' : ''}" style="--dn:${esc(colorDn(ficha))}">`
+        + `<button type="button" class="lz-dn-nom"${ficha ? ` data-lz-dn-abrir="${esc(x.id)}"` : ''} title="${esc(tit)}"><span class="lz-dn-punto"></span><span>${esc(x.nombre)}</span></button>`
+        + (cambio ? `<button type="button" class="lz-dn-act" data-lz-dn-actualizar="${i}" title="Su ficha cambió desde que lo elegiste: usar la de ahora" aria-label="Actualizar «${esc(x.nombre)}»">↻</button>` : '')
+        + `<button type="button" class="lz-dn-x" data-lz-dn-quitar="${i}" title="Quitar el duende" aria-label="Quitar el duende «${esc(x.nombre)}»">${ic('ic-close', 10)}</button></span>`;
+    }).join('');
+  }
+  function ponerDuendes(id, lista) {
+    const limpias = L().sanearDuendes ? L().sanearDuendes(lista || []) : [];
+    m.editarNodo(id, { datos: { duendes: limpias } });
+    const n = m.nodo(id);
+    if (n && !limpias.length && n.datos.duendes && !n.datos.duendes.length) delete n.datos.duendes;
+    cambio();
+  }
+  function actualizarDuende(id, i) {
+    const n = m.nodo(id), xs = ((n && n.datos.duendes) || []).slice(), x = xs[i]; if (!x) return;
+    const ficha = especialesDe(equipoActual()).find(d => d.id === x.id);
+    if (!ficha) { avisar('«' + x.nombre + '» ya no está en tu equipo'); return; }
+    const nueva = instantaneaDe(ficha); if (!nueva) return;
+    xs[i] = nueva; ponerDuendes(id, xs);
+    avisar('«' + nueva.nombre + '» actualizado: la operación sale con su ficha de ahora');
+  }
+  function abrirFicha(did) { if (C.equipoUI && C.equipoUI.abrir) { cerrarMenu(); C.equipoUI.abrir({ id: did }); } }
+  function elegirDuendes(id, ancla) {
+    const n = m.nodo(id); if (!n) return;
+    const eq = equipoActual(), esp = especialesDe(eq), max = L().MAX_DUENDES || 6;
+    const caja = document.createElement('div'); caja.className = 'lz-elige lz-fx-menu lz-dn-menu';
+    caja.innerHTML = `<div class="gd-pop-tit">Duendes de «${esc(m.nombre(id))}»</div>`
+      + (esp.length > 6 ? `<input type="search" placeholder="Buscar un duende" aria-label="Buscar un duende">` : '')
+      + `<div class="lz-elige-lista"></div>`;
+    const campo = caja.querySelector('input'), $l = caja.querySelector('.lz-elige-lista');
+    const elegidos = () => ((m.nodo(id) || {}).datos || {}).duendes || [];
+    const marcar = () => {
+      const xs = elegidos().map(x => x.id);
+      $l.querySelectorAll('[data-lz-dn-op]').forEach(b => { const i = xs.indexOf(b.dataset.lzDnOp); b.classList.toggle('on', i >= 0); b.setAttribute('aria-checked', String(i >= 0)); b.querySelector('small').textContent = i >= 0 ? String(i + 1) : ''; });
+    };
+    const vacio = t => $l.appendChild(Object.assign(document.createElement('div'), { className: 'gd-pop-vacio', textContent: t }));
+    if (!eq) vacio('Los duendes del asistente no están disponibles aquí.');
+    else if (!esp.length) vacio('Aún no tienes duendes especiales. Créalos en «Duendes del asistente» (menú Claude) y dales su personalidad.');
+    esp.forEach(d => {
+      const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'menuitemcheckbox'); b.dataset.lzDnOp = d.id;
+      b.dataset.lzDnBusca = plano(d.nombre + ' ' + (d.personalidad || ''));
+      b.innerHTML = `<span class="lz-fx-check">${ic('ic-check', 12)}</span><span class="lz-dn-punto" style="--dn:${esc(colorDn(d))}"></span><span><b>${esc(d.nombre)}</b><em>${esc(rolDn(d) + (d.personalidad ? ' · ' + primeraLinea(d.personalidad) : ''))}</em></span><small></small>`;
+      b.addEventListener('click', () => {
+        const xs = elegidos().slice(), i = xs.findIndex(x => x.id === d.id);
+        if (i >= 0) xs.splice(i, 1);
+        else { if (xs.length >= max) { avisar('Como mucho ' + max + ' duendes por operación'); return; } const s = instantaneaDe(d); if (!s) return; xs.push(s); }
+        ponerDuendes(id, xs); marcar();
+      });
+      $l.appendChild(b);
+    });
+    marcar();
+    if (campo) {
+      campo.addEventListener('input', () => { const q = plano(campo.value); $l.querySelectorAll('[data-lz-dn-op]').forEach(b => { b.hidden = !!q && !b.dataset.lzDnBusca.includes(q); }); });
+      campo.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); const b = [...$l.querySelectorAll('[data-lz-dn-op]')].find(x => !x.hidden); if (b) b.click(); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); const b = [...$l.querySelectorAll('[data-lz-dn-op]')].find(x => !x.hidden); if (b) b.focus(); }
+      });
+    }
+    if (C.equipoUI && C.equipoUI.abrir) {
+      caja.appendChild(sepMenu());
+      caja.appendChild(opcion(`${ic('ic-plus', 13)}<span>Nuevo duende especial…</span>`, () => C.equipoUI.abrir({ nuevo: true })));
+      caja.appendChild(opcion(`${IC_DUENDE}<span>Administrar duendes…</span>`, () => C.equipoUI.abrir()));
+    }
+    abrirMenu(ancla, caja);
+    setTimeout(() => (campo || $l.querySelector('button') || caja.querySelector('button') || caja).focus({ preventScroll: true }), 0);
+  }
+  /* si el equipo cambia (otra ventana, el diálogo de duendes), los chips dicen «↻» donde toque */
+  let oyendoEquipo = false;
+  function oirEquipo() {
+    if (oyendoEquipo || !C.equipoUI || !C.equipoUI.alCambio) return;
+    oyendoEquipo = true;
+    C.equipoUI.alCambio(() => { if (m) pintar(); });
   }
 
   function elegirImagen(fn) {
@@ -1466,7 +1597,12 @@
     const ls = ids.map(k => enlace({ tipo: 'lienzo', id: lid, nodo: k })).filter(Boolean);
     const nombres = ids.map(k => '«' + m.nombre(k) + '»').join(', ');
     return (ids.length === 1 ? `Ejecuta el nodo ${nombres} del lienzo «${nomL}» de ClapCraft.` : `Ejecuta en orden los nodos ${nombres} del lienzo «${nomL}» de ClapCraft.`) + (ls.length ? '\n' + ls.join('\n') : '')
-      + fxEncargo(ids, enlace);
+      + fxEncargo(ids, enlace) + dnEncargo(ids);
+  }
+  /* los duendes de cada operación (1.1.68): ejecutar_nodo trae su personalidad */
+  function dnEncargo(ids) {
+    const l = ids.map(k => { const n = m.nodo(k), ds = (n && esOp(n) && n.datos.duendes) || []; return ds.length ? 'Duendes de «' + m.nombre(k) + '», en este orden: ' + ds.map(x => '«' + x.nombre + '»').join(', ') + '.' : ''; }).filter(Boolean);
+    return l.length ? '\n' + l.join('\n') + '\nejecutar_nodo trae su personalidad: la salida sale con ella.' : '';
   }
   /* las fórmulas de cada operación (1.1.60), en su orden, con su enlace: ejecutar_nodo trae su texto ya compuesto con lo escrito */
   function fxEncargo(ids, enlace) {
@@ -1549,6 +1685,9 @@
   function activo() {
     if (!m || !$sec || !$sec.offsetParent || !$cuerpo.clientWidth) return false;
     if (document.querySelector('dialog[open], #dlg[open], #dlgNombre[open], .hc-capa, .vs-capa')) return false;
+    /* el teatro, el creador de duendes y «Duendes del asistente» (1.1.68) también tapan: sus teclas en captura en `window` van detrás
+       de esta (se registran al abrirse), así que sin esto Supr en su lista borraba los nodos elegidos del lienzo de debajo */
+    if (document.querySelector('.dn-capa, .cd-capa, .eq-capa')) return false;
     if (window.Anotar && Anotar.abierto && Anotar.abierto()) return false;
     if (document.body.classList.contains('con-ventana')) return false;
     return true;
@@ -1585,7 +1724,7 @@
     const cmd = e.metaKey || e.ctrlKey, k = e.key.toLowerCase(), campo = esCampo(e.target);
     /* lo que no es del lienzo: el menú lateral, las pestañas, los menús del gestor, el aviso (su «Deshacer»), el historial de
        Claude o una comparación (encima) */
-    const fuera = t && t.closest('#gdSide, .franja, .gd-pop, .hc-capa, .vs-capa, #aviso, #asistente, .as-panel, .as-dlg');   // …y el asistente con otra IA (1.1.59)
+    const fuera = t && t.closest('#gdSide, .franja, .gd-pop, .hc-capa, .vs-capa, #aviso, #asistente, .as-panel, .as-dlg, .as-taller');   // …y el asistente con otra IA (1.1.59) y su taller (1.1.68)
     const mio = (fn) => { e.preventDefault(); e.stopPropagation(); fn(); };
     if (e.key === 'Escape' && menuAbierto && !fuera) return mio(cerrarMenu);
     if (campo) {

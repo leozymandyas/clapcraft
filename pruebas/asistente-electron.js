@@ -320,14 +320,14 @@ app.whenReady().then(async () => {
     await js(`window.__primerYo = document.querySelector('#asistente .as-cuerpo .as-yo'); return true;`);
     await mandar('Piensa despacio en la escena de la estación');
     comprobar('1.1.67 · antes de que salga el duende, los tres puntos', await hasta(`return ${A}.trabajando() && !!document.querySelector('#asistente .as-pensando') && document.querySelector('#asistente [data-as-trabajo]').hidden;`, 1200));
-    comprobar('1.1.67 · si tarda, sale el duende trabajando con «Pensando…» (y los puntos se van)', await hasta(`const c = document.querySelector('#asistente [data-as-trabajo]'); return !c.hidden && /Pensando/.test(c.textContent) && !!c.querySelector('iframe.as-duende-marco') && !document.querySelector('#asistente .as-pensando');`, 2600));
-    const marco = JSON.parse(await js(`const f = document.querySelector('#asistente iframe.as-duende-marco'); window.__marcoDuende = f;
+    comprobar('1.1.67 · si tarda, sale el duende trabajando con «Pensando…» (y los puntos se van)', await hasta(`const c = document.querySelector('#asistente [data-as-trabajo]'); return !c.hidden && /Pensando/.test(c.textContent) && !document.querySelector('#asistente .as-pensando');`, 2600));
+    /* 1.1.68: el duende ya no va en la franja: es la mascota, arriba del panel (un solo marco, `?mascota=1`) */
+    const marco = JSON.parse(await js(`const f = document.querySelector('#asistente .as-mascota iframe.as-mascota-marco'); window.__marcoDuende = f;
       for (let i = 0; i < 40 && !(f.contentWindow && f.contentWindow.Duendes); i++) await W(100);
       try { f.contentWindow.__marca = 1; } catch (_) {}
       const r = f.getBoundingClientRect(), fondo = getComputedStyle(f.contentDocument.body).backgroundColor, htmlF = getComputedStyle(f.contentDocument.documentElement).backgroundColor;
-      return JSON.stringify({ n: document.querySelectorAll('#asistente iframe').length, w: r.width, h: r.height, src: f.getAttribute('src'), motor: !!f.contentWindow.Duendes, fondo, htmlF, dentro: !!f.closest('.as-cuerpo') });`));
-    comprobar('1.1.67 · un solo marco, pequeño (64–96 px), fuera de la conversación, con el motor del teatro en modo trabajo', marco.n === 1 && marco.w >= 64 && marco.w <= 96 && marco.h >= 64 && marco.h <= 96 && !marco.dentro && marco.motor && /retrato=1/.test(marco.src) && /trabajo=1/.test(marco.src), JSON.stringify(marco));
-    comprobar('1.1.67 · el marco del duende, con fondo transparente', /rgba\(0, 0, 0, 0\)|transparent/.test(marco.fondo) && /rgba\(0, 0, 0, 0\)|transparent/.test(marco.htmlF), JSON.stringify(marco));
+      return JSON.stringify({ n: document.querySelectorAll('#asistente iframe').length, w: r.width, h: r.height, src: f.getAttribute('src'), motor: !!f.contentWindow.Duendes, fondo, htmlF, dentro: !!f.closest('.as-cuerpo'), franja: !!document.querySelector('#asistente [data-as-trabajo] iframe') });`));
+    comprobar('1.1.68 · un solo marco (la mascota, de ~110 px de alto y el ancho del panel), fuera de la conversación y no en la franja, con el motor del teatro', marco.n === 1 && marco.w >= 200 && marco.h >= 60 && marco.h <= 130 && !marco.dentro && !marco.franja && marco.motor && /mascota=1/.test(marco.src), JSON.stringify(marco));
     await espera(300);
     await win.webContents.capturePage().then(img => fs.writeFileSync(path.join(CAPTURAS, 'duende-pensando.png'), img.toPNG())).catch(() => {});
     comprobar('1.1.67 · llega el razonamiento: abierto y el duende se va (tras un momento)', await hasta(`const d = [...document.querySelectorAll('#asistente .as-razon')].pop(); return !!d && d.open && document.querySelector('#asistente [data-as-trabajo]').hidden;`, 4000));
@@ -386,7 +386,7 @@ app.whenReady().then(async () => {
     await espera(200);
     await win.webContents.capturePage().then(img => fs.writeFileSync(path.join(CAPTURAS, 'duende-paso.png'), img.toPNG())).catch(() => {});
     comprobar('1.1.67 · y se va al terminar', await hastaLibre(12000) && await hasta(`return document.querySelector('#asistente [data-as-trabajo]').hidden;`, 1500));
-    const reusa = JSON.parse(await js(`const f = document.querySelector('#asistente iframe.as-duende-marco'); let marca = null; try { marca = f.contentWindow.__marca; } catch (_) {}
+    const reusa = JSON.parse(await js(`const f = document.querySelector('#asistente iframe.as-mascota-marco'); let marca = null; try { marca = f.contentWindow.__marca; } catch (_) {}
       return JSON.stringify({ n: document.querySelectorAll('#asistente iframe').length, igual: f === window.__marcoDuende, marca });`));
     comprobar('1.1.67 · el marco del duende no se recrea ni se recarga (el mismo, con su marca)', reusa.n === 1 && reusa.igual && reusa.marca === 1, JSON.stringify(reusa));
 
@@ -577,8 +577,10 @@ app.whenReady().then(async () => {
     comprobar('1.1.60 · y el mensaje enviado la enseña como cita', await js(`const y = [...document.querySelectorAll('#asistente .as-yo')].pop(); return !!y && !!y.querySelector('blockquote.as-cita') && /Línea uno/.test(y.querySelector('blockquote.as-cita').textContent) && !/^>/.test(y.textContent.trim());`));
     /* «Citar» sobre lo elegido de una respuesta, con el ratón */
     const sel = JSON.parse(await js(`const p = [...document.querySelectorAll('#asistente .as-ia .as-md p')].pop(), t = p.firstChild; const r = document.createRange(); r.setStart(t, 0); r.setEnd(t, Math.min(8, t.length));
-      const a = r.getBoundingClientRect(); r.setStart(p.lastChild.nodeType === 3 ? p.lastChild : p, 0); const b = p.getBoundingClientRect(); return JSON.stringify({ x0: a.left + 1, y: a.top + a.height / 2, x1: b.right - 4 });`));
-    await arrastrar({ x: sel.x0, y: sel.y }, { x: sel.x1, y: sel.y }, 10);
+      const a = r.getBoundingClientRect(), u = p.lastChild.nodeType === 3 ? p.lastChild : p.lastChild.lastChild || p.lastChild; const r2 = document.createRange(); r2.setStart(u, Math.max(0, (u.length || 1) - 1)); r2.setEnd(u, u.length || 1); const z = r2.getBoundingClientRect();
+      return JSON.stringify({ x0: a.left + 1, y: a.top + a.height / 2, x1: z.right + 2, y1: z.top + z.height / 2 });`));
+    /* hasta el final de verdad de la última letra (antes, el borde del párrafo: si el texto se recolocaba, se quedaba en «…y se») */
+    await arrastrar({ x: sel.x0, y: sel.y }, { x: sel.x1, y: sel.y1 }, 10);
     comprobar('1.1.60 · elegir texto de una respuesta ofrece «Citar»', await hasta(`const b = document.querySelector('#asistente .as-citar-flot'); return !!b && !b.hidden;`, 2000));
     await aClic(`document.querySelector('#asistente .as-citar-flot')`, { tras: 300 });
     comprobar('1.1.60 · y lo pone en el campo como cita de la respuesta', await js(`const ch = ${CAMPO_P}.querySelector('.as-chip-cita'); return !!ch && /Respuesta del asistente/.test(ch.textContent) && /seca/.test(ch.dataset.cita);`), await js(`return ${CAMPO_P}.value;`));

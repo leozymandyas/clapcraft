@@ -135,7 +135,7 @@ test('MCP: saludo, lista de herramientas y, con el proyecto cerrado, lectura y e
     assert.equal(r.error, false, r.texto);
     assert.match(r.texto, /\(Escrito en .*Faro\.clapcraft\. ClapCraft lo verá al abrirlo\.\)/);
     const guardado = leer(ruta);
-    assert.equal(guardado.app, 'clapcraft'); assert.equal(guardado.formato, 4); assert.equal(guardado.nombre, 'Faro');
+    assert.equal(guardado.app, 'clapcraft'); assert.equal(guardado.formato, 5); assert.equal(guardado.nombre, 'Faro');
     assert.equal(guardado.documentos.contenedores[0].esquemas[0].datos.puntos[0].titulo, 'La tormenta');
     assert.deepEqual(fs.readdirSync(dir).filter(f => f.includes('.tmp')), [], 'no quedan temporales');
     /* el historial de Claude va en el archivo, con quién y cómo */
@@ -335,16 +335,16 @@ test('MCP: fórmulas en el archivo — crear (aplanada), usar_formula y el encar
   } finally { await c.cerrar(); }
 });
 
-test('revisión del port · MCP: escribe con el formato 4, y un proyecto de una versión más nueva se lee pero no se reescribe', async () => {
+test('revisión del port · MCP: escribe con el formato 5 (1.1.68), y un proyecto de una versión más nueva se lee pero no se reescribe', async () => {
   try { fs.unlinkSync(PUENTE); } catch (_) {}
   const ruta = archivo('Futuro'), c = cliente();
   try {
     await c.pedir('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '1' } });
     let r = await c.llamar('escribir_documento', { proyecto: ruta, esquema: 'Piloto', contenido: 'INT. FARO - NOCHE\n\nMara sube.' });
     assert.equal(r.error, false, r.texto);
-    assert.equal(leer(ruta).formato, 4, 'lo que escribe el servidor va con el formato de esta versión');
-    /* lo escribe una versión más nueva (formato 5, con algo que esta no conoce) */
-    const x = leer(ruta); x.formato = 5; x.documentos.algoNuevo = { de: 'la 1.2' };
+    assert.equal(leer(ruta).formato, 5, 'lo que escribe el servidor va con el formato de esta versión');
+    /* lo escribe una versión más nueva (formato 6, con algo que esta no conoce) */
+    const x = leer(ruta); x.formato = 6; x.documentos.algoNuevo = { de: 'la 1.2' };
     fs.writeFileSync(ruta, zlib.gzipSync(JSON.stringify(x)));
     const antes = fs.readFileSync(ruta);
     r = await c.llamar('escribir_documento', { proyecto: ruta, esquema: 'Piloto', contenido: 'Otra cosa.' });
@@ -358,4 +358,35 @@ test('revisión del port · MCP: escribe con el formato 4, y un proyecto de una 
     assert.match(r.texto, /versión más nueva de ClapCraft: lo lees con lo que esta versión conoce/);
     assert.match(r.texto, /Mara sube/);
   } finally { await c.cerrar(); }
+});
+
+test('MCP: los duendes del asistente de Leo (1.1.68) — con el proyecto cerrado, editar_lienzo los elige por su nombre (equipo-duendes.json, solo lectura)', async () => {
+  const E = require('../js/claquedraw/equipo.js').equipo;
+  const r0 = E.crearEspecial(E.porDefecto(), { nombre: 'La crítica', personalidad: 'Exigente con el ritmo: corta lo que sobra.', rol: 'revisar', veto: true });
+  assert.ok(r0.ok);
+  const archivoEquipo = path.join(dir, 'equipo-duendes.json');
+  fs.writeFileSync(archivoEquipo, JSON.stringify(r0.equipo));
+  const antes = fs.readFileSync(archivoEquipo, 'utf8');
+  const ruta = archivo('DuendesMCP'), c = cliente();
+  try {
+    await c.pedir('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '1' } });
+    await c.llamar('editar_proyecto', { proyecto: ruta, operaciones: [{ op: 'crear_lienzo', contenedor: 'Temporada 1', nombre: 'Taller' }] });
+    let r = await c.llamar('editar_lienzo', { proyecto: ruta, lienzo: 'Taller', operaciones: [{ op: 'crear_nodo', tipo: 'generar', instruccion: 'la escena', destino: { esquema: 'Piloto' }, duendes: ['La crítica', 'formateador'] }] });
+    assert.equal(r.error, false, r.texto);
+    assert.match(r.texto, /duendes «La crítica» \(d-[a-z0-9]+, revisa y puede vetar\), «El formateador» \(formateador, transforma el texto\)/);
+    const n = leer(ruta).documentos.contenedores[0].lienzos[0].nodos[0];
+    assert.deepEqual(n.datos.duendes.map(x => x.nombre), ['La crítica', 'El formateador']);
+    assert.match(n.datos.duendes[0].personalidad, /Exigente con el ritmo/);
+    r = await c.llamar('editar_lienzo', { proyecto: ruta, lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: n.id, duendes: ['El que no existe'] }] });
+    assert.equal(r.error, true);
+    assert.match(r.texto, /Los especiales de Leo: «El formateador» \(formateador\), «La crítica»/);
+    assert.equal(fs.readFileSync(archivoEquipo, 'utf8'), antes, 'el servidor no escribe el equipo');
+    /* uno de más de 1 MB (el almacén de la app no pasa de ahí) no se lee: ningún especial */
+    fs.writeFileSync(archivoEquipo, JSON.stringify(Object.assign({}, r0.equipo, { relleno: 'x'.repeat(1100 * 1024) })));
+    r = await c.llamar('editar_lienzo', { proyecto: ruta, lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: n.id, duendes: ['La crítica'] }] });
+    assert.equal(r.error, false, 'la ya elegida en el nodo sigue valiendo por su nombre');
+    r = await c.llamar('editar_lienzo', { proyecto: ruta, lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: n.id, duendes: ['formateador'] }] });
+    assert.equal(r.error, true, 'el formateador ya no está en el nodo y el equipo de más de 1 MB no se leyó');
+    assert.doesNotMatch(r.texto, /Los especiales de Leo/);
+  } finally { await c.cerrar(); try { fs.unlinkSync(archivoEquipo); } catch (_) {} }
 });

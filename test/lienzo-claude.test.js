@@ -411,3 +411,64 @@ test('revisión del port · completar_nodo: la nota por su id, su enlace o su t�
   correr(p.ctx, 'completar_nodo', { lienzo: 'Taller', nodo: 'Escena 1', salida: { tipo: 'documento', esquema: 'Piloto' } });
   assert.equal(lienzo(p).nodos.find(n => n.titulo === 'Escena 1').salida.versionId, ver.id);
 });
+
+/* ---------- los duendes de una operación (1.1.68) ---------- */
+test('duendes: editar_lienzo los valida y guarda; leer_lienzo los nombra; ejecutar_nodo da su personalidad; cambiarlos desactualiza', () => {
+  const p = proyecto(); armado(p);
+  const FORM = { id: 'formateador', nombre: 'El formateador', personalidad: 'Ordeno el <b>formato</b> y nada más.', rol: 'transformar', modelo: 'deepseek-v4-pro', temperatura: 0.3, voz: 'grave', fijadaEn: 7, duende: { hat: 'punta' }, enojon: true };
+  const CRIT = { id: 'd-critica', nombre: 'La crítica', personalidad: 'Odio los clichés.\nLos señalo todos.', rol: 'revisar', veto: true };
+  let r = correr(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: [FORM, CRIT] }] });
+  assert.match(r.texto, /duendes «El formateador» \(formateador, transforma el texto\), «La crítica» \(d-critica, revisa y puede vetar\)/);
+  const n = () => lienzo(p).nodos.find(x => x.titulo === 'Escena 1');
+  assert.deepEqual(n().datos.duendes.map(d => d.id), ['formateador', 'd-critica']);
+  assert.equal(n().datos.duendes[0].personalidad, 'Ordeno el formato y nada más.', 'sin HTML');
+  assert.ok(!('duende' in n().datos.duendes[0]) && !('enojon' in n().datos.duendes[0]), 'sin su aspecto');
+  assert.ok(n().datos.duendes[1].fijadaEn > 0, 'sin fecha, la de ahora');
+  /* validación: lo raro no pasa y el lote no cambia nada */
+  const antes = JSON.stringify(lienzo(p));
+  [[{ id: 'maestro', nombre: 'El maestro' }, /duende fijo/], [{ id: 'x y', nombre: 'Uno' }, /necesita su "id"/], [{ id: 'd-1' }, /necesita su "nombre"/],
+    [{ id: 'd-1', nombre: 'U', rol: 'mandar' }, /revisar o transformar/], [{ id: 'd-1', nombre: 'U', personalidad: 3 }, /es un texto/], ['Nadie', /No conozco el duende «Nadie»/], [42, /Cada duende es/],
+    [[1, 2, 3, 4, 5, 6, 7].map(i => ({ id: 'd-' + i, nombre: 'D' + i })), /Como mucho 6 duendes/]].forEach(([v, re]) => {
+    const e = H.ejecutar(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: Array.isArray(v) ? v : [v] }] });
+    assert.equal(e.ok, false); assert.match(e.error, re);
+  });
+  assert.equal(JSON.stringify(lienzo(p)), antes);
+  /* por `datos` también se validan */
+  assert.match(H.ejecutar(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', datos: { duendes: [{ id: 'lector', nombre: 'L' }] } }] }).error, /duende fijo/);
+  /* reordenar por su nombre o su id (los que ya tiene el nodo) */
+  correr(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: ['la critica', 'formateador'] }] });
+  assert.deepEqual(n().datos.duendes.map(d => d.id), ['d-critica', 'formateador']);
+  assert.equal(n().datos.duendes[1].personalidad, 'Ordeno el formato y nada más.', 'la misma instantánea');
+  /* leer_lienzo */
+  assert.match(correr(p.ctx, 'leer_lienzo', { lienzo: 'Taller' }).texto, /duendes \(en orden, con la personalidad de cuando se eligieron\): «La crítica» \(d-critica, revisa y puede vetar\), «El formateador»/);
+  /* ejecutar_nodo */
+  let t = correr(p.ctx, 'ejecutar_nodo', { lienzo: 'Taller', nodo: 'Escena 1' }).texto;
+  assert.match(t, /DUENDES DE ESTA SALIDA \(escribe con su personalidad, en este orden/);
+  assert.match(t, /1\. «La crítica» — revisa y puede vetar\n {5}│ Odio los clichés\.\n {5}│ Los señalo todos\.\n {2}2\. «El formateador» — transforma el texto · modelo deepseek-v4-pro/);
+  assert.match(t, /si uno que puede vetar la rechazaría, corrígela/);
+  assert.ok(!/trabajar_en_equipo/.test(t), 'a Claude por MCP no se le habla del equipo');
+  assert.match(H.ejecutar(Object.assign({}, p.ctx, { ia: true }), 'ejecutar_nodo', { lienzo: 'Taller', nodo: 'Escena 1' }).texto, /Con trabajar_en_equipo van ellos/);
+  /* hecha → cambiar los duendes la desactualiza */
+  pedirTodo(p);
+  correr(p.ctx, 'escribir_documento', { esquema: 'Piloto', contenido: 'INT. PLAYA - DÍA\n\nMara camina.' });
+  correr(p.ctx, 'completar_nodo', { lienzo: 'Taller', nodo: 'Escena 1', salida: { tipo: 'documento', esquema: 'Piloto' } });
+  assert.ok(!/Escena 1[^\n]*DESACTUALIZADA/.test(correr(p.ctx, 'leer_lienzo', { lienzo: 'Taller' }).texto));
+  correr(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: ['formateador'] }] });
+  assert.match(correr(p.ctx, 'leer_lienzo', { lienzo: 'Taller' }).texto, /Escena 1[^\n]*DESACTUALIZADA/);
+  /* [] los quita (la clave desaparece) */
+  r = correr(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: [] }] });
+  assert.match(r.texto, /sin duendes/);
+  assert.ok(!('duendes' in n().datos));
+});
+
+test('duendes: con el equipo de Leo en el contexto, se eligen por su nombre (instantánea de su ficha)', () => {
+  const p = proyecto(); armado(p);
+  const equipo = { duendes: [{ id: 'maestro', papel: 'maestro', nombre: 'El duende maestro' }, { id: 'd-poeta', papel: 'especial', nombre: 'El poeta', personalidad: 'Todo en verso.', rol: 'transformar', modelo: 'deepseek-v4-pro', duende: { hat: 'copa' } }] };
+  const ctx = Object.assign({}, p.ctx, { equipo: () => equipo });
+  correr(ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: ['El poeta'] }] });
+  const d = lienzo(p).nodos.find(x => x.titulo === 'Escena 1').datos.duendes;
+  assert.equal(d.length, 1); assert.equal(d[0].id, 'd-poeta'); assert.equal(d[0].personalidad, 'Todo en verso.'); assert.ok(!('duende' in d[0]));
+  assert.match(H.ejecutar(ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: ['El duende maestro'] }] }).error, /Los especiales de Leo: «El poeta» \(d-poeta\)/);
+  /* sin el equipo (Claude por MCP), por su nombre solo valen los ya elegidos */
+  assert.match(H.ejecutar(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: ['El poeta', 'Otro'] }] }).error, /No conozco el duende «Otro»: da su instantánea/);
+});

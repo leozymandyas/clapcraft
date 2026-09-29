@@ -222,6 +222,18 @@ test('reintenta ante 429 y 5xx (y se rinde a los dos reintentos); no ante 401', 
   s.http.close();
 });
 
+test('revisión 1.1.68 · sin stream no se corta por silencio a los 120 s (el equipo de duendes: nada llega hasta el final)', async () => {
+  const s = await servidor();
+  s.guion = (req, c, res) => setTimeout(() => json(res, 200, { id: 'c1', choices: [{ index: 0, message: { role: 'assistant', content: 'Largo.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 5, completion_tokens: 2 } }), 250);
+  let r = await transporte(s, { tiempoQuieto: 60, tiempoQuietoSinStream: 2000 }).chat({ mensajes: MENSAJES, sinStream: true });
+  assert.strictEqual(r.ok, true, JSON.stringify(r)); assert.strictEqual(r.mensaje.content, 'Largo.');
+  r = await transporte(s, { tiempoQuieto: 60 }).chat({ mensajes: MENSAJES });
+  assert.strictEqual(r.codigo, 'tiempo', 'con stream, el silencio sí corta');
+  r = await transporte(s, { tiempoQuieto: 60, tiempoMax: 100 }).chat({ mensajes: MENSAJES, sinStream: true });
+  assert.strictEqual(r.codigo, 'tiempo', 'el tiempo máximo sigue mandando');
+  s.http.closeAllConnections(); s.http.close();
+});
+
 test('cancelar a mitad del stream devuelve «Detenido.» con lo que llegó; el tiempo máximo y el silencio cortan', async () => {
   const s = await servidor();
   s.guion = (req, c, res) => { res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.write('data: ' + JSON.stringify(delta({ content: 'Érase una vez' })) + '\n\n'); /* y se queda colgado */ };

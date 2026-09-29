@@ -488,3 +488,141 @@ body.con-asistente.asistente-plegado .gd-modal-capa, body.con-asistente.asistent
 .as-saldo.bajo { border-color: color-mix(in srgb, var(--t-ambar) 55%, transparent); background: color-mix(in srgb, var(--t-ambar) 14%, var(--papel)); color: color-mix(in srgb, var(--t-ambar) 80%, var(--tinta)); }
 .as-saldo.critico { border-color: color-mix(in srgb, var(--peligro) 55%, transparent); background: var(--peligro-bg); color: var(--peligro); }
 .as-res-saldo { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 8px; background: var(--foco-suave); color: var(--foco); font: 500 11px var(--mono); }
+
+/* ---------- el equipo de duendes (1.1.68): el maestro, los especiales de la conversación, el paso del equipo, el taller y el sonido ---------- */
+.as-rotulo.as-maestro { color: var(--foco); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-sonido.on { color: var(--foco); }
+.as-dn-boton svg { flex: none; }
+.as-dn-boton[hidden] { display: none; }
+.as-dn-punto { flex: none; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--dc, var(--foco)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tinta) 22%, transparent); }
+.as-dn-chip { border-color: color-mix(in srgb, var(--dc, var(--foco)) 45%, var(--borde)); background: color-mix(in srgb, var(--dc, var(--foco)) 10%, var(--papel)); color: var(--tinta); }
+.as-dn-chip .as-fx-nom span em { font-style: italic; color: var(--palido); font-size: 11px; }
+.as-dn-chip.cambiado { border-style: dashed; }
+.as-dn-pop .as-fx-op { align-items: center; }
+.as-dn-pop .as-dn-punto { margin-right: 2px; }
+.as-dn-rol { font: 500 9.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--palido); font-weight: 500; }
+/* la franja: quién está haciendo qué, y «Ver trabajar» */
+.as-trabajo-txt.enojo { color: var(--peligro); }
+.as-trabajo.equipo .as-trabajo-txt { text-transform: none; letter-spacing: .02em; }
+/* el paso del equipo */
+.as-paso-equipo .as-paso-ic { color: var(--foco); }
+.as-paso-equipo .as-paso-tit { color: var(--tinta); font-weight: 500; }
+.as-paso-equipo.trabajando { border-color: var(--foco-linea); }
+.as-paso-acc .as-enlace-btn svg { margin-right: 4px; }
+.as-eq-chip { flex: none; display: inline-flex; align-items: center; max-width: 11em; height: 18px; padding: 0 7px; border-radius: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: color-mix(in srgb, var(--dc, var(--foco)) 16%, var(--papel)); border: 1px solid color-mix(in srgb, var(--dc, var(--foco)) 45%, transparent); color: var(--tinta); font: 500 11px var(--sans); }
+.as-eq-ultimo { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: -4px; padding: 0 8px 6px 22px; font-size: 12px; color: var(--tenue); }
+.as-eq-ultimo > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-eq-ultimo.enojo > span:last-child { color: var(--peligro); font-weight: 500; }
+.as-eq-evs { list-style: none; margin: 0 0 6px; padding: 0; max-height: 260px; overflow: auto; }
+.as-eq-ev { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: 12px; line-height: 1.35; border-bottom: 1px dashed var(--regla); }
+.as-eq-ev:last-child { border-bottom: 0; }
+.as-eq-acc { flex: none; font: 500 9.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--palido); }
+.as-eq-txt { min-width: 0; color: var(--tinta); }
+.as-eq-ev.enojo .as-eq-txt, .as-eq-ev.rechazar .as-eq-txt, .as-eq-ev.error .as-eq-txt { color: var(--peligro); }
+.as-eq-ev.enojo .as-eq-acc, .as-eq-ev.rechazar .as-eq-acc { color: var(--peligro); }
+.as-eq-ev.aprobar .as-eq-acc { color: var(--ok); }
+.as-eq-encargo { margin: 0 0 8px; font-size: 12px; color: var(--tenue); white-space: pre-wrap; }
+/* el taller: una ventana flotante, no modal, sobre la app (encima de la ventana de una nota; debajo de los menús y del aviso) */
+.as-taller { position: fixed; z-index: 76; display: flex; flex-direction: column; min-width: 320px; border: 1px solid var(--borde-fuerte); border-radius: 8px; overflow: hidden;
+  background: var(--panel); box-shadow: var(--sombra-modal, var(--sombra-alta)); outline: none; }
+.as-taller[hidden] { display: none; }
+.as-taller:focus-visible { box-shadow: 0 0 0 2px var(--foco-linea), var(--sombra-modal, var(--sombra-alta)); }
+.as-taller-cab { flex: none; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 4px 0 10px; border-bottom: 1px solid var(--regla); cursor: move; user-select: none; }
+.as-taller-tit { flex: none; display: inline-flex; align-items: center; gap: 6px; font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--foco); }
+.as-taller-est { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--tenue); }
+.as-taller-est.enojo { color: var(--peligro); font-weight: 500; }
+.as-taller-escena { position: relative; aspect-ratio: 16 / 9; background: #140f24; }
+.as-taller-marco { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
+.as-taller-asa { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, color-mix(in srgb, var(--tinta) 30%, transparent) 50%, transparent 62%, color-mix(in srgb, var(--tinta) 30%, transparent) 62%, transparent 74%); }
+body.as-taller-moviendo, body.as-taller-moviendo * { user-select: none !important; }
+html[data-estilo="synthwave"] .as-taller { box-shadow: 0 0 0 1px var(--foco-linea), 0 0 22px var(--foco-halo); }
+@media (prefers-reduced-motion: reduce) { .as-paso-equipo .as-giro { animation: none; } }
+.as-eq-op { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: -4px; padding: 0 8px 6px 22px; font-size: 11.5px; color: var(--tenue); }
+/* con el botón del sonido, la cabecera no daba para el nombre del maestro, el modelo y el saldo: el icono del asistente se va (el
+   nombre del maestro ya dice qué es) y los botones se estrechan un poco */
+#asistente .as-cab-ic { display: none; }
+#asistente .as-cab { padding-left: 12px; gap: 0; }
+#asistente .as-cab > .icono { width: 26px; }
+#asistente .as-cab-fila:first-child .as-coste { flex: none; }
+/* la mascota (§12): el duende maestro siempre a la vista, en un recuadro bajo la cabecera */
+.as-mascota { flex: none; position: relative; height: 128px; margin: 8px 12px 0; border-radius: 10px; overflow: hidden; cursor: pointer;
+  background: color-mix(in srgb, var(--foco) 5%, var(--lienzo)); border: 1px solid var(--regla); }
+.as-mascota-sitio { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--foco); }
+.as-mascota-marco { display: block; width: 100%; height: 100%; border: 0; background: transparent; pointer-events: none; color-scheme: normal; }
+.as-mascota[data-estado="error"] { border-color: color-mix(in srgb, var(--peligro) 45%, var(--regla)); }
+.as-mascota-ver { position: absolute; right: 6px; bottom: 6px; z-index: 1; padding: 2px 7px; font-size: 11px; background: color-mix(in srgb, var(--papel) 88%, transparent);
+  border: 1px solid var(--foco-linea); border-radius: 12px; }
+.as-mascota-ver[hidden] { display: none; }
+.as-mascota-ver svg { margin-right: 4px; }
+html[data-estilo="synthwave"] .as-mascota { box-shadow: inset 0 0 0 1px var(--foco-linea), 0 0 14px var(--foco-halo); }
+@media (max-height: 560px) { .as-mascota { height: 72px; } }
+/* ---------- quién contesta: Maestro · Equipo · Mesa (1.1.68, §13) ---------- */
+.as-modos { display: flex; align-items: center; gap: 2px; margin: 0 0 6px; }
+.as-modos[hidden] { display: none; }
+.as-modos [data-as-modo] { height: 24px; padding: 0 10px; border: 1px solid var(--borde); background: var(--papel); color: var(--tenue); font: 500 12px var(--sans); cursor: pointer; }
+.as-modos [data-as-modo]:first-child { border-radius: 12px 0 0 12px; }
+.as-modos [data-as-modo]:nth-child(3) { border-radius: 0 12px 12px 0; }
+.as-modos [data-as-modo] + [data-as-modo] { margin-left: -3px; }
+.as-modos [data-as-modo]:hover { color: var(--tinta); }
+.as-modos [data-as-modo].on { position: relative; z-index: 1; border-color: var(--foco-linea); background: var(--foco-suave); color: var(--foco); }
+.as-modos-nota { min-width: 0; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 10px var(--mono); letter-spacing: .05em; color: var(--palido); }
+.as-mesa-ajustes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 10px; font-size: 12px; color: var(--tenue); }
+.as-mesa-rondas { display: inline-flex; }
+.as-mesa-rondas button { min-width: 26px; height: 22px; border: 1px solid var(--borde); background: var(--papel); color: var(--tenue); cursor: pointer; font: 500 12px var(--sans); }
+.as-mesa-rondas button + button { margin-left: -1px; }
+.as-mesa-rondas button.on { border-color: var(--foco-linea); background: var(--foco-suave); color: var(--foco); position: relative; }
+/* van dentro de un `.gd-pop`, que da `width: 100%` y el ✓ de `.on` a todo botón de un menú: solo se veía el «1» (visto al portar los
+   duendes a ClapBook) */
+.gd-pop .as-mesa-rondas button { width: auto; flex: none; height: 22px; padding: 0 8px; justify-content: center; border-radius: 0; }
+.gd-pop .as-mesa-rondas button:first-child { border-radius: 4px 0 0 4px; }
+.gd-pop .as-mesa-rondas button:last-child { border-radius: 0 4px 4px 0; }
+.gd-pop .as-mesa-rondas button.on::after { content: none; }
+.as-mesa-resume { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; cursor: pointer; }
+/* las burbujas de la mesa: su nombre, su color */
+.as-msg.as-mesa { padding-left: 10px; border-left: 3px solid color-mix(in srgb, var(--dc, var(--foco)) 60%, transparent); }
+.as-mesa-quien { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; }
+.as-mesa-rol { font: 500 9.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--palido); }
+.as-msg.as-mesa .as-pensando { margin: 2px 0 0; }
+/* el coordinador en la mesa (§17): su casilla en los ajustes (una fila entera) y su burbuja con «revisa»; con problemas, en ámbar */
+.as-mesa-coord { flex-basis: 100%; margin-left: 0; }
+.as-mesa-revisa { padding: 1px 5px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--dc, var(--foco)) 45%, var(--borde)); color: var(--tenue); }
+.as-mesa-revisa.con-problemas { border-color: color-mix(in srgb, var(--t-ambar, #c98a1a) 70%, transparent); background: color-mix(in srgb, var(--t-ambar, #c98a1a) 14%, transparent); color: color-mix(in srgb, var(--t-ambar, #c98a1a) 70%, var(--tinta)); }
+.as-msg.as-mesa.revisa.con-problemas { border-left-color: color-mix(in srgb, var(--t-ambar, #c98a1a) 80%, transparent); background: color-mix(in srgb, var(--t-ambar, #c98a1a) 6%, transparent); border-radius: 0 6px 6px 0; }
+/* la pelea de la mesa (§14): una línea discreta entre burbujas */
+.as-pelea { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 2px 0 10px; font: 500 11px var(--mono); letter-spacing: .03em; color: var(--peligro); opacity: .85; }
+.as-pelea.nivel-3 { font-weight: 600; }
+/* los personajes en la mesa (§15): su chip lleva su modelo; su menú, el modelo y la temperatura */
+.as-pj-chip .as-fx-nom em { font: 500 9.5px var(--mono); font-style: normal; color: var(--palido); margin-left: 2px; }
+.as-pj-rehacer { font-size: 12px; width: 18px; color: var(--foco); }
+.as-dn-pop .as-fx-grupo span { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.as-pj-temp { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; color: var(--tenue); }
+.as-pj-temp input { flex: 1; accent-color: var(--foco); }
+/* la huelga (§16): «Recargar saldo» en la mascota */
+.as-mascota-recargar { position: absolute; left: 6px; bottom: 6px; z-index: 1; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 12px;
+  background: color-mix(in srgb, var(--peligro) 12%, var(--papel)); border: 1px solid color-mix(in srgb, var(--peligro) 45%, transparent); color: var(--peligro); }
+.as-mascota-recargar[hidden] { display: none; }
+.as-mascota[data-escena="huelga"], .as-mascota[data-escena="tope"] { border-color: color-mix(in srgb, var(--t-ambar, #c98a1a) 45%, var(--regla)); }
+/* la cabecera estrecha (revisión de la 1.1.68: a 300–400 px el nombre del maestro, el modelo y el saldo salían cortados, «EL DUE…»,
+   «deepseek-…», «$9…»): el nombre ocupa la primera fila entera y en la segunda van el modelo (lo único que encoge), el saldo y el gasto;
+   los botones se estrechan un poco */
+#asistente .as-cab { container: as-cab / inline-size; }
+@container as-cab (max-width: 400px) {
+  #asistente .as-cab > .icono { width: 24px; }
+  #asistente .as-cab-tit { display: grid; grid-template-columns: minmax(0, auto) auto auto; justify-content: start; column-gap: 6px; row-gap: 1px; align-items: center; }
+  #asistente .as-cab-tit .as-cab-fila { display: contents; }
+  #asistente .as-cab-tit .as-maestro { grid-column: 1 / -1; grid-row: 1; }
+  #asistente .as-cab-tit .as-modelo { grid-column: 1; grid-row: 2; min-width: 0; max-width: 100%; }
+  #asistente .as-cab-tit .as-saldo { grid-column: 2; grid-row: 2; min-width: max-content; overflow: visible; }
+  #asistente .as-cab-tit .as-coste { grid-column: 3; grid-row: 2; }
+  #asistente .as-modelo-pre { display: none; }
+}
+/* aún más estrecha: la memoria de estilo sigue en Claude › Memoria de estilo… */
+@container as-cab (max-width: 340px) {
+  #asistente .as-cab > .icono { width: 22px; }
+  #asistente .as-cab > [data-as-memoria] { display: none; }
+  #asistente .as-cab-tit { column-gap: 4px; }
+  #asistente .as-cab-tit .as-modelo { font-size: 11px; }
+  #asistente .as-cab-tit .as-coste::before { margin-right: 4px; }
+}

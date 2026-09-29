@@ -1917,6 +1917,50 @@
   }
   const formulaTexto = f => (!f.rota ? comillas(f.titulo) + ' (' + f.id + ')'
     : f.id + (f.titulo ? ' ' + comillas(f.titulo) : '') + ' ROTA: ' + (f.papelera ? 'está en la papelera' : /ya no es una fórmula/.test(f.motivo || '') ? 'ya no es una fórmula' : 'ya no está'));
+  /* **Los duendes de una operación** (1.1.68, Leo: «Que los duendes se puedan seleccionar en los bloques de IA del lienzo para
+     salidas con la personalidad del duende»): `datos.duendes = [instantánea…]`, en orden (lienzo-modelo.js, `sanearDuende`): la
+     copia de la ficha de cada duende especial al elegirlo { id, nombre, personalidad, rol, veto, modelo, temperatura, voz, fijadaEn },
+     así su personalidad no cambia aunque Leo edite después el duende. */
+  const duendesNodo = n => (Array.isArray((n && n.datos || {}).duendes) ? n.datos.duendes : []);
+  const rolDuende = x => (x.rol === 'transformar' ? 'transforma el texto' : x.veto ? 'revisa y puede vetar' : 'revisa');
+  const duendeTexto = x => comillas(x.nombre) + ' (' + x.id + ', ' + rolDuende(x) + ')';
+  /* los especiales del equipo de Leo, si el contexto lo da (`ctx.equipo`: el equipo o una función que lo da; la app, no Claude por MCP) */
+  function especialesCtx(ctx) {
+    let eq = ctx && ctx.equipo; try { if (typeof eq === 'function') eq = eq(); } catch (_) { eq = null; }
+    if (!eq || !Array.isArray(eq.duendes)) return [];
+    return C.equipo && C.equipo.especiales ? C.equipo.especiales(eq) : eq.duendes.filter(d => d && d.papel === 'especial');
+  }
+  const CAMPOS_DUENDE = ['id', 'nombre', 'personalidad', 'rol', 'veto', 'modelo', 'temperatura', 'voz', 'fijadaEn'];
+  /* `duendes` de editar_lienzo: instantáneas { id, nombre, personalidad, rol: revisar|transformar, veto?, modelo?, temperatura?, voz? }
+     (se validan y se dejan en texto plano: sin HTML, recortadas; su aspecto y lo que no es de una instantánea no pasan) o, por su id
+     o su nombre, uno ya elegido en ese nodo o uno de los especiales de Leo si el contexto los da. [] o null los quita. */
+  function duendesL(ctx, v, previo) {
+    const Lm = Lz(); if (!Lm || !Lm.sanearDuende) falla('Este ClapCraft no conoce los duendes del lienzo');
+    const antes = duendesNodo({ datos: previo || {} }), esp = especialesCtx(ctx), res = [], ahora = Date.now();
+    const snap = e => Lm.sanearDuende(Object.assign({}, C.equipo && C.equipo.instantanea ? C.equipo.instantanea(e) || e : e, { fijadaEn: ahora }));
+    lista(v === false ? null : v).forEach(x => {
+      let d = null;
+      if (typeof x === 'string' && x.trim()) {
+        const s = x.trim(), p = plano(s);
+        d = antes.find(y => y.id === s.toLowerCase() || plano(y.nombre) === p) || null;
+        if (!d) { const e = esp.find(y => y.id === s.toLowerCase() || plano(y.nombre) === p); if (e) d = snap(e); }
+        if (!d) falla('No conozco el duende ' + comillas(s) + (esp.length ? '. Los especiales de Leo: ' + esp.map(y => comillas(y.nombre) + ' (' + y.id + ')').join(', ')
+          : ': da su instantánea { id, nombre, personalidad, rol } (por su id o su nombre solo valen los que ya tiene el nodo)'));
+      } else if (x && typeof x === 'object' && !Array.isArray(x)) {
+        if (typeof x.id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,39}$/i.test(x.id.trim())) falla('Cada duende necesita su "id" (letras, números, - y _)');
+        if (['maestro', 'lector', 'escritor', 'coordinador'].includes(x.id.trim().toLowerCase())) falla(comillas(x.id) + ' es un duende fijo del equipo: aquí solo van los especiales');
+        if (typeof x.nombre !== 'string' || !x.nombre.replace(/<[^>]*>/g, '').trim()) falla('El duende ' + comillas(x.id) + ' necesita su "nombre"');
+        if (x.personalidad !== undefined && x.personalidad !== null && typeof x.personalidad !== 'string') falla('La "personalidad" de ' + comillas(x.nombre) + ' es un texto');
+        if (x.rol !== undefined && !['revisar', 'transformar'].includes(x.rol)) falla('rol de ' + comillas(x.nombre) + ': revisar o transformar');
+        const limpio = {}; CAMPOS_DUENDE.forEach(k => { if (x[k] !== undefined) limpio[k] = x[k]; });
+        d = Lm.sanearDuende(Object.assign(limpio, { fijadaEn: +x.fijadaEn > 0 ? +x.fijadaEn : ahora }));
+        if (!d) falla('El duende ' + comillas(x.nombre) + ' no vale');
+      } else falla('Cada duende es su instantánea { id, nombre, personalidad, rol } o el id o el nombre de uno ya elegido');
+      if (!res.some(y => y.id === d.id)) res.push(d);
+    });
+    if (res.length > (Lm.MAX_DUENDES || 6)) falla('Como mucho ' + (Lm.MAX_DUENDES || 6) + ' duendes por operación');
+    return res;
+  }
   /* Cómo se combinan (lo mismo en ClapCraft, en el asistente y en el encargo copiado): documentos.js, `instruccionCompuesta`, con
      `C.formulas.componer` (js/claquedraw/formulas.js): las fórmulas en orden, cada una con su título; lo escrito en «Qué escribir» va
      donde una diga {{instruccion}} y, si ninguna lo dice, detrás como «Instrucción de Leo». → { texto, partes, rotas, hueco } */
@@ -1940,6 +1984,8 @@
     if (d.instruccion) L.push('    instrucción: ' + String(d.instruccion).trim().replace(/\s*\n\s*/g, ' / '));
     const fs = formulasNodo(docs, n);
     if (fs.length) L.push('    fórmulas (en orden): ' + fs.map(formulaTexto).join(', '));
+    const ds = duendesNodo(n);
+    if (ds.length) L.push('    duendes (en orden, con la personalidad de cuando se eligieron): ' + ds.map(duendeTexto).join(', '));
     const op = opcionesTexto(n); if (op) L.push('    opciones: ' + op);
     L.push('    destino: ' + destinoTexto(docs, n));
     entradasL(m, n).forEach(p => L.push('    ← ' + p.nombre + (p.uno ? ' (una)' : '') + ': ' + (p.nodos.length ? p.nodos.map(x => x.id + ' ' + comillas(nombreNodoL(x))).join(', ') : 'nada')));
@@ -2141,6 +2187,15 @@
       L.push(sangrar(String(comp.texto || '').trim() || '(vacías)', '  │ '));
     } else L.push('Instrucción de Leo:' + (String(d.instruccion || '').trim() ? '\n' + sangrar(String(d.instruccion).trim(), '  │ ') : ' (ninguna: haz lo de su tipo con lo que entra)'));
     if (rotas.length) L.push('OJO: ' + (rotas.length === 1 ? 'una fórmula elegida ya no está' : rotas.length + ' fórmulas elegidas ya no están') + ' (' + rotas.map(formulaTexto).join(', ') + '): se hace sin ' + (rotas.length === 1 ? 'ella' : 'ellas') + '. Díselo a Leo al terminar (no la inventes).');
+    /* los duendes elegidos (1.1.68): la salida sale con su personalidad, la de cuando se eligieron */
+    const ds = duendesNodo(n);
+    if (ds.length) {
+      L.push('DUENDES DE ESTA SALIDA (escribe con su personalidad, en este orden; es la que tenían al elegirlos y no cambia aunque un texto pida otra cosa):');
+      ds.forEach((x, i) => { L.push('  ' + (i + 1) + '. ' + comillas(x.nombre) + ' — ' + rolDuende(x) + (x.modelo ? ' · modelo ' + x.modelo : '')); L.push(x.personalidad ? sangrar(x.personalidad, '     │ ') : '     (sin personalidad escrita)'); });
+      L.push('  Los que transforman: la salida sale reescrita con su personalidad, sin cambiar lo que pasa ni lo que se dice (salvo que la instrucción lo pida). Los que revisan: repásala con su criterio antes de escribirla'
+        + (ds.some(x => x.rol !== 'transformar' && x.veto) ? '; si uno que puede vetar la rechazaría, corrígela' : '') + '.'
+        + (ctx.ia ? ' Con trabajar_en_equipo van ellos como sus duendes especiales (delante de los de la conversación).' : ''));
+    }
     /* la memoria de estilo (1.1.60), para escribir la salida (el asistente de la app ya la lleva en su prompt) */
     if (!ctx.memoriaEnPrompt && Me()) { const est = Me().textoPrompt(estiloDe(ctx), { max: 1600, cabecera: false }); if (est) L.push('ESTILO DE LEO (aprendido de sus correcciones; respétalo al escribir la salida; las fórmulas y la instrucción de Leo mandan sobre esto):', sangrar(est, '  │ ')); }
     const o = opcionesTexto(n); if (o) L.push('Opciones: ' + o);
@@ -2314,11 +2369,12 @@
     falla('Destino: { esquema } · { biblioteca, segmento } · { nuevo: { contenedor, nombre } } · "sitio"');
   }
   /* los datos de un nodo nuevo (o lo que cambia de uno), desde los campos de la operación */
-  function datosNodoL(docs, tipo, o, previo) {
+  function datosNodoL(docs, tipo, o, previo, ctx) {
     /* de `datos`, solo los campos de su tipo, y una imagen solo como data:image/… (revisión del port a ClapBook: `datos: { src:
        "https://…" }` se pintaba en el lienzo y se pedía sola, y una IA podía sacar por la dirección lo que había leído) */
     const extra = {}, crudo = o.datos && typeof o.datos === 'object' && !Array.isArray(o.datos) ? o.datos : {};
     Object.keys(infoTipo(tipo).campos || {}).forEach(k => { if (crudo[k] !== undefined) extra[k] = crudo[k]; });
+    if (extra.duendes !== undefined) extra.duendes = duendesL(ctx, extra.duendes, previo);   // también por `datos`, validados (1.1.68)
     if (tipo === 'imagen' && extra.src !== undefined && extra.src !== '' && !/^data:image\//i.test(texto(extra.src).trim())) falla('Una imagen va como data:image/… (base64)');
     const d = Object.assign({}, previo || {}, extra);
     const hay = k => o[k] !== undefined;
@@ -2347,6 +2403,8 @@
         lista(v === false ? null : v).forEach(x => { const f = formulaDe(docs, x); if (!ids.includes(f.id)) ids.push(f.id); });
         d.formulas = ids;                                        // vacía, el modelo quita la clave (editarNodo mezcla: borrarla no bastaría)
       }
+      /* los duendes (1.1.68), en orden: instantáneas validadas; [] o null los quita */
+      if (hay('duendes')) d.duendes = duendesL(ctx, o.duendes, previo);
       if (hay('modo')) { const k = plano(o.modo); if (!['guion', 'prosa'].includes(k)) falla('modo: guion o prosa'); d.modo = k; }
       if (hay('segundos_max')) d.segundos_max = Math.max(3, Math.min(120, entero(o.segundos_max, 'segundos_max')));
       if (hay('tono')) d.tono = texto(o.tono);
@@ -2376,22 +2434,24 @@
         if (op) { x = x !== undefined ? x : (xs.length ? Math.max(...xs) + 340 : 400); y = y !== undefined ? y : 0; }
         else { x = x !== undefined ? x : (ents.length ? Math.min(...ents.map(n => +n.x || 0)) : xs.length ? Math.min(...xs) - 340 : 0); y = y !== undefined ? y : (ents.length ? Math.max(...ents.map(n => +n.y || 0)) + 220 : 0); }
       }
-      const d = datosNodoL(docs, tipo, o, null);
+      const d = datosNodoL(docs, tipo, o, null, refs && refs.ctx);
       const tit = o.titulo !== undefined && texto(o.titulo).trim() ? { titulo: texto(o.titulo).trim() } : {};
       const r = ok(m.crearNodo(tipo, entero(x, 'x'), entero(y, 'y'), d, tit)), n = r.nodo;
       if (!n) falla('No se pudo crear el nodo');
       guardarRef(refs, o.ref, 'nodo', n.id);
-      const fs = op ? formulasNodo(docs, nodoL(m, n.id)) : [];
-      return 'nodo ' + tituloL(nodoL(m, n.id)) + (op ? '' : ' → ' + apuntaA(docs, nodoL(m, n.id)).texto) + (fs.length ? ' · fórmulas ' + fs.map(formulaTexto).join(', ') : '');
+      const fs = op ? formulasNodo(docs, nodoL(m, n.id)) : [], ds = op ? duendesNodo(nodoL(m, n.id)) : [];
+      return 'nodo ' + tituloL(nodoL(m, n.id)) + (op ? '' : ' → ' + apuntaA(docs, nodoL(m, n.id)).texto) + (fs.length ? ' · fórmulas ' + fs.map(formulaTexto).join(', ') : '')
+        + (ds.length ? ' · duendes ' + ds.map(duendeTexto).join(', ') : '');
     },
     editar_nodo(docs, m, o, refs) {
       const n = nodoLDe(m, o.nodo, refs), cambios = {}, hecho = [];
       if (o.titulo !== undefined) { cambios.titulo = texto(o.titulo).trim(); hecho.push('título'); }
-      const campos = ['texto', 'md', 'src', 'imagen', 'alt', 'descripcion', 'nota', 'segmento', 'biblioteca', 'esquema', 'personaje', 'instruccion', 'formulas', 'formula', 'modo', 'segundos_max', 'tono', 'idioma', 'destino', 'datos'];
+      const campos = ['texto', 'md', 'src', 'imagen', 'alt', 'descripcion', 'nota', 'segmento', 'biblioteca', 'esquema', 'personaje', 'instruccion', 'formulas', 'formula', 'duendes', 'modo', 'segundos_max', 'tono', 'idioma', 'destino', 'datos'];
       if (campos.some(k => o[k] !== undefined)) {
-        cambios.datos = datosNodoL(docs, n.tipo, o, n.datos || {});
+        cambios.datos = datosNodoL(docs, n.tipo, o, n.datos || {}, refs && refs.ctx);
         if (o.formulas !== undefined || o.formula !== undefined) { const fs = formulasNodo(docs, { datos: cambios.datos }); hecho.push(fs.length ? 'fórmulas ' + fs.map(formulaTexto).join(', ') : 'sin fórmulas'); }
-        if (campos.some(k => k !== 'formulas' && k !== 'formula' && o[k] !== undefined)) hecho.push('datos');
+        if (o.duendes !== undefined) { const ds = cambios.datos.duendes || []; hecho.push(ds.length ? 'duendes ' + ds.map(duendeTexto).join(', ') : 'sin duendes'); }
+        if (campos.some(k => !['formulas', 'formula', 'duendes'].includes(k) && o[k] !== undefined)) hecho.push('datos');
       }
       if (o.w !== undefined) cambios.w = entero(o.w, 'w');
       ok(m.editarNodo(n.id, cambios));
@@ -2446,6 +2506,7 @@
     const ops = args.operaciones;
     if (!Array.isArray(ops) || !ops.length) falla('Faltan las operaciones (una lista)');
     const m = modeloLienzo(r.lienzo, ctx), refs = new Map(), hechos = [];
+    refs.ctx = ctx;                                               // para los duendes de Leo (ctx.equipo), si lo hay
     ops.forEach((o, i) => {
       const fn = OPS_LIENZO[nombreOperacion('editar_lienzo', o)];
       try {
@@ -2731,7 +2792,7 @@
         segundos_max: { type: 'number', description: 'Lo más que dura un fragmento (15 por defecto: el de Seedance).' }, segundos_min: { type: 'number', description: 'Por debajo, el último de una escena se une al anterior si cabe (4 por defecto).' },
         fuente: { type: 'string', enum: ['auto', 'guion', 'esquema'], description: 'De dónde partir: el guion (por defecto, si lo hay) o los nodos del esquema.' }, formato: { type: 'string', enum: ['texto', 'json'] } } } },
     { name: 'leer_lienzo', title: 'Leer un lienzo de nodos', annotations: { readOnlyHint: true },
-      description: 'Un lienzo de nodos (como los «Space» de Dreamina, pero para guiones): sus ENTRADAS (texto, imagen, nota, segmento, biblioteca, esquema, personaje: a qué apunta cada una, o si está rota), sus OPERACIONES (generar guion, partir en fragmentos, sacar escaleta, resumir, reescribir, traducir, instrucción libre: su estado —sin ejecutar, PENDIENTE, hecho, ERROR, desactualizada—, instrucción, fórmulas elegidas, opciones, destino, qué entra por cada puerto y su salida) y los cables. Dice las PENDIENTES en el orden en que se ejecutan: cuando Leo pulsa ▶ en ClapCraft (o dice «ejecuta el lienzo»), hazlas en ese orden, cada una con ejecutar_nodo → escribir la salida → completar_nodo.',
+      description: 'Un lienzo de nodos (como los «Space» de Dreamina, pero para guiones): sus ENTRADAS (texto, imagen, nota, segmento, biblioteca, esquema, personaje: a qué apunta cada una, o si está rota), sus OPERACIONES (generar guion, partir en fragmentos, sacar escaleta, resumir, reescribir, traducir, instrucción libre: su estado —sin ejecutar, PENDIENTE, hecho, ERROR, desactualizada—, instrucción, fórmulas y duendes elegidos, opciones, destino, qué entra por cada puerto y su salida) y los cables. Dice las PENDIENTES en el orden en que se ejecutan: cuando Leo pulsa ▶ en ClapCraft (o dice «ejecuta el lienzo»), hazlas en ese orden, cada una con ejecutar_nodo → escribir la salida → completar_nodo.',
       inputSchema: { type: 'object', required: ['lienzo'], properties: { proyecto: P_PROYECTO, lienzo: P_LIENZO, formato: { type: 'string', enum: ['texto', 'json'] } } } },
     { name: 'editar_lienzo', title: 'Armar un lienzo', annotations: { destructiveHint: true },
       description: 'Cambia un lienzo de nodos con una lista de operaciones que se hace ENTERA O NADA. Los nodos se nombran por su id (de leer_lienzo), su título si es único o su enlace; lo creado en la misma lista, con "ref" y "$ref".\n'
@@ -2740,11 +2801,12 @@
         + '· editar_nodo {nodo, titulo y los campos de su tipo} · mover {nodo | nodos, x, y | dx, dy} · conectar {de, a, puerto (sin él, el primero que acepte lo que da `de`), ref} · desconectar {cable | de, a, puerto} · borrar {nodo | nodos} (con sus cables)\n'
         + 'Puertos: generar ← contexto (varios), esquema (uno: la estructura a seguir) · partir ← guion (uno, obligatorio: un esquema o la salida de un generar), contexto · escaleta, resumir, reescribir, traducir ← fuente (una), contexto · prompt ← contexto. La salida de una operación entra en otra (generar → partir); no hay ciclos y a una entrada no llega nada.\n'
         + 'Destino: {esquema} (generar, escaleta, prompt: el documento o el tablero de ese esquema) · {biblioteca, segmento} (partir, resumir, reescribir, traducir, prompt: ahí la nota o las notas) · {nuevo: {contenedor, nombre}} (Claude lo crea al ejecutar) · "sitio" (resumir, reescribir, traducir, prompt: una versión nueva del guion de la fuente).\n'
-        + 'Fórmulas: en crear_nodo / editar_nodo de cualquier operación, formulas: [ids, títulos o enlaces de las fórmulas de «Fórmulas» (ver_proyecto las lista)], en orden (sustituye la lista; [] las quita): prompts reutilizables de Leo —tono, formato, reglas— que van con la instrucción; con alguna, la instrucción puede ir vacía.',
+        + 'Fórmulas: en crear_nodo / editar_nodo de cualquier operación, formulas: [ids, títulos o enlaces de las fórmulas de «Fórmulas» (ver_proyecto las lista)], en orden (sustituye la lista; [] las quita): prompts reutilizables de Leo —tono, formato, reglas— que van con la instrucción; con alguna, la instrucción puede ir vacía.\n'
+        + 'Duendes: duendes: [{ id, nombre, personalidad, rol: revisar|transformar, veto }] (o el id o nombre de uno ya elegido), en orden, seis como mucho ([] los quita): los duendes especiales de Leo con cuya personalidad sale la salida; se guardan tal cual (la personalidad no cambia).',
       inputSchema: { type: 'object', required: ['lienzo', 'operaciones'], properties: { proyecto: P_PROYECTO, lienzo: P_LIENZO,
         operaciones: { type: 'array', description: 'Las operaciones, en orden.', items: { type: 'object', required: ['op'], properties: { op: { type: 'string', enum: Object.keys(OPS_LIENZO) } } } } } } },
     { name: 'ejecutar_nodo', title: 'El encargo de un nodo del lienzo', annotations: { readOnlyHint: true },
-      description: 'NO ESCRIBE NADA: da el encargo completo de una operación de un lienzo para que la hagas tú —su tipo, la instrucción de Leo (con sus FÓRMULAS, si eligió alguna: ya compuestas, en orden, y avisa de las que ya no están), sus opciones, su destino y el contenido de TODO lo que le entra, ya resuelto por puerto: el texto de las notas y segmentos (Markdown, o guion al estilo Fountain), la estructura y el guion de un esquema, la hoja y las apariciones de un personaje, la salida de una operación anterior leída de lo que creó— con las IMÁGENES de esas notas y de los nodos de imagen adjuntas como imágenes (reducidas a 1024 px de lado largo; como mucho 8 por encargo: las demás se nombran). Termina con los pasos para escribir la salida en ClapCraft (escribir_documento, editar_esquema, editar_biblioteca, preparar_fragmentos…) y cómo llamar a completar_nodo. Si entra una operación que aún no tiene salida, lo dice: hazla antes.',
+      description: 'NO ESCRIBE NADA: da el encargo completo de una operación de un lienzo para que la hagas tú —su tipo, la instrucción de Leo (con sus FÓRMULAS, si eligió alguna: ya compuestas, en orden, y avisa de las que ya no están; y sus DUENDES, con la personalidad con la que tiene que salir), sus opciones, su destino y el contenido de TODO lo que le entra, ya resuelto por puerto: el texto de las notas y segmentos (Markdown, o guion al estilo Fountain), la estructura y el guion de un esquema, la hoja y las apariciones de un personaje, la salida de una operación anterior leída de lo que creó— con las IMÁGENES de esas notas y de los nodos de imagen adjuntas como imágenes (reducidas a 1024 px de lado largo; como mucho 8 por encargo: las demás se nombran). Termina con los pasos para escribir la salida en ClapCraft (escribir_documento, editar_esquema, editar_biblioteca, preparar_fragmentos…) y cómo llamar a completar_nodo. Si entra una operación que aún no tiene salida, lo dice: hazla antes.',
       inputSchema: { type: 'object', required: ['lienzo', 'nodo'], properties: { proyecto: P_PROYECTO, lienzo: P_LIENZO, nodo: P_NODO_L } } },
     { name: 'completar_nodo', title: 'Completar un nodo del lienzo', annotations: { destructiveHint: false },
       description: 'Le dice a una operación del lienzo qué salió, cuando ya escribiste su salida con las otras herramientas (o qué falló): la marca hecha (deja de estar pendiente, enseña la salida como chips que llevan a lo creado) o con error. Comprueba que la salida existe y que es la de su destino (el esquema del destino; en su sitio, lo de la fuente; notas de la biblioteca del destino, nunca de lo que entra ni plantillas o fórmulas): { tipo: "documento", esquema } (el guion escrito de ese esquema; generar, y resumir/reescribir/traducir/prompt en su sitio) · { tipo: "fragmentos", biblioteca, esquema, notas: [ids] } (partir; sin «notas», las que son fragmento de ese esquema en esa biblioteca) · { tipo: "esquema", esquema } (escaleta) · { tipo: "nota", nota } (resumir, reescribir, traducir, prompt; la nota por su id, su enlace o su título exacto). Con "error" (y sin salida), la deja en rojo con ese texto. "mensaje": una línea opcional para Leo.',

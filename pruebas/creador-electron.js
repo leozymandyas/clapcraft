@@ -114,6 +114,20 @@ app.whenReady().then(async () => {
     comprobar('b) el retrato del motor se carga (' + modo + ')', !!modo);
     comprobar('b) sin nada elegido, todo «de serie»', JSON.stringify(await actual()) === '{}', JSON.stringify(await actual()));
     await captura('1-creador-claro');
+    /* de ClapBook: con el panel del asistente a lo más ancho (720 px) la capa se estrecha y la ventana no: la forma estrecha va por la
+       capa (`@container`; con `@media` las filas se quedaban con su columna de 150 px y el valor entre ‹ › en 12 px) */
+    await js(`window.__cb = document.body.className; window.__asa = document.documentElement.style.getPropertyValue('--as-ancho');
+      document.body.classList.add('con-asistente'); document.body.classList.remove('asistente-plegado'); document.documentElement.style.setProperty('--as-ancho', '720px'); await W(200); return true;`);
+    const anchos = JSON.parse(await js(`return JSON.stringify([...document.querySelectorAll('.cd-fila:not([hidden]) .cd-valor')].filter(v => v.offsetParent).map(v => Math.round(v.getBoundingClientRect().width)));`));
+    comprobar('b) con el asistente a 720 px, el valor entre ‹ › se lee (≥ 60 px)', anchos.length > 0 && anchos.every(w => w >= 60), JSON.stringify(anchos));
+    await captura('1b-creador-asistente-720');
+    await js(`document.body.className = window.__cb; if (window.__asa) document.documentElement.style.setProperty('--as-ancho', window.__asa); else document.documentElement.style.removeProperty('--as-ancho'); await W(150); return true;`);
+    /* de ClapBook: el retrato sigue al tema de la app con el creador abierto (antes se quedaba en el de cuando se abrió) */
+    await js(`const w = document.querySelector('.cd-marco').contentWindow, D = w.Duendes; w.__temas = []; if (typeof D.tema === 'function' && !D.tema.__espia) { const o = D.tema; D.tema = function (t) { w.__temas.push(t); return o.apply(this, arguments); }; D.tema.__espia = true; } return true;`);
+    radioTema('Oscuro').click(); await espera(400);
+    comprobar('b) cambiar el tema con el creador abierto cambia el de su retrato', (await js(`return JSON.stringify(document.querySelector('.cd-marco').contentWindow.__temas || []);`)).includes('dark'),
+      await js(`return JSON.stringify(document.querySelector('.cd-marco').contentWindow.__temas || []);`));
+    radioTema('Claro').click(); await espera(400);
 
     /* ---------- c) ‹ › con el ratón: cuerpo humano ---------- */
     for (let i = 0; i < 6 && (await actual()).cuerpo !== 'humano'; i++) await aClic(`${fila('cuerpo')}.querySelector('.cd-flecha[data-paso="1"]')`, { tras: 200 });
@@ -127,7 +141,8 @@ app.whenReady().then(async () => {
     /* ---------- d) el teclado: flechas en la fila enfocada ---------- */
     await aClic(`${fila('complexion')}.querySelector('.cd-fila-n')`, { tras: 150 });
     comprobar('d) un clic en la fila la enfoca', await js(`return document.activeElement === ${fila('complexion')};`));
-    await js(`window.__abajo = 0; window.__oyente = () => { window.__abajo++; }; document.addEventListener('keydown', window.__oyente); return true;`);
+    await js(`window.__abajo = 0; window.__oyente = () => { window.__abajo++; }; document.addEventListener('keydown', window.__oyente);
+      window.__arriba = 0; window.__oyenteArriba = () => { window.__arriba++; }; document.addEventListener('keyup', window.__oyenteArriba); return true;`);
     await tecla('Right'); await tecla('Right');
     comprobar('d) → cambia la complexión', !!(await actual()).complexion, JSON.stringify(await actual()));
     const comp = (await actual()).complexion;
@@ -138,6 +153,8 @@ app.whenReady().then(async () => {
     await tecla('Right');
     comprobar('d) y → cambia esa (altura)', !!(await actual()).altura, JSON.stringify(await actual()));
     comprobar('d) las teclas no llegan a la app de debajo', await js(`return window.__abajo === 0;`), await js(`return window.__abajo;`));
+    /* de ClapBook: su `keyup` tampoco (las teclas se cortaban en captura, pero el `keyup` seguía hasta el tablero) */
+    comprobar('d) ni su keyup', await js(`const n = window.__arriba; document.removeEventListener('keyup', window.__oyenteArriba); return n === 0;`), await js(`return window.__arriba;`));
     /* las pestañas con el teclado */
     await aClic(pestana('cuerpo'), { tras: 150 });
     await tecla('Right', [], 200); await tecla('Right', [], 200);
@@ -227,6 +244,12 @@ app.whenReady().then(async () => {
     await tecla('Escape', [], 400);
     comprobar('i) Esc cierra sin guardar', !(await js(`return Claquedraw.creadorDuende.abierto();`)) && JSON.stringify(await guardado(pid)) === JSON.stringify(g));
     comprobar('i) Esc no llegó a la app de debajo', await js(`return window.__abajo === 0;`), await js(`return window.__abajo;`));
+    /* de ClapBook: ⌘W cierra el creador sin guardar (y no sigue hasta la app de debajo) */
+    await aClic(`document.querySelector('[data-gd-crear-duende]')`, { tras: 500 });
+    await aClic(`document.querySelector('.cd-azar')`, { tras: 300 });
+    await tecla('w', ['meta'], 400);
+    comprobar('i) ⌘W cierra sin guardar', !(await js(`return Claquedraw.creadorDuende.abierto();`)) && JSON.stringify(await guardado(pid)) === JSON.stringify(g), JSON.stringify(await guardado(pid)));
+    comprobar('i) y el proyecto sigue abierto', await js(`return !!Claquedraw.app.abiertoId();`));
     await js(`document.removeEventListener('keydown', window.__oyente); return true;`);
 
     /* ---------- j) los cuatro temas ---------- */

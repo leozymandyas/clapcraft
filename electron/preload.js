@@ -84,6 +84,18 @@ contextBridge.exposeInMainWorld('editorAPI', {
     escribir: t => ipcRenderer.invoke('teatro:escribir', t || {}),
     alCambiar: cb => ipcRenderer.on('teatro:cambio', () => cb())
   },
+  /* los duendes del asistente (1.1.68, electron/equipo.js): el equipo entero —modo, rondas y cada duende— de todos los proyectos, en
+     los datos de la app; `alCambiar(fn)` avisa cuando otra ventana lo cambió, con lo que escribió (`fn(equipo)`, sin normalizar), y
+     devuelve con qué dejar de oír */
+  equipo: {
+    leer: () => ipcRenderer.invoke('equipo:leer'),
+    escribir: datos => ipcRenderer.invoke('equipo:escribir', datos || {}),
+    alCambiar: fn => {
+      const f = (_e, datos) => { try { fn(datos || null); } catch (_) {} };
+      ipcRenderer.on('equipo:cambio', f);
+      return () => ipcRenderer.removeListener('equipo:cambio', f);
+    }
+  },
   /* salir de la app (1.1.55): Electron pide a la ventana que escriba lo pendiente y espera su respuesta */
   onVaciar: cb => ipcRenderer.on('app:vaciar', async (_e, n) => {
     let ok = false; try { ok = await cb(); } catch (_) {}

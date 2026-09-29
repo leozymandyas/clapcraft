@@ -20,8 +20,9 @@
   const EXT = 'clapcraft', SIN_TITULO = 'Sin título';
   /* .clapcraft: { app, formato, nombre, documentos }, con gzip. 3 desde la 1.1.61 (lienzos, fórmulas, memoria de estilo: la 1.1.60
      los escribía con el 2 de la 1.1.55, que los tiraba al guardar); 4 desde la 1.1.67 (el duende v2 de un personaje y los ajustes de
-     escenario de una obra: la 1.1.66 los quitaba al normalizar); uno mayor que este se lee pero no se escribe (`formatoDe`) */
-  const FORMATO_ARCHIVO = 4;
+     escenario de una obra: la 1.1.66 los quitaba al normalizar); 5 desde la 1.1.68 (los duendes de una operación del lienzo,
+     `datos.duendes`: la 1.1.67 los tiraba al autoguardar); uno mayor que este se lee pero no se escribe (`formatoDe`) */
+  const FORMATO_ARCHIVO = 5;
   const $ = id => document.getElementById(id);
   const api = window.editorAPI;                                // puente de Electron, si existe
   const escritorio = !!(api && api.isElectron);
@@ -734,7 +735,7 @@
      vuelve a poner) y se apagan sin nada a ese lado. También Cmd/Ctrl+[ y ]. */
   const MAX_HISTORIA = 40;
   /* el creador de duendes o el teatro tapan la app: mientras están, no se navega por debajo (1.1.67) */
-  const capaTeatro = () => !!((C.creadorDuende && C.creadorDuende.abierto()) || (C.duendes && C.duendes.abierto && C.duendes.abierto()));
+  const capaTeatro = () => !!((C.creadorDuende && C.creadorDuende.abierto()) || (C.duendes && C.duendes.abierto && C.duendes.abierto()) || equipoUIAbierto());
   function irHistoria(salto) {
     if (capaTeatro()) return;
     const t = pestanaActiva(); if (!t || pantalla !== 'proyecto') return;
@@ -1374,7 +1375,9 @@
   function cerrarLoDeDelante() {
     if (pantalla === 'nuevo') { cancelarProyecto(); return; }
     if (C.creadorDuende && C.creadorDuende.abierto()) { C.creadorDuende.cerrar(); return; }   // el creador de duendes (1.1.67), sin guardar
+    if (equipoUIAbierto()) { C.equipoUI.cerrar(); return; }   // «Duendes del asistente» (1.1.68)
     if (C.duendes && C.duendes.abierto && C.duendes.abierto()) { C.duendes.cerrar(); return; }   // el teatro
+    if (C.asistente && C.asistente.tallerAbierto && C.asistente.tallerAbierto()) { C.asistente.cerrarTaller(); return; }   // el taller de los duendes (1.1.68)
     if (C.gestor.ventanaAbierta && C.gestor.ventanaAbierta()) { C.gestor.cerrarVentana(); return; }   // la ventana de una nota, lo primero (como en Notion)
     if (pestanas && pestanas.lista.length > 1) { cerrarPestanaElemento(pestanas.activa); return; }
     cerrarProyecto();
@@ -1394,6 +1397,7 @@
     else if (est.archivo) { if (!await escribirArchivo(id) && !await T.tablero.confirmar('No se pudo escribir en ' + est.archivo.nombre + '. ¿Cerrar «' + g.nombre + '» de todas formas? Se perderían los cambios.', 'Cerrar')) return; }
     else if (!esVirgen(g) && !await T.tablero.confirmar('¿Cerrar «' + g.nombre + '»? No está guardado en ningún archivo y se perderá.', 'Cerrar')) return;
     if (est.archivo) recordarReciente(id);
+    if (C.equipoUI && C.equipoUI.guardarYa) { try { await C.equipoUI.guardarYa(); } catch (_) {} }   // lo pendiente de los duendes, antes de que se vaya la ventana
     quitarDeLaVentana(id);
     quedarSinProyectos(); informarVentana();
     await cerrarVentana(forzar);
@@ -2531,6 +2535,8 @@
   function historia(accion, tablero) {
     if (C.duendes && C.duendes.abierto()) return;           // con el teatro delante no se deshace nada de debajo
     if (C.creadorDuende && C.creadorDuende.abierto()) { C.creadorDuende.historia(accion); return; }   // el creador de duendes: su historial (1.1.67)
+    /* «Duendes del asistente» (1.1.68): lo de debajo no se toca; en un campo del diálogo (la personalidad, el nombre), el suyo */
+    if (equipoUIAbierto()) { const a = document.activeElement; if (a && (a.matches('input, textarea') || a.isContentEditable)) document.execCommand(accion); return; }
     /* con el visor de una imagen abierto, Deshacer y Rehacer son suyos (si no, deshacían el documento o el tablero de debajo) */
     if (window.Anotar && Anotar.abierto()) { if (Anotar.editando()) Anotar[accion === 'undo' ? 'deshacer' : 'rehacer'](); return; }
     const marco = $('editorMarco'), a = document.activeElement;
@@ -2653,6 +2659,11 @@
     nuevaPestana: () => nuevaPestana(), atras: () => irHistoria(-1), adelante: () => irHistoria(1),
     historialClaude: () => abrirHistorialClaude(),
     memoriaEstilo: () => { if (C.memoriaUI && C.memoriaUI.abrir) C.memoriaUI.abrir(); },   // Claude › Memoria de estilo… (1.1.60)
+    duendesAsistente: () => abrirEquipoUI(),                   // Claude › Duendes del asistente… (1.1.68)
+    /* el respaldo de los duendes (para llevarlos a otro equipo de cómputo): exportar no necesita la ventana; importar la abre y luego
+       el selector de archivos */
+    exportarDuendes: () => { if (C.equipoUI && C.equipoUI.exportar) C.equipoUI.exportar(); },
+    importarDuendes: () => { if (C.creadorDuende && C.creadorDuende.abierto()) return; if (C.equipoUI && C.equipoUI.importar) C.equipoUI.importar(); },
     asistente: () => alternarAsistente(), configurarIA: () => configurarIA(),   // Claude › Asistente con otra IA… / Configurar IA… (1.1.59)
     tutorialIA: () => { if (C.asistente && C.asistente.tutorial) C.asistente.tutorial(); else configurarIA(); },
     duendes: () => abrirDuendes(),                            // Ver › Teatro… (1.1.62)
@@ -2823,6 +2834,7 @@
     let cambio = false;
     const ctx = { docs: d, proyecto: { nombre: g.nombre, ruta: a ? (a.ruta || a.nombre) : null, vivo: true }, origen: op.origen || 'Claude', ia: !!op.ia,
       teatroGlobal: { leer: () => modsGlobales, escribir: t => escribirModsGlobales(t) },   // los mods del teatro, de todos los proyectos (1.1.64)
+      equipo: () => equipoActual(),                            // los duendes del asistente (1.1.68): `editar_lienzo` los acepta por su nombre
       /* la memoria de estilo (1.1.60, js/claquedraw/memoria-ui.js): la general, de este equipo; el asistente ya la lleva en su prompt */
       memoriaGeneral: C.memoriaUI && C.memoriaUI.ctxGeneral ? C.memoriaUI.ctxGeneral() : null, memoriaEnPrompt: !!op.memoriaEnPrompt,
       cambio: () => { cambio = true; }, estado: estadoEnPantalla, mostrar: mostrarClaude, ponerNombre: ponerNombreProyecto,
@@ -3150,6 +3162,81 @@
     const a = asis(); if (!a) return;
     if (a.configurar) a.configurar(); else if (a.abrir) a.abrir();
   }
+  /* ---------- el equipo de duendes del asistente (1.1.68) ----------
+     Leo, 28-09-2026: «El "coordinador" que use el modelo de deepseek-v4-pro y el resto el barato… Que los agentes personalizados
+     (al igual que los personajes) tengan su duende propio… Incorpora un duende especial por defecto que se encargue de ver que el texto
+     esté bien formateado… El asistente IA es un duende también, que sea "El duende maestro"». Los datos y el trabajo son de
+     js/claquedraw/equipo.js (`C.equipo`), el diálogo «Duendes del asistente» de js/claquedraw/equipo-ui.js (`C.equipoUI`) y el panel
+     del chat, de asistente.js. El equipo vive **en todos los proyectos** (como los mods del teatro): en los datos de la app
+     (electron/equipo.js, `editorAPI.equipo`) o, en el navegador, en el localStorage. Aquí: el almacén, lo último leído (para el
+     asistente, que lo pide sincrónico), los avisos de cambio (también de otras ventanas) y abrir el diálogo. */
+  var CLAVE_EQUIPO = 'guiones.claquedraw.equipo';
+  var equipoApp = null;                                        // lo último leído o escrito, normalizado
+  var alCambioEquipoApp = [];                                  // quién quiere saber que cambió (el asistente)
+  function normalizarEquipo(x) {
+    if (C.equipo && typeof C.equipo.normalizar === 'function') { try { return C.equipo.normalizar(x); } catch (_) { /* tal cual */ } }
+    return x || null;
+  }
+  const apiEquipo = () => (api && api.equipo && typeof api.equipo.leer === 'function' ? api.equipo : null);
+  function avisarEquipo(eq) { equipoApp = eq || equipoApp; alCambioEquipoApp.slice().forEach(fn => { try { fn(equipoApp); } catch (e) { console.error(e); } }); }
+  async function leerEquipoApp() {
+    let x = null;
+    const a = apiEquipo();
+    if (a) { try { x = await a.leer(); } catch (_) { x = null; } }
+    else x = leerJSON(CLAVE_EQUIPO);
+    equipoApp = normalizarEquipo(x);
+    return equipoApp;
+  }
+  async function escribirEquipoApp(eq) {
+    const n = normalizarEquipo(eq);
+    const a = apiEquipo();
+    let r;
+    if (a && typeof a.escribir === 'function') { try { r = await a.escribir(n); } catch (e) { r = { ok: false, error: (e && e.message) || String(e) }; } }
+    else r = { ok: !!escribirJSON(CLAVE_EQUIPO, n) };
+    if (!r || r.ok !== false) { equipoApp = n; avisarEquipo(n); }
+    return r || { ok: true };
+  }
+  function oirEquipoApp(fn) {
+    const a = apiEquipo();
+    if (a && typeof a.alCambiar === 'function') return a.alCambiar(x => fn(normalizarEquipo(x)));
+    const f = e => { if (e.key === CLAVE_EQUIPO) fn(normalizarEquipo(leerJSON(CLAVE_EQUIPO))); };
+    window.addEventListener('storage', f);
+    return () => window.removeEventListener('storage', f);
+  }
+  /* el de ahora: el del diálogo (si está) o lo último leído aquí */
+  function equipoActual() {
+    if (C.equipoUI && typeof C.equipoUI.equipo === 'function') { try { const e = C.equipoUI.equipo(); if (e) return e; } catch (_) { /* el de aquí */ } }
+    return equipoApp;
+  }
+  function equipoUIAbierto() { try { return !!(C.equipoUI && C.equipoUI.abierto && C.equipoUI.abierto()); } catch (_) { return false; } }
+  function abrirEquipoUI(op) {
+    if (!C.equipoUI || typeof C.equipoUI.abrir !== 'function') { T.tablero.avisar('Esta versión de ClapCraft no trae los duendes del asistente'); return false; }
+    if (C.creadorDuende && C.creadorDuende.abierto()) return false;   // no encima del creador de duendes
+    C.equipoUI.abrir(op || {});
+    return true;
+  }
+  /* los modelos que se le pueden poner a un duende (los de DeepSeek del motor, con su precio) */
+  function modelosEquipo() {
+    const M = C.asistenteMotor, t = M && Array.isArray(M.MODELOS) ? M.MODELOS : [];
+    return t.map(m => ({ id: m.id, nombre: m.nombre || m.id, entrada: m.entrada ?? null, salida: m.salida ?? null, nota: m.nota || '' }));
+  }
+  function iniciarEquipo() {
+    oirEquipoApp(eq => { equipoApp = eq || equipoApp; avisarEquipo(equipoApp); });
+    if (C.equipoUI && typeof C.equipoUI.iniciar === 'function') {
+      C.equipoUI.iniciar({
+        leer: () => leerEquipoApp(), escribir: eq => escribirEquipoApp(eq), modelos: modelosEquipo,
+        avisar: (msg, acc) => T.tablero.avisar(msg, acc), confirmar: (msg, si) => T.tablero.confirmar(msg, si),
+        alCambiar: fn => oirEquipoApp(fn),
+        /* el respaldo de los duendes (los diálogos de guardar y abrir son los de equipo-ui.js): la versión que lleva y los mods del
+           teatro, la copia de esta ventana (escribirlos por aquí la pone al día; por editorAPI.teatro, main.js no avisa a quien escribe) */
+        mods: () => modsGlobales, escribirMods: m => escribirModsGlobales(m),
+        version: () => (api && api.version ? api.version() : fetch('package.json').then(r => r.json()).then(j => j.version)).catch(() => null)
+      });
+      if (typeof C.equipoUI.alCambio === 'function') C.equipoUI.alCambio(eq => { if (eq) equipoApp = eq; avisarEquipo(equipoApp); });
+    }
+    leerEquipoApp().then(eq => avisarEquipo(eq)).catch(() => {});
+  }
+
   function iniciarAsistente() {
     const a = C.asistente && C.asistente.iniciar ? C.asistente : null; if (!a || asistenteIniciado) return;
     asistenteIniciado = true;
@@ -3180,7 +3267,10 @@
       abrirFormula: id => { if (!conProyecto() || !C.gestor.abrirFormula) return; volcarLienzo(); volcarTexto(); verVista('documentos'); C.gestor.abrirFormula(id); },
       abrirFormulas: () => verFormulas(),
       memoria: () => (C.memoriaUI && C.memoriaUI.paraPrompt ? C.memoriaUI.paraPrompt() : null),   // la memoria de estilo (1.1.60)
-      origen: modelo => origenIA(modelo)
+      origen: modelo => origenIA(modelo),
+      /* el equipo de duendes (1.1.68): el de este equipo (global, de todos los proyectos), leerlo, oír sus cambios y administrarlo */
+      equipo: () => equipoActual(), leerEquipo: () => (C.equipoUI && C.equipoUI.leer ? C.equipoUI.leer() : leerEquipoApp()), alCambioEquipo: fn => { alCambioEquipoApp.push(fn); },
+      abrirDuendes: op => abrirEquipoUI(op)
     });
   }
   /* otro proyecto en la ventana (o ninguno): el panel pasa a su conversación */
@@ -3571,14 +3661,22 @@
 
   window.addEventListener('beforeunload', () => {
     detenerAsistente();                                        // lo que el asistente estuviera haciendo, parado (1.1.59)
+    if (C.equipoUI && C.equipoUI.guardarYa) { try { C.equipoUI.guardarYa(); } catch (_) {} }   // lo escrito en la ficha de un duende (lo que dé tiempo)
     volcarTodo();
     biblioteca.datos.guiones.forEach(g => { if (sucio(g.id)) escribirArchivo(g.id); });   // lo que dé tiempo
   });
   /* **Salir de la app espera a que se escriba todo** (1.1.55): Electron pregunta a cada ventana antes de salir (Cmd+Q, apagar el
      equipo) y sale cuando todas contestan; antes salía a mitad de la escritura y un proyecto grande quedaba cortado. */
-  if (api && api.onVaciar) api.onVaciar(async () => { detenerAsistente(); try { return await escribirTodo(); } catch (_) { return false; } });
+  if (api && api.onVaciar) api.onVaciar(async () => {
+    detenerAsistente();
+    /* lo que esperaba sus 300 ms en «Duendes del asistente» (el nombre o la personalidad de un duende): `guardarYa` solo escribe lo
+       pendiente, así que con dos ventanas la que no cambió nada no pisa a la otra */
+    if (C.equipoUI && C.equipoUI.guardarYa) { try { await C.equipoUI.guardarYa(); } catch (_) { /* lo que dé tiempo */ } }
+    try { return await escribirTodo(); } catch (_) { return false; }
+  });
 
-  /* el asistente con otra IA (1.1.59), ya con todo lo de la ventana a punto */
+  /* el equipo de duendes del asistente (1.1.68) y el asistente con otra IA (1.1.59), ya con todo lo de la ventana a punto */
+  try { iniciarEquipo(); } catch (e) { console.error('Los duendes del asistente no arrancaron:', e); }
   try { iniciarAsistente(); } catch (e) { console.error('El asistente no arrancó:', e); }
   /* la memoria de estilo (1.1.60, js/claquedraw/memoria-ui.js): la general y lo que escribió la IA, en los datos de la app */
   try {

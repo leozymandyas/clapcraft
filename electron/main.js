@@ -239,6 +239,9 @@ function montarMenu() {
       { type: 'separator' },
       /* otras IAs por API (1.1.59, electron/ia.js): el asistente de la página, que habla con DeepSeek por APIMart, y su configuración */
       { label: 'Asistente con otra IA…', accelerator: 'CmdOrCtrl+Shift+I', click: () => enviar('asistente') },
+      { label: 'Duendes del asistente…', click: () => enviar('duendesAsistente') },   // su equipo: el maestro, los fijos y los especiales (1.1.68)
+      { label: 'Exportar respaldo de los duendes…', click: () => enviar('exportarDuendes') },   // para llevarlos a otro equipo de cómputo
+      { label: 'Importar respaldo de los duendes…', click: () => enviar('importarDuendes') },
       { label: 'Configurar IA…', click: () => enviar('configurarIA') },
       { label: 'Tutorial de la IA…', click: () => enviar('tutorialIA') },
       { label: 'Conectar con Claude…', click: () => { if (claude) claude.conectar(BrowserWindow.getFocusedWindow()); } } ] },
@@ -252,6 +255,8 @@ app.whenReady().then(() => {
   require('./ia').iniciar({ app, ipcMain, safeStorage, shell, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
   /* la memoria de estilo (1.1.60): la general y lo que escribió la IA, en los datos de la app */
   require('./memoria').iniciar({ app, ipcMain, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
+  /* los duendes del asistente (1.1.68): el equipo, de todos los proyectos, en los datos de la app; al cambiarlo se avisa a las demás ventanas */
+  require('./equipo').iniciar({ app, ipcMain, ventanas, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
   /* los mods del teatro de duendes, de todos los proyectos (1.1.64, claude/teatro-global.js): los lee y escribe cada ventana, y si
      cambian (otra ventana, o Claude con un proyecto cerrado) se avisa a las demás */
   (() => {

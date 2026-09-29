@@ -24,7 +24,7 @@ const imagenes = require('./imagenes');                        // las imágenes 
 
 const RAIZ = path.join(__dirname, '..');
 ['js/tramas/modelo.js', 'js/claquedraw/biblioteca.js', 'js/claquedraw/lienzo-modelo.js', 'js/claquedraw/formulas.js', 'js/claquedraw/documentos.js', 'js/claquedraw/plantillas.js', 'js/claquedraw/guion.js',
- 'js/claquedraw/relaciones.js', 'js/claquedraw/conversor.js', 'js/claquedraw/memoria.js', 'js/claquedraw/historial.js', 'js/claquedraw/enlaces.js', 'js/claquedraw/teatro-mods.js', 'js/claquedraw/duendes.js', 'js/claquedraw/herramientas.js'].forEach(f => require(path.join(RAIZ, f)));
+ 'js/claquedraw/relaciones.js', 'js/claquedraw/conversor.js', 'js/claquedraw/memoria.js', 'js/claquedraw/historial.js', 'js/claquedraw/enlaces.js', 'js/claquedraw/teatro-mods.js', 'js/claquedraw/duendes.js', 'js/claquedraw/equipo.js', 'js/claquedraw/herramientas.js'].forEach(f => require(path.join(RAIZ, f)));
 const C = globalThis.Claquedraw;
 const H = C.herramientas;
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8')).version || '0'; } catch (_) { return '0'; } })();
@@ -51,6 +51,18 @@ function candidatos() {
 function almacenTeatro() {
   const fs0 = candidatos(), dir = path.dirname(fs0.find(f => { try { return fs.existsSync(f); } catch (_) { return false; } }) || fs0[0]);
   return require('./teatro-global').crear(dir, C.teatroMods);
+}
+/* los duendes del asistente (1.1.68): el equipo de Leo, de todos los proyectos, en `equipo-duendes.json` junto a su puente.json. Aquí
+   solo se lee (lo escribe la app): `editar_lienzo` acepta por su nombre o su id los duendes especiales de Leo con el proyecto
+   cerrado, como en vivo (ctx.equipo). Si no está o no se entiende, ninguno. */
+function equipoGlobal() {
+  try {
+    const fs0 = candidatos(), dir = path.dirname(fs0.find(f => { try { return fs.existsSync(f); } catch (_) { return false; } }) || fs0[0]);
+    const f = path.join(dir, 'equipo-duendes.json');
+    if (fs.statSync(f).size > 1024 * 1024) return null;             // el almacén de la app no pasa de 1 MB (electron/equipo.js)
+    const x = JSON.parse(fs.readFileSync(f, 'utf8'));
+    return C.equipo && C.equipo.normalizar ? C.equipo.normalizar(x) : null;
+  } catch (_) { return null; }
 }
 const vivo = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 /* El estado de la app: { pid, socket, activo, abiertos: [{ id, nombre, ruta }] } de la que esté en marcha, o null. */
@@ -104,10 +116,11 @@ function escribirProyecto(ruta, datos) {
   atomico.escribirSync(ruta, bytes);
 }
 /* El formato del archivo que escribe esta versión (el mismo que FORMATO_ARCHIVO de js/claquedraw/app.js): 3 desde la 1.1.61, 4 desde la 1.1.67
-   (duende v2 y ajustes de escenario de las obras). Un
+   (duende v2 y ajustes de escenario de las obras), 5 desde la 1.1.68 (los duendes de las operaciones de un lienzo, `datos.duendes`:
+   la 1.1.67 sanea los datos de cada nodo con sus campos y los tiraba al autoguardar). Un
    proyecto de una versión más nueva de ClapCraft se lee, pero no se reescribe: lo que esta no conoce se perdería al guardarlo
    (revisión del port a ClapBook: la 1.1.55 tiraba así los lienzos y la memoria de estilo de la 1.1.60, que llevaba su mismo 2). */
-const FORMATO = 4;
+const FORMATO = 5;
 const masNuevo = datos => +(datos && datos.formato) > FORMATO;
 const AVISO_FORMATO = 'Ese proyecto es de una versión más nueva de ClapCraft: se puede leer, pero para cambiarlo hay que actualizar la app (y con ella este conector de Claude).';
 const nombreDentro = ruta => { try { const d = leerProyecto(ruta); return typeof d.nombre === 'string' && d.nombre.trim() ? d.nombre.trim() : null; } catch (_) { return null; } };
@@ -217,7 +230,7 @@ async function enArchivo(ruta, nombre, args, app) {
   let cambio = false;
   const al = almacenTeatro();
   const ctx = { docs, origen, proyecto: { nombre: datos.nombre || path.basename(ruta, '.clapcraft'), ruta: bonito(ruta), vivo: false }, cambio: () => { cambio = true; },
-    teatroGlobal: { leer: () => al.leer(), escribir: t => al.escribir(t) } };
+    teatroGlobal: { leer: () => al.leer(), escribir: t => al.escribir(t) }, equipo: () => equipoGlobal() };
   const abiertoSinPuente = app && app.p && !app.p.activo && (app.p.abiertos || []).some(x => x.ruta && atomico.mismoArchivo(x.ruta, ruta));
   const meta = H.LISTA.find(t => t.name === nombre);
   if (masNuevo(datos) && !(meta && meta.annotations && meta.annotations.readOnlyHint)) return { ok: false, error: AVISO_FORMATO };

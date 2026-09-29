@@ -74,9 +74,43 @@
      'numero' (positivo), 'modo:a|b' (uno de esos), 'destino' (ver `sanearDestino`), 'ids' (una lista de ids sin repetir; la clave
      **solo si hay alguna**, así lo guardado antes de tenerla sigue igual).
      `formulas` (1.1.60): las fórmulas elegidas en una operación, en su orden (ids de notas de la biblioteca «Fórmulas»,
-     documentos.js; prompts reutilizables que se combinan con la instrucción, js/claquedraw/formulas.js). */
-  const INSTR = ['texto', ''], DEST = ['destino', null], FORM = ['ids', null];
+     documentos.js; prompts reutilizables que se combinan con la instrucción, js/claquedraw/formulas.js).
+     `duendes` (1.1.68, Leo: «Que los duendes se puedan seleccionar en los bloques de IA del lienzo para salidas con la personalidad
+     del duende»): los duendes especiales del asistente elegidos en una operación, en su orden, como **instantáneas** (la copia de su
+     ficha al elegirlos, `C.equipo.instantanea` sin su aspecto): { id, nombre, personalidad, rol, veto, modelo, temperatura, voz,
+     fijadaEn }. Viajan en el archivo (Claude por MCP también los ve) y la personalidad no cambia aunque Leo edite después la ficha;
+     cambiarlos (añadir, quitar, reordenar, actualizar una) cambia la huella de los datos: la operación queda desactualizada
+     ('instruccion'). Seis como mucho; la clave, solo si hay alguno. */
+  const INSTR = ['texto', ''], DEST = ['destino', null], FORM = ['ids', null], DUEN = ['duendes', null];
   const MAX_FORMULAS = 20;
+  const MAX_DUENDES = 6, MAX_PERSONALIDAD = 4000, MAX_NOMBRE_DUENDE = 60;
+  /* los duendes fijos del equipo (el maestro, el lector, la escritora y el coordinador) no se eligen: solo los especiales */
+  const DUENDES_FIJOS = ['maestro', 'lector', 'escritor', 'coordinador'];
+  /* texto plano: sin etiquetas HTML ni caracteres de control (salvo el salto de renglón y el tabulador), recortado */
+  const plano = (v, max) => (typeof v === 'string' ? v : '').replace(/<[^>]*>/g, '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').replace(/\r\n?/g, '\n').trim().slice(0, max);
+  /* Una instantánea de duende saneada (la que llega de la interfaz, de Claude o del archivo), o null si no vale: solo sus campos,
+     en ese orden, sin HTML y recortados. Un id fijo, vacío o raro no vale. */
+  function sanearDuende(x) {
+    if (!esObj(x)) return null;
+    const id = typeof x.id === 'string' ? x.id.trim().toLowerCase() : '';
+    if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(id) || DUENDES_FIJOS.includes(id)) return null;
+    const rol = x.rol === 'transformar' ? 'transformar' : 'revisar';
+    const t = x.temperatura, temp = t !== null && t !== '' && typeof t !== 'boolean' && isFinite(+t) ? Math.round(Math.max(0, Math.min(2, +t)) * 100) / 100 : null;
+    const voces = raiz.Claquedraw && raiz.Claquedraw.teatroMods && Array.isArray(raiz.Claquedraw.teatroMods.VOCES) ? raiz.Claquedraw.teatroMods.VOCES : null;
+    const voz = typeof x.voz === 'string' && /^[a-z][a-z_-]{0,23}$/.test(x.voz.trim()) && (!voces || voces.includes(x.voz.trim())) ? x.voz.trim() : null;
+    return {
+      id, nombre: plano(x.nombre, MAX_NOMBRE_DUENDE).replace(/\s+/g, ' ') || 'Duende especial',
+      personalidad: plano(x.personalidad, MAX_PERSONALIDAD), rol, veto: rol === 'revisar' && x.veto === true,
+      modelo: typeof x.modelo === 'string' && /^[\w.:/@+-]{1,100}$/.test(x.modelo.trim()) ? x.modelo.trim() : null,
+      temperatura: temp, voz, fijadaEn: +x.fijadaEn > 0 ? Math.round(+x.fijadaEn) : 0
+    };
+  }
+  /* la lista: saneadas, sin repetir id (se queda la primera), seis como mucho */
+  function sanearDuendes(v) {
+    const res = [];
+    (Array.isArray(v) ? v : []).forEach(x => { const d = sanearDuende(x); if (d && !res.some(y => y.id === d.id) && res.length < MAX_DUENDES) res.push(d); });
+    return res;
+  }
   const puerto = (id, nombre, acepta, op) => Object.assign({ id, nombre, acepta, uno: false, obligatorio: false }, op || {});
   const contexto = () => puerto('contexto', 'Contexto', TODAS.slice());
   const fuente = acepta => puerto('fuente', 'Fuente', acepta, { uno: true, obligatorio: true });
@@ -91,25 +125,25 @@
     esquema: entrada('Esquema', 'E', ['esquema', 'guion'], { eid: ['id', null] }, 'Un esquema: su tablero (la estructura) y su guion'),
     personaje: entrada('Personaje', 'P', ['personaje'], { personajeId: ['id', null] }, 'Un personaje: su nombre, su hoja y sus apariciones'),
     generar: operacion('Generar guion', 'G', [contexto(), puerto('esquema', 'Esquema', ['esquema'], { uno: true })], ['guion'],
-      { instruccion: INSTR, modo: ['modo:guion|prosa', 'guion'], destino: DEST, formulas: FORM },
+      { instruccion: INSTR, modo: ['modo:guion|prosa', 'guion'], destino: DEST, formulas: FORM, duendes: DUEN },
       { destinos: ['eid', 'nuevo'], nuevoEs: 'esquema', salidas: ['documento'], descripcion: 'Escribe el guion (o la prosa) con lo conectado y lo deja como documento de un esquema' }),
     partir: operacion('Partir en fragmentos', 'F', [puerto('guion', 'Guion', ['guion', 'esquema'], { uno: true, obligatorio: true }), contexto()], ['fragmentos'],
-      { segundos_max: ['numero', 15], destino: DEST, instruccion: INSTR, formulas: FORM },
+      { segundos_max: ['numero', 15], destino: DEST, instruccion: INSTR, formulas: FORM, duendes: DUEN },
       { destinos: ['subId', 'nuevo'], nuevoEs: 'biblioteca', salidas: ['fragmentos'], descripcion: 'Parte un guion en fragmentos cortos, una nota por fragmento' }),
     escaleta: operacion('Sacar escaleta', 'Es', [fuente(['guion', 'esquema', 'texto', 'nota']), contexto()], ['esquema'],
-      { instruccion: INSTR, destino: DEST, formulas: FORM },
+      { instruccion: INSTR, destino: DEST, formulas: FORM, duendes: DUEN },
       { destinos: ['eid', 'nuevo'], nuevoEs: 'esquema', salidas: ['esquema'], descripcion: 'Saca los beats de un guion o de un texto como nodos de un esquema' }),
     resumir: operacion('Resumir', 'R', [fuente(TEXTUALES.slice()), contexto()], ['texto'],
-      { instruccion: INSTR, destino: DEST, formulas: FORM },
+      { instruccion: INSTR, destino: DEST, formulas: FORM, duendes: DUEN },
       { destinos: ['subId', 'enSitio', 'nuevo'], nuevoEs: 'biblioteca', salidas: ['nota', 'documento'], descripcion: 'Resume la fuente en una nota' }),
     reescribir: operacion('Reescribir', 'Re', [fuente(TEXTUALES.slice()), contexto()], ['texto', 'guion'],
-      { tono: ['texto', ''], instruccion: INSTR, destino: DEST, formulas: FORM },
+      { tono: ['texto', ''], instruccion: INSTR, destino: DEST, formulas: FORM, duendes: DUEN },
       { destinos: ['subId', 'enSitio', 'nuevo'], nuevoEs: 'biblioteca', salidas: ['nota', 'documento'], descripcion: 'Reescribe la fuente con otro tono (en una nota o, en su sitio, como versión nueva del guion)' }),
     traducir: operacion('Traducir', 'Tr', [fuente(TEXTUALES.slice()), contexto()], ['texto', 'guion'],
-      { idioma: ['texto', ''], instruccion: INSTR, destino: DEST, formulas: FORM },
+      { idioma: ['texto', ''], instruccion: INSTR, destino: DEST, formulas: FORM, duendes: DUEN },
       { destinos: ['subId', 'enSitio', 'nuevo'], nuevoEs: 'biblioteca', salidas: ['nota', 'documento'], descripcion: 'Traduce la fuente a otro idioma' }),
     prompt: operacion('Instrucción libre', '?', [contexto()], ['texto', 'guion'],
-      { instruccion: INSTR, destino: DEST, formulas: FORM },
+      { instruccion: INSTR, destino: DEST, formulas: FORM, duendes: DUEN },
       { destinos: ['subId', 'eid', 'enSitio', 'nuevo'], nuevoEs: 'biblioteca', salidas: ['nota', 'documento'], descripcion: 'Lo que se le pida a Claude con lo conectado' })
   };
   Object.keys(TIPOS).forEach(k => { TIPOS[k].id = k; TIPOS[k].icono = 'lz-' + k; });
@@ -143,6 +177,7 @@
       else if (clase.startsWith('modo:')) res[k] = clase.slice(5).split('|').includes(v) ? v : defecto;
       else if (clase === 'destino') res[k] = sanearDestino(v, t.destinos || []);
       else if (clase === 'ids') { const l = [...new Set((Array.isArray(v) ? v : []).map(idDe).filter(Boolean))].slice(0, MAX_FORMULAS); if (l.length) res[k] = l; }
+      else if (clase === 'duendes') { const l = sanearDuendes(v); if (l.length) res[k] = l; }
     });
     return res;
   }
@@ -305,7 +340,9 @@
       if (n.tipo === 'prompt' && !instr) res.push({ que: 'dato', aviso: 'Falta la instrucción' });
       if (n.tipo === 'generar' && !hay && !instr) res.push({ que: 'dato', aviso: 'Conecta algo o escribe una instrucción' });
       if (n.tipo === 'traducir' && !String(d.idioma || '').trim()) res.push({ que: 'dato', aviso: 'Falta el idioma' });
-      if (n.tipo === 'reescribir' && !String(d.tono || '').trim() && !instr) res.push({ que: 'dato', aviso: 'Falta el tono o una instrucción' });
+      /* en reescribir, un duende que transforma el texto hace de tono (1.1.68: «con la personalidad del duende») */
+      const transforma = (d.duendes || []).some(x => x.rol === 'transformar');
+      if (n.tipo === 'reescribir' && !String(d.tono || '').trim() && !instr && !transforma) res.push({ que: 'dato', aviso: 'Falta el tono o una instrucción' });
       this.previas(id).forEach(p => { const q = this.nodo(p); if (q.estado !== 'hecho' && q.estado !== 'pendiente') res.push({ que: 'previa', nodo: p, aviso: 'Antes hay que hacer ' + comillas(this.nombre(q)) }); });
       return res;
     }
@@ -525,7 +562,7 @@
     duplicar(ids) { const clip = this.copiar(ids); return clip ? this.pegar(clip) : no('No hay nodos que duplicar'); }
   }
 
-  Object.assign(Lienzo, { TIPOS, CLASES, FAMILIAS, ENTRADAS, OPERACIONES, ESTADOS, sanear, sanearSalida, sanearDatos, huellaDe });
+  Object.assign(Lienzo, { TIPOS, CLASES, FAMILIAS, ENTRADAS, OPERACIONES, ESTADOS, MAX_DUENDES, sanear, sanearSalida, sanearDatos, sanearDuende, sanearDuendes, huellaDe });
   C.Lienzo = Lienzo;
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);

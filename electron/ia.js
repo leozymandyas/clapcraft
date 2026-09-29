@@ -232,6 +232,10 @@ function crearTransporte(o) {
   o = o || {};
   const hacerFetch = o.fetch || ((...a) => fetch(...a));
   const TIEMPO_MAX = o.tiempoMax || 10 * 60 * 1000, TIEMPO_QUIETO = o.tiempoQuieto || 120 * 1000;
+  /* Sin stream (el equipo de duendes, 1.1.68; describir imágenes) no llega nada hasta el final: una respuesta larga de la escritora
+     (8192 tokens) o el razonamiento de deepseek-v4-pro pasan de 120 s sin que la IA se haya parado, y cortarla ahí era pagarla y
+     perderla. Ahí el silencio aguanta más (y el tiempo máximo sigue mandando). */
+  const TIEMPO_QUIETO_SIN_STREAM = o.tiempoQuietoSinStream || 5 * 60 * 1000;
   const REINTENTOS = o.reintentos == null ? 2 : o.reintentos;
   const esperaDe = o.espera || ((n, ms) => ms != null ? ms : [1500, 4000, 8000][n] || 8000);
   const enCurso = new Map();                                     // id → { abortar(motivo) }
@@ -271,7 +275,8 @@ function crearTransporte(o) {
     const yo = { abortar }; enCurso.set(id, yo);
     const tTotal = setTimeout(() => abortar('tiempo'), op.tiempoMax || TIEMPO_MAX);
     let tQuieto = null;
-    const vigilar = () => { clearTimeout(tQuieto); tQuieto = setTimeout(() => abortar('quieto'), TIEMPO_QUIETO); };
+    const quieto = op.sinStream ? Math.max(TIEMPO_QUIETO, TIEMPO_QUIETO_SIN_STREAM) : TIEMPO_QUIETO;
+    const vigilar = () => { clearTimeout(tQuieto); tQuieto = setTimeout(() => abortar('quieto'), quieto); };
     const acc = acumulador();
     let llegoAlgo = false;
 
@@ -878,7 +883,7 @@ function iniciar(o) {
     let x;
     try {
       x = await t.chat({ id: k, mensajes: op.mensajes, tools: op.tools, tool_choice: op.tool_choice, modelo, temperatura: op.temperatura,
-        max_tokens: maxTokens, alTrozo: tr => { if (!wc.isDestroyed()) wc.send('ia:trozo', Object.assign({}, tr, { id })); } });
+        max_tokens: maxTokens, sinStream: !!op.sinStream, alTrozo: tr => { if (!wc.isDestroyed()) wc.send('ia:trozo', Object.assign({}, tr, { id })); } });
     } catch (err) {
       x = { ok: false, codigo: 'respuesta', error: 'Algo falló al hablar con la IA.' };
     } finally { set.delete(k); }

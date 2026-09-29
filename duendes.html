@@ -18,6 +18,10 @@
   if (q.has('retrato')) document.documentElement.classList.add('retrato');
   /* el duende que trabaja en el asistente (?retrato=1&trabajo=1): sobre fondo transparente desde el primer fotograma */
   if (q.has('retrato') && q.has('trabajo')) document.documentElement.classList.add('retrato-transparente');
+  /* el taller del asistente (1.1.68, ?embebido=1&taller=1): solo el escenario con los duendes del equipo y una línea de estado */
+  if (q.has('taller') && !q.has('retrato')) { document.documentElement.classList.add('embebido', 'taller'); document.title = 'Taller de duendes'; }
+  /* la mascota del asistente (1.1.68, ?embebido=1&mascota=1): el duende maestro en un recuadro ancho y bajo, sin interfaz */
+  else if (q.has('mascota') && !q.has('retrato')) { document.documentElement.classList.add('embebido', 'mascota'); if (q.get('fondo') === 'transparente') document.documentElement.classList.add('mascota-transparente'); document.title = 'El duende maestro'; }
 })();
 </script>
 <style>
@@ -67,6 +71,23 @@ html.retrato #portrait{max-width:none; width:100%; margin:0; border:0}
 html.retrato #portrait{background:linear-gradient(to top, #6b4024 0 14%, #3a2214 14% 16%, transparent 16%), linear-gradient(90deg, #6a1020, #8a1426 50%, #6a1020)}
 html.retrato body{background:transparent!important}
 html.retrato-transparente #portrait, html.retrato.retrato-transparente #portrait{background:transparent!important}
+/* **El taller** (1.1.68): el escenario llena el marco (sin controles del teatro ni del generador) y debajo, una línea de estado */
+html.taller, html.taller body{margin:0; height:100%; overflow:hidden}
+html.embebido.taller body{background:#e9e2d0}
+html.embebido.taller[data-theme="dark"] body{background:#141019}
+html.taller .controls, html.taller #theaterCard, html.taller .sobretitulo, html.taller #hint, html.taller aside{display:none!important}
+html.embebido.taller .wrap{padding:0; max-width:none; height:100%; display:flex; flex-direction:column; justify-content:center}
+html.embebido.taller .grid{display:block}
+html.embebido.taller .stage-wrap{width:min(100%, calc((100vh - 30px) * 16 / 9)); min-width:0; margin:0 auto}
+html.embebido.taller #stage{border:2px solid #3a2414; box-shadow:none; cursor:default}
+html.embebido.taller #overlay{left:2px; top:2px}
+/* **La mascota** (1.1.68): un lienzo que llena el marco; el pixel art se escala entero, sin deformarse */
+html.mascota, html.mascota body{margin:0; height:100%; overflow:hidden; background:transparent!important}
+html.mascota .wrap{display:none!important}
+#mascota{position:fixed; inset:0; width:100%; height:100%; display:block; image-rendering:pixelated; cursor:pointer}
+.taller-estado{width:min(100%, calc((100vh - 30px) * 16 / 9)); margin:4px auto 0; padding:0 6px; min-height:22px; font:500 14px/22px "Pixelify Sans", system-ui, sans-serif;
+  color:#3a2414; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center}
+html[data-theme="dark"] .taller-estado{color:#e8dcc0}
 :root{
   --bg:#dfe7d3; --panel:#f3f6ec; --ink:#1f2a22; --muted:#56645a; --line:#1f2a22;
   --gold:#f2c94c; --red:#c8553d; --moss:#4f8c43; --chip:#e4ebd8; --paper:#fffdf5;
@@ -355,6 +376,8 @@ Soy el gerente regional.</pre>
 const W = 320, H = 180, GT = 120, GB = 174, MAX = 40;
 const EMB = document.documentElement.classList.contains('embebido');   // dentro de ClapCraft
 const RETRATO = document.documentElement.classList.contains('retrato');   // solo el retrato de un duende
+const TALLER = document.documentElement.classList.contains('taller');     // el taller del asistente (1.1.68)
+const MASCOTA = document.documentElement.classList.contains('mascota');   // la mascota del asistente (1.1.68)
 const rand = (a, b) => Math.random() * (b - a) + a;
 const ri = (a, b) => Math.floor(rand(a, b + 1));
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -369,7 +392,7 @@ const keyOf = s => norm(s).toUpperCase().replace(/\s+/g, ' ').trim();
 const titleCase = s => s.toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase());
 
 /* ============ Sonido retro ============ */
-const SND = {ctx:null, master:null, on:true, vol:.6, noise:null};
+const SND = {ctx:null, master:null, on:true, vol:.6, noise:null, notas:0};   // `notas`: cuántas se han programado (para las pruebas)
 function audio() {
   if (!SND.ctx) {
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
@@ -395,7 +418,7 @@ function blip(freq, dur, type, vol, o = {}) {
   if (o.vib) { const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 18; lg.gain.value = freq * .04; l.connect(lg); lg.connect(osc.frequency); l.start(t); l.stop(t + dur + .03); }
   const g = envGain(ac, t, dur, vol);
   if (o.lp) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.lp; osc.connect(f); f.connect(g); } else osc.connect(g);
-  osc.start(t); osc.stop(t + dur + .03);
+  osc.start(t); osc.stop(t + dur + .03); SND.notas++;
 }
 function noiseBurst(dur, vol, o = {}) {
   const ac = ready(); if (!ac) return;
@@ -404,7 +427,7 @@ function noiseBurst(dur, vol, o = {}) {
   const f = ac.createBiquadFilter(); f.type = o.type || 'bandpass'; f.frequency.setValueAtTime(o.freq || 1200, t); f.Q.value = o.q || 1.5;
   if (o.sweep) f.frequency.exponentialRampToValueAtTime(o.sweep, t + dur);
   const g = envGain(ac, t, dur, vol);
-  src.connect(f); f.connect(g); src.start(t, Math.random() * .5); src.stop(t + dur + .03);
+  src.connect(f); f.connect(g); src.start(t, Math.random() * .5); src.stop(t + dur + .03); SND.notas++;
 }
 const VOICES = {
   normal:    {n:'Normal', e:'🙂', type:'square', base:330, range:4, dur:.055, vol:.06},
@@ -453,6 +476,112 @@ function gibberish(v, text, emo, volMul = 1, every = 2) {
   let k = 0;
   letters.forEach((c, i) => { if (i % every === 0) { voiceBlip(v, c, emo, {vol: volMul, at: k * .065, question: q && i >= letters.length - 4}); k++; } });
 }
+/* ============ Lipsync (1.1.68) ============
+   Leo (28-09-2026): «Mejora su "lipsync"». La boca ya no se abre y se cierra a ritmo fijo: sigue las sílabas de lo que se dice.
+   Cada sílaba tiene su visema (el de su vocal: a muy abierta, e abierta y ancha, i estrecha y ancha, o redonda, u pequeña y redonda),
+   se cierra en m, b y p y entre palabras, y hace una pausa más larga en comas y puntos. Dos formas de seguirla:
+   · **por tiempo** (`pistaDe(texto)`: el taller, el retrato del asistente y la mascota): una lista de tramos `{t, d, v}` con su
+     sonido programado **con los mismos tiempos** (`programarPista`: una nota por sílaba), así la boca y la voz van juntas; sin sonido,
+     el mismo ritmo;
+   · **por letra** (`visemasTexto(trozo)`: el teatro, que dice las letras a medida que aparecen en el globo): el visema de la sílaba de
+     la letra que se está diciendo; cerrada en los espacios y en la puntuación.
+   Los visemas van en `pose.mouth` como 'v-a', 'v-e', 'v-i', 'v-o', 'v-u', 'v-m' (cerrada) y 'v-c' (consonante, entreabierta); una
+   cara que no los dibuja usa la de siempre (abierta o cerrada). */
+const VISEMAS = ['v-a', 'v-e', 'v-i', 'v-o', 'v-u', 'v-m', 'v-c'];
+const VIS_VOCAL = {a:'v-a', e:'v-e', i:'v-i', o:'v-o', u:'v-u'};
+const FUERZA_VOCAL = {a:5, o:4, e:3, u:2, i:1};
+const bocaAbierta = m => m === 'open' || m === 'v-a' || m === 'v-e' || m === 'v-o' || m === 'v-c';
+/* cuántas filas de boca abierta (para barbas, hocicos y caras que solo saben abrir o cerrar) y si es estrecha */
+const FILAS_BOCA = {open: 2, 'v-a': 3, 'v-e': 2, 'v-o': 2, 'v-c': 2, 'v-u': 1, 'v-i': 1};
+const bocaEstrecha = m => m === 'v-o' || m === 'v-u';
+const letraBase = c => norm(c).toLowerCase();
+/* las sílabas de una palabra (índices dentro de ella): consonantes + grupo de vocales; lo que queda sin vocal se une a la última */
+function silabasDe(chars) {
+  const b = chars.map(letraBase), out = [];
+  let i = 0;
+  while (i < b.length) {
+    let j = i; while (j < b.length && !VIS_VOCAL[b[j]]) j++;
+    if (j >= b.length) { if (out.length) out[out.length - 1][1] = b.length; else out.push([i, b.length]); break; }
+    let k = j; while (k < b.length && VIS_VOCAL[b[k]]) k++;
+    out.push([i, k]); i = k;
+  }
+  return out.map(([a, z]) => {
+    const letras = b.slice(a, z);
+    let vocal = null; for (const c of letras) if (VIS_VOCAL[c] && (!vocal || FUERZA_VOCAL[c] > FUERZA_VOCAL[vocal])) vocal = c;
+    const inicio = letras[0];
+    return {a, z, vocal, vis: vocal ? VIS_VOCAL[vocal] : letras.join('') === 'y' ? 'v-i' : 'v-c',
+      cierre: 'mbp'.includes(inicio), cons: !VIS_VOCAL[inicio] && !'mbp'.includes(inicio)};
+  });
+}
+/* el visema de cada letra de un trozo (el teatro): la de su sílaba; cerrada en m/b/p (al empezar la sílaba), espacios y puntuación */
+const cacheVisemas = new Map();
+function visemasTexto(t) {
+  t = String(t || '');
+  if (cacheVisemas.has(t)) return cacheVisemas.get(t);
+  const ch = [...t], out = new Array(ch.length).fill('x');
+  for (let i = 0; i < ch.length;) {
+    if (!IS_LETTER.test(ch[i])) { i++; continue; }
+    let j = i; while (j < ch.length && IS_LETTER.test(ch[j])) j++;
+    for (const s of silabasDe(ch.slice(i, j))) for (let k = s.a; k < s.z; k++) out[i + k] = s.cierre && k === s.a ? 'v-m' : s.vis;
+    i = j;
+  }
+  /* los índices del trozo son de UTF-16 (play.shown cuenta así): se reparten por unidad */
+  const u = []; ch.forEach((c, i) => { for (let k = 0; k < c.length; k++) u.push(out[i]); });
+  if (cacheVisemas.size > 200) cacheVisemas.clear();
+  cacheVisemas.set(t, u);
+  return u;
+}
+/* la pista por tiempo: tramos {t, d, v, ch, q, ex} (en segundos); los huecos entre tramos son boca cerrada ('x') */
+function pistaDe(texto, maxSeg) {
+  const ch = [...String(texto || '')], items = [], tope = Math.min(6, maxSeg || 6);
+  let t = 0;
+  for (let i = 0; i < ch.length && t < tope;) {
+    const c = ch[i];
+    if (!IS_LETTER.test(c)) {
+      if (/[,;:]/.test(c)) t += .22; else if (/[.!?…]/.test(c)) t += .38; else if (/[\n—–-]/.test(c)) t += .2; else if (/\s/.test(c)) t += .06;
+      i++; continue;
+    }
+    let j = i; while (j < ch.length && IS_LETTER.test(ch[j])) j++;
+    const pal = ch.slice(i, j);
+    for (const s of silabasDe(pal)) {
+      if (t >= tope) break;
+      const n = s.z - s.a, d = .12 + .015 * clamp(n - 2, 0, 3);
+      const rest = ch.slice(j).join(''), q = /^[^.!]*\?/.test(rest) && !/[.!]/.test(rest.split('?')[0]), ex = /^[^.?]*!/.test(rest) && !/[.?]/.test(rest.split('!')[0]);
+      const letra = s.vocal || letraBase(pal[s.a]);
+      if (s.cierre) { items.push({t, d: d * .35, v: 'v-m'}); items.push({t: t + d * .35, d: d * .65, v: s.vis, ch: letra, q, ex, voz: t}); }
+      else if (s.cons) { items.push({t, d: d * .25, v: 'v-c'}); items.push({t: t + d * .25, d: d * .75, v: s.vis, ch: letra, q, ex, voz: t}); }
+      else items.push({t, d, v: s.vis, ch: letra, q, ex, voz: t});
+      t += d;
+    }
+    i = j;
+  }
+  return {items, fin: items.length ? items[items.length - 1].t + items[items.length - 1].d : 0};
+}
+/* una nota por sílaba, a su tiempo (la de su vocal: la misma que `voiceBlip`) */
+function programarPista(v, pista, emo, volMul) {
+  let n = 0;
+  for (const it of pista.items) if (it.ch) { voiceBlip(v, it.ch, emo, {vol: volMul || 1, at: it.voz, question: it.q, exclaim: it.ex}); n++; }
+  return n;
+}
+const ahoraSeg = () => performance.now() / 1000;
+/* el visema de un duende que habla por tiempo (null si ya acabó: se le quita la pista) */
+function visemaPista(d) {
+  const P = d.pista; if (!P) return null;
+  const e = ahoraSeg() - P.t0;
+  if (e < 0) return 'x';
+  if (e > P.fin) { d.pista = null; return null; }
+  for (const it of P.items) if (e >= it.t && e < it.t + it.d) return it.v;
+  return 'x';
+}
+const bocasTeatro = [];   // las formas de boca que ha ido poniendo quien habla en el teatro (lectura de prueba: lipsyncInfo)
+/* el del teatro: la letra que se está diciendo en el globo */
+function visemaTeatro(d) {
+  if (d.pista) return visemaPista(d);
+  if (!(play.active && play.speaker === d && play.phase === 'speak')) return null;
+  const t = play.chunks[play.ci] || '', i = Math.min(t.length - 1, Math.floor(play.shown));
+  return i >= 0 ? visemasTexto(t)[i] || 'x' : 'x';
+}
+
 /* un ladrido de chiptune, para quien ladra sin estar hablando */
 function guau(d) {
   const k = d && d.escala && d.escala > 1 ? .7 : d && d.escala && d.escala < 1 ? 1.5 : 1;
@@ -842,7 +971,8 @@ const GL = {
   heart:['01010','11111','01110','00100'], spark:['010','111','010'],
   q:['111','001','010','000','010'], ex:['1','1','1','0','1'],
   check:['0001','0010','1010','0100'], one:['010','110','010','010','111'], zero:['111','101','101','101','111'],
-  env:['11111','11011','10101','11111'], drop:['1','1'], anger:['101','010','101']
+  env:['11111','11011','10101','11111'], drop:['1','1'], anger:['101','010','101'],
+  hoja:['0110','1111','1111','0110']   // la bola de papel que tira quien rechaza (el taller)
 };
 const BUB = {
   dots:{g:['10101'], c:'#56645a'}, q:{g:GL.q, c:'#5a5aa8'}, ex:{g:GL.ex, c:'#c8553d'},
@@ -1050,10 +1180,16 @@ function getPose(d) {
         case 'grune': p.mouth = 'open'; p.b = 1; p.armL = 'out'; p.armR = 'out'; break;
         default: if (talk) p.armR = ['down','diag','out','down'][Math.floor(T / 26) % 4];
       }
-      if (talk && e !== 'rie' && e !== 'sorpresa') p.mouth = Math.floor(T / 6) % 2 ? 'open' : (p.mouth === 'smile' ? 'smile' : 'normal');
+      if (talk && e !== 'rie' && e !== 'sorpresa') {
+        const v = visemaTeatro(d);   // la sílaba que dice (1.1.68); sin texto que seguir, como siempre
+        p.mouth = v && v !== 'x' ? v : v === 'x' || Math.floor(T / 6) % 2 === 0 ? (p.mouth === 'smile' ? 'smile' : 'normal') : 'open';
+        if (d === play.speaker && p.mouth !== bocasTeatro[bocasTeatro.length - 1]) { bocasTeatro.push(p.mouth); if (bocasTeatro.length > 300) bocasTeatro.shift(); }   // para las pruebas
+      }
       break;
     }
   }
+  /* quien habla por tiempo (el taller, el retrato, la mascota) mueve la boca con su pista, haga lo que haga */
+  if (d.pista) { const v = visemaPista(d); if (v) p.mouth = v === 'x' ? (p.mouth === 'smile' ? 'smile' : 'normal') : v; }
   if (p.eyes === 'open' && ((d.t + d.id * 53) % 170) < 5) p.eyes = 'closed';
   return p;
 }
@@ -1309,7 +1445,7 @@ function drawDuende(d, p, f) {
     const ey = top + 8;
     if (p.eyes === 'closed') { HL(ey + 1, -1, 1, NEGRO); HL(ey + 1, 4, 6, NEGRO); }
     else { R(-1, ey, 2, 3, NEGRO); R(4, ey, 2, 3, NEGRO); P(0, ey, '#5a5a78'); P(5, ey, '#5a5a78'); }
-    if (p.mouth === 'open') ELI(3, ey + 7, 1, 2, NEGRO); else HL(ey + 6, 2, 4, NEGRO);
+    if (bocaAbierta(p.mouth)) ELI(3, ey + 7, bocaEstrecha(p.mouth) ? 1 : 1, (FILAS_BOCA[p.mouth] || 2) > 2 ? 2 : 1, NEGRO); else if (p.mouth === 'v-u' || p.mouth === 'v-i') HL(ey + 7, 2 + (p.mouth === 'v-u'), 4 - (p.mouth === 'v-u'), NEGRO); else HL(ey + 6, 2, 4, NEGRO);
     if (p.armR !== 'down') { R(half, top + 14, 3, 2, Wd); R(half + 2, top + 12, 2, 2, Wd); }
     if (p.armL !== 'down') { R(-half - 2, top + 14, 3, 2, Sd); R(-half - 3, top + 12, 2, 2, Sd); }
     return {hx: (half + 2) / RES, hy: (top + 14) / RES, luz: null};
@@ -1757,7 +1893,7 @@ function drawDuende(d, p, f) {
   }
   function boca(X) {
     const x0 = hx0 + (G.ex1 - G.hx0) + 2, x1 = x0 + (duende ? 3 : 2), y = mY;
-    let tipo = p.mouth === 'open' ? 'abierta' : p.mouth === 'smile' ? (pal.boca === 'dientes' ? 'dientes' : 'sonrisa') : (X.bocaE || pal.boca);
+    let tipo = p.mouth === 'open' ? 'abierta' : p.mouth === 'smile' ? (pal.boca === 'dientes' ? 'dientes' : 'sonrisa') : VISEMAS.includes(p.mouth) ? p.mouth : (X.bocaE || pal.boca);
     const lab = pal.boca === 'labios' || pal.marcas.has('maquillaje') ? '#c8324a' : null;
     const barbaLarga = pal.beard === 'barba-larga' && duende;
     const mc = MC;
@@ -1769,13 +1905,28 @@ function drawDuende(d, p, f) {
       case 'triste': HL(y - 1, x0 + 1, x1 - 1, mc); P(x0, y, mc); P(x1, y, mc); break;
       case 'mueca': P(x0, y, mc); P(x0 + 1, y, mc); HL(y - 1, x0 + 2, x1, mc); break;
       case 'labios': HL(y - 1, x0, x1, '#b8324a'); HL(y, x0, x1, '#e05a70'); P(x0 + 1, y, '#f28b9a'); break;
+      /* los visemas (1.1.68) */
+      case 'v-a': R(x0, y - 1, x1 - x0 + 1, 4, mc); HL(y + 2, x0 + 1, x1 - 1, LENGUA); if (!barbaLarga) HL(y - 1, x0 + 1, x1 - 1, DIENTE); break;
+      case 'v-e': R(x0 - 1, y - 1, x1 - x0 + 2, 2, mc); if (!barbaLarga) HL(y - 1, x0, x1 - 1, DIENTE); break;
+      case 'v-i': HL(y - 1, x0 - 1, x1, mc); HL(y, x0 - 1, x1, DIENTE); HL(y + 1, x0, x1 - 1, mc); break;
+      case 'v-o': { const xc = Math.round((x0 + x1) / 2); R(xc - 1, y - 1, 3, 3, mc); P(xc, y, sh(mc, -25)); P(xc - 1, y - 1, sh(pal.skin, -20)); P(xc + 1, y + 1, sh(pal.skin, -20)); break; }
+      case 'v-u': { const xc = Math.round((x0 + x1) / 2); R(xc, y - 1, 2, 2, mc); P(xc - 1, y, sh(pal.skin, -30)); break; }
+      case 'v-m': HL(y, x0, x1, sh(mc, -15)); HL(y + 1, x0 + 1, x1 - 1, pal.sD); break;
+      case 'v-c': R(x0, y - 1, x1 - x0 + 1, 2, mc); if (!barbaLarga) HL(y - 1, x0, x1, DIENTE); break;
       default: HL(y, x0, x1, mc);
     }
-    if (lab && tipo !== 'abierta' && tipo !== 'labios') { HL(y, x0, x1, lab); if (tipo === 'sonrisa') { P(x0, y - 1, lab); P(x1, y - 1, lab); } }
+    if (lab && tipo !== 'abierta' && tipo !== 'labios' && !VISEMAS.includes(tipo)) { HL(y, x0, x1, lab); if (tipo === 'sonrisa') { P(x0, y - 1, lab); P(x1, y - 1, lab); } }
   }
   function vello() {
     const v = pal.beard; if (!v || v === 'no') return;
-    const bc = pal.beardCol, bd = pal.bD, bl = pal.bL, x0 = hx0 + (G.ex1 - G.hx0), open = p.mouth === 'open';
+    const bc = pal.beardCol, bd = pal.bD, bl = pal.bL, x0 = hx0 + (G.ex1 - G.hx0), open = bocaAbierta(p.mouth) || p.mouth === 'v-u';
+    const fb = FILAS_BOCA[p.mouth] || 2, eb = bocaEstrecha(p.mouth) ? 1 : 0;   // cuánto se abre dentro de la barba (visemas)
+    /* la boca dentro de la barba: su alto y su ancho según el visema, con dientes (e, i, consonante) o lengua (a) */
+    const bocaBarba = () => {
+      R(x0 + 2 + eb, mY - 1, 3 - eb, fb, MC);
+      if (p.mouth === 'v-e' || p.mouth === 'v-c' || p.mouth === 'v-i') HL(mY - 1, x0 + 2, x0 + 4, DIENTE);
+      if (fb >= 3) HL(mY + fb - 2, x0 + 3, x0 + 4, LENGUA);
+    };
     const bigote = (ancho) => { HL(mY - 1, x0 + 1 - ancho, x0 + 5 + ancho, bc); HL(mY - 2, x0 + 2, x0 + 4, bc); P(x0 + 1 - ancho, mY, bd); P(x0 + 5 + ancho, mY, bd); P(x0 + 3, mY - 2, bl); };
     switch (v) {
       case 'sombra': for (let y = mY - 2; y <= hBot; y++) { const [a, z] = HR[y]; for (let x = Math.max(a + 2, hx0 + 3); x <= z; x++) if (((x + y) & 1) && !(y === mY && x >= x0 + 2 && x <= x0 + 5)) P(x, y, sh(bc === pal.hair ? pal.hairD : bc, 20)); } break;
@@ -1786,7 +1937,7 @@ function drawDuende(d, p, f) {
       case 'barba-corta':
         for (let y = mY - 2; y <= hBot + 1; y++) { const [a, z] = HR[Math.min(y, hBot)]; HL(y, Math.max(a + 1, hx0 + (duende ? 0 : 3)), z, bc); P(Math.max(a + 1, hx0 + (duende ? 0 : 3)), y, bd); }
         HL(mY - 1, x0 + 1, x0 + 5, bc); HL(hBot + 1, hx0 + 4, hx1 - 2, bd); P(x0 + 4, mY - 2, bl);
-        if (open) R(x0 + 2, mY - 1, 3, 2, MC); else HL(mY, x0 + 2, x0 + 4, MC);
+        if (open) bocaBarba(); else HL(mY, x0 + 2, x0 + 4, MC);
         break;
       case 'barba-larga': {
         const fin = duende ? Math.min(-4, tTop + Math.round(G.torsoH * .75)) : tTop + Math.round(G.torsoH * .45);
@@ -1797,7 +1948,7 @@ function drawDuende(d, p, f) {
           HL(y, xa, xz, bc); P(xa, y, bd); if (y > hBot && (y + xa) % 3 === 0) P(Math.round((xa + xz) / 2), y, bd); if (y > hBot && y % 4 === 1) P(xz - 1, y, bl);
         }
         HL(mY - 1, x0 + 1, x0 + 5, bc); P(x0 + 3, mY - 2, bl);
-        if (open) R(x0 + 2, mY - 1, 3, 2, MC); else HL(mY, x0 + 2, x0 + 4, bd);
+        if (open) bocaBarba(); else HL(mY, x0 + 2, x0 + 4, bd);
         break;
       }
     }
@@ -2121,7 +2272,8 @@ function drawDuende(d, p, f) {
     if (A.morro) { RR(mx0, my0, hx1 + largo, my0 + 4, 2, A.morro); HL(my0 + 4, mx0 + 1, hx1 + largo - 1, sh(A.morro, -25)); }
     else RR(mx0, my0, hx1 + largo, my0 + 4, 2, sh(fur, 15));
     R(hx1 + largo - 1, my0, 2, 2, A.nariz); P(hx1 + largo - 1, my0, sh(A.nariz, 40));
-    if (p.mouth === 'open') { R(hx1 - 2, my0 + 3, largo + 2, 2, MC); HL(my0 + 4, hx1 - 1, hx1 + largo - 1, LENGUA); if (A.dientes) R(hx1 + 1, my0 + 3, 2, 1, '#ffffff'); }
+    const fa = FILAS_BOCA[p.mouth] || 0, ea = bocaEstrecha(p.mouth) ? Math.ceil(largo / 2) : 0;   // visemas: más o menos abierta, redonda
+    if (fa) { R(hx1 - 2 + ea, my0 + 3, largo + 2 - ea, fa, MC); if (fa > 1) HL(my0 + 2 + fa, hx1 - 1 + ea, hx1 + largo - 1, LENGUA); if (A.dientes && fa > 1) R(hx1 + 1, my0 + 3, 2, 1, '#ffffff'); }
     else { HL(my0 + 3, hx1 - 1, hx1 + largo - 1, sh(A.morro || fur, -55)); if (A.dientes) R(hx1 + largo - 2, my0 + 4, 2, 2, '#ffffff'); }
     if (A.bigotes) for (const dy of [1, 3]) { HL(my0 + dy, hx1 + largo + 1, hx1 + largo + 4, '#e8ecf2'); }
   }
@@ -2157,7 +2309,7 @@ function drawDuende(d, p, f) {
         VL(hcx, hTop, eyeY - 2, '#ffffff'); VL(hcx + 1, hTop, eyeY - 3, '#ffffff');
         R(e1 - 1, eyeY - 1, ew + 2, eh + 2, '#f2c94c'); R(e2 - 1, eyeY - 1, ew + 2, eh + 2, '#f2c94c');
         R(e1, eyeY, ew, eh, '#ffffff'); P(e1 + ew - 1, eyeY + 1, NEGRO); R(e2, eyeY, ew, eh, '#ffffff'); P(e2 + ew - 1, eyeY + 1, NEGRO);
-        R(e1 + 2, mY - 1, 3, 2, p.mouth === 'open' ? MC : pal.skin);
+        R(e1 + 2, mY - 1, 3, 2, bocaAbierta(p.mouth) ? MC : pal.skin);
         break;
       }
       case 'calavera':
@@ -3176,7 +3328,7 @@ function playTick() {
     case 'enter': { const d = play.speaker; play.timer++; if (!d.goto || play.timer > 200) beginSpeak(); break; }
     case 'speak': {
       const chunk = play.chunks[play.ci], len = chunk.length, prev = Math.floor(play.shown), d = play.speaker;
-      play.shown += .6 * spd;
+      play.shown += (/[,;:]/.test(chunk[prev - 1] || '') && play.shown - prev < .5 ? .15 : .6) * spd;   // un respiro en las comas (el lipsync)
       const upto = Math.min(len, Math.floor(play.shown)), every = (spd > 1.3 || d.emo === 'canta') ? 3 : 2;
       const q = /\?\s*$/.test(chunk), ex = /!\s*$/.test(chunk);
       for (let i = prev; i < upto; i++) if (i % every === 0 && IS_LETTER.test(chunk[i]))
@@ -3726,6 +3878,8 @@ if (EMB) {
   $('stopBtn').after($('dirigir'));
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape' || e.defaultPrevented) return;
+    /* el taller no es el teatro: Esc se le cuenta a quien lo tiene (el asistente cierra su ventana) */
+    if (TALLER || MASCOTA) { try { window.parent.postMessage({tipo: TALLER ? 'duendes-taller' : 'duendes-mascota', tecla: 'Escape'}, '*'); } catch (_) {} return; }
     try { window.parent.Claquedraw.duendes.cerrar(); } catch (_) {}
   });
 }
@@ -3911,8 +4065,10 @@ function retratoTick(d) {
 }
 function tick() {
   frame++;
-  if (retratoD) retratoTick(retratoD);
+  if (retratoD) { retratoTick(retratoD); if (retratoD.hablaT > 0) retratoD.hablaT--; }
   if (RETRATO) return;
+  if (TALLER) { tallerTick(); return; }
+  if (MASCOTA) { mascotaTick(); return; }
   for (const d of duendes.slice()) { emitScene = d.onStage ? 'teatro' : 'bosque'; update(d); }
   emitScene = 'bosque';
   playTick();
@@ -4057,6 +4213,7 @@ function drawPortrait() {
   pc.imageSmoothingEnabled = false;
   pc.clearRect(0, 0, PW, PH);
   const d = sel, pose = getPose(d);
+  if (d.hablaT > 0 && !d.pista) pose.mouth = Math.floor(d.t / 6) % 2 ? 'open' : 'normal';   // habla (Duendes.hablar, el sonido del asistente)
   renderSprite(d, pose);
   const trabaja = d === retratoD && BUSY.includes(d.action) && d.action !== 'leer';
   const cx = Math.round(PW / 2 + (trabaja ? -d.facing * 9 : 0)) + (d.shake && frame % 4 < 2 ? 1 : 0), dy = PPIES - OY - Math.min(8, Math.round(d.z * RES * .6));
@@ -4221,22 +4378,1482 @@ function drawOverlay() {
 }
 
 function draw() {
+  if (MASCOTA) { drawMascota(); return; }
   if (!RETRATO) {   // en el retrato (Personajes, el asistente) solo se pinta el retrato
     ctx.setTransform(RES, 0, 0, RES, 0, 0); ctx.imageSmoothingEnabled = false;
-    if (scene === 'teatro') drawTheater(); else drawForest();
-    drawOverlay();
+    if (TALLER) { drawTaller(); drawOverlayTaller(); }
+    else {
+      if (scene === 'teatro') drawTheater(); else drawForest();
+      drawOverlay();
+    }
   }
   drawPortrait();
 }
 
 let last = performance.now(), acc = 0;
 const STEP = 1000 / 60;
+/* en pausa (1.1.68: la mascota con el panel del asistente cerrado o plegado, el taller escondido) el bucle no se vuelve a pedir:
+   un marco escondido con `display: none` sigue recibiendo fotogramas en Chromium y la mascota pintaba a 60 por segundo sin verse */
+const PAUSA = {on: false, corre: false};
 function loop(now) {
+  if (PAUSA.on) { PAUSA.corre = false; return; }
+  PAUSA.corre = true;
   acc += Math.min(100, now - last); last = now;
   while (acc >= STEP) { tick(); acc -= STEP; }
   draw();
   requestAnimationFrame(loop);
 }
+
+/* ============ El taller del asistente y la voz (1.1.68) ============
+   Leo (28-09-2026): «mientras trabajan que se vea en el asistente una opción para verlos trabajar, parecida a lo que hacen actualmente
+   en el teatro», «el duende coordinador y los especiales tienen animaciones de enojo a menudo (porque están corrigiendo)» y «una
+   opción de sonido, para que "hablen" como lo hacen en el teatro». `?embebido=1&taller=1` es una oficina del bosque con los duendes
+   del equipo, cada uno en su puesto (el maestro en el centro), y una línea de estado debajo; el asistente los pone con
+   `Duendes.taller({ actores, sonido })` y les cuenta lo que pasa con `Duendes.tallerEvento(ev)`: el que hace la acción la actúa con lo
+   que el motor ya sabe (leer con su libro, teclear con sus unos y ceros, revisar con la lupa, el gesto enojado de fábrica con sus
+   partículas…), con su globo y su nombre. `Duendes.hablar` hace hablar al duende del taller o del retrato con el `gibberish` del
+   teatro, también después de `detener()`. Nada de esto toca el generador, el teatro ni el retrato de siempre. */
+const VOZ = {permitido: !TALLER && !MASCOTA, gen: 0};   // permitido: el taller empieza callado (lo enciende `sonido`); el retrato habla si se le pide
+const MQ_REDUCIR = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)'); } catch (_) { return null; } })();
+const reducir = () => !!(MQ_REDUCIR && MQ_REDUCIR.matches);   // «reducir movimiento», en vivo
+/* hablar por tiempo (el lipsync): la boca sigue la pista del texto y, si se puede, la voz la dice con los mismos tiempos */
+const segundosVoz = (text, maxSeg) => pistaDe(text, maxSeg || 6).fin;
+function ponerPista(d, texto, maxSeg) { const P = pistaDe(texto, maxSeg || 6); d.pista = P.items.length ? Object.assign(P, {t0: ahoraSeg()}) : null; return d.pista; }
+function hablarCon(d, v, texto, emo, maxSeg, vol, conVoz, forzar) {
+  const P = d ? ponerPista(d, texto, maxSeg) : Object.assign(pistaDe(texto, maxSeg || 6), {t0: ahoraSeg()});
+  if (!P) return false;
+  if (!conVoz) return false;
+  return conSonido(() => { P.t0 = ahoraSeg(); programarPista(v, P, emo, vol); }, forzar);
+}
+/* suena aunque el marco se haya callado con `detener()` (que cierra el AudioContext): se crea otro o se reanuda; si el navegador no
+   deja, no pasa nada. `SND.on` solo se enciende mientras se programan las notas (el resto del motor no cambia) */
+function conSonido(fn, forzar) {
+  if (!VOZ.permitido && !forzar) return false;
+  if (SND.ctx && SND.ctx.state === 'closed') { SND.ctx = null; SND.master = null; }
+  let ac = null; try { ac = audio(); } catch (_) { ac = null; }
+  if (!ac) return false;
+  const gen = VOZ.gen;
+  const ya = () => {
+    if (gen !== VOZ.gen || (!VOZ.permitido && !forzar) || ac.state !== 'running') return;
+    const prev = SND.on; SND.on = true;
+    try { fn(); } catch (_) {} finally { SND.on = prev; }
+  };
+  if (ac.state === 'running') ya(); else { try { ac.resume().then(ya, () => {}); } catch (_) {} }
+  return true;
+}
+/* corta lo que suena: lo ya programado cuelga del `master` de antes, que se desconecta */
+function callarVoz(todo = true) {
+  VOZ.gen++;
+  if (SND.ctx && SND.master && SND.ctx.state !== 'closed') {
+    try { SND.master.disconnect(); } catch (_) {}
+    try { const g = SND.ctx.createGain(); g.gain.value = SND.vol * .9; g.connect(SND.ctx.destination); SND.master = g; } catch (_) {}
+  }
+  if (!todo) return;   // solo el sonido (apagar el sonido no calla la boca ni el globo)
+  if (retratoD) { retratoD.hablaT = 0; retratoD.pista = null; }
+  for (const d of taller.actores) { d.hablaT = 0; d.pista = null; if (d.breve && d.breve.tipo === 'hablar') d.breve.t = Math.min(d.breve.t, 20); }
+  if (typeof callarMascota === 'function') callarMascota();
+}
+
+const taller = {actores: [], porId: new Map(), trabajando: false, estado: '', fin: null, eventos: 0};
+const PAPELES_T = ['maestro', 'lector', 'escritor', 'coordinador', 'especial'];
+const RANGO_T = {lector: 0, escritor: 1, coordinador: 2, especial: 3};
+const MAX_TALLER = 12;
+/* los puestos (x, y de los pies y hacia dónde miran): los de la izquierda miran al centro, los de la derecha también */
+const CASA_MAESTRO = [160, 160, 1];
+const PUESTOS = [[58,136,1],[262,136,-1],[98,150,1],[222,150,-1],[36,162,1],[284,162,-1],[126,130,1],[194,130,-1],[72,168,1],[248,168,-1],[18,146,1],[302,146,-1]];
+/* el aspecto de su papel cuando el duende no tiene uno propio (el maestro es el duende genérico del asistente) */
+const ASPECTO_PAPEL = {
+  maestro: GENERICO,
+  lector: {skin:'#a3d977', cloth:'#2f8f6b', pants:'#3f5a2e', shoes:'#3b2a1e', hat:'gorro', hatCol:'#e8a33d', beard:'corta', beardCol:'#b9b4ab', lentes:'redondos', accesorios:['bufanda'], cejas:'gruesas', nombre:'Lector'},
+  escritor: {skin:'#f0c9a0', cloth:'#d65a9e', cloth2:'#f4f1ea', pants:'#2e3a4f', shoes:'#5a3a22', hat:'boina', hatCol:'#7a4fb0', beard:'no', peinado:'rizado', hairCol:'#d9823b', ojos:'brillantes', accesorios:['audifonos'], nombre:'Escritor'},
+  coordinador: {skin:'#8d6e4a', cloth:'#3a3f4a', cloth2:'#f4f1ea', pants:'#2e2a2e', shoes:'#1b1420', prenda:'saco', accesorios:['corbata'], lentes:'cuadrados', hat:'pelo', vello:'bigote', cejas:'gruesas', boca:'seria', hairCol:'#1b1420', nombre:'Coordinador'},
+  especial: {cejas:'gruesas', lentes:'redondos', nombre:'Especial'}
+};
+const VOZ_PAPEL = {maestro:'grave', lector:'misteriosa', escritor:'dulce', coordinador:'ronca'};
+const GRUNIDOS = ['¡Hmm!', '¿Quién escribió esto?', '¡No, no, no!', 'Grrr…', '¡Otra vez!', '¿Y esto de dónde salió?', '¡Esa coma!', 'Mmm… no.'];
+const DEF_T = {empezar:'Tengo un encargo', leer:'Leyendo las fuentes…', escribir:'Escribiendo…', revisar:'Revisando…', enojo:'¡Grrr!', aprobar:'¡Aprobado!',
+  rechazar:'¡Así no!', corregir:'Corrigiendo…', entregar:'Aquí tienes', hablar:'…', error:'Algo salió mal', fin:'¡Listo!'};
+const EMOJI_T = {empezar:'📜', leer:'📖', escribir:'✍️', revisar:'🔎', enojo:'💢', aprobar:'✅', rechazar:'❌', corregir:'✏️', entregar:'📨', hablar:'💬', error:'⚠️', fin:'🎉'};
+const texto1 = (t, n) => { t = String(t == null ? '' : t).replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+
+function aspectoDe(a) { return a.duende && typeof a.duende === 'object' ? a.duende : ASPECTO_PAPEL[a.papel] || ASPECTO_PAPEL.especial; }
+function vestirActor(d, a) {
+  aplicarDuendePj(d, 'taller ' + a.id, aspectoDe(a));
+  d.mask = a.duende && a.duende.mascara && MASKS[a.duende.mascara] ? a.duende.mascara : 'ninguna';
+}
+function vozDe(d) { return voiceFor(d.tNombre, d.tVoz || (d.tDuende && VOICES[d.tDuende.voz] ? d.tDuende.voz : null) || VOZ_PAPEL[d.tPapel] || null); }
+const maestroT = () => taller.actores.find(d => d.tPapel === 'maestro') || null;
+function actorT(ev) {
+  if (!ev) return null;
+  const q = ev.quien != null ? String(ev.quien) : '';
+  if (q && taller.porId.has(q)) return taller.porId.get(q);
+  /* uno que aún no estaba (un especial nuevo sin `taller()` de por medio): entra con el aspecto de su papel */
+  if (q && taller.actores.length < MAX_TALLER && (ev.nombre || ev.papel)) {
+    ponerActores([...taller.actores.map(d => d.tDef), {id: q, nombre: ev.nombre || q, papel: ev.papel || 'especial'}]);
+    if (taller.porId.has(q)) return taller.porId.get(q);
+  }
+  if (ev.papel) { const d = taller.actores.find(x => x.tPapel === ev.papel); if (d) return d; }
+  return maestroT();
+}
+function sanearActor(a) {
+  if (!a || typeof a !== 'object' || a.id == null || String(a.id) === '') return null;
+  const papel = PAPELES_T.includes(a.papel) ? a.papel : 'especial';
+  return {id: String(a.id).slice(0, 60), nombre: texto1(a.nombre || a.id, 40), papel,
+    duende: a.duende && typeof a.duende === 'object' ? a.duende : null, voz: typeof a.voz === 'string' && VOICES[a.voz] ? a.voz : null,
+    enojon: typeof a.enojon === 'boolean' ? a.enojon : papel === 'coordinador' || papel === 'especial'};
+}
+/* pone a los actores; los que ya estaban se quedan donde van (y con lo que hacen), los nuevos aparecen en su puesto con un «puf» */
+function ponerActores(lista) {
+  const vistos = new Set(), nuevos = [];
+  for (const a0 of lista || []) { const a = sanearActor(a0); if (!a || vistos.has(a.id) || nuevos.length >= MAX_TALLER) continue; vistos.add(a.id); nuevos.push(a); }
+  for (const d of taller.actores.slice()) if (!vistos.has(d.tid)) {
+    emitScene = 'taller'; poof(d.x, d.y - 8); emitScene = 'bosque';
+    taller.actores.splice(taller.actores.indexOf(d), 1); taller.porId.delete(d.tid);
+  }
+  const orden = nuevos.filter(a => a.papel !== 'maestro').map((a, i) => [a, i]).sort((x, y) => (RANGO_T[x[0].papel] - RANGO_T[y[0].papel]) || x[1] - y[1]).map(x => x[0]);
+  let hayMaestro = false;
+  const casaDe = a => {
+    if (a.papel === 'maestro' && !hayMaestro) { hayMaestro = true; return CASA_MAESTRO; }
+    const i = orden.indexOf(a); return PUESTOS[(i < 0 ? orden.length : i) % PUESTOS.length];
+  };
+  taller.actores = [];
+  for (const a of nuevos) {
+    let d = taller.porId.get(a.id);
+    const clave = JSON.stringify([a.papel, a.duende]), casa = casaDe(a);
+    if (!d) {
+      d = makeDuende(); d.born = 10; d.t = 0; d.facing = casa[2];
+      Object.assign(d, {tid: a.id, x: casa[0], y: casa[1], z: 0, base: 'esperar', breve: null, mueve: null, globo: null, hablaT: 0, carga: false,
+        enojos: 0, entregas: 0, ultimaEntrega: null, proxEnojo: 0, mira: null, miraT: 0, pausaCasa: 0, escribeCon: 'teclear', cambioT: 0});
+      emitScene = 'taller'; poof(casa[0], casa[1] - 8); emitScene = 'bosque';
+    }
+    Object.assign(d, {tNombre: a.nombre, tPapel: a.papel, tVoz: a.voz, tDuende: a.duende, tEnojon: a.enojon, tDef: a, name: a.nombre, full: a.nombre, casa});
+    if (d.tClave !== clave) { vestirActor(d, a); d.tClave = clave; }
+    d.voiceObj = vozDe(d);
+    /* si le cambió el puesto y está quieto, va a su puesto nuevo */
+    if (!d.mueve && !enCasa(d) && !taller.fin && !d.enPelea && !d.escenaEsp) irCasa(d);
+    taller.actores.push(d); taller.porId.set(a.id, d);
+  }
+}
+const enCasa = d => Math.hypot(d.x - d.casa[0], d.y - d.casa[1]) < 1.5;
+function irA(d, x, y, luego) { d.mueve = {x: clamp(x, 10, W - 10), y: clamp(y, 126, 170), luego: luego || null}; }
+function irCasa(d, luego) { irA(d, d.casa[0], d.casa[1], () => { d.facing = d.casa[2]; if (luego) luego(); }); }
+function ponerBase(d, b) {
+  if (d.base !== b && (b === 'revisar' || b === 'corregir')) d.proxEnojo = ri(90, 240);   // el primer enojo llega pronto
+  d.base = b; d.cambioT = 0;
+  if (!d.mueve && !enCasa(d) && !taller.fin && !d.enPelea && !d.escenaEsp) irCasa(d);
+}
+function ponerAccion(d, a) { if (d.action !== a) { d.action = a; d.t = 0; d.dur = a === 'revisar' ? 420 : 9999; d.bubble = a === 'actuar' ? d.bubble : null; } }
+/* el globo de texto (y su voz, si hay sonido) */
+function globoT(d, texto, tono, seg, maxBoca) {
+  texto = texto1(texto, 120); if (!texto) return;
+  d.globo = {texto, tono: tono || null, vida: Math.round((seg || Math.min(6, 2.2 + texto.length / 22)) * 60), total: 0};
+  d.globo.total = d.globo.vida;
+  const P = ponerPista(d, texto, maxBoca || 2.5);   // la boca, con o sin sonido
+  d.hablaT = P ? Math.round(P.fin * 60) : 0;
+}
+/* su voz, con la misma pista que su boca (se rehace con el tope de la voz) */
+function vozGlobo(d, texto, emo, maxSeg, vol) { const ok = hablarCon(d, vozDe(d), texto1(texto, 120), emo, maxSeg || 2.5, vol || .8, true); d.hablaT = d.pista ? Math.round(d.pista.fin * 60) : 0; return ok; }
+function enojar(d, texto, sonido) {
+  d.breve = {tipo: 'enojo', emo: 'enojado', t: 100}; d.enojos++;
+  globoT(d, texto, 'mal', 2.4);
+  emitScene = 'taller';
+  const hy = d.y - d.z - altoDe(d) + 2;
+  for (let i = 0; i < 3; i++) addP(d.x + rand(-5, 5), hy - rand(0, 4), 'anger', {vy: -.3, life: 40, c: '#ff5a5a'});
+  emitScene = 'bosque';
+  if (sonido) vozGlobo(d, texto, 'enojado', 1.6, .7);
+}
+function siguienteDe(d) {
+  const cadena = taller.actores.filter(x => x.tPapel !== 'maestro').sort((a, b) => (RANGO_T[a.tPapel] - RANGO_T[b.tPapel]) || taller.actores.indexOf(a) - taller.actores.indexOf(b));
+  if (d.tPapel === 'maestro') return cadena[0] || null;
+  const i = cadena.indexOf(d);
+  return (i >= 0 && cadena[i + 1]) || maestroT();
+}
+/* **Lo que pasa** (§3 del contrato): el que hace la acción la actúa, con su globo; el estado de abajo lo dice */
+function eventoTaller(ev) {
+  if (!ev || typeof ev !== 'object') return false;
+  const acc = String(ev.accion || '');
+  if (!EMOJI_T[acc]) return false;
+  taller.eventos++;
+  const d = actorT(ev); if (!d) { pintarEstado(ev, null); return false; }
+  const texto = texto1(ev.texto, 120), dice = texto || DEF_T[acc], m = maestroT();
+  if (m && m !== d && acc !== 'fin') { m.mira = d; m.miraT = 240; }
+  const suena = VOZ.permitido;
+  switch (acc) {
+    case 'empezar':
+      taller.trabajando = true; taller.fin = null;
+      d.breve = {tipo: 'hablar', emo: 'saluda', t: 150}; globoT(d, dice);
+      for (const x of taller.actores) if (x !== d) { x.mira = d; x.miraT = 150; }
+      if (suena) vozGlobo(d, dice, null, 3, .9);
+      break;
+    case 'leer': case 'escribir': case 'revisar': case 'corregir':
+      taller.trabajando = true;
+      ponerBase(d, acc); if (acc === 'escribir') d.escribeCon = 'teclear';
+      globoT(d, dice, null, texto ? 3 : 1.6);   // sin texto propio, solo un momento (la línea de estado ya lo dice)
+      if (suena && texto) vozGlobo(d, dice, acc === 'revisar' ? 'piensa' : null, 2, .7);
+      break;
+    case 'enojo': enojar(d, dice, suena); break;
+    case 'rechazar': {
+      enojar(d, dice, suena); d.breve.tipo = 'rechazar'; d.breve.t = 120; ponerBase(d, 'esperar');
+      emitScene = 'taller'; addP(d.x + d.facing * 4, d.y - d.z - 14, 'hoja', {vx: d.facing * rand(.8, 1.3), vy: -1.7, life: 60, c: '#f4efe0'}); emitScene = 'bosque';
+      break;
+    }
+    case 'aprobar':
+      d.breve = {tipo: 'aprobar', emo: 'aplaude', t: 120}; ponerBase(d, 'esperar'); globoT(d, dice, 'bien', 2.6);
+      emitScene = 'taller'; addP(d.x - 2, d.y - d.z - altoDe(d) - 4, 'check', {vy: -.3, life: 60, c: '#6fdc8c'}); emitScene = 'bosque';
+      if (suena) vozGlobo(d, dice, 'feliz', 1.6, .8);
+      break;
+    case 'error':
+      d.breve = {tipo: 'error', emo: 'triste', t: 150}; globoT(d, dice, 'mal', 3.5);
+      if (suena) vozGlobo(d, dice, 'triste', 2, .8);
+      break;
+    case 'hablar': {
+      const emo = typeof ev.emo === 'string' && (GESTOS_FABRICA.has(ev.emo) || MOD_GESTOS[ev.emo]) ? ev.emo : null;
+      const seg = segundosVoz(dice, 6);
+      d.breve = {tipo: 'hablar', emo, t: Math.round(Math.max(2, seg + 1) * 60)}; globoT(d, dice, null, Math.max(2.5, seg + 1.5), 6);
+      if (suena) vozGlobo(d, dice, emo, 6, 1);
+      break;
+    }
+    case 'entregar': {
+      let t = null;
+      const para = ev.para || ev.a || ev.destino;
+      if (para != null && taller.porId.has(String(para))) t = taller.porId.get(String(para));
+      if (!t || t === d) t = siguienteDe(d);
+      if (!t || t === d) t = maestroT();
+      ponerBase(d, 'esperar');
+      if (!t || t === d) { globoT(d, dice, null, 2.5); break; }
+      d.carga = true; d.ultimaEntrega = {a: t.tid, llego: false}; d.breve = null;
+      const lado = t.x >= d.x ? -1 : 1;
+      irA(d, t.x + lado * 16, t.y + 1, () => {
+        d.carga = false; d.entregas++; d.ultimaEntrega.llego = true; d.facing = Math.sign(t.x - d.x) || d.facing;
+        globoT(d, dice, null, 2.2); t.bubble = {icon: 'doc', life: 70};
+        t.mira = d; t.miraT = 90;
+        emitScene = 'taller'; addP(t.x - 2, t.y - t.z - altoDe(t) - 6, 'check', {vy: -.25, life: 45, c: '#6fdc8c'}); emitScene = 'bosque';
+        if (suena) vozGlobo(d, dice, null, 1.4, .7);
+        d.pausaCasa = 50;
+      });
+      break;
+    }
+    case 'fin': {
+      /* en fila detrás del maestro, escalonados para que no se pisen los nombres */
+      const otros = taller.actores.filter(x => x !== d && !x.enPelea && !x.escenaEsp), n = otros.length, paso = n > 1 ? Math.min(44, 250 / (n - 1)) : 0;
+      otros.sort((a, b) => a.x - b.x).forEach((x, i) => {
+        x.base = 'esperar'; x.carga = false; x.pausaCasa = 0;
+        irA(x, 160 + (i - (n - 1) / 2) * paso, i % 2 ? 150 : 142);
+      });
+      d.base = 'esperar'; if (!enCasa(d)) irCasa(d);
+      taller.fin = {fase: 'ir', t: 0, quien: d};
+      globoT(d, dice, 'bien', 3.5);
+      if (suena) vozGlobo(d, dice, 'feliz', 2.5, .9);
+      break;
+    }
+  }
+  pintarEstado(ev, d);
+  return true;
+}
+let estadoEl = null;
+function pintarEstado(ev, d) {
+  if (!TALLER) return;
+  if (!estadoEl) {
+    estadoEl = document.createElement('div'); estadoEl.className = 'taller-estado'; estadoEl.id = 'tallerEstado'; estadoEl.setAttribute('aria-live', 'polite');
+    const sw = document.querySelector('.stage-wrap'); if (sw) sw.after(estadoEl); else document.body.append(estadoEl);
+  }
+  let t;
+  if (!ev) t = taller.actores.length > 1 ? `Los duendes esperan un encargo (${taller.actores.length}).` : 'El duende maestro espera un encargo.';
+  else {
+    const quien = d ? d.tNombre : (ev.nombre || 'Alguien'), dice = texto1(ev.texto, 120) || DEF_T[ev.accion] || '';
+    t = `${EMOJI_T[ev.accion] || '•'} ${quien}: ${dice}` + (ev.ronda > 1 ? ` · ronda ${Math.round(ev.ronda)}` : '');
+  }
+  taller.estado = t; estadoEl.textContent = t; estadoEl.title = t;
+}
+
+/* lo que hace cada uno en cada paso */
+function tallerTick() {
+  for (const d of taller.actores) {
+    d.t++; d.cambioT++;
+    if (d.bubble && --d.bubble.life <= 0) d.bubble = null;
+    if (d.globo && --d.globo.vida <= 0) d.globo = null;
+    if (d.hablaT > 0) d.hablaT--;
+    if (d.miraT > 0 && --d.miraT === 0) d.mira = null;
+    if (d.z > 0) { d.z += d.vz; d.vz -= .15; if (d.z <= 0) { d.z = 0; d.vz = 0; } }
+    if (d.breve && --d.breve.t <= 0) d.breve = null;
+    if (d.pausaCasa > 0 && --d.pausaCasa === 0) irCasa(d);
+    /* caminar */
+    if (d.mueve) {
+      const dx = d.mueve.x - d.x, dy = d.mueve.y - d.y, dist = Math.hypot(dx, dy), v = 1.25;
+      if (dist <= v) { d.x = d.mueve.x; d.y = d.mueve.y; const f = d.mueve.luego; d.mueve = null; d.moving = false; if (f) f(); }
+      else { d.x += dx / dist * v; d.y += dy / dist * v; d.moving = true; if (Math.abs(dx) > .4) d.facing = Math.sign(dx); }
+    } else d.moving = false;
+    /* los enojones se enojan a menudo mientras revisan o corrigen */
+    if (d.tEnojon && !d.mueve && !d.breve && !d.enPelea && !d.escenaEsp && (d.base === 'revisar' || d.base === 'corregir') && --d.proxEnojo <= 0) {
+      enojar(d, pick(GRUNIDOS), VOZ.permitido); d.proxEnojo = ri(170, 400);
+    }
+    /* qué se ve */
+    if (d.mueve) ponerAccion(d, 'caminar');
+    else if (d.breve) { ponerAccion(d, 'actuar'); d.emo = d.breve.emo; }
+    else switch (d.base) {
+      case 'leer': ponerAccion(d, 'leer'); break;
+      case 'escribir':
+        if (d.cambioT > 420 && Math.random() < .004) { d.escribeCon = d.escribeCon === 'teclear' ? 'escribir' : 'teclear'; d.cambioT = 0; }
+        ponerAccion(d, d.escribeCon); break;
+      case 'revisar': ponerAccion(d, 'revisar'); if (d.t >= d.dur) d.t = 0; break;
+      case 'corregir': ponerAccion(d, 'escribir'); break;
+      default: ponerAccion(d, 'actuar'); d.emo = null;
+    }
+    d.talking = d.action === 'actuar' && !!d.pista;
+    d.shake = !reducir() && !d.moving && d.action === 'actuar' && d.emo === 'enojado';
+    if (!d.mueve) {
+      if (d.mira && d.mira !== d && (d.action === 'actuar')) d.facing = Math.sign(d.mira.x - d.x) || d.facing;
+      else if (enCasa(d) && !d.breve) d.facing = d.casa[2];
+    }
+    /* la pelea (1.1.68): los que pelean, a lo suyo; el maestro, preocupado */
+    if (d.enPelea && PELEA) { if (!d.mueve) peleaActor(d); continue; }
+    if (d.escenaEsp && ESC) { if (!d.mueve) escenaActor(d); continue; }
+    if (ESC && ESC.tipo === 'huelga' && !d.mueve && !d.breve && d.base === 'esperar') { ponerAccion(d, 'actuar'); d.emo = 'sienta'; }   // los demás, de brazos cruzados
+    if (PELEA && PELEA.fase === 'pelea' && d.tPapel === 'maestro' && !d.mueve && !d.breve && d.base === 'esperar') {
+      ponerAccion(d, 'actuar'); d.emo = 'nervioso'; d.facing = Math.sign(PELEA.cx - d.x) || d.facing;
+    }
+    efectosTaller(d);
+  }
+  peleaTick(); escenaTick();
+  /* el final: todos con el maestro, un aplauso y cada quien a su puesto */
+  const f = taller.fin;
+  if (f) {
+    f.t++;
+    const otros = taller.actores.filter(x => x !== f.quien);
+    if (f.fase === 'ir' && (otros.every(x => !x.mueve) || f.t > 300)) {
+      f.fase = 'celebrar'; f.t = 0;
+      for (const x of taller.actores) { x.mueve = null; x.breve = {tipo: 'fin', emo: x === f.quien ? 'feliz' : 'aplaude', t: 130}; x.mira = f.quien === x ? null : f.quien; x.miraT = 130; }
+      emitScene = 'taller'; for (let i = 0; i < 16; i++) addP(rand(110, 210), rand(90, 110), 'conf', {vx: rand(-.3, .3), vy: rand(.3, .7), life: ri(60, 100), c: pick(['#f2c94c', '#f28b9a', '#7fc8ff', '#6fdc8c', '#ffffff'])}); emitScene = 'bosque';
+    } else if (f.fase === 'celebrar' && f.t > 150) {
+      for (const x of taller.actores) { x.base = 'esperar'; irCasa(x); }
+      taller.fin = null; taller.trabajando = false;
+    }
+  }
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.x += p.vx + (p.wob ? Math.sin(frame * .08 + p.ph) * .2 : 0) + (p.type === 'conf' ? Math.sin(frame * .1 + p.ph) * .3 : 0); p.y += p.vy;
+    if (p.type === 'px') { p.vx *= .93; p.vy *= .93; }
+    if (p.type === 'hoja') { p.vy += .07; if (p.y > 172) { p.y = 172; p.vy = 0; p.vx *= .8; } }
+    if (--p.life <= 0) parts.splice(i, 1);
+  }
+}
+/* lo que va echando cada uno (lo mismo que en el bosque: unos y ceros, palomitas, ideas; y lo del taller: tachones, enojo) */
+function efectosTaller(d) {
+  if (d.moving) return;
+  emitScene = 'taller';
+  const T = d.t, f = d.facing, hy = d.y - d.z - altoDe(d) + 2;
+  switch (d.action) {
+    case 'leer':
+      if (d.flip > 0) d.flip--;
+      if (T % 90 === 45) d.flip = 8;
+      if (T % 200 === 120 && Math.random() < .6) d.bubble = {icon: 'bulb', life: 60};
+      break;
+    case 'teclear':
+      if (T % 14 === 0) addP(d.x + f * rand(10, 15), d.y - 17, Math.random() < .5 ? 'one' : 'zero', {vy: -.35, vx: f * rand(-.1, .2), life: 45, c: pick(['#6fdc8c', '#7fc8ff'])});
+      if (T % 180 === 90 && Math.random() < .6) d.bubble = {icon: pick(['code', 'chart']), life: 60};
+      break;
+    case 'escribir':
+      if (d.base === 'corregir') { if (T % 40 === 20) addP(d.x + f * 5, d.y - 14, 'anger', {vy: -.2, life: 35, c: '#e04848'}); if (T % 150 === 100) addP(d.x + f * 6, d.y - 12, 'check', {vy: -.25, life: 45, c: '#6fdc8c'}); }
+      else { if (T % 75 === 70) addP(d.x + f * 6, d.y - 12, 'check', {vy: -.25, life: 45, c: '#6fdc8c'}); if (T % 170 === 100 && Math.random() < .5) d.bubble = {icon: 'doc', life: 60}; }
+      break;
+    case 'revisar':
+      if (T === 25) d.bubble = {icon: 'q', life: 60};
+      if (T === Math.floor(d.dur * .45)) d.bubble = {icon: 'ex', life: 50};
+      if (T % 24 === 0) addP(d.x + f * rand(9, 15), d.y - rand(4, 16), 'px', {vy: -.3, life: 18, c: '#fff6b8'});
+      break;
+    case 'actuar':
+      switch (d.emo) {
+        case 'enojado': if (T % 12 === 0) addP(d.x + f * 3 + rand(-4, 4), hy - 2, 'anger', {vy: -.3, life: 35, c: '#ff5a5a'}); break;
+        case 'aplaude': if (T % 20 === 0) addP(d.x + f * 3, hy + 4, 'spark', {vy: -.3, life: 22, c: pick(FLOW)}); break;
+        case 'feliz': if (T % 30 === 0) addP(d.x + rand(-4, 4), hy + 2, 'spark', {vy: -.3, life: 30, c: pick(FLOW)}); break;
+        case 'triste': if (T % 26 === 0) addP(d.x + f, d.y - d.z - 11, 'drop', {vy: .35, life: 30, c: '#7fc8ff'}); break;
+        case 'saluda': break;
+      }
+      break;
+  }
+  emitScene = 'bosque';
+}
+
+/* ---- el dibujo: la oficina del bosque, un tapete por puesto y los duendes ---- */
+const tallerSuelo = document.createElement('canvas'); tallerSuelo.width = W; tallerSuelo.height = H;
+(function () {
+  const g = tallerSuelo.getContext('2d'), Rr = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  Rr(0, BH, W, H - BH, '#7a4a2a');
+  const lineas = [126, 129, 133, 138, 144, 151, 159, 168, 178];
+  lineas.forEach((y, i) => {
+    Rr(0, y, W, 1, '#55301a'); Rr(0, y + 1, W, 1, '#8a5a34');
+    const nx = lineas[i + 1] || H;
+    const paso = 16 + i * 3; for (let x = (i * 9) % paso; x < W; x += paso) Rr(x, y + 1, 1, nx - y - 1, '#5e3820');
+  });
+  Rr(0, BH, W, 2, '#3a2214');
+  for (let i = 0; i < 300; i++) Rr(ri(0, W - 1), ri(128, H - 1), 1, 1, Math.random() < .5 ? '#6b4024' : '#865634');
+})();
+function drawTaller() {
+  ctx.drawImage(getBd('oficina'), 0, 0);
+  ctx.drawImage(tallerSuelo, 0, 0);
+  if (document.documentElement.dataset.theme === 'dark') { ctx.fillStyle = 'rgba(18,22,70,.22)'; ctx.fillRect(0, 0, W, H); }
+  /* un tapete del color de cada uno en su puesto (el del maestro, dorado) */
+  for (const d of taller.actores) {
+    const [x, y] = d.casa, c = d.tPapel === 'maestro' ? '#c9a227' : d.pal.cloth;
+    ctx.globalAlpha = .45; ctx.fillStyle = sh(c, -30);
+    for (let dy = -3; dy <= 3; dy++) { const w = Math.floor(15 * Math.sqrt(1 - dy * dy / 12)); ctx.fillRect(Math.round(x) - w, Math.round(y) + dy, w * 2, 1); }
+    ctx.globalAlpha = 1;
+  }
+  drawEscenaFondo(ctx);
+  const bubbles = [];
+  for (const d of taller.actores.slice().sort((a, b) => a.y - b.y)) {
+    if (enNube(d)) continue;   // dentro de la nube de la pelea
+    const k = escalaDe(d), G = d.pal.G;
+    sombra(d.x, d.y, Math.max(8, Math.round((G.torsoW + 8) * k) - Math.floor(d.z)));
+    const X = d.x + (d.shake ? (frame % 4 < 2 ? .5 : 0) : 0), Y = d.y - d.z - (d.alzado || 0), pose = getPose(d);
+    poseEscena(d, pose);
+    const h = renderSprite(d, pose);
+    blit(ctx, X, Y, k);
+    if (d.carga) {   // el papel que lleva
+      const hx = X + k * (d.facing > 0 ? h.hx : -h.hx - .5), hy = Y + k * h.hy;
+      ctx.fillStyle = '#140f1c'; ctx.fillRect(Math.round(hx) - 3, Math.round(hy) - 6, 6, 7);
+      ctx.fillStyle = '#fffdf5'; ctx.fillRect(Math.round(hx) - 2, Math.round(hy) - 5, 4, 5);
+      ctx.fillStyle = '#9a9aa8'; ctx.fillRect(Math.round(hx) - 1, Math.round(hy) - 4, 2, 1); ctx.fillRect(Math.round(hx) - 1, Math.round(hy) - 2, 2, 1);
+    }
+    if (d.bubble) bubbles.push([Math.round(X) - 4, Math.round(Y - altoDe(d) - 19 + (pose.sit ? G.sitDrop / RES * k : 0)), d.bubble.icon]);
+  }
+  drawEscenaFrente(ctx);
+  drawNube(ctx);
+  for (const p of parts) {
+    if (p.sc !== 'taller' || (p.life < 12 && p.life % 2)) continue;
+    if (p.type === 'px' || p.type === 'conf') { ctx.fillStyle = p.c; ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1 + (p.type === 'conf' && frame % 20 < 10 ? 1 : 0)); }
+    else if (GL[p.type]) glyphAt(GL[p.type], Math.round(p.x), Math.round(p.y), p.c);
+  }
+  for (const [x, y, icon] of bubbles) drawBubble(x, y, icon);
+}
+/* los nombres debajo de los pies y los globos encima de la cabeza (sin pisarse) */
+function drawOverlayTaller() {
+  sizeOverlay();
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  octx.clearRect(0, 0, ow, oh);
+  const sx = ow / W, sy = oh / H;
+  const fs = Math.round(clamp(ow / 70, 9, 12));
+  octx.font = `600 ${fs}px ${FONT}`; octx.textAlign = 'left'; octx.textBaseline = 'middle';
+  for (const d of taller.actores) {
+    if (enNube(d)) continue;
+    const txt = d.tNombre, w = octx.measureText(txt).width + 14, h = fs + 6;
+    const x = clamp(d.x * sx - w / 2, 2, ow - w - 2), y = Math.min(oh - h / 2 - 1, (d.y + 3.5) * sy);
+    octx.fillStyle = 'rgba(20,15,28,.74)'; octx.fillRect(x, y - h / 2, w, h);
+    octx.fillStyle = d.tPapel === 'maestro' ? '#f2c94c' : d.pal.cloth; octx.fillRect(x + 2, y - h / 2 + 2, 4, h - 4);
+    octx.fillStyle = '#ffffff'; octx.fillText(txt, x + 9, y + 1);
+  }
+  drawEscenaTexto(octx, sx, sy, Math.round(clamp(ow / 60, 9, 13)));
+  drawPalabrasPelea(octx, sx, sy, Math.round(clamp(ow / 40, 12, 20)));
+  const con = taller.actores.filter(d => d.globo).sort((a, b) => b.globo.vida - a.globo.vida);
+  const puestos = [];
+  const gfs = Math.round(clamp(ow / 52, 10, 15)), lh = Math.round(gfs * 1.25), pad = Math.round(gfs * .55), maxW = Math.min(ow * .36, 250);
+  for (const d of con) {
+    const g = d.globo, nf = `700 ${gfs}px ${FONT}`, tf = `500 ${gfs}px ${FONT}`;
+    octx.font = tf; let lines = wrap(g.texto, maxW - pad * 2);
+    if (lines.length > 3) { lines = lines.slice(0, 3); lines[2] = lines[2].replace(/\s*\S*$/, '') + '…'; }
+    const lw = Math.max(...lines.map(l => octx.measureText(l).width));
+    octx.font = nf; const nw = octx.measureText(d.tNombre).width;
+    const w = Math.max(lw, nw) + pad * 2, h = pad * 2 + lh * (lines.length + 1);
+    const cx = d.x * sx, headY = (d.y - d.z - altoDe(d) - 4) * sy;
+    let bx = clamp(cx - w / 2, 4, ow - w - 4), by = Math.max(4, headY - h - 10);
+    for (let k = 0; k < 6; k++) {
+      const choca = puestos.find(r => bx < r.x + r.w + 4 && bx + w > r.x - 4 && by < r.y + r.h + 4 && by + h > r.y - 4);
+      if (!choca) break;
+      if (choca.y - h - 6 >= 4) by = choca.y - h - 6; else bx = clamp(choca.x + choca.w + 6 <= ow - w - 4 ? choca.x + choca.w + 6 : choca.x - w - 6, 4, ow - w - 4);
+    }
+    puestos.push({x: bx, y: by, w, h});
+    const alfa = Math.min(1, g.vida / 15), borde = g.tono === 'mal' ? '#c8553d' : g.tono === 'bien' ? '#2f8f6b' : '#140f1c';
+    octx.globalAlpha = alfa;
+    const tx = clamp(cx, bx + 12, bx + w - 12), tipY = Math.min(headY - 2, by + h + 12);
+    octx.fillStyle = 'rgba(20,15,28,.85)'; octx.fillRect(bx + 3, by + 3, w, h);
+    octx.beginPath(); octx.moveTo(tx - 7, by + h - 2); octx.lineTo(cx, Math.max(tipY, by + h + 3)); octx.lineTo(tx + 7, by + h - 2); octx.closePath();
+    octx.fillStyle = '#fffdf5'; octx.fill(); octx.lineWidth = 3; octx.strokeStyle = borde; octx.stroke();
+    octx.fillStyle = '#fffdf5'; octx.fillRect(bx, by, w, h);
+    octx.strokeRect(bx + 1.5, by + 1.5, w - 3, h - 3);
+    octx.fillStyle = '#fffdf5'; octx.fillRect(tx - 5, by + h - 3, 10, 3);
+    octx.textAlign = 'left'; octx.textBaseline = 'top';
+    const nc = d.tPapel === 'maestro' ? '#8a6a14' : d.pal.cloth;
+    octx.font = nf; octx.fillStyle = luma(nc) > 170 ? sh(nc, -90) : nc; octx.fillText(d.tNombre, bx + pad, by + pad);
+    const shown = Math.floor((g.total - g.vida) * 1.6);
+    octx.font = tf; octx.fillStyle = g.tono === 'mal' ? '#8a1f14' : '#1f2a22';
+    let rem = shown;
+    lines.forEach((l, i) => { if (rem <= 0) return; octx.fillText(l.slice(0, rem), bx + pad, by + pad + lh * (i + 1)); rem -= l.length + 1; });
+    octx.globalAlpha = 1;
+  }
+}
+/* un toque en un duende del taller: saluda y dice su nombre */
+if (TALLER) cv.addEventListener('pointerdown', e => {
+  const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+  const d = taller.actores.slice().sort((a, b) => b.y - a.y).find(a => x >= a.x - 8 && x <= a.x + 8 && y >= a.y - a.z - altoDe(a) - 3 && y <= a.y - a.z + 1);
+  if (!d || d.mueve) return;
+  if (!d.breve) d.breve = {tipo: 'saluda', emo: 'saluda', t: 90};
+  globoT(d, d.tNombre, null, 1.8);
+  if (VOZ.permitido) vozGlobo(d, d.tNombre, 'feliz', 1.5, .9);
+});
+
+Object.assign(window.Duendes, {
+  /* `taller({ actores: [{ id, nombre, papel, duende, voz, enojon }], sonido })`: los pone en escena (o los pone al día sin recargar) */
+  taller(op) {
+    if (!TALLER) return false;
+    op = op || {};
+    if (typeof op.sonido === 'boolean') window.Duendes.sonido(op.sonido);
+    if (Array.isArray(op.actores)) ponerActores(op.actores);
+    if (!taller.trabajando) pintarEstado(null, null);
+    return true;
+  },
+  tallerEvento(ev) { return TALLER ? eventoTaller(ev) : false; },
+  /* el sonido del taller (los globos hablan) y de `hablar`; apagado, corta lo que suena */
+  sonido(on) { VOZ.permitido = !!on; if (!VOZ.permitido) callarVoz(!MASCOTA); return VOZ.permitido; },
+  /* hace hablar al duende del retrato o al maestro del taller con el `gibberish` del teatro en esa voz (6 s como mucho) */
+  hablar(op) {
+    op = op || {};
+    const texto = String(op.texto || '').replace(/\s+/g, ' ').trim();
+    if (MASCOTA && texto) { window.Duendes.decir({texto, voz: op.voz, emo: op.emo}); return VOZ.permitido; }   // en la mascota: `decir`, con su cola
+    if (!texto || !VOZ.permitido) return false;
+    callarVoz();
+    const quien = TALLER ? maestroT() : retratoD;
+    const v = VOICES[op.voz] ? voiceFor(quien && quien.tNombre ? quien.tNombre : 'El duende maestro', op.voz)
+      : quien && quien.tNombre ? vozDe(quien) : voiceFor('El duende maestro', VOZ_PAPEL.maestro);   // el retrato del asistente es el maestro
+    const emo = typeof op.emo === 'string' ? op.emo : null, seg = segundosVoz(texto, 6);
+    if (TALLER && quien) { quien.breve = {tipo: 'hablar', emo: GESTOS_FABRICA.has(emo) ? emo : null, t: Math.round((seg + .6) * 60)}; globoT(quien, texto, null, seg + 1.5, 6); }
+    if (!hablarCon(quien || null, v, texto, emo, 6, 1, true)) return false;
+    if (quien) quien.hablaT = Math.round(seg * 60);
+    return true;
+  },
+  callar() { callarVoz(); return true; },
+  /* lecturas para las pruebas: los actores del taller, lo que hacen y el sonido */
+  tallerInfo() {
+    const cuenta = {};
+    for (const p of parts) if (p.sc === 'taller') cuenta[p.type] = (cuenta[p.type] || 0) + 1;
+    return {taller: TALLER, pelea: peleaInfo(), escena: escenaInfo(), trabajando: taller.trabajando, estado: taller.estado, eventos: taller.eventos, fin: taller.fin ? taller.fin.fase : null,
+      sonido: VOZ.permitido, notas: SND.notas, audio: SND.ctx ? SND.ctx.state : null, hablando: !!(retratoD && retratoD.hablaT > 0) || taller.actores.some(d => d.hablaT > 0 && d.breve && d.breve.tipo === 'hablar'),
+      particulas: cuenta,
+      actores: taller.actores.map(d => ({id: d.tid, nombre: d.tNombre, papel: d.tPapel, enojon: !!d.tEnojon, x: Math.round(d.x * 10) / 10, y: Math.round(d.y * 10) / 10,
+        casa: d.casa.slice(0, 2), tarea: d.base, breve: d.breve ? d.breve.tipo : null, accion: d.action, gesto: d.action === 'actuar' ? d.emo || null : null,
+        caminando: !!d.mueve, destino: d.mueve ? [Math.round(d.mueve.x), Math.round(d.mueve.y)] : null, carga: !!d.carga, globo: d.globo ? d.globo.texto : null,
+        enojos: d.enojos, entregas: d.entregas, ultimaEntrega: d.ultimaEntrega ? Object.assign({}, d.ultimaEntrega) : null, cuerpo: d.pal && d.pal.cuerpo,
+        ropa: d.pal && d.pal.cloth, sombrero: d.pal && d.pal.hat, sacude: !!d.shake, enPelea: !!d.enPelea, enNube: enNube(d), enEscena: !!d.escenaEsp, alzado: d.alzado || 0}))};
+  }
+});
+if (TALLER) {
+  scene = 'taller';
+  ponerActores([{id: 'maestro', nombre: 'El duende maestro', papel: 'maestro'}]);
+  pintarEstado(null, null);
+}
+
+/* ============ La mascota del asistente (1.1.68) ============
+   Leo (28-09-2026): «Agrega al asistente de IA un recuadro en la parte superior para ver "hablar" a los duendes. Siempre se ve el
+   duende y funciona como una especie de mascota. Mejora su "lipsync".» `?embebido=1&mascota=1&tema=…` es un escenario bajo y ancho
+   (pensado para ~100–130 px de alto por 300–720 de ancho) con el duende maestro siempre a la vista y vida propia (parpadea, respira,
+   mira a los lados, a ratos saluda, bosteza o lee). El lienzo mide lo que mida el marco y el pixel art se pinta a escala entera (1×
+   hasta 160 px de alto, luego 2×…), así nunca se deforma. `Duendes.decir` hace hablar al maestro o a un invitado que entra por la
+   derecha, dice lo suyo y se va; lo que llega mientras otro habla espera en una cola (3 como mucho). */
+const masc = {cv: null, g: null, cssW: 0, cssH: 0, dpr: 1, k: 1, LW: 0, LH: 0, fondo: 'tema', maestro: null, invitados: new Map(),
+  estado: 'quieto', estadoT: 0, cola: [], actual: null, rutina: null, rutinaT: 180, parts: [], bocas: [], boca: 'normal', dichos: 0};
+const ESTADOS_M = ['quieto', 'pensando', 'trabajando', 'escuchando', 'contento', 'error', 'huelga', 'tope', 'sin-clave', 'sin-red', 'saturado'];
+const SALUDOS_M = ['¡Hola!', 'Aquí ando.', '¿Qué escribimos hoy?', '¡Hola, Leo!', 'Listo para trabajar.'];
+const suelo = () => masc.LH - 7;
+const xMaestro = () => Math.max(34, Math.min(56, masc.LW * .1));
+const xInvitado = () => masc.LW - xMaestro();
+/* lo que se dice en el recuadro: sin marcas de Markdown y, si es largo, una frase */
+function fraseDe(t) {
+  t = String(t || '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>~|]+/g, '').replace(/\s+/g, ' ').trim();
+  const m = t.match(/^.+?[.!?…](?=\s|$)/);
+  if (m && m[0].length >= 8) t = m[0];
+  return t.length > 140 ? t.slice(0, 139).replace(/\s+\S*$/, '') + '…' : t;
+}
+function nuevoActorM(id, nombre, duende, voz, papel) {
+  const d = makeDuende(); d.born = 10; d.t = 0; d.z = 0;
+  Object.assign(d, {tid: id, tNombre: nombre, tPapel: papel, tVoz: voz || null, tDuende: duende || null, name: nombre, full: nombre, mueve: null, breve: null, globo: null, pista: null});
+  vestirM(d);
+  return d;
+}
+function vestirM(d) {
+  const asp = d.tDuende && typeof d.tDuende === 'object' ? d.tDuende : ASPECTO_PAPEL[d.tPapel] || ASPECTO_PAPEL[d.tid] || ASPECTO_PAPEL.especial;
+  aplicarDuendePj(d, 'mascota ' + d.tid, asp);
+  d.mask = d.tDuende && d.tDuende.mascara && MASKS[d.tDuende.mascara] ? d.tDuende.mascara : 'ninguna';
+  d.tClave = JSON.stringify(d.tDuende || null);
+  d.voiceObj = vozDe(d);
+}
+function medirMascota() {
+  if (!masc.cv) return;
+  const w = Math.max(1, masc.cv.clientWidth), h = Math.max(1, masc.cv.clientHeight), r = window.devicePixelRatio || 1;
+  if (w === masc.cssW && h === masc.cssH && r === masc.dpr) return;
+  masc.cssW = w; masc.cssH = h; masc.dpr = r;
+  masc.k = h < 160 ? 1 : Math.max(1, Math.floor(h / 110));   // escala entera: 1× hasta 160 px de alto
+  masc.LW = w / masc.k; masc.LH = h / masc.k;
+  masc.cv.width = Math.round(w * r); masc.cv.height = Math.round(h * r);
+  const m = masc.maestro;
+  if (m && !m.mueve) { m.x = xMaestro(); m.y = suelo(); }
+  for (const d of masc.invitados.values()) if (!d.mueve && d.enEscena) { d.x = xInvitado(); d.y = suelo(); }
+}
+function iniciarMascota() {
+  const c = document.createElement('canvas'); c.id = 'mascota'; c.setAttribute('aria-label', 'El duende maestro');
+  document.body.append(c);
+  masc.cv = c; masc.g = c.getContext('2d');
+  try { new ResizeObserver(medirMascota).observe(c); } catch (_) { window.addEventListener('resize', medirMascota); }
+  medirMascota();
+  masc.maestro = nuevoActorM('maestro', 'El duende maestro', null, 'grave', 'maestro');
+  masc.maestro.x = xMaestro(); masc.maestro.y = suelo(); masc.maestro.facing = 1;
+  c.addEventListener('pointerdown', () => {
+    const m = masc.maestro;
+    if (!masc.actual) { m.breve = {emo: 'saluda', t: 80}; if (VOZ.permitido) decirM({texto: pick(SALUDOS_M)}); }
+    try { window.parent.postMessage({tipo: 'duendes-mascota', evento: 'clic'}, '*'); } catch (_) {}
+  });
+}
+/* ---- la cola ---- */
+function decirM(op) {
+  op = op || {};
+  const texto = fraseDe(op.texto);
+  if (!texto) return Promise.resolve({ok: false, motivo: 'sin texto'});
+  return new Promise(res => {
+    masc.cola.push({op, texto, res});
+    while (masc.cola.length > 3) masc.cola.shift().res({ok: false, motivo: 'descartado'});   // los más viejos se descartan
+  });
+}
+function actorDeItem(it) {
+  const op = it.op, q = op.quien == null || op.quien === '' || op.quien === 'maestro' ? 'maestro' : String(op.quien);
+  if (q === 'maestro') return masc.maestro;
+  let d = masc.invitados.get(q);
+  const nombre = texto1(op.nombre || (d && d.tNombre) || q, 40);
+  if (!d) { d = nuevoActorM(q, nombre, op.duende || null, op.voz || null, op.papel || (ASPECTO_PAPEL[q] ? q : 'especial')); d.enEscena = false; masc.invitados.set(q, d); }
+  else {
+    d.tNombre = d.name = d.full = nombre;
+    if (op.duende !== undefined && JSON.stringify(op.duende || null) !== d.tClave) { d.tDuende = op.duende || null; vestirM(d); }
+    if (op.voz) { d.tVoz = op.voz; d.voiceObj = vozDe(d); }
+  }
+  return d;
+}
+function empezarItem(it) {
+  const d = actorDeItem(it);
+  it.d = d; it.fase = 'entrar'; masc.actual = it;
+  if (d !== masc.maestro && !d.enEscena) {
+    d.enEscena = true; d.x = masc.LW + 30; d.y = suelo(); d.facing = -1;
+    d.mueve = {x: xInvitado(), y: suelo()};
+  } else if (d !== masc.maestro) d.mueve = d.mueve && d.mueve.sale ? {x: xInvitado(), y: suelo()} : d.mueve;
+  if (!d.mueve) hablarItem(it);
+}
+function hablarItem(it) {
+  const d = it.d, op = it.op;
+  it.fase = 'hablar';
+  const conVoz = op.sonido === true || (op.sonido !== false && VOZ.permitido);
+  if (op.voz && VOICES[op.voz]) { d.tVoz = op.voz; d.voiceObj = vozDe(d); }
+  hablarCon(d, vozDe(d), it.texto, op.emo || null, 6, 1, conVoz, op.sonido === true);
+  if (!d.pista) ponerPista(d, it.texto, 6);
+  const fin = d.pista ? d.pista.fin : 0;
+  it.hasta = ahoraSeg() + Math.max(1.6, fin + clamp(.8 + it.texto.length / 40, 1.2, 3));
+  d.globo = {texto: it.texto, tono: op.emo === 'enojado' ? 'mal' : null, vida: 1, total: 1};
+  d.emoHabla = typeof op.emo === 'string' && (GESTOS_FABRICA.has(op.emo) || MOD_GESTOS[op.emo]) ? op.emo : null;
+  masc.bocas = []; masc.dichos++;
+  if (d.emoHabla === 'enojado') for (let i = 0; i < 3; i++) particulaM(d, 'anger', '#ff5a5a');
+  if (d !== masc.maestro) { masc.maestro.mira = d; }
+}
+function terminarItem(it, r) {
+  const d = it.d;
+  if (d) { d.globo = null; d.emoHabla = null; }
+  masc.maestro.mira = null;
+  masc.actual = null;
+  it.res(r || {ok: true});
+  /* el invitado se va, salvo que lo siguiente sea suyo */
+  if (d && d !== masc.maestro) {
+    const sig = masc.cola[0], suyo = sig && String(sig.op.quien) === d.tid;
+    if (!suyo && !d.enPelea && !d.escenaEsp) { d.mueve = {x: masc.LW + 34, y: suelo(), sale: true}; }
+  }
+}
+function callarMascota() {
+  if (!MASCOTA) return;
+  const it = masc.actual;
+  for (const d of [masc.maestro, ...masc.invitados.values()]) if (d) { d.pista = null; d.globo = null; }
+  while (masc.cola.length) masc.cola.shift().res({ok: false, motivo: 'callado'});
+  if (it) terminarItem(it, {ok: false, motivo: 'callado'});
+}
+function particulaM(d, tipo, c, o) {
+  o = o || {};
+  const top = d.y - (d.pal.G.alto * escalaDe(d)) - 2;
+  masc.parts.push({tipo, x: d.x + (o.dx != null ? o.dx : rand(-6, 6)), y: top + (o.dy || 0), vx: o.vx || rand(-.15, .15), vy: o.vy != null ? o.vy : -.35, life: o.life || 40, c});
+}
+/* ---- cada paso ---- */
+function mascotaTick() {
+  medirMascota();
+  const m = masc.maestro; if (!m) return;
+  masc.estadoT++;
+  if (masc.estado === 'contento' && masc.estadoT > 300) { masc.estado = 'quieto'; masc.estadoT = 0; }
+  /* la cola */
+  const it = masc.actual;
+  if (!it && masc.cola.length) empezarItem(masc.cola.shift());
+  else if (it) {
+    if (it.fase === 'entrar' && !it.d.mueve) hablarItem(it);
+    else if (it.fase === 'hablar' && ahoraSeg() >= it.hasta) terminarItem(it);
+  }
+  const todos = [m, ...masc.invitados.values()];
+  for (const d of todos) {
+    d.t++;
+    if (d.bubble && --d.bubble.life <= 0) d.bubble = null;
+    if (d.breve && --d.breve.t <= 0) d.breve = null;
+    if (d.z > 0) { d.z += d.vz; d.vz -= .15; if (d.z <= 0) { d.z = 0; d.vz = 0; } }
+    if (d.mueve) {
+      const dx = d.mueve.x - d.x, dy = d.mueve.y - d.y, dist = Math.hypot(dx, dy), v = d.mueve.sale ? 2.6 : 1.5;
+      if (dist <= v) { d.x = d.mueve.x; d.y = d.mueve.y; const sale = d.mueve.sale; d.mueve = null; d.moving = false; if (sale) { d.enEscena = false; } }
+      else { d.x += dx / dist * v; d.y += dy / dist * v; d.moving = true; if (Math.abs(dx) > .4) d.facing = Math.sign(dx); }
+    } else d.moving = false;
+  }
+  /* los invitados que ya salieron se olvidan (vuelven a entrar si hablan otra vez) */
+  for (const [k, d] of masc.invitados) if (!d.enEscena && !d.mueve && !(masc.actual && masc.actual.d === d) && !masc.cola.some(x => String(x.op.quien) === k)) masc.invitados.delete(k);
+  vidaMaestro(m);
+  for (const d of masc.invitados.values()) {
+    if (d.mueve) { ponerAccion(d, 'caminar'); continue; }
+    if (d.enPelea && PELEA) { peleaActor(d); continue; }
+    if (d.escenaEsp && ESC) { escenaActor(d); continue; }
+    ponerAccion(d, 'actuar'); d.emo = d.emoHabla || (d.breve && d.breve.emo) || null;
+    d.facing = -1;
+    d.talking = !!d.pista;
+    d.shake = !reducir() && d.emo === 'enojado';
+    if (d.emo === 'enojado' && d.t % 14 === 0) particulaM(d, 'anger', '#ff5a5a');
+  }
+  peleaTick(); escenaTick();
+  for (let i = masc.parts.length - 1; i >= 0; i--) { const q = masc.parts[i]; q.x += q.vx; q.y += q.vy; if (--q.life <= 0) masc.parts.splice(i, 1); }
+}
+/* el maestro: lo que dice manda; si no, su estado; y quieto, su rutina (nunca del todo quieto) */
+function vidaMaestro(m) {
+  const habla = masc.actual && masc.actual.d === m && masc.actual.fase === 'hablar';
+  m.talking = !!m.pista; m.shake = false;
+  if (m.mueve) { ponerAccion(m, 'caminar'); return; }
+  if (m.enPelea && PELEA) { peleaActor(m); return; }
+  if (m.mira && m.mira.enEscena) m.facing = Math.sign(m.mira.x - m.x) || 1;
+  if (habla) {
+    ponerAccion(m, 'actuar'); m.emo = m.emoHabla || (masc.estado === 'error' ? 'triste' : null);
+    m.shake = !reducir() && m.emo === 'enojado';
+    if (m.emo === 'enojado' && m.t % 14 === 0) particulaM(m, 'anger', '#ff5a5a');
+    if (!m.mira) m.facing = 1;
+    return;
+  }
+  if (m.breve) { ponerAccion(m, 'actuar'); m.emo = m.breve.emo; return; }
+  if (ESC && m.escenaEsp) { escenaActor(m); return; }
+  /* hay pelea: se aparta y mira preocupado */
+  if (PELEA && PELEA.fase === 'pelea') {
+    ponerAccion(m, 'actuar'); m.emo = 'nervioso'; m.facing = Math.sign(PELEA.cx - m.x) || 1;
+    if (m.t % 40 === 0) particulaM(m, 'drop', '#bfe6ff', {dx: -3, dy: 10, vy: .3});
+    return;
+  }
+  const e = masc.estado, T = masc.estadoT;
+  switch (e) {
+    case 'pensando':
+      ponerAccion(m, 'actuar'); m.emo = 'piensa'; if (!m.mira) m.facing = 1;
+      if (T % 80 === 1) m.bubble = {icon: ['dots', 'q', 'bulb'][Math.floor(T / 80) % 3], life: 70};
+      return;
+    case 'trabajando': {
+      const fase = TRABAJO[Math.floor(T / 330) % TRABAJO.length];
+      ponerAccion(m, fase); if (!m.mira) m.facing = 1;
+      if (fase === 'revisar' && m.t >= m.dur) m.t = 0;
+      if (fase === 'teclear' && m.t % 16 === 0) particulaM(m, Math.random() < .5 ? 'one' : 'zero', pick(['#6fdc8c', '#7fc8ff']), {dx: 14 + rand(0, 10), dy: 22, vx: .1});
+      if (fase === 'escribir' && m.t % 75 === 70) particulaM(m, 'check', '#6fdc8c', {dx: 12, dy: 14});
+      if (fase === 'leer') { if (m.flip > 0) m.flip--; if (m.t % 90 === 45) m.flip = 8; }
+      if (fase === 'revisar' && m.t === 25) m.bubble = {icon: 'q', life: 60};
+      return;
+    }
+    case 'escuchando': ponerAccion(m, 'actuar'); m.emo = null; if (!m.mira) m.facing = 1; return;
+    case 'contento':
+      ponerAccion(m, 'actuar'); m.emo = 'feliz'; if (!m.mira) m.facing = 1;
+      if (T % 30 === 0) particulaM(m, 'spark', pick(FLOW));
+      return;
+    case 'error':
+      ponerAccion(m, 'actuar'); m.emo = 'triste'; if (!m.mira) m.facing = 1;
+      if (T % 40 === 0) particulaM(m, 'drop', '#7fc8ff', {dx: 3, dy: 12, vy: .3});
+      return;
+  }
+  /* quieto: una rutina cada pocos segundos */
+  if (--masc.rutinaT <= 0 || !masc.rutina) {
+    const r = masc.rutina ? pick(['mira', 'mira', 'saluda', 'bosteza', 'lee', 'nada']) : 'nada';
+    masc.rutina = {tipo: r, t: 0};
+    masc.rutinaT = r === 'lee' ? 300 : r === 'nada' ? ri(120, 240) : ri(80, 110);
+    if (r === 'mira') m.facing = -m.facing;
+  }
+  const r = masc.rutina; r.t++;
+  if (r.tipo === 'lee') { ponerAccion(m, 'leer'); if (m.flip > 0) m.flip--; if (m.t % 90 === 45) m.flip = 8; return; }
+  ponerAccion(m, 'actuar');
+  m.emo = r.tipo === 'saluda' ? 'saluda' : r.tipo === 'bosteza' ? 'cansado' : null;
+  if (r.tipo !== 'mira' && !m.mira && m.facing !== 1 && r.t > 60) m.facing = 1;
+}
+/* ---- el dibujo ---- */
+const FONDO_M = {light: ['#efe6d2', '#e3d6bb', '#b98a5a', '#9a6c42'], dark: ['#211b2e', '#1a1524', '#4a3426', '#382619']};
+function drawMascota() {
+  const g = masc.g; if (!g) return;
+  const {dpr, k, LW, LH} = masc;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, masc.cv.width, masc.cv.height);
+  g.setTransform(dpr * k, 0, 0, dpr * k, 0, 0); g.imageSmoothingEnabled = false;
+  const transparente = masc.fondo === 'transparente' || document.documentElement.classList.contains('mascota-transparente');
+  if (!transparente) {
+    const tema = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', F = /^#[0-9a-f]{6}$/i.test(masc.fondo) ? [masc.fondo, sh(masc.fondo, -12), sh(masc.fondo, -60), sh(masc.fondo, -80)] : FONDO_M[tema];
+    g.fillStyle = F[0]; g.fillRect(0, 0, LW, LH);
+    g.fillStyle = F[1]; for (let x = 0; x < LW; x += 18) g.fillRect(Math.round(x), 0, 1, suelo() - 4);
+    g.fillStyle = F[2]; g.fillRect(0, suelo() - 3, LW, LH);
+    g.fillStyle = F[3]; g.fillRect(0, suelo() - 3, LW, 1); for (let x = 7; x < LW; x += 23) g.fillRect(x, suelo() - 2, 1, LH);
+  }
+  drawEscenaFondo(g);
+  const todos = [masc.maestro, ...[...masc.invitados.values()].filter(d => d.enEscena || d.mueve)].filter(d => d && !enNube(d)).sort((a, b) => a.y - b.y);
+  const heads = new Map();
+  for (const d of todos) {
+    const e = escalaDe(d), pose = getPose(d);
+    poseEscena(d, pose);
+    /* respira: el cuerpo baja un píxel de vez en cuando (si no hace otra cosa) */
+    if (!d.moving && d.action === 'actuar' && !d.emo && !reducir() && Math.sin(d.t / 22) > .55) pose.b = Math.max(pose.b, 1);
+    if (d === masc.maestro && masc.rutina && masc.rutina.tipo === 'bosteza' && !d.pista && d.action === 'actuar' && d.emo === 'cansado') { const q = masc.rutina.t; if (q > 15 && q < 70) pose.mouth = q < 30 || q > 55 ? 'v-o' : 'v-a'; }
+    if (masc.actual && masc.actual.d === d && masc.actual.fase === 'hablar') { const b = pose.mouth; if (b !== masc.boca) { masc.boca = b; masc.bocas.push(b); if (masc.bocas.length > 400) masc.bocas.shift(); } }
+    renderSprite(d, pose);
+    g.fillStyle = 'rgba(10,8,20,.28)'; g.fillRect(Math.round(d.x - 9 * e), Math.round(d.y) - 1, Math.round(18 * e), 2);
+    const X = Math.round(d.x - OX * e + (d.shake && frame % 4 < 2 ? 1 : 0)), Y = Math.round(d.y - OY * e - Math.round(d.z * 2) - (d.alzado || 0));
+    g.drawImage(S, X, Y, Math.round(SPW * e), Math.round(SPH * e));
+    heads.set(d, d.y - (d.alzado || 0) - d.pal.G.alto * e);
+    if (d.bubble) {
+      const ic = BUB[d.bubble.icon], bx = Math.round(d.x + d.facing * 6 - 9), by = Math.round(heads.get(d) - 16);
+      g.fillStyle = '#140f1c'; g.fillRect(bx + 1, by, 16, 12); g.fillRect(bx, by + 1, 18, 10);
+      g.fillStyle = '#fffdf5'; g.fillRect(bx + 1, by + 1, 16, 10);
+      if (ic) { g.fillStyle = ic.c; const w = ic.g[0].length, h = ic.g.length, x0 = bx + 1 + Math.floor((16 - w * 2) / 2), y0 = by + 1 + Math.floor((10 - h * 2) / 2);
+        for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (ic.g[j][i] === '1') g.fillRect(x0 + i * 2, y0 + j * 2, 2, 2); }
+    }
+  }
+  drawEscenaFrente(g);
+  drawNube(g);
+  for (const q of masc.parts) {
+    const gl = GL[q.tipo]; if (!gl) continue;
+    g.fillStyle = q.c; g.globalAlpha = Math.min(1, q.life / 12);
+    for (let j = 0; j < gl.length; j++) for (let i = 0; i < gl[j].length; i++) if (gl[j][i] === '1') g.fillRect(Math.round(q.x) + i * 2, Math.round(q.y) + j * 2, 2, 2);
+    g.globalAlpha = 1;
+  }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawEscenaTexto(g, k, k, Math.round(clamp(masc.cssH / 9, 10, 14)));
+  drawPalabrasPelea(g, k, k, Math.round(clamp(masc.cssH / 7, 12, 18)));
+  /* el globo de quien habla, en píxeles de pantalla (letra nítida) */
+  const it = masc.actual;
+  if (it && it.fase === 'hablar' && it.d && it.d.globo) {
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const d = it.d, izq = d === masc.maestro, W2 = masc.cssW, H2 = masc.cssH;
+    const fs = Math.round(clamp(H2 / 8.5, 11, 15)), lh = Math.round(fs * 1.22), pad = Math.round(fs * .5);
+    const x0 = izq ? (d.x + 24) * k : 8, x1 = izq ? W2 - 8 : (d.x - 24) * k;   // sin tapar la cara: la boca tiene que verse
+    const maxW = Math.max(80, x1 - x0);
+    g.font = `500 ${fs}px ${FONT}`; g.textBaseline = 'top'; g.textAlign = 'left';
+    const lineas = []; let cur = '';
+    for (const w of d.globo.texto.split(' ')) { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width > maxW - pad * 2 && cur) { lineas.push(cur); cur = w; } else cur = t; }
+    if (cur) lineas.push(cur);
+    const caben = Math.max(1, Math.floor((H2 - 12 - pad * 2 - lh) / lh));
+    if (lineas.length > caben) { lineas.length = caben; lineas[caben - 1] = lineas[caben - 1].replace(/\s*\S*$/, '') + '…'; }
+    g.font = `700 ${fs}px ${FONT}`; const nw = g.measureText(d.tNombre).width;
+    g.font = `500 ${fs}px ${FONT}`;
+    const w = Math.min(maxW, Math.max(nw, ...lineas.map(l => g.measureText(l).width)) + pad * 2), h = pad * 2 + lh * (lineas.length + 1);
+    const bx = izq ? x0 : x1 - w, by = Math.max(4, Math.min(H2 - h - 6, heads.get(d) * k - h / 2));
+    const tipX = izq ? bx : bx + w, tipY = clamp((heads.get(d) + 10) * k, by + 8, by + h - 8), mx = (d.x + (izq ? 15 : -15)) * k;
+    const borde = d.globo.tono === 'mal' ? '#c8553d' : '#140f1c';
+    g.fillStyle = 'rgba(20,15,28,.35)'; g.fillRect(bx + 3, by + 3, w, h);
+    g.beginPath(); g.moveTo(tipX, tipY - 6); g.lineTo(mx, tipY); g.lineTo(tipX, tipY + 6); g.closePath();
+    g.fillStyle = '#fffdf5'; g.fill(); g.lineWidth = 2; g.strokeStyle = borde; g.stroke();
+    g.fillStyle = '#fffdf5'; g.fillRect(bx, by, w, h); g.strokeRect(bx + 1, by + 1, w - 2, h - 2);
+    g.fillRect(tipX - (izq ? 0 : 2), tipY - 5, 2, 10);
+    const nc = d === masc.maestro ? '#8a6a14' : d.pal.cloth;
+    g.font = `700 ${fs}px ${FONT}`; g.fillStyle = luma(nc) > 170 ? sh(nc, -90) : nc; g.fillText(d.tNombre, bx + pad, by + pad);
+    g.font = `500 ${fs}px ${FONT}`; g.fillStyle = d.globo.tono === 'mal' ? '#8a1f14' : '#1f2a22';
+    lineas.forEach((l, i) => g.fillText(l, bx + pad, by + pad + lh * (i + 1)));
+  }
+}
+
+Object.assign(window.Duendes, {
+  /* `mascota({ maestro: { id, nombre, duende, voz }, sonido, fondo })`: el maestro del recuadro (llamarla otra vez lo pone al día) */
+  mascota(op) {
+    if (!MASCOTA) return false;
+    op = op || {};
+    if (typeof op.sonido === 'boolean') VOZ.permitido = op.sonido;
+    if (typeof op.fondo === 'string') masc.fondo = op.fondo;
+    const x = op.maestro, m = masc.maestro;
+    if (x && typeof x === 'object' && m) {
+      if (x.nombre) m.tNombre = m.name = m.full = texto1(x.nombre, 40);
+      if ('voz' in x) m.tVoz = VOICES[x.voz] ? x.voz : null;
+      if ('duende' in x && JSON.stringify(x.duende || null) !== m.tClave) { m.tDuende = x.duende && typeof x.duende === 'object' ? x.duende : null; vestirM(m); }
+      m.voiceObj = vozDe(m);
+    }
+    return true;
+  },
+  /* 'quieto' | 'pensando' | 'trabajando' | 'escuchando' | 'contento' | 'error' */
+  mascotaEstado(e, op) {
+    if (!MASCOTA || !ESTADOS_M.includes(e)) return false;
+    if (e !== masc.estado) { masc.estado = e; masc.estadoT = 0; masc.rutina = null; masc.rutinaT = 120; }
+    /* las escenas (1.1.68): la huelga y compañía duran hasta el siguiente estado */
+    if (e !== 'error' && ESCENAS.includes(e)) ponerEscena(e, op || {}); else if (ESC) ponerEscena(null);
+    return true;
+  },
+  /* `decir({ quien?, nombre?, duende?, voz?, texto, emo?, sonido? })` → Promise { ok, motivo? } al terminar (con su cola) */
+  decir(op) { return MASCOTA ? decirM(op) : Promise.resolve({ok: false, motivo: 'no es la mascota'}); },
+  /* el lipsync de un texto (para las pruebas): por tiempo, o por letra como en el teatro (`'letras'`) */
+  lipsync(texto, modo) {
+    if (modo === 'letras') return visemasTexto(texto);
+    const P = pistaDe(texto, 6); return {fin: P.fin, items: P.items.map(x => ({t: Math.round(x.t * 1000) / 1000, d: Math.round(x.d * 1000) / 1000, v: x.v, nota: !!x.ch}))};
+  },
+  /* las bocas de cada cara (para las pruebas): cuántos dibujos distintos salen con cada visema */
+  bocasPrueba() {
+    const out = {};
+    for (const [n, x] of [['duende', {cuerpo: 'duende', vello: 'no'}], ['duende-barba', {cuerpo: 'duende', vello: 'barba-larga'}], ['humano', {cuerpo: 'humano'}], ['nino', {cuerpo: 'nino'}], ['perro', {vestuario: 'perro'}]]) {
+      const d = makeDuende(); aplicarDuendePj(d, 'prueba ' + n, x); d.action = 'actuar'; d.emo = null; d.facing = 1; d.t = 1;
+      const hashes = {};
+      for (const m of ['normal', ...VISEMAS]) {
+        const p = {leg: 0, armL: 'down', armR: 'down', swingL: 0, swingR: 0, b: 0, sit: false, eyes: 'open', mouth: m, wx: 0, wy: 0};
+        SBUF.fill(0); drawDuende(d, p, 1);
+        let h = 2166136261; for (let i = 0; i < SBUF.length; i++) { h ^= SBUF[i]; h = Math.imul(h, 16777619); }
+        hashes[m] = (h >>> 0).toString(36);
+      }
+      out[n] = hashes;
+    }
+    return out;
+  },
+  /* lo que ha ido diciendo la boca de quien habla en el teatro (para las pruebas) */
+  lipsyncInfo() { return {teatro: bocasTeatro.slice(), habla: play.speaker ? play.speaker.role || play.speaker.name : null, visema: play.speaker ? visemaTeatro(play.speaker) : null}; },
+  /* `pausa(true)`: deja de animar (y de avanzar la cola) hasta `pausa(false)`, que sigue donde lo dejó; → si está en pausa */
+  pausa(on) {
+    if (on === undefined) return PAUSA.on;
+    PAUSA.on = !!on;
+    if (!PAUSA.on && !PAUSA.corre) { PAUSA.corre = true; last = performance.now(); acc = 0; requestAnimationFrame(loop); }
+    return PAUSA.on;
+  },
+  mascotaInfo() {
+    const a = d => d && {id: d.tid, nombre: d.tNombre, x: Math.round(d.x), y: Math.round(d.y), facing: d.facing, enEscena: d === masc.maestro || !!d.enEscena, caminando: !!d.mueve,
+      accion: d.action, gesto: d.action === 'actuar' ? d.emo || null : null, globo: d.globo ? d.globo.texto : null, boca: d.pista ? visemaPista(d) : null, sacude: !!d.shake, ropa: d.pal && d.pal.cloth, sombrero: d.pal && d.pal.hat, enPelea: !!d.enPelea, enNube: enNube(d), enEscenaEsp: !!d.escenaEsp, alzado: d.alzado || 0};
+    return {mascota: MASCOTA, pelea: peleaInfo(), escena: escenaInfo(), estado: masc.estado, hablando: masc.actual && masc.actual.fase === 'hablar' ? masc.actual.d.tid : null, fase: masc.actual ? masc.actual.fase : null,
+      cola: masc.cola.length, dichos: masc.dichos, bocas: masc.bocas.slice(), sonido: VOZ.permitido, notas: SND.notas, escala: masc.k, ancho: masc.LW, alto: masc.LH,
+      maestro: a(masc.maestro), invitados: [...masc.invitados.values()].map(a)};
+  }
+});
+if (MASCOTA) iniciarMascota();
+
+/* ============ La pelea de caricatura (1.1.68) ============
+   Leo (28-09-2026): «Pon que si la discusión es muy fuerte, exista una animación de pelea entre los duendes; se dejan de pelear
+   hasta mi próxima respuesta.» En la mascota y en el taller, `Duendes.pelea({ entre, nivel })` junta a los que pelean en una nube de
+   polvo con brazos, piernas y gorros asomando, estrellas, «¡PUM!», «¡ZAS!», «#@!», el gesto 'pelea' de fábrica, saltitos y
+   sacudidas (más con `nivel` 3), hasta `Duendes.pelea(null)`: la nube se disipa, quedan mareados un momento y cada uno vuelve a su
+   sitio (en la mascota, los invitados salen). Con sonido, golpes y gruñidos cortos de vez en cuando, bajitos. Con «reducir
+   movimiento», quietos con el gesto enojado y un «#@!». Mientras, `decir` sigue: el que habla sale de la nube un momento. */
+let PELEA = null;
+const PALABRAS_PELEA = ['¡PUM!', '¡ZAS!', '#@!', '¡PAF!', '%&$!', '¡BONK!', '¡CRAC!'];
+const uPelea = () => TALLER ? .5 : 1;   // unidades: el taller va en el mundo de 320×180; la mascota, en píxeles del sprite
+const radioNube = () => (20 + 5 * (PELEA ? PELEA.nivel : 1)) * uPelea();
+function sueloPelea() { return TALLER ? 150 : suelo(); }
+function centroPelea(actores) {
+  if (TALLER) {
+    const xs = actores.map(d => d.casa ? d.casa[0] : d.x);
+    let cx = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 160;
+    if (Math.abs(cx - 160) < 34) cx = cx < 160 ? 118 : 202;   // no encima del maestro
+    return clamp(cx, 60, 260);
+  }
+  return clamp(Math.max(masc.LW * .62, xMaestro() + 74), 60, masc.LW - 44);
+}
+/* dónde va cada uno: su sitio en la pelea o, si habla o asoma, al borde de la nube */
+function sitioPelea(d) {
+  const P = PELEA, i = P.actores.indexOf(d), n = P.actores.length, u = uPelea();
+  const off = (i - (n - 1) / 2) * 8 * u, fuera = P.fase === 'pelea' && !reducir() && (hablaEnPelea(d) || (P.asoma && P.asoma.d === d));
+  if (reducir() || P.fase !== 'pelea') return [P.cx + (i - (n - 1) / 2) * 22 * u, sueloPelea()];
+  if (fuera) { const lado = TALLER ? (off >= 0 ? 1 : -1) : 1; return [P.cx + lado * (radioNube() + 9 * u), sueloPelea()]; }
+  return [P.cx + off, sueloPelea()];
+}
+function hablaEnPelea(d) {
+  if (MASCOTA) return !!(masc.actual && masc.actual.d === d && masc.actual.fase === 'hablar');
+  return !!(d.globo && d.pista);
+}
+const enNube = d => !!(PELEA && d.enPelea && PELEA.fase === 'pelea' && !reducir() && !d.mueve && !hablaEnPelea(d) && !(PELEA.asoma && PELEA.asoma.d === d));
+/* quién pelea: en el taller, los que ya están (o llegan con su nombre); en la mascota, los que no están entran */
+function actorPelea(x) {
+  const id = String(x.id);
+  if (TALLER) return actorT({quien: id, nombre: x.nombre || id, papel: taller.porId.has(id) ? undefined : 'especial'});
+  if (id === 'maestro') return masc.maestro;
+  const d = actorDeItem({op: {quien: id, nombre: x.nombre || id, duende: x.duende, voz: x.voz}});
+  if (!d.enEscena) { d.enEscena = true; d.x = masc.LW + 30; d.y = suelo(); d.facing = -1; }
+  return d;
+}
+function soltarDePelea(d) {
+  d.enPelea = false; d.shake = false;
+  if (TALLER) { d.mueve = null; irCasa(d); return; }
+  if (d === masc.maestro) { d.mueve = {x: xMaestro(), y: suelo()}; return; }
+  if (!(masc.actual && masc.actual.d === d) && !masc.cola.some(it => String(it.op.quien) === d.tid)) d.mueve = {x: masc.LW + 34, y: suelo(), sale: true};
+}
+function ponerPelea(x) {
+  if (!TALLER && !MASCOTA) return false;
+  if (!x) {
+    if (PELEA && PELEA.fase === 'pelea') {
+      PELEA.fase = 'fin'; PELEA.finT = 110; PELEA.asoma = null; PELEA.palabras = [];
+      if (!reducir()) for (let i = 0; i < 14; i++) chispaPelea('px', pick(['#efe6d6', '#d9cdb4', '#ffffff']), {vx: rand(-1, 1), vy: rand(-1, .2), life: ri(18, 34)});
+    }
+    return true;
+  }
+  const lista = (Array.isArray(x.entre) ? x.entre : []).filter(e => e && e.id != null && String(e.id) !== '').slice(0, 6);
+  if (!lista.length) return false;
+  const nivel = clamp(Math.round(+x.nivel || 1), 1, 3);
+  const nuevos = [];
+  for (const e of lista) { const d = actorPelea(e); if (d && !nuevos.includes(d)) nuevos.push(d); }
+  if (!nuevos.length) return false;
+  if (PELEA) for (const d of PELEA.actores) if (!nuevos.includes(d)) soltarDePelea(d);
+  const antes = PELEA && PELEA.fase === 'pelea' ? PELEA : null;
+  PELEA = {entre: nuevos.map(d => d.tid), nivel, fase: 'pelea', t: antes ? antes.t : 0, finT: 0, actores: nuevos, cx: 0, asoma: null,
+    palabras: antes ? antes.palabras : [], golpes: antes ? antes.golpes : 0, proxGolpe: 30, proxPalabra: 20, proxAsoma: 90};
+  PELEA.cx = centroPelea(nuevos);
+  for (const d of nuevos) {
+    d.enPelea = true; d.breve = null; d.carga = false; d.pausaCasa = 0;
+    const [tx, ty] = sitioPelea(d);
+    if (reducir() && MASCOTA && d !== masc.maestro) { d.x = tx; d.y = ty; d.mueve = null; }   // sin movimiento: aparecen en su sitio
+    else if (TALLER) irA(d, tx, ty); else d.mueve = {x: tx, y: ty};
+  }
+  return true;
+}
+function chispaPelea(tipo, c, o) {
+  o = o || {};
+  const u = uPelea(), r = radioNube(), cy = sueloPelea() - 20 * u;
+  const x = PELEA.cx + (o.x != null ? o.x : rand(-r, r)), y = cy + (o.y != null ? o.y : rand(-r * .8, r * .2));
+  if (TALLER) { emitScene = 'taller'; addP(x, y, tipo, {vx: (o.vx || 0) * u, vy: (o.vy != null ? o.vy : -.3) * u, life: o.life || 30, c}); emitScene = 'bosque'; }
+  else masc.parts.push({tipo, x, y, vx: o.vx || 0, vy: o.vy != null ? o.vy : -.3, life: o.life || 30, c});
+}
+/* un golpe: su ruido (bajito) y, a veces, un gruñido de uno de ellos */
+function golpePelea() {
+  const P = PELEA; P.golpes++;
+  const quien = pick(P.actores);
+  conSonido(() => {
+    noiseBurst(.06, .04, {type: 'lowpass', freq: 420, q: .7});
+    blip(rand(90, 125), .05, 'square', .025, {slide: .55});
+    if (quien && Math.random() < .4) voiceBlip(vozDe(quien), pick(['g', 'r', 'a']), 'enojado', {vol: .3, at: .07});
+  });
+}
+/* cada paso (lo llaman el taller y la mascota al final del suyo) */
+function peleaTick() {
+  const P = PELEA; if (!P) return;
+  P.t++;
+  if (P.fase === 'fin') {
+    if (P.finT % 12 === 0) for (const d of P.actores) if (!d.mueve) chispaPelea('spark', '#f2c94c', {x: d.x - P.cx + rand(-4, 4) * uPelea(), y: -(d.pal.G.alto * uPelea()) + 4 * uPelea(), vy: -.1, life: 18});
+    if (--P.finT <= 0) { for (const d of P.actores) soltarDePelea(d); PELEA = null; }
+    return;
+  }
+  for (const d of P.actores) if (d.mueve && d.mueve.sale) d.mueve = null;   // uno que se iba y vuelve a pelear
+  if (--P.proxGolpe <= 0) { golpePelea(); P.proxGolpe = Math.round(ri(45, 90) / (.5 + P.nivel * .35)); }
+  if (reducir()) return;
+  if (--P.proxPalabra <= 0) {
+    const r = radioNube();
+    P.palabras.push({txt: pick(PALABRAS_PELEA), x: P.cx + rand(-r, r), y: sueloPelea() - 20 * uPelea() - r * rand(.5, 1.1), vida: 55, rot: rand(-.3, .3)});
+    if (P.palabras.length > 4) P.palabras.shift();
+    P.proxPalabra = Math.round(ri(50, 95) / (.6 + P.nivel * .3));
+  }
+  for (const w of P.palabras) w.vida--;
+  P.palabras = P.palabras.filter(w => w.vida > 0);
+  if (P.t % Math.max(4, 10 - P.nivel * 2) === 0) chispaPelea('spark', pick(['#f2c94c', '#fff6b8', '#ffffff']), {vy: rand(-.5, -.1), vx: rand(-.4, .4), life: 22});
+  if (P.asoma && --P.asoma.t <= 0) P.asoma = null;
+  if (!P.asoma && --P.proxAsoma <= 0 && P.actores.length) { P.asoma = {d: pick(P.actores), t: 32}; P.proxAsoma = Math.round(ri(70, 140) / (.6 + P.nivel * .25)); }
+}
+/* lo que hace uno que pelea (cuando ya llegó) */
+function peleaActor(d) {
+  const P = PELEA, [tx, ty] = sitioPelea(d);
+  if (!d.mueve) { d.x += (tx - d.x) * .25; d.y += (ty - d.y) * .25; }
+  ponerAccion(d, 'actuar');
+  d.talking = !!d.pista;
+  if (P.fase === 'fin') { d.emo = 'cansado'; d.shake = false; return; }
+  const habla = hablaEnPelea(d);
+  if (reducir()) { d.emo = habla && d.emoHabla ? d.emoHabla : 'enojado'; d.shake = false; d.facing = Math.sign(P.cx - d.x) || d.facing; return; }
+  d.emo = habla ? (d.emoHabla || 'enojado') : 'pelea';
+  d.shake = true;
+  if (habla) d.facing = -1;
+  else if (d.t % 9 === 0) d.facing = -d.facing;
+  if (!habla && d.z === 0 && Math.random() < .03 * P.nivel) { d.vz = 1.5 * (TALLER ? 1 : 1.2); d.z = .01; }
+}
+/* ---- el dibujo de la nube (en las unidades de cada escena: el mundo del taller o los píxeles de la mascota) ---- */
+function circuloP(g, cx, cy, r, c) {
+  g.fillStyle = c; r = Math.max(1, Math.round(r));
+  for (let dy = -r; dy <= r; dy++) { const w = Math.floor(Math.sqrt(r * r - dy * dy)); g.fillRect(Math.round(cx - w), Math.round(cy + dy), 2 * w + 1, 1); }
+}
+function lineaP(g, x0, y0, x1, y1, c, th) {
+  const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0))), o = TALLER ? .5 : 1;
+  g.fillStyle = '#1a1220';   // su contorno, como el de los sprites
+  for (let i = 0; i <= n; i++) g.fillRect(Math.round(x0 + (x1 - x0) * i / n) - o, Math.round(y0 + (y1 - y0) * i / n) - o, th + 2 * o, th + 2 * o);
+  g.fillStyle = c;
+  for (let i = 0; i <= n; i++) g.fillRect(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), th, th);
+}
+function drawNube(g) {
+  const P = PELEA; if (!P || reducir()) return;
+  const alfa = P.fase === 'fin' ? Math.max(0, 1 - (110 - P.finT) / 40) : 1;
+  if (alfa <= 0) return;
+  const u = uPelea(), r = radioNube(), cx = P.cx, cy = sueloPelea() - 20 * u, t = P.t, jit = (1 + P.nivel * .6) * u, n = 6 + P.nivel * 2;
+  const th = TALLER ? 1 : 2;
+  g.save(); g.globalAlpha = alfa;
+  const puffs = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + t * .07 * (i % 2 ? 1 : -1), rr = r * .55 + Math.sin(t * .21 + i) * jit;
+    puffs.push([cx + Math.cos(a) * rr + Math.sin(t * .9 + i * 1.7) * jit, cy + Math.sin(a) * rr * .6 + Math.cos(t * .8 + i) * jit, r * (.42 + .08 * Math.sin(t * .3 + i * 2))]);
+  }
+  for (const [x, y, pr] of puffs) circuloP(g, x, y, pr + th, '#6b5a44');
+  circuloP(g, cx, cy, r * .55 + th, '#6b5a44');
+  for (const [x, y, pr] of puffs) circuloP(g, x, y, pr, '#efe6d6');
+  circuloP(g, cx, cy, r * .55, '#efe6d6');
+  for (const [x, y, pr] of puffs) circuloP(g, x + pr * .2, y + pr * .25, pr * .55, '#d9cdb4');
+  /* brazos, piernas y gorros asomando (encima del polvo: salen de él) */
+  if (P.fase === 'pelea') {
+    let s = (Math.floor(t / 5) * 2654435761) >>> 0;
+    const rnd = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296);
+    const cuantos = 2 + P.nivel;
+    for (let j = 0; j < cuantos; j++) {
+      const d = P.actores[j % P.actores.length], pal = d.pal, ang = rnd() * Math.PI * 2, tipo = rnd();
+      const x0 = cx + Math.cos(ang) * r * .75, y0 = cy + Math.sin(ang) * r * .5, L = r * (.45 + rnd() * .35);
+      const x1 = x0 + Math.cos(ang) * L, y1 = Math.min(y0 + Math.sin(ang) * L * .8, sueloPelea() - 1);
+      if (tipo < .45) { lineaP(g, x0, y0, x1, y1, pal.manga || pal.cloth, th); g.fillStyle = pal.skin; g.fillRect(Math.round(x1 - th), Math.round(y1 - th), th * 2, th * 2); }
+      else if (tipo < .8) { lineaP(g, x0, y0, x1, y1, pal.pants, th); g.fillStyle = pal.shoes; g.fillRect(Math.round(x1 - th), Math.round(y1 - th / 2), th * 3, th * 2); }
+      else if (pal.hat && pal.hat !== 'nada' && pal.hat !== 'pelo') {   // un gorro que salta de la nube
+        const hx = x1, hy = cy - r * .8 - rnd() * r * .3, alto = Math.round(8 * u + 2);
+        g.fillStyle = pal.hatCol; for (let k = 0; k < alto; k++) { const w = Math.max(1, Math.round((k + 1) * 1.1)); g.fillRect(Math.round(hx - w / 2), Math.round(hy + k), w, 1); }
+      }
+    }
+  }
+  /* remolinos de la nube */
+  g.fillStyle = '#b8ab94';
+  for (let i = 0; i < 5; i++) { const a = t * .15 + i * 1.3, rr = r * (.2 + .12 * i); g.fillRect(Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr * .5), th * 2, th); }
+  g.restore();
+}
+/* las onomatopeyas y el «#@!» de «reducir movimiento», en píxeles de pantalla (k: de las unidades de la escena a CSS) */
+function drawPalabrasPelea(g, kx, ky, fsBase) {
+  const P = PELEA; if (!P || P.fase !== 'pelea') return;
+  const pinta = (txt, x, y, fs, rot, a, c) => {
+    g.save(); g.globalAlpha = a; g.translate(x, y); g.rotate(rot);
+    g.font = `700 ${fs}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = Math.max(3, fs / 4); g.strokeStyle = '#140f1c'; g.strokeText(txt, 0, 0);
+    g.fillStyle = c; g.fillText(txt, 0, 0); g.restore();
+  };
+  if (reducir()) { const alto = Math.max(...P.actores.map(d => d.pal.G.alto * escalaDe(d))); pinta('#@!', P.cx * kx, (sueloPelea() - (alto + 12) * uPelea()) * ky - fsBase * .6, fsBase, 0, 1, '#ff5a5a'); return; }
+  for (const w of P.palabras) {
+    const edad = 55 - w.vida, fs = Math.round(fsBase * (1 + P.nivel * .12) * (edad < 6 ? .6 + edad * .07 : 1));
+    pinta(w.txt, w.x * kx, w.y * ky, fs, w.rot, Math.min(1, w.vida / 12), w.txt.includes('!') && /[#%&$@]/.test(w.txt) ? '#ff5a5a' : '#f2c94c');
+  }
+}
+function peleaInfo() {
+  const P = PELEA;
+  return P ? {entre: P.entre.slice(), nivel: P.nivel, fase: P.fase, golpes: P.golpes, palabras: P.palabras.length, nube: P.fase === 'pelea' && !reducir(), reducir: reducir(),
+    cx: Math.round(P.cx), llegaron: P.actores.every(d => !d.mueve)} : null;
+}
+/* `pelea({ entre: [{ id, nombre, duende?, voz? }], nivel: 1|2|3 })` empieza (o cambia) una pelea; `pelea(null)` la para */
+window.Duendes.pelea = x => ponerPelea(x);
+
+/* ============ Las escenas de los estados: la huelga y compañía (1.1.68) ============
+   Leo (28-09-2026): «Si ya no hubiera saldo de tokens, que se vea una animación de duendes en huelga, y otras animaciones
+   divertidas.» En la mascota (`mascotaEstado(e, { texto?, actores? })`) y en el taller (`Duendes.escena(e, { texto? })`, `escena(null)`
+   vuelve a lo normal), hasta que cambia el estado:
+   · 'huelga' (sin saldo): el maestro y 2–3 más marchan en círculo alrededor de un tambo con fuego, con pancartas y puños arriba,
+     coreando («¡hu-el-ga!»); el maestro, con megáfono; a ratos se sientan de brazos cruzados. Con sonido, un coro bajito de vez en cuando.
+   · 'tope' (tope de gasto): un letrero «CERRADO · vuelvan mañana»; el maestro duerme (Zzz) y otro sacude una alcancía vacía.
+   · 'sin-clave': el maestro busca la llave con una linterna y a ratos saca los bolsillos vacíos («?»).
+   · 'sin-red': el maestro, subido a una escalera, arregla un cable que echa chispas («📡…»).
+   · 'saturado' (el servicio pide esperar): hacen fila con su ticket delante de una ventanilla «TURNO 17»; el último mira el reloj y bosteza.
+   · 'error' (solo el taller; la mascota ya lo tenía): el maestro triste, con gotas.
+   Con «reducir movimiento», la escena quieta con sus letreros. */
+let ESC = null;
+const ESCENAS = ['huelga', 'tope', 'sin-clave', 'sin-red', 'saturado', 'error'];
+const PANCARTAS = ['HUELGA', '¡SIN TOKENS NO HAY CUENTOS!', '¡RECARGA YA!', '$0.00', 'DUENDES UNIDOS'];   // la larga, en medio y más alta
+const COROS = ['¡hu-el-ga!', '¡RE-CAR-GA!', '¡hu-el-ga!', '¡sin tokens no hay cuentos!', '¡DUENDES UNIDOS!'];
+const INVITADOS_ESC = {
+  huelga: [{id: 'lector', nombre: 'El lector', papel: 'lector'}, {id: 'escritor', nombre: 'La escritora', papel: 'escritor'}, {id: 'coordinador', nombre: 'El coordinador', papel: 'coordinador'}],
+  tope: [{id: 'coordinador', nombre: 'El coordinador', papel: 'coordinador'}],
+  saturado: [{id: 'lector', nombre: 'El lector', papel: 'lector'}, {id: 'escritor', nombre: 'La escritora', papel: 'escritor'}]
+};
+const altoU = d => d.pal.G.alto * escalaDe(d) * uPelea();
+const sueloE = () => TALLER ? 150 : suelo();
+function maestroE() { return TALLER ? maestroT() : masc.maestro; }
+/* quiénes hacen la escena: el maestro y, según cuál, otros (en la mascota entran; en el taller, los primeros del equipo) */
+function actoresEscena(tipo, op) {
+  const m = maestroE(), out = m ? [m] : [];
+  const cuantos = tipo === 'huelga' ? 3 : tipo === 'tope' ? 1 : tipo === 'saturado' ? 2 : 0;
+  if (!cuantos) return out;
+  if (TALLER) {
+    const otros = taller.actores.filter(d => d !== m && !d.enPelea).sort((a, b) => (tipo === 'tope' ? (b.tPapel === 'coordinador') - (a.tPapel === 'coordinador') : 0) || (RANGO_T[a.tPapel] - RANGO_T[b.tPapel]));
+    return out.concat(otros.slice(0, cuantos));
+  }
+  const lista = Array.isArray(op.actores) && op.actores.length ? op.actores : INVITADOS_ESC[tipo];
+  for (const x of lista.slice(0, cuantos)) {
+    if (!x || x.id == null) continue;
+    const d = actorDeItem({op: {quien: String(x.id), nombre: x.nombre || String(x.id), duende: x.duende, voz: x.voz, papel: x.papel}});
+    if (d.mueve && d.mueve.sale) d.mueve = null;
+    if (!d.enEscena) { d.enEscena = true; d.x = masc.LW + 30; d.y = suelo(); d.facing = -1; }
+    if (!out.includes(d)) out.push(d);
+  }
+  return out;
+}
+function soltarDeEscena(d) {
+  d.escenaEsp = false; d.alzado = 0; d.shake = false;
+  if (d.enPelea) return;
+  if (TALLER) { irCasa(d); return; }
+  if (d === masc.maestro) { d.mueve = {x: xMaestro(), y: suelo()}; return; }
+  if (!(masc.actual && masc.actual.d === d) && !masc.cola.some(it => String(it.op.quien) === d.tid)) d.mueve = {x: masc.LW + 34, y: suelo(), sale: true};
+}
+function ponerEscena(tipo, op) {
+  op = op || {};
+  if (!TALLER && !MASCOTA) return false;
+  if (tipo && !ESCENAS.includes(tipo)) return false;
+  const antes = ESC;
+  if (antes && antes.tipo === tipo) { if (typeof op.texto === 'string') antes.texto = op.texto; return true; }
+  const nuevos = tipo ? actoresEscena(tipo, op) : [];
+  if (antes) for (const d of antes.actores) if (!nuevos.includes(d)) soltarDeEscena(d);
+  if (antes) for (const d of antes.actores) { d.alzado = 0; d.shake = false; }
+  if (!tipo) { ESC = null; return true; }
+  ESC = {tipo, texto: typeof op.texto === 'string' && op.texto.trim() ? texto1(op.texto, 60) : null, t: 0, actores: nuevos, ang: 0, parado: 0, proxParo: ri(360, 540),
+    coros: [], corosTotal: 0, proxCoro: 60, cantos: 0, turno: 17, fase: 'ir', bolsillos: 0, choque: 0, bostezo: 0};
+  nuevos.forEach((d, i) => { d.escenaEsp = true; d.breve = null; d.carga = false; d.pausaCasa = 0; const [x, y] = sitioEscena(d, i, true); if (TALLER) irA(d, x, y); else if (reducir()) { d.mueve = null; d.x = x; d.y = y; } else d.mueve = {x, y}; });   // sin movimiento: ya en su sitio
+  return true;
+}
+/* dónde empieza cada uno (y, con «reducir movimiento», dónde se queda) */
+function sitioEscena(d, i, inicio) {
+  const E = ESC, U = uPelea(), n = E.actores.length, base = sueloE(), m = maestroE();
+  const W0 = TALLER ? W : masc.LW, xm = TALLER ? (m ? m.casa[0] : 160) : xMaestro();
+  switch (E.tipo) {
+    case 'huelga': {
+      const cx = TALLER ? 160 : W0 * .55;
+      if (reducir()) return [cx + (i - (n - 1) / 2) * (TALLER ? 44 : 58) * U, base];
+      const a = E.ang + i * Math.PI * 2 / n, rx = TALLER ? 75 : clamp(W0 * .34, 70, 190);
+      return [cx + Math.cos(a) * rx, base - 2 * U + Math.sin(a) * (TALLER ? 9 : 3)];
+    }
+    case 'tope': return i === 0 ? [xm, TALLER ? m.casa[1] : base] : [xm + 44 * U, TALLER ? m.casa[1] : base];
+    case 'sin-clave': return [xm, TALLER ? m.casa[1] : base];
+    case 'sin-red': return [ladderX() - 1 * U, TALLER ? m.casa[1] : base];
+    case 'saturado': return [ventanillaX() - (TALLER ? 30 : 44) * U * (i + 1), base];
+    default: return TALLER && d.casa ? [d.casa[0], d.casa[1]] : [xm, base];
+  }
+}
+const ladderX = () => (TALLER ? (maestroE() ? maestroE().casa[0] : 160) + 24 : xMaestro() + 34);
+const ventanillaX = () => TALLER ? 286 : masc.LW - 34;
+const alturaEscalera = () => 30 * uPelea();
+function coroE(d, txt, sonar) {
+  ESC.coros.push({d, txt, vida: 80}); ESC.corosTotal++;
+  if (ESC.coros.length > 3) ESC.coros.shift();
+  ponerPista(d, txt, 1.4);
+  if (sonar) conSonido(() => { const P = pistaDe(txt, 1.4); d.pista = Object.assign(P, {t0: ahoraSeg()}); programarPista(vozDe(d), P, 'enojado', .35); });
+}
+/* cada paso de la escena (lo llaman el taller y la mascota) */
+function escenaTick() {
+  const E = ESC; if (!E) return;
+  E.t++;
+  for (const c of E.coros) c.vida--;
+  E.coros = E.coros.filter(c => c.vida > 0);
+  const quieta = reducir();
+  switch (E.tipo) {
+    case 'huelga':
+      if (quieta) break;
+      if (E.parado > 0) { if (--E.parado === 0) E.proxParo = ri(360, 560); }
+      else { E.ang += .007; if (--E.proxParo <= 0) E.parado = 170; }
+      if (--E.proxCoro <= 0 && E.actores.length) {
+        const i = E.cantos++ % E.actores.length, d = E.actores[i];
+        coroE(d, i === 0 ? pick(COROS) : COROS[(E.cantos + i) % COROS.length], VOZ.permitido && E.cantos % 3 === 1);
+        E.proxCoro = ri(110, 160);
+      }
+      break;
+    case 'tope': if (!quieta && E.t % 300 === 150 && E.actores[1]) coroE(E.actores[1], pick(['0… 0… nada.', 'Ni una moneda.', '¿Y la alcancía?']), false); break;
+    case 'sin-clave':
+      if (quieta) break;
+      if (E.bolsillos > 0) E.bolsillos--; else if (E.t % 420 === 300) { E.bolsillos = 120; if (E.actores[0]) E.actores[0].bubble = {icon: 'q', life: 90}; }
+      break;
+    case 'sin-red':
+      if (quieta) break;
+      if (E.choque > 0) E.choque--; else if (E.t % 360 === 200) { E.choque = 34; for (let i = 0; i < 8; i++) chispaE('spark', pick(['#fff6b8', '#7fc8ff', '#ffffff']), ladderX() + 4 * uPelea(), cableY(), {vx: rand(-1, 1), vy: rand(-1, .3), life: ri(12, 24)}); }
+      if (E.t % 7 === 0) chispaE('spark', pick(['#fff6b8', '#f2c94c']), ladderX() + 4 * uPelea() + rand(-2, 2), cableY(), {vx: rand(-.5, .5), vy: rand(-.6, .2), life: 14});
+      if (E.t % 260 === 100 && E.actores[0]) coroE(E.actores[0], '📡…', false);
+      break;
+    case 'saturado':
+      if (E.t % 600 === 599) E.turno++;
+      if (E.bostezo > 0) E.bostezo--; else if (E.t % 300 === 200) E.bostezo = 70;
+      break;
+  }
+}
+const cableY = () => sueloE() - alturaEscalera() - (TALLER ? 25 : 50) * uPelea() - 4 * uPelea();
+function chispaE(tipo, c, x, y, o) {
+  o = o || {};
+  if (TALLER) { emitScene = 'taller'; addP(x, y, tipo, {vx: (o.vx || 0) * uPelea(), vy: (o.vy || 0) * uPelea(), life: o.life || 20, c}); emitScene = 'bosque'; }
+  else masc.parts.push({tipo, x, y, vx: o.vx || 0, vy: o.vy || 0, life: o.life || 20, c});
+}
+/* lo que hace cada uno en la escena (cuando ya llegó a su sitio) */
+function escenaActor(d) {
+  const E = ESC, i = E.actores.indexOf(d), U = uPelea(), quieta = reducir();
+  d.talking = !!d.pista; d.shake = false;
+  d.escPose = null;
+  switch (E.tipo) {
+    case 'huelga': {
+      if (quieta) { const [x, y] = sitioEscena(d, i); d.x = x; d.y = y; ponerAccion(d, 'actuar'); d.emo = null; d.facing = 1; d.escPose = 'puños'; return; }
+      if (E.parado > 0) { ponerAccion(d, 'actuar'); d.emo = 'sienta'; d.facing = Math.sign((TALLER ? 160 : masc.LW * .55) - d.x) || 1; return; }
+      const [tx, ty] = sitioEscena(d, i), dx = tx - d.x, dy = ty - d.y, dist = Math.hypot(dx, dy), v = 1.6 * U;
+      if (dist > v) { d.x += dx / dist * v; d.y += dy / dist * v; } else { d.x = tx; d.y = ty; }
+      if (Math.abs(dx) > .05) d.facing = Math.sign(dx);
+      ponerAccion(d, 'caminar'); d.moving = true; d.escPose = 'puños';
+      return;
+    }
+    case 'tope':
+      if (i === 0) { ponerAccion(d, 'dormir'); d.facing = 1; if (!quieta && d.t % 60 === 10) chispaE('z', '#dfe8ff', d.x + 4 * U, d.y - altoU(d) * .6, {vx: .15, vy: -.22, life: 90}); return; }
+      ponerAccion(d, 'actuar'); d.facing = -1;
+      { const sacude = !quieta && E.t % 150 < 45; d.emo = sacude ? 'nervioso' : 'triste'; d.shake = sacude; d.escPose = 'alcancia'; }
+      if (!quieta && E.t % 150 === 5) chispaE('px', '#f2c94c', d.x - 6 * U, d.y - altoU(d) * .45, {vx: -.2, vy: -.6, life: 20});
+      return;
+    case 'sin-clave': {
+      if (i !== 0) { ponerAccion(d, 'actuar'); d.emo = null; return; }
+      if (quieta || E.bolsillos > 0) { ponerAccion(d, 'actuar'); d.emo = quieta ? 'piensa' : 'sorpresa'; d.escPose = quieta ? 'linterna' : 'bolsillos'; if (!quieta) d.moving = false; return; }
+      const xm = TALLER ? d.casa[0] - 35 : xMaestro(), x1 = TALLER ? d.casa[0] + 35 : xMaestro() + Math.min(160, masc.LW * .4);
+      if (!d.dirBusca) d.dirBusca = 1;
+      d.x += d.dirBusca * .45 * U * 2;
+      if (d.x > x1) d.dirBusca = -1; else if (d.x < xm) d.dirBusca = 1;
+      d.facing = d.dirBusca; ponerAccion(d, 'caminar'); d.moving = true; d.escPose = 'linterna';
+      return;
+    }
+    case 'sin-red':
+      if (i !== 0) { ponerAccion(d, 'actuar'); d.emo = null; return; }
+      d.alzado = Math.min(alturaEscalera(), (d.alzado || 0) + (quieta ? 99 : .6 * U));
+      ponerAccion(d, 'actuar'); d.facing = 1;
+      d.emo = E.choque > 0 ? 'sorpresa' : 'piensa'; d.shake = E.choque > 0; d.escPose = 'arreglar';
+      return;
+    case 'saturado': {
+      const [tx, ty] = sitioEscena(d, i); d.x += (tx - d.x) * .2; d.y += (ty - d.y) * .2;
+      ponerAccion(d, 'actuar'); d.facing = 1;
+      const ultimo = i === E.actores.length - 1;
+      d.emo = ultimo && E.bostezo > 0 ? 'cansado' : null;
+      d.escPose = ultimo && E.bostezo > 0 ? 'bosteza' : ultimo && E.t % 200 < 60 ? 'reloj' : 'ticket';
+      return;
+    }
+    default:   // 'error'
+      if (i === 0) { ponerAccion(d, 'actuar'); d.emo = 'triste'; if (!quieta && d.t % 40 === 0) chispaE('drop', '#7fc8ff', d.x + d.facing, d.y - altoU(d) * .5, {vy: .35, life: 30}); }
+  }
+}
+/* la pose de la escena, sobre la de siempre (puños arriba, bolsillos, arreglar el cable, el bostezo…) */
+function poseEscena(d, p) {
+  if (!ESC || !d.escenaEsp || !d.escPose) return;
+  switch (d.escPose) {
+    case 'puños': p.armL = 'up'; if (d === maestroE()) p.armR = 'out'; else p.armR = 'up'; break;
+    case 'bolsillos': p.armL = 'out'; p.armR = 'out'; p.mouth = 'v-o'; break;
+    case 'linterna': p.armR = 'out'; break;
+    case 'arreglar': p.armR = 'up'; p.armL = ESC.choque > 0 ? 'up' : 'out'; break;
+    case 'alcancia': p.armR = 'hold'; p.armL = 'hold'; break;
+    case 'ticket': p.armR = 'hold'; break;
+    case 'reloj': p.armL = 'hold'; p.armR = 'down'; break;
+    case 'bosteza': { const q = 70 - ESC.bostezo; p.armL = 'up'; p.armR = 'up'; p.eyes = 'closed'; p.mouth = q < 15 || q > 55 ? 'v-o' : 'v-a'; break; }
+  }
+}
+/* ---- lo que se pinta: fondo (detrás de ellos), frente (delante) y letreros (en píxeles de pantalla) ---- */
+function drawEscenaFondo(g) {
+  const E = ESC; if (!E) return;
+  const U = uPelea(), th = TALLER ? 1 : 2;
+  if (E.tipo === 'huelga') {   // el tambo con fuego
+    const cx = TALLER ? 160 : masc.LW * .55, y = sueloE() - 4 * U;
+    g.fillStyle = '#1a1220'; g.fillRect(Math.round(cx - 7 * U) - 1, Math.round(y - 16 * U) - 1, Math.round(14 * U) + 2, Math.round(16 * U) + 2);
+    g.fillStyle = '#6a7384'; g.fillRect(Math.round(cx - 7 * U), Math.round(y - 16 * U), Math.round(14 * U), Math.round(16 * U));
+    g.fillStyle = '#4a5260'; for (const k of [5, 11]) g.fillRect(Math.round(cx - 7 * U), Math.round(y - k * U), Math.round(14 * U), th);
+    if (!reducir() || true) {
+      const fl = reducir() ? 0 : Math.sin(E.t * .4);
+      g.fillStyle = '#e8573c'; g.fillRect(Math.round(cx - 5 * U), Math.round(y - (21 + fl * 2) * U), Math.round(10 * U), Math.round(6 * U));
+      g.fillStyle = '#f2a33c'; g.fillRect(Math.round(cx - 3 * U), Math.round(y - (24 + fl * 2) * U), Math.round(6 * U), Math.round(7 * U));
+      g.fillStyle = '#fff1a8'; g.fillRect(Math.round(cx - 1 * U), Math.round(y - (22 + fl) * U), Math.max(1, Math.round(2 * U)), Math.round(4 * U));
+    }
+  }
+  if (E.tipo === 'sin-red') {   // la escalera y el cable roto
+    const lx = ladderX(), top = sueloE() - alturaEscalera(), base = sueloE();
+    g.fillStyle = '#6b4226';
+    g.fillRect(Math.round(lx - 7 * U), Math.round(top), th, Math.round(base - top)); g.fillRect(Math.round(lx + 7 * U), Math.round(top), th, Math.round(base - top));
+    for (let y = top + 3 * U; y < base; y += 6 * U) g.fillRect(Math.round(lx - 7 * U), Math.round(y), Math.round(14 * U) + th, th);
+    const cy = cableY(), x0 = TALLER ? lx - 90 : 0, x1 = TALLER ? lx + 90 : masc.LW;
+    g.fillStyle = '#1a1220';
+    g.fillRect(Math.round(x0), Math.round(cy), Math.round(lx + 2 * U - x0), th); g.fillRect(Math.round(lx + 6 * U), Math.round(cy + 1 * U), Math.round(x1 - lx - 6 * U), th);
+  }
+  if (E.tipo === 'saturado') {   // la ventanilla
+    const vx = ventanillaX(), b = sueloE();
+    g.fillStyle = '#1a1220'; g.fillRect(Math.round(vx - 12 * U) - 1, Math.round(b - 34 * U) - 1, Math.round(26 * U) + 2, Math.round(34 * U) + 2);
+    g.fillStyle = '#9a6a3a'; g.fillRect(Math.round(vx - 12 * U), Math.round(b - 34 * U), Math.round(26 * U), Math.round(34 * U));
+    g.fillStyle = '#bfe0f5'; g.fillRect(Math.round(vx - 9 * U), Math.round(b - 30 * U), Math.round(20 * U), Math.round(12 * U));
+    g.fillStyle = '#6b4226'; g.fillRect(Math.round(vx - 12 * U), Math.round(b - 16 * U), Math.round(26 * U), th);
+  }
+}
+function drawEscenaFrente(g) {
+  const E = ESC; if (!E) return;
+  const U = uPelea(), th = TALLER ? 1 : 2;
+  for (const d of E.actores) {
+    if (d.mueve || enNube(d)) continue;
+    const top = d.y - (d.alzado || 0) - altoU(d), f = d.facing, hx = d.x + f * 7 * U, hy = d.y - (d.alzado || 0) - altoU(d) * .45;
+    if (d.escPose === 'puños' && d === maestroE()) {   // el megáfono
+      const mx = d.x + f * 6 * U, my = top + altoU(d) * .42;
+      g.fillStyle = '#1a1220'; g.fillRect(Math.round(mx - (f < 0 ? 9 * U : 0)) - 1, Math.round(my - 3 * U) - 1, Math.round(9 * U) + 2, Math.round(6 * U) + 2);
+      g.fillStyle = '#e8e0d0'; g.fillRect(Math.round(mx - (f < 0 ? 9 * U : 0)), Math.round(my - 2 * U), Math.round(9 * U), Math.round(4 * U));
+      g.fillStyle = '#c8553d'; g.fillRect(Math.round(f > 0 ? mx + 7 * U : mx - 9 * U), Math.round(my - 3 * U), Math.max(1, Math.round(2 * U)), Math.round(6 * U));
+    }
+    if (d.escPose === 'linterna') {   // la linterna y su luz
+      g.fillStyle = '#3a3f4a'; g.fillRect(Math.round(hx - 1 * U), Math.round(hy - 1 * U), Math.round(4 * U), Math.max(1, Math.round(2 * U)));
+      g.fillStyle = 'rgba(255,240,150,.22)';
+      const L = 46 * U;
+      for (let k = 0; k < L; k++) { const w = Math.round(k * .35); g.fillRect(Math.round(hx + f * (k + 3 * U)), Math.round(hy - w * .5 + (d.y - hy) * .35 * k / L), 1, Math.max(1, w)); }
+    }
+    if (d.escPose === 'bolsillos') {
+      g.fillStyle = '#fffdf5'; const py = d.y - altoU(d) * .32;
+      g.fillRect(Math.round(d.x - 7 * U), Math.round(py), Math.round(3 * U) || 1, Math.round(4 * U)); g.fillRect(Math.round(d.x + 5 * U), Math.round(py), Math.round(3 * U) || 1, Math.round(4 * U));
+    }
+    if (d.escPose === 'alcancia') {   // la alcancía vacía
+      const ax = d.x + f * 7 * U + (d.shake ? (frame % 4 < 2 ? 1 : -1) * U : 0), ay = d.y - altoU(d) * .42;
+      g.fillStyle = '#1a1220'; g.fillRect(Math.round(ax - 5 * U) - 1, Math.round(ay - 3 * U) - 1, Math.round(10 * U) + 2, Math.round(7 * U) + 2);
+      g.fillStyle = '#f28bc4'; g.fillRect(Math.round(ax - 5 * U), Math.round(ay - 3 * U), Math.round(10 * U), Math.round(7 * U));
+      g.fillStyle = '#d65a9e'; g.fillRect(Math.round(ax + f * 5 * U - (f < 0 ? 2 * U : 0)), Math.round(ay - 1 * U), Math.max(1, Math.round(2 * U)), Math.round(3 * U));
+      g.fillStyle = '#1a1220'; g.fillRect(Math.round(ax - 1 * U), Math.round(ay - 3 * U), Math.max(1, Math.round(3 * U)), th);
+    }
+    if (d.escPose === 'reloj') { g.fillStyle = '#e8e0c0'; g.fillRect(Math.round(d.x - f * 3 * U), Math.round(d.y - altoU(d) * .5), Math.max(1, Math.round(2 * U)), Math.max(1, Math.round(2 * U))); }
+  }
+}
+function drawEscenaTexto(g, kx, ky, fs) {
+  const E = ESC; if (!E) return;
+  const U = uPelea();
+  const tabla = (txt, x, y, op) => {   // un cartón o una tabla con letras
+    op = op || {};
+    g.font = `700 ${op.fs || fs}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const w = g.measureText(txt).width + (op.fs || fs) * .9, h = (op.fs || fs) * 1.5;
+    const bx = clamp(x - w / 2, 2, (TALLER ? ow : masc.cssW) - w - 2), by = Math.max(2, y - h);
+    if (op.palo) { g.fillStyle = '#6b4226'; g.fillRect(Math.round(op.palo[0]) - 1, by + h, 3, Math.max(0, op.palo[1] - by - h)); }
+    if (op.cuerdas) { g.strokeStyle = '#3a2414'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(bx + 8, 0); g.lineTo(bx + 8, by); g.moveTo(bx + w - 8, 0); g.lineTo(bx + w - 8, by); g.stroke(); }
+    g.fillStyle = 'rgba(20,12,18,.35)'; g.fillRect(bx + 2, by + 2, w, h);
+    g.fillStyle = op.fondo || '#e9d3a2'; g.fillRect(bx, by, w, h);
+    g.lineWidth = 2; g.strokeStyle = op.borde || '#5a3a22'; g.strokeRect(bx + 1, by + 1, w - 2, h - 2);
+    g.fillStyle = op.color || '#3a2414'; g.fillText(txt, bx + w / 2, by + h / 2 + 1);
+    return {bx, by, w, h};
+  };
+  const cabeza = d => (d.y - (d.alzado || 0) - altoU(d)) * ky;
+  switch (E.tipo) {
+    case 'huelga':
+      E.actores.forEach((d, i) => {
+        if (d === maestroE() || d.mueve || enNube(d)) return;
+        const txt = i === 2 && E.texto ? E.texto : PANCARTAS[(i - 1) % PANCARTAS.length];
+        const hx = (d.x + d.facing * 3 * U) * kx, top = cabeza(d) - fs * .3 - (i % 2 === 0 ? fs * 1.35 : 0);   // escalonadas: no se tapan
+        tabla(txt, hx, top, {fs: Math.round(fs * .85), palo: [hx, (d.y - altoU(d) * .55) * ky], fondo: '#f4efe0', color: i % 2 ? '#c8553d' : '#1f2a22', borde: '#3a2414'});
+      });
+      break;
+    case 'tope': {
+      const m = E.actores[0]; if (!m) break;
+      tabla(E.texto || 'CERRADO · vuelvan mañana', (m.x + 22 * U) * kx, TALLER ? cabeza(m) - fs * .6 : fs * 1.6 + 6, {cuerdas: true, fondo: '#c8553d', color: '#fffdf5', borde: '#6a1020'});
+      break;
+    }
+    case 'sin-clave': { const m = E.actores[0]; if (m && E.bolsillos > 0) tabla('?', m.x * kx, cabeza(m) - fs * .2, {fondo: '#fffdf5'}); break; }
+    case 'saturado': {
+      const vx = ventanillaX() * kx;
+      tabla(E.texto || ('TURNO ' + E.turno), vx, (sueloE() - 36 * U) * ky, {fondo: '#1b1420', color: '#6fdc8c', borde: '#3a3f4a', fs: Math.round(fs * .9)});
+      E.actores.forEach((d, i) => {
+        if (d.mueve) return;
+        const tx = (d.x + d.facing * 5 * U) * kx, ty = (d.y - altoU(d) * .45) * ky;
+        g.font = `700 ${Math.round(fs * .62)}px ${FONT}`; const w = g.measureText('Nº 00').width + 6, h = fs * .9;
+        g.fillStyle = '#fffdf5'; g.fillRect(tx - w / 2, ty - h, w, h); g.strokeStyle = '#1a1220'; g.lineWidth = 1; g.strokeRect(tx - w / 2 + .5, ty - h + .5, w - 1, h - 1);
+        g.fillStyle = '#1a1220'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Nº ' + (E.turno + 25 + i), tx, ty - h / 2 + 1);
+      });
+      break;
+    }
+  }
+  /* los coros y los «…» de la escena: globos pequeños */
+  for (const c of E.coros) {
+    const d = c.d; if (d.mueve && E.tipo !== 'huelga') continue;
+    g.font = `700 ${Math.round(fs * .85)}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const idx = E.actores.indexOf(d), alLado = E.tipo === 'tope' || E.tipo === 'sin-red';   // en esas, al lado (arriba están el letrero o el cable)
+    const w = g.measureText(c.txt).width + 10, h = fs * 1.35, x = clamp(d.x * kx + (alLado ? w / 2 + 12 : d.facing * 6), w / 2 + 2, (TALLER ? ow : masc.cssW) - w / 2 - 2);
+    const y = Math.max(h + 2, alLado ? cabeza(d) + fs * 1.2 : cabeza(d) - (E.tipo === 'huelga' && d !== maestroE() ? fs * 2.3 + (idx % 2 === 0 ? fs * 1.35 : 0) : fs * .4));
+    g.globalAlpha = Math.min(1, c.vida / 12);
+    g.fillStyle = '#fffdf5'; g.fillRect(x - w / 2, y - h, w, h); g.strokeStyle = '#140f1c'; g.lineWidth = 2; g.strokeRect(x - w / 2 + 1, y - h + 1, w - 2, h - 2);
+    g.fillStyle = E.tipo === 'huelga' ? '#c8553d' : '#1f2a22'; g.fillText(c.txt, x, y - h / 2 + 1);
+    g.globalAlpha = 1;
+  }
+}
+function escenaInfo() {
+  const E = ESC;
+  return E ? {tipo: E.tipo, texto: E.texto, actores: E.actores.map(d => d.tid), t: E.t, coros: E.coros.length, corosTotal: E.corosTotal, cantos: E.cantos,
+    parado: E.parado > 0, turno: E.turno, reducir: reducir(), llegaron: E.actores.every(d => !d.mueve), alzado: Math.round((E.actores[0] && E.actores[0].alzado || 0) * 10) / 10} : null;
+}
+/* `escena(e, { texto? })` en el taller ('huelga' | 'tope' | 'sin-clave' | 'sin-red' | 'saturado' | 'error'); `escena(null)` la quita */
+window.Duendes.escena = (e, op) => TALLER ? ponerEscena(e || null, op) : false;
 
 log('🌙 Cae la noche en el bosque…');
 if (!EMB && !RETRATO) for (let i = 0; i < 4; i++) setTimeout(() => spawn(), 300 + i * 350);
@@ -4244,7 +5861,7 @@ if (window.__OBRA__) { try { Duendes.cargar(window.__OBRA__); } catch (err) { co
 /* ?retrato=1&trabajo=1: el duende genérico del asistente, trabajando desde que carga, sin sonido */
 if (RETRATO && new URLSearchParams(location.search).has('trabajo')) { SND.on = false; musicaOn = false; Duendes.retrato({accion: 'trabajar', fondo: 'transparente'}); }
 updateCount(); renderPanel(); markButtons(); renderCast(); updatePlayButtons();
-requestAnimationFrame(loop);
+PAUSA.corre = true; requestAnimationFrame(loop);
 })();
 </script>
 </body>

@@ -252,11 +252,11 @@ body.lz-arrastrando .lz-nodo.arrastrado, body.lz-arrastrando .lz-nodo.arrastrado
 .gd-pop.lz-menu .lz-ic-m.op { color: var(--foco-sobre); background: var(--c); }
 .gd-pop.lz-menu button:hover .lz-ic-m svg { color: inherit; }
 .lz-elige { width: 320px; max-height: min(460px, calc(100vh - 40px)); display: flex; flex-direction: column; }
-.lz-elige input[type=search] { height: 30px; margin: 2px 2px 6px; padding: 0 9px; border: 1px solid var(--borde); border-radius: 4px; font: 400 12.5px var(--sans); color: var(--tinta); background: var(--papel); outline: none; }
+.lz-elige input[type=search] { flex: none; height: 30px; margin: 2px 2px 6px; padding: 0 9px; border: 1px solid var(--borde); border-radius: 4px; font: 400 12.5px var(--sans); color: var(--tinta); background: var(--papel); outline: none; }
 .lz-elige input[type=search]:focus { border-color: var(--foco-linea); box-shadow: 0 0 0 3px var(--foco-halo); }
-.lz-elige-lista { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.lz-elige-lista { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-height: 0; }
 .gd-pop .lz-elige-lista button { height: auto; min-height: 30px; padding: 5px 9px; align-items: center; }
-.lz-elige-lista button > span:nth-child(2) { display: flex; flex-direction: column; min-width: 0; }
+.lz-elige-lista button > span:nth-child(2) { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .lz-elige-lista b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lz-elige-lista em { font: normal 400 10px var(--mono); color: var(--palido); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lz-elige-lista .gd-pop-sub { padding: 6px 9px 2px; font: 500 9.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--palido); }
@@ -280,13 +280,17 @@ body.lz-arrastrando .lz-nodo.arrastrado, body.lz-arrastrando .lz-nodo.arrastrado
 .lz-fx-chip.roto { border-style: dashed; border-color: color-mix(in srgb, var(--peligro) 50%, transparent); background: var(--peligro-bg); color: var(--peligro); }
 .lz-fx-chip.roto .lz-fx-nom { cursor: default; }
 .lz-fx-chip.roto .lz-fx-nom span { text-decoration: line-through; }
-/* la lista: cada fórmula con su casilla y, elegida, su puesto en el orden */
+/* la lista: cada fórmula con su casilla y, elegida, su puesto en el orden. `.lz-fx-menu` es la caja **de dentro** del `.gd-pop.lz-menu`
+   (`abrirMenu` no le pasa clase): con las tres clases en el mismo elemento, la casilla de lo elegido no se rellenaba nunca y el
+   nombre salía del color de foco con el ✓ de los menús (visto al portar los duendes a ClapBook) */
 .lz-fx-menu .lz-fx-check { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 1px solid var(--borde-fuerte);
   border-radius: 4px; background: var(--papel); }
 .lz-fx-menu .lz-fx-check svg { visibility: hidden; }
-.gd-pop.lz-menu.lz-fx-menu button.on .lz-fx-check { background: var(--foco); border-color: var(--foco); }
-.gd-pop.lz-menu.lz-fx-menu button.on .lz-fx-check svg { visibility: visible; color: var(--foco-sobre); }
-.gd-pop.lz-menu.lz-fx-menu button.on small { color: var(--foco); font-weight: 500; }
+.gd-pop.lz-menu .lz-fx-menu button.on { color: var(--tinta); font-weight: 400; }
+.gd-pop.lz-menu .lz-fx-menu button.on::after { content: none; }
+.gd-pop.lz-menu .lz-fx-menu button.on .lz-fx-check { background: var(--foco); border-color: var(--foco); }
+.gd-pop.lz-menu .lz-fx-menu button.on .lz-fx-check svg { visibility: visible; color: var(--foco-sobre); }
+.gd-pop.lz-menu .lz-fx-menu button.on small { color: var(--foco); font-weight: 500; }
 .lz-fx-menu .gd-pop-sub { display: flex; align-items: center; gap: 6px; }
 .lz-fx-menu .gd-pop-sub[hidden], .lz-fx-menu button[hidden] { display: none; }
 /* «Nueva fórmula desde lo escrito…»: su nombre y lo que se guarda */
@@ -302,6 +306,34 @@ body.lz-arrastrando .lz-nodo.arrastrado, body.lz-arrastrando .lz-nodo.arrastrado
 .gd-pop .lz-fx-acc .btn { height: 28px; width: auto; padding: 0 12px; justify-content: center; }
 .gd-pop .lz-fx-acc .btn.primario { background: var(--foco); border-color: var(--foco); color: var(--foco-sobre); }
 html[data-estilo="synthwave"] .lz-fx-chip:not(.roto) { box-shadow: 0 0 6px color-mix(in srgb, var(--foco) 35%, transparent); }
+
+/* ---------- los duendes de una operación (1.1.68): el botón «Duendes» junto a «Fórmula» y un chip por cada uno, con el color de su ropa ---------- */
+.lz-dn-chips { display: contents; }
+.lz-dn-chip { --dn: var(--foco); display: inline-flex; align-items: center; max-width: 100%; height: 24px; border-radius: 12px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--dn) 55%, var(--borde)); background: color-mix(in srgb, var(--dn) 12%, var(--papel)); color: var(--tinta); }
+.lz-dn-nom { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 100%; padding: 0 3px 0 7px; border: 0; background: none; color: inherit;
+  font: 500 11.5px var(--sans); cursor: pointer; }
+.lz-dn-nom:not([data-lz-dn-abrir]) { cursor: default; }
+.lz-dn-nom span:last-child { min-width: 0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-dn-nom[data-lz-dn-abrir]:hover span:last-child { text-decoration: underline; text-underline-offset: 2px; }
+/* sin redeclarar --dn: dentro de un chip hereda el color de su ropa (con él aquí, todos los puntos salían del color de foco) */
+.lz-dn-punto { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--dn, var(--foco)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--tinta) 25%, transparent); }
+.lz-dn-act, .lz-dn-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 100%; padding: 0; border: 0; background: none;
+  color: inherit; opacity: .6; cursor: pointer; font: 600 12px var(--sans); }
+.lz-dn-x { padding-right: 3px; }
+.lz-dn-act, .lz-dn-act:hover, .lz-dn-x:hover { opacity: 1; }
+.lz-dn-act { color: var(--t-ambar); }
+.lz-dn-chip.cambio { border-style: dashed; }
+.lz-dn-chip.suelto { border-style: dashed; opacity: .8; }
+.lz-dn-chip.suelto .lz-dn-nom span:last-child { font-style: italic; }
+.lz-dn-boton svg:first-child { flex: none; }
+.lz-dn-menu .lz-elige-lista button { gap: 7px; }
+/* aquí el segundo hijo es el punto de color, no la columna del nombre (la regla de las fórmulas lo aplastaba en una raya, y el nombre y
+   su rol iban pegados en una línea que desbordaba la lista a lo ancho y escondía su puesto): la columna es el tercero */
+.lz-dn-menu .lz-elige-lista button > span.lz-dn-punto { display: block; flex: none; width: 9px; height: 9px; }
+.lz-dn-menu .lz-elige-lista button > span:nth-child(3) { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.lz-dn-menu .lz-elige-lista button > small { flex: none; }
+html[data-estilo="synthwave"] .lz-dn-chip { box-shadow: 0 0 6px color-mix(in srgb, var(--dn) 35%, transparent); }
 
 /* ---------- temas neón (1.1.57): rejilla de neón y cables con brillo ---------- */
 html[data-estilo] .lz-cuerpo {

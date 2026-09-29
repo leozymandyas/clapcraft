@@ -875,6 +875,9 @@ html[data-theme="dark"] .gd-per-punto { background: var(--chd); box-shadow: inse
 .zoom-pct.on { color: var(--foco); }
 /* el aviso con «Deshacer» (1.1.40): su botón recibe clics y el texto deja sitio al lado */
 #aviso.con-accion { pointer-events: auto; display: inline-flex; align-items: center; gap: 10px; padding-right: 6px; }
+/* ya ido (sin `.show`, transparente) no recibe clics: se quedaba con `con-accion` y tapaba sin verse lo de debajo hasta el siguiente
+   aviso (el pie de «Duendes del asistente», al importar un respaldo, 29-09-2026) */
+#aviso.con-accion:not(.show) { pointer-events: none; }
 /* el botón va en el acento del aviso, que es el mismo en claro y en oscuro (con `--toast-fg` se veía apagado; con el `--inverso`
    de tramas.css, casi negro sobre el grafito, 1.1.43) */
 #aviso .aviso-accion { border: 0; background: color-mix(in srgb, var(--toast-acento) 18%, transparent); color: var(--toast-acento); cursor: pointer;
