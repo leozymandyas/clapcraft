@@ -756,7 +756,10 @@ app.whenReady().then(async () => {
     comprobar('la conversación ya no está en el localStorage', !guardada, guardada);
     const dirConv = path.join(DATOS, 'asistente');
     const enDisco = fs.existsSync(dirConv) ? fs.readdirSync(dirConv).map(f => fs.readFileSync(path.join(dirConv, f), 'utf8')) : [];
-    comprobar('sino en los datos de la app (userData/asistente/), un archivo por proyecto, con su ruta', enDisco.length === 1 && enDisco[0].includes(JSON.stringify(ids.ruta).slice(1, -1)) && /llegada de Mara/.test(enDisco[0]),
+    /* 1.1.73: el índice del proyecto (con su ruta) y un archivo por conversación */
+    const indiceDisco = enDisco.map(t => { try { return JSON.parse(t); } catch (_) { return null; } }).find(x => x && x.clave === ids.ruta);
+    comprobar('sino en los datos de la app (userData/asistente/): el índice del proyecto, con su ruta, y un archivo por conversación', enDisco.length === 2 && !!indiceDisco
+      && indiceDisco.datos.version === 2 && indiceDisco.datos.chats.length === 1 && enDisco.some(t => t.includes(JSON.stringify(ids.ruta + '#chat:').slice(1, -1)) && /llegada de Mara/.test(t)),
       enDisco.length + ' archivos');
     comprobar('con tope (lo guardado, de menos de 300 KB) y sin la clave', enDisco.every(t => t.length < 320000 && !t.includes(CLAVE)));
     await sinClave('con la conversación');
@@ -776,6 +779,162 @@ app.whenReady().then(async () => {
     await hastaLibre();
     const sigue = S.peticiones[antesSigue];
     comprobar('y el modelo recibe lo de antes (la conversación sigue)', !!sigue && sigue.cuerpo.messages.some(m => m.role === 'user' && /llegada de Mara/.test(m.content || '')));
+
+    /* ---------- 1.1.73: el historial de conversaciones ---------- */
+    const idx = () => js(`return JSON.stringify(await window.editorAPI.ia.conversacion({ accion: 'leer', clave: ${JSON.stringify(ids.ruta)} }));`).then(JSON.parse);
+    const filas = () => js(`return JSON.stringify([...document.querySelectorAll('#asistente .as-hist [data-as-chat]')].map(f => ({ id: f.dataset.asChat, tit: (f.querySelector('.as-hist-tit') || {}).textContent, on: f.classList.contains('on') })));`).then(JSON.parse);
+    const histVisible = () => js(`const h = document.querySelector('#asistente .as-hist'); return !!h && !h.hidden && h.offsetHeight > 100;`);
+    let ix = await idx();
+    const chat1 = ix && ix.actual;
+    comprobar('h) el índice apunta la conversación abierta, con su título (lo primero que se pidió)', !!chat1 && ix.chats.length === 1 && /llegada de Mara/.test(ix.chats[0].titulo) && ix.chats[0].mensajes >= 4, JSON.stringify(ix && ix.chats));
+    await aClic(`document.querySelector('#asistente [data-as-hist]')`, { tras: 400 });
+    comprobar('h) el reloj de la cabecera abre la lista encima de la conversación', await hasta(`return document.querySelectorAll('#asistente .as-hist [data-as-chat]').length === 1;`, 3000) && await histVisible());
+    let fs1 = await filas();
+    comprobar('h) con la de ahora marcada («Abierta») y el foco en el buscador', fs1.length === 1 && fs1[0].on && /Abierta/.test(await js(`return document.querySelector('#asistente .as-hist .on').innerText;`))
+      && await js(`return document.activeElement === document.querySelector('#asistente [data-as-hist-buscar]');`), JSON.stringify(fs1));
+    await aClic(`document.querySelector('#asistente .as-hist [data-as-nueva]')`, { tras: 400 });
+    comprobar('h) «Nueva» deja el panel vacío, cierra la lista y no borra la de antes', (await items()).length === 0 && !(await histVisible())
+      && await hasta(`return true;`) && (ix = await idx()) && ix.actual === null && ix.chats.length === 1, JSON.stringify(ix));
+    S.cola.push({ texto: 'Para el final, Mara se queda en el andén.' });
+    await mandar('Propón un final distinto');
+    await hastaLibre();
+    ix = await idx();
+    const chat2 = ix && ix.actual;
+    comprobar('h) la nueva entra en el historial al primer mensaje', !!chat2 && chat2 !== chat1 && ix.chats.length === 2 && ix.chats.some(c => c.id === chat2 && /final distinto/.test(c.titulo)), JSON.stringify(ix && ix.chats));
+    await aClic(`document.querySelector('#asistente [data-as-hist]')`, { tras: 400 });
+    await hasta(`return document.querySelectorAll('#asistente .as-hist [data-as-chat]').length === 2;`, 3000);
+    fs1 = await filas();
+    comprobar('h) la más reciente arriba, marcada', fs1.length === 2 && fs1[0].id === chat2 && fs1[0].on && fs1[1].id === chat1 && !fs1[1].on, JSON.stringify(fs1));
+    await win.webContents.capturePage().then(img => fs.writeFileSync(path.join(CAPTURAS, 'historial.png'), img.toPNG())).catch(() => {});
+    comprobar('h) agrupadas por día («Hoy»)', /^hoy$/im.test(await js(`return document.querySelector('#asistente .as-hist-lista').innerText;`)));
+    await escribir('llegada mara');
+    comprobar('h) el buscador filtra por título y por lo pedido (sin acentos ni mayúsculas)', await hasta(`const f = [...document.querySelectorAll('#asistente .as-hist [data-as-chat]')]; return f.length === 1 && f[0].dataset.asChat === ${JSON.stringify(chat1)};`, 2000));
+    await tecla('Enter', [], 500);
+    its = await items();
+    comprobar('h) Enter en el buscador abre la primera: vuelve la conversación de antes, entera', its.some(i => i.tipo === 'yo' && /llegada de Mara/.test(i.texto)) && !its.some(i => i.tipo === 'yo' && /final distinto/.test(i.texto)) && !(await histVisible()), its.length + ' items');
+    comprobar('h) y el foco vuelve al campo', await js(`return document.activeElement === document.querySelector('#asistente [data-as-campo]');`));
+    ix = await idx();
+    comprobar('h) el índice la deja como la abierta', ix.actual === chat1 && ix.chats.length === 2);
+    S.cola.push({ texto: 'Seguimos con Mara.' });
+    const antesH = S.peticiones.length;
+    await mandar('Sigue con la escena');
+    await hastaLibre();
+    const ph = S.peticiones[antesH];
+    comprobar('h) el modelo recibe lo de esa conversación, no lo de la otra', !!ph && ph.cuerpo.messages.some(m => m.role === 'user' && /llegada de Mara/.test(m.content || '')) && !ph.cuerpo.messages.some(m => /final distinto/.test(m.content || '')));
+    /* renombrar con doble clic: Enter guarda; el nombre se queda aunque la conversación siga */
+    await aClic(`document.querySelector('#asistente [data-as-hist]')`, { tras: 400 });
+    await hasta(`return document.querySelectorAll('#asistente .as-hist [data-as-chat]').length === 2;`, 3000);
+    const pTit = await centro(`document.querySelector('#asistente .as-hist [data-as-chat="${chat1}"] .as-hist-tit')`);
+    ev({ type: 'mouseMove', x: R(pTit.x), y: R(pTit.y) }); await espera(30);
+    ev({ type: 'mouseDown', x: R(pTit.x), y: R(pTit.y), button: 'left', clickCount: 1 }); await espera(40);
+    ev({ type: 'mouseUp', x: R(pTit.x), y: R(pTit.y), button: 'left', clickCount: 1 }); await espera(90);
+    ev({ type: 'mouseDown', x: R(pTit.x), y: R(pTit.y), button: 'left', clickCount: 2 }); await espera(40);
+    ev({ type: 'mouseUp', x: R(pTit.x), y: R(pTit.y), button: 'left', clickCount: 2 }); await espera(400);
+    await win.webContents.capturePage().then(img => fs.writeFileSync(path.join(CAPTURAS, 'historial-renombrar.png'), img.toPNG())).catch(() => {});
+    comprobar('h) doble clic en el título lo vuelve un campo', await hasta(`return document.activeElement && document.activeElement.classList.contains('as-hist-edit');`, 2000));
+    await js(`document.activeElement.select(); return true;`);
+    await escribir('Escena de Mara');
+    await tecla('Enter', [], 500);
+    ix = await idx();
+    comprobar('h) Enter guarda el nombre', ix.chats.some(c => c.id === chat1 && c.titulo === 'Escena de Mara' && c.propio) && /Escena de Mara/.test(await js(`return document.querySelector('#asistente .as-hist-lista').innerText;`)), JSON.stringify(ix.chats.map(c => c.titulo)));
+    await tecla('Escape', [], 300);
+    comprobar('h) Esc cierra la lista', !(await histVisible()));
+    S.cola.push({ texto: 'Vale.' });
+    await mandar('Otra cosa más');
+    await hastaLibre();
+    ix = await idx();
+    comprobar('h) un nombre puesto a mano no lo cambia el siguiente mensaje', ix.chats.some(c => c.id === chat1 && c.titulo === 'Escena de Mara'));
+    /* eliminar (el bote, al pasar el ratón) y «Deshacer» del aviso */
+    await aClic(`document.querySelector('#asistente [data-as-hist]')`, { tras: 400 });
+    await hasta(`return document.querySelectorAll('#asistente .as-hist [data-as-chat]').length === 2;`, 3000);
+    const fila2 = await centro(`document.querySelector('#asistente .as-hist [data-as-chat="${chat2}"]')`);
+    ev({ type: 'mouseMove', x: R(fila2.x), y: R(fila2.y) }); await espera(200);
+    comprobar('h) al pasar el ratón salen renombrar y eliminar', await js(`return getComputedStyle(document.querySelector('#asistente .as-hist [data-as-chat="${chat2}"] [data-as-chat-borrar]')).opacity === '1';`));
+    await aClic(`document.querySelector('#asistente .as-hist [data-as-chat="${chat2}"] [data-as-chat-borrar]')`, { tras: 500 });
+    ix = await idx();
+    const archivosChat = () => fs.readdirSync(path.join(DATOS, 'asistente')).filter(f => { const t = fs.readFileSync(path.join(DATOS, 'asistente', f), 'utf8'); return t.includes('#chat:' + chat2) && /final distinto/.test(t); }).length;
+    comprobar('h) eliminar la quita de la lista, del índice y del disco', (await filas()).length === 1 && !ix.chats.some(c => c.id === chat2) && archivosChat() === 0 && (await items()).some(i => /llegada de Mara/.test(i.texto || '')));
+    comprobar('h) con «Deshacer» en el aviso', await hasta(`const a = document.getElementById('aviso'); return !!a && a.classList.contains('show') && /Conversación eliminada/.test(a.textContent) && !!a.querySelector('.aviso-accion');`, 2000));
+    await aClic(`document.querySelector('#aviso .aviso-accion')`, { tras: 600 });
+    ix = await idx();
+    comprobar('h) «Deshacer» la devuelve, con lo que tenía', ix.chats.some(c => c.id === chat2) && archivosChat() === 1 && await hasta(`return document.querySelectorAll('#asistente .as-hist [data-as-chat]').length === 2;`, 2000));
+    /* eliminar la que está abierta deja el panel con una nueva */
+    await aClic(`document.querySelector('#asistente [data-as-hist]')`, { tras: 300 });
+    if (!(await histVisible())) await aClic(`document.querySelector('#asistente [data-as-hist]')`, { tras: 400 });
+    await js(`document.querySelector('#asistente .as-hist [data-as-chat="${chat2}"] [data-as-chat-abrir]').focus(); return true;`);
+    await tecla('Enter', [], 500);
+    comprobar('h) Enter con el foco en una fila la abre', (await items()).some(i => /final distinto/.test(i.texto || '')));
+    await aClic(`document.querySelector('#asistente [data-as-hist]')`, { tras: 400 });
+    await aClic(`document.querySelector('#asistente .as-hist [data-as-chat="${chat2}"] [data-as-chat-borrar]')`, { tras: 500 });
+    ix = await idx();
+    comprobar('h) eliminar la abierta deja el panel con una nueva', (await items()).length === 0 && ix.actual === null && ix.chats.length === 1);
+    await tecla('Escape', [], 200);
+    /* al volver a abrir el proyecto, la que estaba abierta (aquí, la de Mara) */
+    await js(`await ${A}.abrirConversacion(${JSON.stringify(chat1)}); return true;`);
+    await js(`await ${A}.recargar(); await W(300); return true;`);
+    comprobar('h) al recargar vuelve la conversación que estaba abierta', (await items()).some(i => /llegada de Mara/.test(i.texto || '')) && await js(`return ${A}.conversacionActual();`) === chat1);
+    /* el archivo se renombra: el índice y sus conversaciones van con él (electron/ia.js) */
+    const C2 = JSON.stringify(ids.ruta + '.otro');
+    await js(`await window.editorAPI.ia.conversacion({ accion: 'mover', clave: ${JSON.stringify(ids.ruta)}, a: ${C2} }); return true;`);
+    const movido = JSON.parse(await js(`const x = await window.editorAPI.ia.conversacion({ accion: 'leer', clave: ${C2} }); const c = x && await window.editorAPI.ia.conversacion({ accion: 'leer', clave: ${C2} + '#chat:' + ${JSON.stringify(chat1)} });
+      const viejo = await window.editorAPI.ia.conversacion({ accion: 'leer', clave: ${JSON.stringify(ids.ruta)} + '#chat:' + ${JSON.stringify(chat1)} }); return JSON.stringify({ x: !!x, c: !!c, viejo: !!viejo });`));
+    comprobar('h) mover el índice se lleva sus conversaciones', movido.x && movido.c && !movido.viejo, JSON.stringify(movido));
+    await js(`await window.editorAPI.ia.conversacion({ accion: 'mover', clave: ${C2}, a: ${JSON.stringify(ids.ruta)} }); return true;`);
+    /* una conversación de antes de la 1.1.73 (una sola, sin índice) pasa a ser la primera del historial */
+    const viejaClave = JSON.stringify(ids.ruta + '.vieja');
+    const mig = JSON.parse(await js(`await window.editorAPI.ia.conversacion({ accion: 'escribir', clave: ${viejaClave}, datos: { version: 1, vista: [{ tipo: 'yo', texto: 'Una [escena](clapcraft://x/nodo/1) de antes' }, { tipo: 'ia', texto: 'ok' }], coste: { usd: 0.01 }, fecha: 1700000000000 } });
+      await window.editorAPI.ia.conversacion({ accion: 'mover', clave: ${viejaClave}, a: ${viejaClave} + '2' });
+      const x = await window.editorAPI.ia.conversacion({ accion: 'leer', clave: ${viejaClave} + '2' }); return JSON.stringify(x);`));
+    comprobar('h) (lo de antes se mueve tal cual, sin índice)', mig && mig.version === 1);
+    await js(`await window.editorAPI.ia.conversacion({ accion: 'borrar', clave: ${viejaClave} + '2' }); return true;`);
+    await js(`await ${A}.recargar(); await W(200); return true;`);
+
+    /* ---------- i) 1.1.75: compartir una conversación con Claude (Leo: «quiero poder compartir una conversación que tuve en el asistente
+       con Claude para pedir opiniones o refinamientos») ---------- */
+    {
+      const abierta = await js(`return ${A}.conversacionActual();`);
+      await aClic(`document.querySelector('#asistente [data-as-compartir]')`, { tras: 400 });
+      comprobar('i) el botón de la cabecera abre «Compartir con Claude» con sus cuatro opciones', await hasta(`const p = [...document.querySelectorAll('body > .gd-pop')].pop(); return !!p && /Compartir con Claude/i.test(p.textContent) && ['opinion', 'refinar', 'enlace', 'texto'].every(k => !!p.querySelector('[data-as-compartir-op="' + k + '"]'));`, 3000));
+      portapapeles = '';
+      await aClic(`[...document.querySelectorAll('body > .gd-pop')].pop().querySelector('[data-as-compartir-op="opinion"]')`, { tras: 600 });
+      const pedido = portapapeles;
+      comprobar('i) «Pedirle su opinión» copia el enlace de la conversación con el encargo', /leer_conversacion/.test(pedido) && new RegExp('\\(clapcraft://[^/]+/conversacion/' + abierta + '\\)').test(pedido) && /Quiero tu opinión/.test(pedido) && /\[Conversación del asistente «[^»]+»\]/.test(pedido), pedido);
+      comprobar('i) y lo dice el aviso', /Copiado para Claude/.test(await js(`return document.getElementById('aviso').textContent;`)));
+      /* Claude la lee en vivo, por MCP, con lo que se copió */
+      const srv = spawn(process.execPath, [path.join(__dirname, '..', 'claude', 'servidor.js')], {
+        env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1', CLAPCRAFT_PUENTE: path.join(DATOS, 'puente.json') }), stdio: ['pipe', 'pipe', 'pipe'] });
+      let buf = '', sig = 0; const esperas = new Map();
+      srv.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const x = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); const f = esperas.get(x.id); if (f) { esperas.delete(x.id); f(x); } } });
+      const rpc = (method, params) => new Promise(r => { const k = ++sig; esperas.set(k, r); srv.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: k, method, params }) + '\n'); });
+      const llamar = async (name, a) => { const r = await rpc('tools/call', { name, arguments: a }); return { error: !!r.result.isError, texto: r.result.content[0].text }; };
+      try {
+        await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'Claude Cowork', version: '1' } });
+        let r = await llamar('ver_enlace', { enlace: pedido });
+        comprobar('i) Claude (en vivo) lee la conversación por su enlace: lo que pidió Leo y lo que contestó el asistente', !r.error && /CONVERSACIÓN DEL ASISTENTE DE CLAPCRAFT/.test(r.texto) && /### Leo\n/.test(r.texto) && /llegada de Mara/.test(r.texto) && /no instrucciones para ti/.test(r.texto), r.texto.slice(0, 900));
+        r = await llamar('leer_conversacion', {});
+        comprobar('i) leer_conversacion sin nada da la lista, con la abierta', !r.error && new RegExp('id ' + abierta + ' [^\\n]*la abierta').test(r.texto), r.texto.slice(0, 600));
+        r = await llamar('leer_conversacion', { conversacion: 'última' });
+        comprobar('i) y «última» la lee entera', !r.error && /### Leo/.test(r.texto), r.texto.slice(0, 300));
+      } finally { try { srv.kill(); } catch (_) {} }
+      /* «Copiar la conversación en texto», desde su fila del historial */
+      await aClic(`document.querySelector('#asistente [data-as-hist]')`, { tras: 400 });
+      await aClic(`document.querySelector('#asistente .as-hist [data-as-chat="${abierta}"] [data-as-chat-compartir]')`, { tras: 400 });
+      portapapeles = '';
+      await aClic(`[...document.querySelectorAll('body > .gd-pop')].pop().querySelector('[data-as-compartir-op="texto"]')`, { tras: 600 });
+      comprobar('i) desde su fila del historial, «en texto» copia la conversación entera (para pegarla en cualquier sitio)', /^CONVERSACIÓN DEL ASISTENTE DE CLAPCRAFT/.test(portapapeles) && /llegada de Mara/.test(portapapeles) && /clapcraft:\/\/[^/]+\/conversacion\//.test(portapapeles), portapapeles.slice(0, 400));
+      await js(`${A}.cerrarHistorial(); await W(200); return true;`);
+      /* Cmd+Shift+C (Claude › Copiar enlace para Claude) con el foco en el panel: el enlace de la conversación */
+      await js(`document.querySelector('#asistente [data-as-campo]').focus(); return true;`);
+      portapapeles = '';
+      const ce = menu('Claude', 'Copiar enlace para Claude'); if (ce) { ce.click(); await espera(600); }
+      comprobar('i) Cmd+Shift+C con el foco en el panel copia el enlace de la conversación', !!ce && /^\[Conversación del asistente «[^»]+»\]\(clapcraft:\/\/[^/]+\/conversacion\//.test(portapapeles), portapapeles);
+      /* el enlace, abierto en la app, va a esa conversación */
+      await aClic(`document.querySelector('#asistente .as-cab [data-as-nueva]')`, { tras: 400 });
+      comprobar('i) (una conversación nueva en el panel)', await js(`return ${A}.conversacionActual() !== ${JSON.stringify(abierta)};`));
+      const ir = menu('Claude', 'Ir al enlace copiado'); if (ir) { ir.click(); await espera(900); }   // (el enlace sigue en el portapapeles de mentira)
+      comprobar('i) abrir su enlace en ClapCraft vuelve a esa conversación en el panel', await hasta(`return ${A}.conversacionActual() === ${JSON.stringify(abierta)};`, 4000));
+    }
+
     await sinClave('al final');
     comprobar('todas las llamadas llevaron la clave solo en la cabecera', S.peticiones.every(p => p.auth === 'Bearer ' + CLAVE && !JSON.stringify(p.cuerpo).includes(CLAVE)));
     /* una conversación de antes (en el localStorage) se muda a los datos de la app la próxima vez que se carga */

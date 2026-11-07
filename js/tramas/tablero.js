@@ -1426,14 +1426,17 @@
     el.classList.remove('arrastrando'); el.style.pointerEvents = '';
     quitarHot();
     if (!movido) { arr = null; return; }                      // clic seco: nada que recolocar
-    if (pos && (arr.alt || (e && e.altKey))) {                // **con Opción, se duplica donde se suelta** (Leo, 17-09-2026)
+    /* `pos` es la columna: la primera es la 0 (1.1.72, Leo: «sigue sin dejarme mover el nodo» a la primera línea vertical; con
+       `if (pos)` el 0 contaba como «no hay sitio» y el nodo volvía al suyo) */
+    const hay = pos !== null && pos !== undefined;
+    if (hay && (arr.alt || (e && e.altKey))) {                // **con Opción, se duplica donde se suelta** (Leo, 17-09-2026)
       const clip = m.copiar([p.id]), yo = clip && clip.puntos.find(x => x.ref === p.id);
       const fila = m.datos.lineas.findIndex(l => l.id === destino.dataset.linea);
       const r = yo && m.pegar(clip, pos - yo.dc, fila - yo.df);
       if (r && r.ok) { const nuevo = r.ids.find(x => m.punto(x) && m.punto(x).titulo === p.titulo) || r.ids[0]; sel = { tipo: 'punto', id: nuevo }; avisar('Nodo duplicado'); }
       arr = null; render(); return;
     }
-    if (pos) {
+    if (hay) {
       const nueva = destino.dataset.linea;
       /* encima de otro nodo, se cambian de lugar (Leo, 15-09-2026) */
       const r = m.moverPunto(p.id, { col: pos, lineaId: nueva }, { intercambiar: true });
@@ -2571,7 +2574,9 @@
       && e.clientX >= zonaUtil() && !arrastrando();
     if (!libre) { $celda.classList.remove('show'); celdaObj = null; return; }
     const r = tr.getBoundingClientRect();
-    if (celdaCli(e.clientX - r.left) < 0) { $celda.classList.remove('show'); celdaObj = null; return; }   // el hueco de delante no es una celda
+    /* el hueco de delante no es una celda, pero su mitad de la derecha es de la columna 1 (1.1.70, Leo: «no puedo poner nodos en la
+       primera línea vertical»: con `< 0` el «+» solo salía a la derecha de su raya, y cada columna es media celda a cada lado) */
+    if (celdaCli(e.clientX - r.left) < -0.5) { $celda.classList.remove('show'); celdaObj = null; return; }
     const id = tr.dataset.linea;
     /* **pasado el final, una columna más** (Leo, 17-09-2026: «cuando llego al final de una trama ya no se me sugiere agregar
        nodos; tengo que aumentar el tamaño desde el panel»): el «+» sale ahí y, al crear, nace esa columna (los actos no cambian) */

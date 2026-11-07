@@ -1379,8 +1379,10 @@
   function equipoActual() { try { return C.equipoUI && C.equipoUI.equipo ? C.equipoUI.equipo() : null; } catch (_) { return null; } }
   function especialesDe(eq) {
     if (!eq || !Array.isArray(eq.duendes)) return [];
-    try { if (E() && E().especiales) return E().especiales(eq) || []; } catch (_) {}
-    return eq.duendes.filter(d => d && d.papel === 'especial');
+    let l = null;
+    try { if (E() && E().especiales) l = E().especiales(eq) || []; } catch (_) { l = null; }
+    /* la secretaria (rol anotar, 1.1.74) toma notas en la Mesa: en el lienzo no trabaja */
+    return (l || eq.duendes.filter(d => d && d.papel === 'especial')).filter(d => d && d.rol !== 'anotar');
   }
   /* la instantánea de una ficha, ya como la guarda el lienzo (sin aspecto) */
   function instantaneaDe(d) {
@@ -1394,8 +1396,8 @@
     const a = instantaneaDe(ficha); if (!a) return false;
     return ['nombre', 'personalidad', 'rol', 'veto', 'modelo', 'temperatura', 'voz'].some(k => JSON.stringify(a[k] ?? null) !== JSON.stringify(inst[k] ?? null));
   }
-  const ROL_DN = { transformar: 'Transforma el texto', revisar: 'Revisa' };
-  const rolDn = x => (x.rol === 'transformar' ? ROL_DN.transformar : x.veto ? 'Revisa y puede vetar' : ROL_DN.revisar);
+  const ROL_DN = { transformar: 'Transforma el texto', revisar: 'Revisa', consultar: 'Solo opina' };
+  const rolDn = x => (x.rol === 'transformar' || x.rol === 'consultar' ? ROL_DN[x.rol] : x.veto ? 'Revisa y puede vetar' : ROL_DN.revisar);
   function colorDn(ficha) {
     let a = null; try { a = ficha && E() && E().aspectoDe ? E().aspectoDe(ficha) : ficha && ficha.duende; } catch (_) { a = null; }
     return a && /^#[0-9a-f]{6}$/i.test(a.cloth || '') ? a.cloth : 'var(--foco)';

@@ -782,19 +782,29 @@ function crearConversaciones(o) {
   }
   function escribir(clave, datos) {
     const f = archivoDe(clave); if (!f) return { ok: false, error: 'Sin clave' };
-    if (datos === null || datos === undefined) return borrar(clave);
+    if (datos === null || datos === undefined) return borrar(clave, true);
     let txt; try { txt = JSON.stringify({ clave: String(clave), guardada: Date.now(), datos }); } catch (_) { return { ok: false, error: 'No se puede guardar' }; }
     if (txt.length > MAX_CONVERSACION) return { ok: false, error: 'La conversación es demasiado grande para guardarla' };
     try { fs.mkdirSync(DIR, { recursive: true, mode: 0o700 }); atomico.escribirSync(f, txt, 0o600); return { ok: true }; } catch (e) { return { ok: false, error: limpiar(e.message) }; }
   }
-  function borrar(clave) {
+  /* el historial de conversaciones (1.1.73, ver `chatsIA` en app.js): la clave de un proyecto guarda su índice
+     (`{ version: 2, chats: [{ id… }] }`) y cada conversación va en `<clave>#chat:<id>`. Borrar o mover el índice se lleva sus
+     conversaciones; `solo` borra únicamente esa clave (una conversación, o el índice que se reescribe) */
+  const SEP_CHAT = '#chat:';
+  const chatsDe = x => (x && typeof x === 'object' && x.version === 2 && Array.isArray(x.chats) ? x.chats.map(c => c && c.id).filter(id => typeof id === 'string' && id) : []);
+  function borrar(clave, solo) {
     const f = archivoDe(clave); if (!f) return { ok: false };
+    if (!solo) chatsDe(leer(clave)).forEach(id => borrar(clave + SEP_CHAT + id, true));
     try { fs.unlinkSync(f); } catch (_) {}
     return { ok: true };
   }
   function mover(antes, ahora) {
     const x = leer(antes); if (!x) return { ok: false };
-    const r = escribir(ahora, x); if (r.ok) borrar(antes);
+    for (const id of chatsDe(x)) {
+      const c = leer(antes + SEP_CHAT + id); if (!c) continue;
+      if (escribir(ahora + SEP_CHAT + id, c).ok) borrar(antes + SEP_CHAT + id, true);
+    }
+    const r = escribir(ahora, x); if (r.ok) borrar(antes, true);
     return r;
   }
   return { leer, escribir, borrar, mover, dir: DIR, archivoDe };
@@ -956,12 +966,12 @@ function iniciar(o) {
     if (!deLaApp(e) || !webPermitida(url)) return false;
     try { await shell.openExternal(new URL(url).href); return true; } catch (_) { return false; }
   });
-  /* la conversación del asistente de un proyecto: { accion: leer | escribir | borrar | mover, clave, datos, a } */
+  /* la conversación del asistente de un proyecto: { accion: leer | escribir | borrar | mover, clave, datos, a, solo } */
   ipcMain.handle('ia:conversacion', (e, q) => {
     if (!deLaApp(e) || !q || typeof q !== 'object') return null;
     if (q.accion === 'leer') return conv.leer(q.clave);
     if (q.accion === 'escribir') return conv.escribir(q.clave, q.datos);
-    if (q.accion === 'borrar') return conv.borrar(q.clave);
+    if (q.accion === 'borrar') return conv.borrar(q.clave, !!q.solo);
     if (q.accion === 'mover') return conv.mover(q.clave, q.a);
     return null;
   });

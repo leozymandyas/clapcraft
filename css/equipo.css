@@ -141,3 +141,9 @@ html[data-estilo] .eq-rol.on { box-shadow: 0 0 0 1px var(--foco), 0 0 12px var(-
   .eq-dos { grid-template-columns: 1fr; }
   .eq-respaldo { flex: 1 1 100%; }
 }
+
+/* 1.1.70: el duende del chat (★) y «Pedir a Claude» */
+.eq-pred { flex: none; color: var(--foco); font-size: 13px; line-height: 1; }
+.eq-pred-btn, .eq-f-cab .eq-claude { height: 26px; padding: 0 8px; font-size: 12px; white-space: nowrap; }
+.eq-pred-btn.on { background: var(--foco-suave); border-color: var(--foco-linea); color: var(--foco); }
+.eq-nuevo.eq-claude { margin-top: 0; }

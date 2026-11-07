@@ -65,7 +65,28 @@ function iniciar(o) {
     if (r && r.ok) for (const wc of otras(e.sender)) { try { wc.send('equipo:cambio', datos); } catch (_) {} }
     return r;
   });
-  return almacen;
+  /* **Claude** (1.1.70, js/claquedraw/equipo-claude.js): ver_duendes_asistente y editar_duendes_asistente llegan por el puente
+     (electron/claude.js) con la app en marcha. Aquí se leen y se escriben, se avisa a todas las ventanas (`equipo:cambio`, con lo
+     escrito: el diálogo y el asistente se ponen al día) y la de delante enseña el aviso con «Deshacer» (`equipo:claude`, con lo de
+     antes). `ventanaAviso`: la ventana (BrowserWindow) del aviso, o null. */
+  const todas = () => otras(null);
+  function leerMods() {
+    try { const Tm = require('../js/claquedraw/teatro-mods.js').teatroMods; return require('../claude/teatro-global').crear(o.dir || o.app.getPath('userData'), Tm).leer(); } catch (_) { return {}; }
+  }
+  async function deClaude(nombre, args, origen, ventanaAviso) {
+    let Q;
+    try { Q = require('../js/claquedraw/equipo-claude.js').equipoClaude; } catch (e) { return { ok: false, error: 'Esta versión de ClapCraft no trae los duendes del asistente para Claude' }; }
+    const r = Q.ejecutar(almacen.leer(), String(nombre || ''), args || {}, { mods: leerMods() });
+    if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'No se pudo' };
+    if (!Q.escribe(nombre) || !r.cambio) return { ok: true, texto: r.texto };
+    const w = await almacen.escribir(r.equipo);
+    if (!w || !w.ok) return { ok: false, error: (w && w.error) || 'No se pudieron guardar los duendes del asistente' };
+    for (const wc of todas()) { try { wc.send('equipo:cambio', r.equipo); } catch (_) {} }
+    const aviso = ventanaAviso && !ventanaAviso.isDestroyed() ? ventanaAviso.webContents : todas()[0];
+    if (aviso) { try { aviso.send('equipo:claude', { texto: Q.resumenAviso(r, origen || 'Claude'), antes: r.antes, ids: r.tocados }); } catch (_) {} }
+    return { ok: true, texto: r.texto + '\n(Ya está en ClapCraft: Leo lo ve en Claude › Duendes del asistente… y puede deshacerlo desde el aviso.)' };
+  }
+  return Object.assign({}, almacen, { deClaude });
 }
 
 module.exports = { iniciar, crearAlmacen, ARCHIVO, MAX };

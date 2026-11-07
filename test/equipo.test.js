@@ -54,10 +54,17 @@ const base = (t, extra) => Object.assign({ transporte: t, equipo: E.porDefecto()
 /* ====================================================================
    Los datos
    ==================================================================== */
-test('el equipo de partida: los cuatro fijos y el formateador, con sus modelos y un aspecto propio que valida el teatro', () => {
+test('el equipo de partida: los cuatro fijos, el formateador y la secretaria, con sus modelos y un aspecto propio que valida el teatro', () => {
   const eq = E.porDefecto();
-  assert.deepEqual(eq.duendes.map(d => d.id), ['maestro', 'lector', 'escritor', 'coordinador', 'formateador']);
-  assert.equal(eq.modo, 'fiel'); assert.equal(eq.rondas, 2); assert.deepEqual(eq.sembrado, ['formateador']);
+  assert.deepEqual(eq.duendes.map(d => d.id), ['maestro', 'lector', 'escritor', 'coordinador', 'formateador', 'secretaria']);
+  assert.equal(eq.modo, 'fiel'); assert.equal(eq.rondas, 2); assert.deepEqual(eq.sembrado, ['formateador', 'secretaria']);
+  /* la secretaria (1.1.74): toma notas en la Mesa, con el modelo barato, sin enojarse, y su personalidad se edita como la de cualquiera */
+  const sec = E.duendeDe(eq, 'secretaria');
+  assert.equal(sec.nombre, 'La secretaria'); assert.equal(sec.rol, 'anotar'); assert.equal(sec.fijo, false); assert.equal(sec.modelo, 'deepseek-v4-flash');
+  assert.equal(sec.enojon, false); assert.match(sec.personalidad, /Acuerdos/); assert.match(sec.personalidad, /Pendientes/);
+  assert.ok(E.ROLES.includes('anotar'));
+  const sec2 = E.editarDuende(eq, 'secretaria', { personalidad: 'Apunto todo en verso.' });
+  assert.ok(sec2.ok); assert.equal(sec2.duende.personalidad, 'Apunto todo en verso.'); assert.equal(sec2.duende.rol, 'anotar');
   const d = id => E.duendeDe(eq, id);
   assert.equal(d('maestro').nombre, 'El duende maestro');
   assert.equal(d('maestro').modelo, null, 'el maestro usa el de Configurar IA');
@@ -93,9 +100,16 @@ test('normalizar: nunca lanza, completa los fijos, siembra el formateador una so
     assert.deepEqual(e.duendes.slice(0, 4).map(d => d.id), ['maestro', 'lector', 'escritor', 'coordinador']);
     assert.equal(E.duendeDe(e, 'maestro').papel, 'maestro');
   });
-  /* uno viejo sin sembrar: recibe el formateador */
+  /* uno viejo sin sembrar: recibe el formateador y la secretaria */
   const viejo = E.normalizar({ duendes: [{ id: 'd-1', nombre: 'La crítica', personalidad: 'Odia los adverbios', rol: 'revisar', veto: true }] });
-  assert.deepEqual(viejo.duendes.map(d => d.id), ['maestro', 'lector', 'escritor', 'coordinador', 'formateador', 'd-1']);
+  assert.deepEqual(viejo.duendes.map(d => d.id), ['maestro', 'lector', 'escritor', 'coordinador', 'formateador', 'secretaria', 'd-1']);
+  /* uno de la 1.1.73 (el formateador ya sembrado, quizá movido): recibe solo la secretaria, detrás del formateador; borrada, no vuelve */
+  const de73 = E.normalizar({ sembrado: ['formateador'], duendes: [{ id: 'd-1', nombre: 'La crítica' }, { id: 'formateador', nombre: 'El formateador', rol: 'transformar' }, { id: 'd-2', nombre: 'Otro' }] });
+  assert.deepEqual(E.especiales(de73).map(d => d.id), ['d-1', 'formateador', 'secretaria', 'd-2']);
+  assert.deepEqual(de73.sembrado, ['formateador', 'secretaria']);
+  const sinSec = E.eliminarDuende(de73, 'secretaria').equipo;
+  assert.ok(!E.duendeDe(E.normalizar(JSON.parse(JSON.stringify(sinSec))), 'secretaria'), 'la secretaria borrada no vuelve');
+  assert.deepEqual(E.especiales(E.normalizar({ sembrado: ['formateador'], duendes: [] })).map(d => d.id), ['secretaria'], 'sin el formateador, la secretaria la primera');
   /* borrado el formateador, no vuelve */
   const sin = E.eliminarDuende(viejo, 'formateador');
   assert.ok(sin.ok);
@@ -106,7 +120,7 @@ test('normalizar: nunca lanza, completa los fijos, siembra el formateador una so
     { id: 'd-2', nombre: '  ', personalidad: 'x'.repeat(9000), rol: 'transformar', veto: true, modelo: 'con espacios', temperatura: 7, voz: 'inexistente', duende: { hat: 'sombrero-inventado' } },
     { id: 'd-2', nombre: 'Repetido' },
     { id: 'lector', nombre: 'Lectora', personalidad: 'no debería', modelo: 'deepseek-v3.2', temperatura: 0.1 }] });
-  assert.equal(e.modo, 'fiel'); assert.equal(e.rondas, 4); assert.deepEqual(e.sembrado, ['formateador']);
+  assert.equal(e.modo, 'fiel'); assert.equal(e.rondas, 4); assert.deepEqual(e.sembrado, ['formateador', 'secretaria']);
   const d2 = E.duendeDe(e, 'd-2');
   assert.equal(d2.nombre, 'Duende especial'); assert.equal(d2.personalidad.length, E.MAX_PERSONALIDAD);
   assert.equal(d2.veto, false, 'el veto solo con revisar'); assert.equal(d2.modelo, 'deepseek-v4-pro'); assert.equal(d2.temperatura, 2);
@@ -146,11 +160,11 @@ test('crear, editar, eliminar y mover: los fijos no se eliminan ni tienen person
   /* mover */
   const r2 = E.crearEspecial(e, { nombre: 'Otro' });
   e = r2.equipo;
-  assert.deepEqual(E.especiales(e).map(d => d.nombre), ['El formateador', 'La crítica', 'Otro']);
+  assert.deepEqual(E.especiales(e).map(d => d.nombre), ['El formateador', 'La secretaria', 'La crítica', 'Otro']);
   e = E.moverDuende(e, r2.duende.id, 'formateador').equipo;
-  assert.deepEqual(E.especiales(e).map(d => d.nombre), ['Otro', 'El formateador', 'La crítica']);
+  assert.deepEqual(E.especiales(e).map(d => d.nombre), ['Otro', 'El formateador', 'La secretaria', 'La crítica']);
   e = E.moverDuende(e, r2.duende.id, null).equipo;
-  assert.deepEqual(E.especiales(e).map(d => d.nombre), ['El formateador', 'La crítica', 'Otro']);
+  assert.deepEqual(E.especiales(e).map(d => d.nombre), ['El formateador', 'La secretaria', 'La crítica', 'Otro']);
   assert.equal(E.moverDuende(e, 'lector', null).ok, false);
   e = E.moverDuende(e, 'formateador', 'maestro').equipo;
   assert.deepEqual(e.duendes.slice(0, 5).map(d => d.id), ['maestro', 'lector', 'escritor', 'coordinador', 'formateador'], 'nunca delante de los fijos');
@@ -574,7 +588,7 @@ test('respaldo: el sobre común a ClapCraft y ClapBook, con el equipo normalizad
   assert.equal(l.ok, true, l.error);
   assert.deepEqual(l.equipo, r.equipo);
   assert.equal(l.app, 'clapcraft'); assert.equal(l.version, '1.1.68'); assert.equal(l.exportado, r.exportado);
-  assert.equal(l.especiales, 2); assert.equal(l.rasgosQuitados, 0); assert.equal(l.descartados, 0); assert.equal(l.aviso, null);
+  assert.equal(l.especiales, 3); assert.equal(l.rasgosQuitados, 0); assert.equal(l.descartados, 0); assert.equal(l.aviso, null);
   assert.equal(l.mods, null); assert.equal(l.nMods, 0);
 });
 
@@ -640,10 +654,10 @@ test('un respaldo de ClapBook entra en ClapCraft: sus especiales con su aspecto,
 });
 
 test('importarRespaldo «anadir»: añade los que no hay, el de modificado más reciente gana, respeta el tope y no toca fijos, modo ni rondas', () => {
-  let mio = conEspeciales(2, AHORA);                                           // formateador, Especial 0, Especial 1
+  let mio = conEspeciales(2, AHORA);                                           // formateador, secretaria, Especial 0, Especial 1
   mio = E.ajustar(mio, { modo: 'libre', rondas: 3 }).equipo;
   mio = E.editarDuende(mio, 'lector', { nombre: 'Mi lector' }).equipo;
-  const [e0, e1] = E.especiales(mio).filter(d => d.id !== 'formateador');
+  const [e0, e1] = E.especiales(mio).filter(d => d.id !== 'formateador' && d.id !== 'secretaria');
   let suyo = E.porDefecto(reloj(AHORA - 5000));
   suyo.duendes.push(Object.assign({}, e0, { personalidad: 'Retocado allí', modificado: AHORA + 1000 }));
   suyo.duendes.push(Object.assign({}, e1, { personalidad: 'Viejo', modificado: AHORA - 1000 }));
@@ -655,25 +669,25 @@ test('importarRespaldo «anadir»: añade los que no hay, el de modificado más 
   const r = E.importarRespaldo(mio, suyo, 'anadir');
   assert.equal(JSON.stringify(mio), a); assert.equal(JSON.stringify(suyo), b);
   assert.equal(r.ok, true); assert.equal(r.modo, 'anadir');
-  assert.deepEqual([r.anadidos, r.actualizados, r.conservados, r.iguales, r.sinSitio], [2, 1, 1, 1, 0], JSON.stringify(r).slice(0, 300));
+  assert.deepEqual([r.anadidos, r.actualizados, r.conservados, r.iguales, r.sinSitio], [2, 1, 1, 2, 0], JSON.stringify(r).slice(0, 300));
   assert.equal(r.equipo.modo, 'libre'); assert.equal(r.equipo.rondas, 3);
   assert.equal(E.duendeDe(r.equipo, 'lector').nombre, 'Mi lector', 'los fijos se quedan');
   assert.equal(E.duendeDe(r.equipo, e0.id).personalidad, 'Retocado allí');
   assert.equal(E.duendeDe(r.equipo, e1.id).personalidad, 'Soy el 1');
-  assert.deepEqual(E.especiales(r.equipo).map(d => d.nombre), ['El formateador', 'Especial 0', 'Especial 1', 'Nuevo A', 'Nuevo B'], 'los nuevos, detrás');
+  assert.deepEqual(E.especiales(r.equipo).map(d => d.nombre), ['El formateador', 'La secretaria', 'Especial 0', 'Especial 1', 'Nuevo A', 'Nuevo B'], 'los nuevos, detrás');
   const igual = E.importarRespaldo(mio, mio, 'anadir');
-  assert.deepEqual([igual.anadidos, igual.actualizados, igual.iguales], [0, 0, 3]);
+  assert.deepEqual([igual.anadidos, igual.actualizados, igual.iguales], [0, 0, 4]);
   assert.deepEqual(igual.equipo, E.normalizar(mio));
   assert.equal(E.importarRespaldo(mio, suyo, '???').modo, 'anadir');
 });
 
 test('importarRespaldo: el tope de especiales (sinSitio) y el formateador retocado allí gana al recién sembrado aquí aunque sea más viejo', () => {
-  const lleno = conEspeciales(E.MAX_ESPECIALES - 1, AHORA);                    // con el formateador, 40
+  const lleno = conEspeciales(E.MAX_ESPECIALES - 2, AHORA);                    // con el formateador y la secretaria, 40
   assert.equal(E.especiales(lleno).length, E.MAX_ESPECIALES);
   const traidos = conEspeciales(3, AHORA + 100);
   const r = E.importarRespaldo(lleno, traidos, 'anadir');
   assert.equal(r.sinSitio, 3); assert.equal(r.anadidos, 0); assert.equal(E.especiales(r.equipo).length, E.MAX_ESPECIALES);
-  const casi = conEspeciales(E.MAX_ESPECIALES - 2, AHORA);
+  const casi = conEspeciales(E.MAX_ESPECIALES - 3, AHORA);
   const r2 = E.importarRespaldo(casi, traidos, 'anadir');
   assert.equal(r2.anadidos, 1); assert.equal(r2.sinSitio, 2);
   const alla = E.editarDuende(E.porDefecto(reloj(AHORA - 9e8)), 'formateador', { personalidad: 'Mi formateador, retocado' }, reloj(AHORA - 8e8)).equipo;
@@ -688,7 +702,7 @@ test('importarRespaldo: el tope de especiales (sinSitio) y el formateador retoca
 
 test('importarRespaldo «reemplazar»: el equipo del respaldo entero, con lo que se añade, cambia y quita', () => {
   const mio = conEspeciales(2, AHORA);
-  const [e0] = E.especiales(mio).filter(d => d.id !== 'formateador');
+  const [e0] = E.especiales(mio).filter(d => d.id !== 'formateador' && d.id !== 'secretaria');
   let suyo = E.porDefecto(reloj(AHORA));
   suyo.duendes.push(Object.assign({}, e0, { nombre: 'Cambiado' }));
   suyo = E.crearEspecial(suyo, { nombre: 'Solo allí' }, reloj(AHORA + 5)).equipo;
@@ -698,7 +712,7 @@ test('importarRespaldo «reemplazar»: el equipo del respaldo entero, con lo que
   assert.equal(JSON.stringify(mio), a);
   assert.equal(r.modo, 'reemplazar');
   assert.deepEqual(r.equipo, E.normalizar(suyo));
-  assert.deepEqual([r.anadidos, r.actualizados, r.iguales, r.quitados, r.sinSitio], [1, 1, 1, 1, 0]);
+  assert.deepEqual([r.anadidos, r.actualizados, r.iguales, r.quitados, r.sinSitio], [1, 1, 2, 1, 0]);
   assert.equal(r.equipo.modo, 'libre'); assert.equal(r.equipo.rondas, 4);
 });
 

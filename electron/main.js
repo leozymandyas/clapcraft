@@ -256,7 +256,7 @@ app.whenReady().then(() => {
   /* la memoria de estilo (1.1.60): la general y lo que escribió la IA, en los datos de la app */
   require('./memoria').iniciar({ app, ipcMain, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
   /* los duendes del asistente (1.1.68): el equipo, de todos los proyectos, en los datos de la app; al cambiarlo se avisa a las demás ventanas */
-  require('./equipo').iniciar({ app, ipcMain, ventanas, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
+  const equipoDuendes = require('./equipo').iniciar({ app, ipcMain, ventanas, esVentana: wc => [...ventanas.values()].some(v => v.win && !v.win.isDestroyed() && v.win.webContents === wc) });
   /* los mods del teatro de duendes, de todos los proyectos (1.1.64, claude/teatro-global.js): los lee y escribe cada ventana, y si
      cambian (otra ventana, o Claude con un proyecto cerrado) se avisa a las demás */
   (() => {
@@ -274,7 +274,7 @@ app.whenReady().then(() => {
     });
     try { fsSync.watch(path.dirname(almacen.archivo), (ev, f) => { if (f === 'teatro-mods.json' && Date.now() - propio > 1500) avisar(null); }); } catch (_) {}
   })();
-  claude = require('./claude')({ app, ipcMain, dialog, shell, clipboard, ventanas, enfocar, abrirRuta, alCambiar: () => montarMenu(), nuevaVentana: () => createWindow() });
+  claude = require('./claude')({ app, ipcMain, dialog, shell, clipboard, ventanas, enfocar, abrirRuta, equipo: equipoDuendes, alCambiar: () => montarMenu(), nuevaVentana: () => createWindow() });
   montarMenu();
   listo = true;
   /* las ventanas de la última vez, cada una con su proyecto; si no había, una vacía */

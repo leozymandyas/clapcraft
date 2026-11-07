@@ -11,8 +11,9 @@
    Aquí solo se dibuja, sin tocar el documento ni el Deshacer: cuando una página empieza en un bloque, ese bloque recibe margen
    superior con una hoja de estilos propia (`#editor > :nth-child(n) { margin-top }`) para que empiece en la hoja siguiente; entre
    hoja y hoja se dibuja el hueco (capa `.pag-capa` dentro de #pageWrap, fuera del contenteditable). Cuando empieza a mitad de un
-   bloque (un diálogo o una acción partidos), una raya marca dónde se corta. Cada hoja mide al menos 54 renglones de la hoja y crece
-   si lo que cabe en una página impresa ocupa más en pantalla. El número va arriba a la derecha, «2.», sin el de la primera. */
+   bloque (un diálogo o una acción partidos), una raya marca dónde se corta. Cada hoja mide lo que ocupa en pantalla lo que cabe en
+   su página impresa (1.1.70: antes, al menos 54 renglones de pantalla, y sobraba mucho blanco al pie); la última, al menos 54
+   renglones, para seguir escribiendo. El número va arriba a la derecha, «2.», sin el de la primera. */
 (function (Ed) {
   'use strict';
   const P = {};
@@ -154,7 +155,11 @@
           /* empieza en la hoja siguiente: un margen con el hueco natural más lo que falta hasta ella */
           const arriba = k.offsetTop + desplaza;
           const hueco = k.offsetTop - (previo.offsetTop + previo.offsetHeight);   // el hueco natural con el anterior (márgenes colapsados)
-          const limite = Math.max(previo.offsetTop + previo.offsetHeight + desplaza, inicio + minimoHoja);
+          /* **la hoja acaba donde acaba lo suyo** (1.1.70, Leo: «hay un espacio muy grande y desperdiciado al final de las hojas»):
+             una página impresa llena (54 renglones del PDF) ocupa en pantalla bastante menos —la hoja es más ancha que los 60
+             caracteres del PDF y el hueco entre elementos es menor que un renglón—, y con el alto mínimo de 54 renglones de pantalla
+             quedaba en blanco hasta un tercio de la hoja. El corte sigue siendo el del PDF; solo la última hoja mide lo de siempre */
+          const limite = previo.offsetTop + previo.offsetHeight + desplaza;
           const nuevo = limite + padB + HUECO + padT;
           const extra = nuevo - arriba;
           reglas.push(`${selector(ed, k)} { margin-top: ${Math.max(0, hueco) + extra}px !important; }`);

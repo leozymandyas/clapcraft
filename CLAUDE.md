@@ -191,8 +191,10 @@ La interfaz está en español; los comentarios del código también.
   **Desde la 1.1.16 las reparte `Claquedraw.maquetar.paginar`, igual que el PDF** (ver arriba): de cada página que empieza en
   un bloque sale su margen de salto, y de la que empieza a mitad de uno (un diálogo o una acción partidos) una raya `.dentro`
   a la altura del carácter donde sigue (`alturaEn`: el rectángulo de ese carácter, proporcional al alto del bloque, así vale
-  con zoom); una página que empieza en un elemento de lista pone el margen en el `li`. La hoja en pantalla mide al menos 54
-  líneas y crece si hace falta. Lo que sigue describe la parte visual:
+  con zoom); una página que empieza en un elemento de lista pone el margen en el `li`. **Cada hoja en pantalla acaba donde acaba
+  lo suyo** (1.1.70, Leo: «hay un espacio muy grande y desperdiciado al final de las hojas»: la hoja es más ancha que los 60
+  caracteres del PDF y el hueco entre elementos es menor que un renglón, así que una página impresa llena ocupaba en pantalla un
+  tercio menos y el resto de sus 54 líneas quedaba en blanco); solo la última mide al menos 54 líneas, para seguir escribiendo. Lo que sigue describe la parte visual:
   la hoja sigue siendo continua, pero se ve partida en hojas. No toca el DOM del documento ni el Deshacer:
   mide `offsetTop` de los bloques (unidades sin zoom), y al bloque que no cabe le da margen con una hoja de
   estilos propia (`#pagEstilo`: `#editor > :nth-child(n) { margin-top }` = hueco natural + lo que falta
@@ -2740,6 +2742,144 @@ con ClapCraft), uno que unificó el reemplazo de bloques y uno que escribió la 
   MenuItem (Cmd+Z con `sendInputEvent` no hace nada: lo resuelve el menú); en index.html solo, `webContents.undo()`.
 - **Queda**: interlineado, sangría y los atributos de un recuadro (título, tipo, color) siguen fuera de Deshacer; copiar y cortar
   bloques con el `role` del menú de Electron solo se probó con `ClipboardEvent` sintéticos (el portapapeles real es el de Leo).
+
+## 1.1.70: los duendes del asistente con Claude, el consultor y el duende del chat
+
+Leo, 29-09-2026: «Haz que los duendes de clapcraft puedan conectarse con Claude Cowork para su creación, la idea es poderles dar una
+personalidad más avanzada con Claude», y a mitad: «que no necesariamente haga algo con el texto, igual puede ser un consultor que lea y
+dé su opinión. Por ejemplo un duende que sepa de comedia debería poder revisar el guion si el usuario lo pide y dar sus opiniones de
+ciertas partes», «que pueda cambiar al duende maestro del asistente para poner a otro como predeterminado» y «cuando estoy creando un
+duende, puedo seleccionar la voz, pero debería poder escucharla antes».
+
+- **Claude los crea** (`js/claquedraw/equipo-claude.js`, `C.equipoClaude`, puro; test/equipo-claude.test.js): dos herramientas de MCP
+  que no son de ningún proyecto, `ver_duendes_asistente` (solo lee: el equipo, con `duende` la ficha entera —personalidad y aspecto— y
+  la guía para escribir una personalidad: cómo la usa cada papel, los modelos con su precio, las voces, los rasgos del aspecto y cómo
+  «consultar» a un duende desde Cowork, contestando Claude como él) y `editar_duendes_asistente` (un lote **entero o nada**: `crear`,
+  `cambiar` —`aspecto` sustituye o, con `cambiar_aspecto`, se mezcla—, `eliminar`, `mover`, `equipo`; los fijos solo nombre, modelo,
+  temperatura, voz y aspecto; nombres únicos; la personalidad larga es un error, no se recorta; el aspecto se valida con los mods del
+  teatro; un modelo desconocido vale con aviso). Las define el módulo y las ofrece claude/servidor.js (`llamarEquipo`, antes de buscar
+  proyecto): **con la app en marcha y la conexión encendida** van por el puente (`tipo: 'equipo'` en electron/claude.js →
+  `deClaude` de electron/equipo.js: escribe, manda `equipo:cambio` a todas las ventanas y `equipo:claude` a la de delante, que enseña
+  el aviso «Cowork creó «X»…» con «Ver» y «Deshacer» —vuelve el equipo de antes de esa petición entero—); **con la app cerrada**, el
+  servidor escribe `equipo-duendes.json` (atómico, 0600); **con la conexión apagada** (o una app que no conoce `equipo`), solo se lee.
+  No van en el historial de un proyecto. El asistente de la app no las tiene. En «Duendes del asistente»: «✨ Pedir a Claude» en la
+  ficha de un especial y «✨ Crear con Claude» bajo la lista (copian el encargo; gancho `copiar`). La skill lleva
+  `references/duendes-asistente.md` y las INSTRUCCIONES del servidor lo nombran.
+- **El papel `consultar`** (equipo.js `ROLES`; «Solo opina» en el diálogo, «Opina» en el panel, «Solo opina» en el lienzo): no toca el
+  texto ni lo veta. En la cadena del equipo los consultores van **al final** sobre el resultado (`sistemaEspecial(s, 'consultar')`:
+  opinión citando los trozos, 15 líneas como mucho), su opinión va a `informe.opiniones` y a `informe.especiales` («opinó»), el evento
+  `hablar` la dice en la mascota y el resumen del maestro la lleva («Opiniones…»). En la Mesa hablan como cualquiera (y pueden leer el
+  proyecto: así se le pide a uno «revisa el guion»). En un lienzo, `ejecutar_nodo` pide a Claude darle a Leo su opinión al terminar.
+- **El duende del chat** (`eq.predeterminado`, la clave solo si no es el maestro; `C.equipo.predeterminado(eq)` y
+  `fijarPredeterminado(eq, id)`, solo un especial o el maestro; eliminarlo vuelve al maestro al normalizar): «☆ Que sea el del chat» en
+  la ficha de un especial (★ en su fila; en el maestro, «Volver a ser el del chat»; aviso con «Deshacer»). En el panel (asistente.js
+  `principal()`): la cabecera, la bienvenida y la mascota (su aspecto y su voz) son los suyos, y el motor recibe `persona` →
+  `promptSistema` empieza «Eres «X», el asistente de ClapCraft» y lleva «## Tu personalidad» (sigue siendo el asistente con todas sus
+  reglas; con el equipo, «Coordinas a tu equipo» sin «Sin personalidad propia»). El modelo sigue siendo el de Configurar IA. La mesa
+  sigue con el maestro fijo de moderador.
+- **Oír la voz**: en el creador de duendes, «▶ Voz» junto a «Girar» y, al cambiarla en «Voz», suena (`oir()`: `Duendes.hablar` del
+  retrato con una frase corta y esa voz); en «Duendes del asistente», elegir otra voz también suena.
+- **La columna 1 del esquema** (Leo: «no puedo poner nodos en la primera línea vertical»): `onMouseMove` de tablero.js escondía el «+»
+  en cuanto el puntero quedaba a la izquierda de la raya de la columna 1 (`celdaCli(…) < 0`, pensado para el hueco de delante), así
+  que solo salía en su mitad derecha y, llegando desde la columna de tramas, parecía que no se podía. Ahora `< -0.5`: como las demás,
+  media celda a cada lado de su raya (el hueco de delante sigue sin ser celda). **Y mover un nodo ahí** (1.1.72, «sigue sin dejarme
+  mover el nodo»): al soltar, `onPointerUp` comprobaba `if (pos)` y la columna 1 es la 0, así que el nodo volvía a su sitio (y
+  duplicar con Opción tampoco caía ahí); ahora `pos !== null && pos !== undefined`, como ya hacía el trazo de un salto. Probado con
+  el ratón de verdad en Electron (la ventana enfocada: sin foco, `sendInputEvent` pierde el arrastre y la prueba engaña).
+- **Pruebas**: test/equipo-claude.test.js y test/mcp.test.js (archivo, puente y conexión apagada) en `npm test` (522); en Electron
+  `test:equipo-ui` (152: sección n, Claude por MCP en vivo con el servidor de verdad, aviso con Ver/Deshacer, ★, «Pedir a Claude», la
+  voz y la conexión apagada), `test:creador` (67, la voz), `test:equipo` (127, el duende del chat en la cabecera, la mascota y la
+  petición a la IA) y `test:asistente` (161). Para no quitarle el foco a Leo: `NODE_OPTIONS=--require <archivo>` que, **solo si
+  `require('electron').BrowserWindow` existe** (el `node_modules/.bin/electron` y el servidor en modo Node también lo cargan), cambie
+  `show` por `showInactive` y `focus` por `webContents.focus()`.
+
+## 1.1.73: el historial de conversaciones del asistente
+
+Leo, 02-10-2026: «Implementa en el asistente de IA un historial de chats». Hasta la 1.1.72 cada proyecto tenía una sola conversación y
+«Nueva conversación» la borraba.
+
+- **Dónde vive** (app.js, `chatsIA()`; sigue siendo de este equipo, por proyecto, nunca en el .clapcraft): la clave del proyecto (su
+  archivo, o `p:<id>`) guarda un **índice** `{ version: 2, actual, chats: [{ id, titulo, propio?, creado, modificado, mensajes, coste,
+  modelo, modo, busca }] }` y cada conversación va en su clave, `<clave>#chat:<id>` (en Electron, un archivo cada una en
+  `userData/asistente/`; en el navegador, el localStorage). Todo pasa por una cola (`enCola`): una operación detrás de otra.
+  `indiceChats()` pone al día lo de antes: una conversación sola de la 1.1.72 (`version: 1`) pasa a ser la primera del índice, y la
+  de un proyecto que estrena archivo se muda de `p:<id>`. electron/ia.js: `borrar` del índice se lleva sus conversaciones (salvo
+  con `solo`) y `mover` (renombrar el archivo) también. 200 como mucho (se van las más viejas, nunca la abierta). **Ojo**: `montar`
+  llama a `iniciar` del asistente antes de que app.js llegue a esta parte, así que todo va con `function`/`var` (con `const` daba
+  TDZ y no se guardaba nada, sin error a la vista).
+- **El panel** (asistente.js): `chatId` es la conversación del panel (null = una nueva, que entra en el historial al guardarse con
+  algo; sin ningún mensaje no se lista y, al dejarla, se borra). `guardar()` manda la conversación y su línea (`metaChat`: el título es
+  lo primero que se pidió, sin marcas de enlace; un nombre puesto a mano, `propio`, no lo cambian los mensajes siguientes).
+  `reiniciar()` deja todo a cero (también la usan Nueva y recargar); `dejarChat()` guarda la de ahora tal cual —a mitad, con lo que
+  estaba en curso cortado— antes de pasar a otra; `cargarDatos(d)` es lo de cargar de siempre. «Nueva conversación» ya no borra.
+- **La lista**: el reloj de la cabecera (`[data-as-hist]`, SVG en línea `SVG_HISTORIAL`) abre `.as-hist` encima de la mascota, la
+  conversación y el campo: por días (Hoy, Ayer, Esta semana, y por meses), la más reciente arriba y la abierta marcada; cada fila con su
+  hora, mensajes, gasto y modo; buscador por título y por lo que pidió Leo (`busca`, sin acentos); un clic abre (en el título, tras 260 ms:
+  el doble clic renombra, `clicChat`), ✎ o F2 renombra (salir del campo guarda, Esc lo deja), 🗑 o Supr elimina con «Deshacer» en el
+  aviso (`restaurar`), Enter en el buscador abre la primera, ↑ ↓ recorren, Esc la cierra (también con el foco en ninguna parte). La fila
+  con el foco lo conserva al repintar. API: `C.asistente.abrirHistorial`, `cerrarHistorial`, `abrirConversacion(id)`,
+  `conversacionActual()`. Con siete botones, la cabecera estrecha (≤ 400 px) los deja en 22 px.
+- **Pruebas**: la sección h) de `npm run test:asistente` (186 en total, ratón y teclado de verdad: índice y archivos, Nueva, la nueva al
+  primer mensaje, orden, buscar, abrir y que el modelo reciba solo lo de esa, renombrar con doble clic, eliminar y Deshacer, eliminar la
+  abierta, recargar, mover el índice).
+
+## 1.1.74: la secretaria de la Mesa y sentar duendes en cualquier momento
+
+Leo, 06-11-2026: «Que en el asistente, los duendes puedan editar documentos, como una especie de secretaria que tome notas durante la
+mesa, que pueda personalizarse su personalidad como a los otros duendes», y a mitad: «Durante las mesas, no puedo agregar nuevos duendes
+hasta haber quitado todos, quiero poder agregar duendes a la mesa en cualquier momento».
+
+- **El papel `anotar`** (equipo.js `ROLES`; «Toma notas» en «Duendes del asistente», «Toma notas» en el panel): la secretaria. **De
+  fábrica, «La secretaria»** (id `secretaria`, deepseek-v4-flash, temperatura 0,2, no se enoja), sembrada una vez como el formateador:
+  `DE_FABRICA`/`SEMBRABLES` en equipo.js (un equipo de la 1.1.73 la recibe detrás del formateador; borrada, no vuelve; el respaldo y
+  `deFabrica` cuentan a los dos). Su personalidad se edita como la de cualquiera y dice cómo redacta. No entra en la cadena del Equipo
+  (`trabajar` la filtra), ni se ofrece en «Duendes» del modo Equipo ni en el lienzo (`especialesDe` de lienzo.js; `editar_lienzo` la
+  rechaza por su nombre). En ClapBook, que no tiene el papel, un respaldo con ella la lee como `revisar`.
+- **En la Mesa** (asistente-motor.js, `esSecretaria`, `sistemaSecretaria`): no conversa ni pelea. Tras el resumen, **apunta en el acta**
+  lo de la última vuelta (`_transcripcion(null, { desdeLeo: true })`, sin herramientas; «⟦sin notas⟧» = no se escribe) y el código lo
+  escribe (`_escribirActa`: una entrada `## HH:MM · lo que dijo Leo` —sin las @, `sinArrobas`—; la primera vez `editar_biblioteca ›
+  crear_nota` en la biblioteca de `op.acta`, luego `escribir_documento` modo anadir en la misma nota; si la tiraron, nace otra). **Si Leo
+  le habla** («@La secretaria…», o es la única en la mesa: con ella sola ya hay mesa) hace lo que pide con `MESA_LECTURA` +
+  `escribir_documento` + `editar_biblioteca` + `anotar_en_acta` (propia del motor), por `_ejecutar` (que ahora acepta `extra` para el
+  `quien` del paso y devuelve también `resultado`): lo que reemplaza o borra pide permiso como siempre. `conv.acta = { nota, titulo,
+  biblioteca, bibliotecaNombre, entradas, creada }` va en toJSON/cargar y `vaciar` lo olvida; sus mensajes llevan `anota`, `acta`,
+  `notaActa`, `sinNotas` (internos) y lo del acta no entra en lo que leen los demás.
+- **En el panel** (asistente.js): la burbuja lleva «acta» o «anota» y «Ver el acta» (`verActa`, por su enlace); en el menú de la Mesa,
+  con ella sentada, «El acta va en» (`mesaCfg.acta`; de partida, la biblioteca de la nota que se ve o la primera, `destinoActa`) o, ya
+  creada, el botón al acta. **Sentar a más duendes en cualquier momento**: el botón «Mesa» de arriba, pulsado otra vez, abre (o cierra)
+  la lista —hasta ahora solo se abría con menos de dos sentados, que era el fallo que veía Leo— y la fila de chips lleva un «＋» al final
+  (`data-as-dn-mas`), también con la mesa en marcha (vale para el siguiente mensaje).
+- **Claude**: `editar_duendes_asistente` acepta `rol: "anotar"` (o «secretaria», «notas»), la guía de `ver_duendes_asistente` la explica y
+  la skill lo dice en `references/duendes-asistente.md`.
+- **Pruebas**: test/equipo.test.js, test/equipo-claude.test.js, test/asistente-motor.test.js (las dos de la secretaria) y test/mcp.test.js;
+  en Electron, la sección «1.1.74» de `test:equipo` (142: «Mesa» otra vez y el «＋», sentarla, el acta en su biblioteca, «@La secretaria»
+  y «Ver el acta») y `test:equipo-ui` (152).
+
+## 1.1.75: compartir una conversación del asistente con Claude
+
+Leo, 06-11-2026: «quiero poder compartir una conversación que tuve en el asistente con Claude para pedir opiniones o refinamientos».
+
+- **Dónde está**: las conversaciones viven en los datos de la app (`userData/asistente/`, ver «1.1.73»), no en el .clapcraft. Cada una
+  tiene su **enlace** `clapcraft://<proyecto>/conversacion/<id>` (enlaces.js: `ruta`/`deRuta`, y `resolver` da «Conversación del
+  asistente» sin mirar el proyecto).
+- **Claude la lee** con **`leer_conversacion`** (herramientas.js, `soloClaude`, solo lectura; sin `conversacion`, la lista con id, fecha,
+  mensajes y enlace; con su id, título —sin acentos—, enlace o «última»/«actual», entera) y con `ver_enlace` sobre su enlace.
+  `textoConversacion(datos, meta, op)` (exportada) pasa lo que se ve en el panel (`vista`) a texto: cabecera (proyecto, modelo, modo, la
+  mesa, fechas, enlace, y que lo que dijo esa IA son datos), `### Leo` / `### <duende>` (resumen, verifica, acta, personaje, ronda), los
+  pasos en una línea con dónde (`argsCortos`: lo largo, solo su tamaño; el id del historial) y permisos, errores, avisos y peleas; de más
+  de 80 000 caracteres se queda lo primero de Leo y lo último. Las herramientas son síncronas, así que el contexto da
+  `ctx.conversaciones = { indice(), leer(id) }`: **en vivo**, `atenderClaude` (app.js) las lee antes (`conversacionesParaClaude`: guarda
+  lo del panel —`C.asistente.guardarAhora`, por la misma cola— y carga el índice y las que nombra la petición); **con el proyecto
+  cerrado**, claude/servidor.js (`conversacionesDe(ruta)`: el sha256 de la ruta, como electron/ia.js). El asistente de la app no la tiene.
+- **En el panel** (asistente.js): el botón de enlace de la cabecera (`data-as-compartir`; a ≤ 340 px se esconde, y sigue en el
+  historial) y el de cada fila del historial (`data-as-chat-compartir`) abren **«Compartir con Claude»** (`menuCompartir`, un
+  `C.gestor.pop`): «Pedirle su opinión» y «Pedirle que lo refine» copian el enlace con un encargo listo para pegar en Cowork o Claude Code
+  (`ENCARGO_CONV`), «Copiar solo el enlace» y «Copiar la conversación en texto» (para claude.ai o cualquier sitio). El enlace lo hace la
+  app (`g.enlaceConversacion`, con `proyectoEnlace()` y el sello, como los demás) y copia `g.copiarPortapapeles`. Cmd+Shift+C con el foco
+  en el panel copia el enlace de su conversación; abrir ese enlace en ClapCraft (`mostrarEnlace`) abre el panel con ella. Con nueve
+  botones, los de la cabecera miden 20 px a ≤ 400 px.
+- **Pruebas**: test/conversacion.test.js, test/mcp.test.js (con el proyecto cerrado); `test:asistente` (196: sección i, el menú, lo
+  copiado, Claude en vivo por MCP con lo copiado, la fila del historial, Cmd+Shift+C y abrir el enlace).
 
 ## Claude: acceso desde Cowork y Claude Code (1.1.49)
 

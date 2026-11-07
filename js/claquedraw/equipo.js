@@ -37,11 +37,19 @@
     coordinador: { nombre: 'El coordinador', modelo: MODELO_COORDINADOR, temperatura: 0, voz: 'ronca', enojon: true,
       que: 'Compara cada versión con las fuentes y la rechaza si inventa, contradice o no hace lo pedido. Trabaja con los resultados de los demás y usa el modelo más capaz.' },
     especial: { nombre: 'Duende especial', modelo: MODELO_ESPECIAL, temperatura: 0.3, voz: null, enojon: true,
-      que: 'Trabaja con lo que ya hizo el equipo: lo revisa (y puede vetarlo) o lo transforma, siempre con la personalidad que le diste.' }
+      que: 'Trabaja con lo que ya hizo el equipo: lo revisa (y puede vetarlo), lo transforma o solo da su opinión; o, como secretaria, toma notas en la Mesa y edita los documentos que le pidas. Siempre con la personalidad que le diste.' }
   };
   /* la temperatura de la escritora depende del modo */
   const TEMP_ESCRITOR = { fiel: 0.5, libre: 0.8 };
-  const ROLES = ['revisar', 'transformar'];
+  /* `consultar` (1.1.70, Leo: «que no necesariamente haga algo con el texto, igual puede ser un consultor que lea y dé su opinión. Por
+     ejemplo un duende que sepa de comedia debería poder revisar el guion si el usuario lo pide y dar sus opiniones de ciertas partes»):
+     no toca el texto ni lo veta; en la cadena da su opinión del resultado al final (va en el informe, `opiniones`) y en la mesa habla
+     como cualquiera. */
+  /* `anotar` (1.1.74, Leo: «Que en el asistente, los duendes puedan editar documentos, como una especie de secretaria que tome notas
+     durante la mesa, que pueda personalizarse su personalidad como a los otros duendes»): la secretaria. No opina ni toca el texto del
+     equipo: en la Mesa escucha y, al terminar cada vuelta, apunta en el acta de la conversación (una nota de una biblioteca) lo que se
+     decidió; y si Leo le habla con «@», edita los documentos que le pida (guiones y notas). No trabaja en la cadena ni en el lienzo. */
+  const ROLES = ['revisar', 'transformar', 'consultar', 'anotar'];
   const MAX_ESPECIALES = 40, MAX_PERSONALIDAD = 4000, MAX_NOMBRE = 60, MAX_EN_CONVERSACION = 8;
   /* El formateador, el especial que viene de fábrica (Leo: «un duende especial por defecto que se encargue de ver que el texto esté
      bien formateado»). Se siembra una vez (`sembrado`): si Leo lo borra, no vuelve. */
@@ -50,6 +58,13 @@
     'En un guion (el Fountain de ClapCraft): cada escena empieza con su encabezado INT. o EXT. LUGAR - MOMENTO en su propia línea; la acción va en párrafos; el PERSONAJE va en MAYÚSCULAS en su línea y debajo, sin línea en blanco, su (paréntesis) y su diálogo; las transiciones como «> CORTE A:»; una línea en blanco entre elementos; nada de Markdown dentro del guion (ni **, ni listas, ni tablas).',
     'En prosa: Markdown limpio (títulos con #, listas con -, sin espacios ni saltos de más).',
     'NUNCA cambio lo que pasa ni lo que se dice: ni una palabra de los diálogos, ni un suceso, ni un nombre. Solo el formato. Los [hueco: …] y las marcas ⟦…⟧ se quedan como están.'
+  ].join('\n');
+  /* La secretaria (1.1.74), la otra especial de fábrica: se siembra una vez, como el formateador, y su personalidad se edita igual. */
+  const PERSONALIDAD_SECRETARIA = [
+    'Soy la secretaria de la mesa: escucho, no opino, y apunto lo que importa para que Leo no lo pierda.',
+    'Mis notas son breves y ordenadas: viñetas cortas en estas secciones, solo las que tengan algo: **Acuerdos**, **Ideas y propuestas** (con quién la propuso), **Desacuerdos** (quién piensa qué) y **Pendientes** (lo que falta decidir o hacer).',
+    'Apunto lo que se dijo, con las palabras justas y sin adornos; no invento nada ni lo mejoro, y si algo quedó en el aire, lo pongo en Pendientes.',
+    'Cuando Leo me pide algo a mí, lo hago en el documento que diga, con cuidado de no tocar lo que no me pidió.'
   ].join('\n');
 
   /* Los aspectos de partida: el duende de cada uno (lo que valida C.teatroMods.validarDuende, el del creador de duendes), distintos
@@ -65,6 +80,8 @@
       cejas: 'gruesas', boca: 'seria', beard: 'corta', beardCol: '#5B5B5B', descripcion: 'Serio: saco gris oscuro, corbata, lentes y el ceño fruncido.' },
     formateador: { cuerpo: 'duende', hat: 'gorro', hatCol: '#6A3FA0', cloth: '#7D5BB5', pat: 'bolsillos', patCol: '#F0E6FF', lentes: 'redondos', prop: 'lupa',
       prenda: 'chaleco', cejas: 'arqueadas', descripcion: 'Lentes redondos, gorro morado, chaleco de bolsillos y su lupa para cazar comas.' },
+    secretaria: { cuerpo: 'duende', hat: 'nada', peinado: 'chongo', hairCol: '#3B2A22', cloth: '#C2536B', cloth2: '#F6E7EA', prenda: 'saco', lentes: 'redondos',
+      accesorios: ['collar'], ojos: 'grandes', boca: 'sonrisa', descripcion: 'Chongo alto, lentes redondos, saco frambuesa y un collar.' },
     especial: { cuerpo: 'duende', hat: 'caido', hatCol: '#3E7C74', cloth: '#4F9A8F', descripcion: 'Un duende especial.' }
   };
 
@@ -99,7 +116,7 @@
     if (d && v.includes(d.voz)) return d.voz;
     if (d && d.duende && v.includes(d.duende.voz)) return d.duende.voz;
     const p = d && PAPELES[d.papel];
-    return (p && p.voz) || (d && d.id === 'formateador' ? 'robot' : 'normal');
+    return (p && p.voz) || (d && d.id === 'formateador' ? 'robot' : d && d.id === 'secretaria' ? 'dulce' : 'normal');
   }
 
   /* ====================================================================
@@ -118,7 +135,7 @@
     const P = PAPELES[papel], fijo = papel !== 'especial';
     const d = {
       id, papel, fijo,
-      nombre: texto(x.nombre, MAX_NOMBRE) || (id === 'formateador' ? 'El formateador' : P.nombre),
+      nombre: texto(x.nombre, MAX_NOMBRE) || (id === 'formateador' ? 'El formateador' : id === 'secretaria' ? 'La secretaria' : P.nombre),
       personalidad: fijo ? '' : texto(x.personalidad, MAX_PERSONALIDAD),
       rol: fijo ? null : ROLES.includes(x.rol) ? x.rol : 'revisar',
       veto: false,
@@ -142,10 +159,17 @@
     return sanearDuende({ id: 'formateador', nombre: 'El formateador', personalidad: PERSONALIDAD_FORMATEADOR, rol: 'transformar', modelo: MODELO_ESPECIAL,
       duende: copia(ASPECTOS.formateador), voz: 'robot', enojon: true, creado: ahora, modificado: ahora }, { ahora: () => ahora });
   }
-  /* el equipo de partida: los cuatro fijos y el formateador */
+  function secretariaDePartida(ahora) {
+    return sanearDuende({ id: 'secretaria', nombre: 'La secretaria', personalidad: PERSONALIDAD_SECRETARIA, rol: 'anotar', modelo: MODELO_BARATO, temperatura: 0.2,
+      duende: copia(ASPECTOS.secretaria), voz: 'dulce', enojon: false, creado: ahora, modificado: ahora }, { ahora: () => ahora });
+  }
+  /* los especiales de fábrica, en su orden: cada uno se siembra una sola vez (`sembrado`); borrado, no vuelve */
+  const DE_FABRICA = { formateador: formateadorDePartida, secretaria: secretariaDePartida };
+  const SEMBRABLES = Object.keys(DE_FABRICA);
+  /* el equipo de partida: los cuatro fijos, el formateador y la secretaria */
   function porDefecto(op) {
     const ahora = ahoraDe(op);
-    return { version: 1, modo: 'fiel', rondas: 2, sembrado: ['formateador'], duendes: FIJOS.map(id => fijoDePartida(id, ahora)).concat([formateadorDePartida(ahora)]) };
+    return { version: 1, modo: 'fiel', rondas: 2, sembrado: SEMBRABLES.slice(), duendes: FIJOS.map(id => fijoDePartida(id, ahora)).concat(SEMBRABLES.map(id => DE_FABRICA[id](ahora))) };
   }
   /* Un equipo válido a partir de cualquier cosa (lo guardado, lo que manda otra ventana). Nunca lanza: repara, completa los fijos que
      falten, siembra el formateador una sola vez y deja los fijos primero en su orden. */
@@ -156,7 +180,7 @@
       const modo = x.modo === 'libre' ? 'libre' : 'fiel';
       const r = Math.round(+x.rondas);
       const rondas = Number.isFinite(r) ? Math.max(1, Math.min(4, r)) : 2;
-      const sembrado = [...new Set((Array.isArray(x.sembrado) ? x.sembrado : []).filter(s => s === 'formateador'))];
+      const sembrado = [...new Set((Array.isArray(x.sembrado) ? x.sembrado : []).filter(s => SEMBRABLES.includes(s)))];
       const vistos = new Set(), fijos = {}, especiales = [];
       (Array.isArray(x.duendes) ? x.duendes : []).forEach(d0 => {
         const d = sanearDuende(d0, op);
@@ -164,16 +188,40 @@
         vistos.add(d.id);
         if (d.fijo) fijos[d.id] = d; else if (especiales.length < MAX_ESPECIALES) especiales.push(d);
       });
-      if (!sembrado.includes('formateador')) {
-        sembrado.push('formateador');
-        if (!vistos.has('formateador') && especiales.length < MAX_ESPECIALES) especiales.unshift(formateadorDePartida(ahora));
-      }
-      return { version: 1, modo, rondas, sembrado, duendes: FIJOS.map(id => fijos[id] || fijoDePartida(id, ahora)).concat(especiales) };
+      /* los de fábrica que aún no se sembraron: delante de los de Leo, en su orden (la secretaria, detrás del formateador si está) */
+      let pos = 0;
+      SEMBRABLES.forEach(id => {
+        const i = especiales.findIndex(d => d.id === id);
+        if (i >= 0) { pos = Math.max(pos, i + 1); return; }
+        if (sembrado.includes(id)) return;
+        sembrado.push(id);
+        if (!vistos.has(id) && especiales.length < MAX_ESPECIALES) { especiales.splice(pos, 0, DE_FABRICA[id](ahora)); pos++; }
+      });
+      sembrado.sort((a, b) => SEMBRABLES.indexOf(a) - SEMBRABLES.indexOf(b));
+      const e = { version: 1, modo, rondas, sembrado, duendes: FIJOS.map(id => fijos[id] || fijoDePartida(id, ahora)).concat(especiales) };
+      /* el duende predeterminado del chat (1.1.70): uno de los especiales; sin él (o si ya no está), el maestro. La clave solo si hay. */
+      const pd = typeof x.predeterminado === 'string' ? x.predeterminado.trim().toLowerCase() : '';
+      if (pd && pd !== 'maestro' && especiales.some(d => d.id === pd)) e.predeterminado = pd;
+      return e;
     } catch (_) { return porDefecto(op); }
   }
   const especiales = eq => ((eq && Array.isArray(eq.duendes)) ? eq.duendes : []).filter(d => d && d.papel === 'especial');
   const duendeDe = (eq, id) => ((eq && Array.isArray(eq.duendes)) ? eq.duendes : []).find(d => d && d.id === id) || null;
   const maestro = eq => duendeDe(eq, 'maestro') || fijoDePartida('maestro', Date.now());
+  /* **El duende predeterminado del chat** (1.1.70, Leo: «que pueda cambiar al duende maestro del asistente para poner a otro como
+     predeterminado»): el que contesta en el chat con el asistente en «Maestro», con su nombre, su personalidad, su aspecto y su voz (el
+     modelo sigue siendo el de Configurar IA) y hace de maestro del equipo. De partida y si no hay otro, el duende maestro (sin
+     personalidad). `eq.predeterminado`: el id de un especial. */
+  const predeterminado = eq => (eq && eq.predeterminado && duendeDe(eq, eq.predeterminado)) || maestro(eq);
+  function fijarPredeterminado(eq, id, op) {
+    const e = normalizar(eq, op), x = typeof id === 'string' ? id.trim().toLowerCase() : '';
+    if (!x || x === 'maestro') { delete e.predeterminado; return { ok: true, equipo: e, duende: copia(maestro(e)) }; }
+    const d = duendeDe(e, x);
+    if (!d) return { ok: false, equipo: e, error: 'No existe ese duende.' };
+    if (d.fijo) return { ok: false, equipo: e, error: d.nombre + ' tiene un trabajo fijo en el equipo: el predeterminado del chat es el duende maestro o uno de tus especiales.' };
+    e.predeterminado = d.id;
+    return { ok: true, equipo: e, duende: copia(d) };
+  }
 
   /* ---------- crear, editar, eliminar y mover (devuelven un equipo nuevo; el de entrada no se toca) ---------- */
   function crearEspecial(eq, datos, op) {
@@ -351,7 +399,10 @@
   function sistemaEspecial(s, que, formato, modo) {
     const P = ['Eres «' + s.nombre + '», un duende especial del equipo de ClapCraft.',
       'TU PERSONALIDAD:', s.personalidad || '(sin personalidad escrita: sé un revisor atento y breve)', PERSONALIDAD_FIJA, ''];
-    if (que === 'revisar') P.push('Tu trabajo ahora: REVISAR el texto con tu criterio y tu personalidad. No lo reescribas.', DATOS_NO_ORDENES, 'Devuelve este JSON: ' + VEREDICTO, JSON_SOLO);
+    if (que === 'consultar') P.push('Tu trabajo ahora: dar tu OPINIÓN del texto como consultor, con tu criterio y tu personalidad. No lo reescribes entero ni lo apruebas o rechazas: comenta lo que funciona y lo que no, citando entre comillas el trozo del que hablas (unas palabras bastan), y propón ideas concretas. Si la instrucción pregunta por ciertas partes, céntrate en ellas.',
+      'Lo que no esté en el texto ni en las fuentes no lo des por hecho: dilo como pregunta o como propuesta.', DATOS_NO_ORDENES,
+      'Escribe en español, en prosa breve o en una lista corta (15 líneas como mucho), sin saludar ni despedirte y sin ``` alrededor.');
+    else if (que === 'revisar') P.push('Tu trabajo ahora: REVISAR el texto con tu criterio y tu personalidad. No lo reescribas.', DATOS_NO_ORDENES, 'Devuelve este JSON: ' + VEREDICTO, JSON_SOLO);
     else P.push('Tu trabajo ahora: TRANSFORMAR el texto según tu personalidad y devolverlo ENTERO, sin alargarlo ni añadirle frases tuyas.',
       modo === 'libre' ? 'Lo nuevo que inventes va entre ⟦ ⟧; no quites las marcas ⟦…⟧ ni los [hueco: …] que haya.' : 'No añadas hechos, personajes, lugares, nombres, sucesos ni diálogos nuevos, no quites contenido y deja los [hueco: …] como están.',
       FORMATO[formato], DATOS_NO_ORDENES, 'Devuelve SOLO el texto, en español, sin explicaciones y sin ``` alrededor.');
@@ -581,12 +632,13 @@
     const fuentes = (Array.isArray(op.fuentes) ? op.fuentes : []).filter(f => f && typeof f.texto === 'string')
       .map((f, i) => ({ etiqueta: linea(f.etiqueta || 'fuente ' + (i + 1), 120), texto: String(f.texto) }));
     const conocidos = op.conocidos && typeof op.conocidos === 'object' ? op.conocidos : {};
-    const esp = (Array.isArray(op.especiales) ? op.especiales : []).map(sanearInstantanea).filter(Boolean).slice(0, MAX_EN_CONVERSACION);
+    /* la secretaria (rol anotar) no trabaja en la cadena: toma notas en la Mesa */
+    const esp = (Array.isArray(op.especiales) ? op.especiales : []).map(sanearInstantanea).filter(Boolean).filter(s => s.rol !== 'anotar').slice(0, MAX_EN_CONVERSACION);
     const lector = duendeDe(eq, 'lector'), escritor = duendeDe(eq, 'escritor'), coord = duendeDe(eq, 'coordinador'), mae = maestro(eq);
     const prefijo = (typeof op.id === 'string' && op.id ? op.id : 'eq' + (++serie) + '-' + Date.now().toString(36));
     const det = () => { try { return typeof op.detenido === 'function' && !!op.detenido(); } catch (_) { return false; } };
     const gasto = { coste: 0, entrada: 0, cache: 0, salida: 0, llamadas: 0, estimadas: 0, porDuende: {} };
-    const informe = { rondas: 0, aprobado: false, problemas: [], pendientes: [], huecos: [], inventado: [], especiales: [], avisos: [] };
+    const informe = { rondas: 0, aprobado: false, problemas: [], pendientes: [], huecos: [], inventado: [], especiales: [], opiniones: [], avisos: [] };
     let actual = '';                                               // el último texto bueno (por si hay que parar)
     let n = 0;
 
@@ -741,9 +793,9 @@
       }
       let pendientes = await vueltas(eq.rondas, null);
 
-      /* 5. Los especiales, en orden */
+      /* 5. Los especiales, en orden (los consultores, al final: opinan del resultado) */
       const tempEsp = s => temperaturaDe(s, PAPELES.especial.temperatura);
-      for (const s of esp) {
+      for (const s of esp.filter(x => x.rol !== 'consultar')) {
         const d = { id: s.id, papel: 'especial', nombre: s.nombre };
         const modeloEsp = modeloDe(s, MODELO_ESPECIAL);
         if (s.rol === 'transformar') {
@@ -815,6 +867,23 @@
           if (pendientes.length) pendientes = await vueltas(Math.max(0, eq.rondas - 1), pendientes);
         }
         informe.especiales.push({ id: s.id, nombre: s.nombre, accion, notas: linea(notas, 800) });
+      }
+
+      /* 6. Los consultores: su opinión del resultado, que no lo toca (va en el informe) */
+      for (const s of esp.filter(x => x.rol === 'consultar')) {
+        const d = { id: s.id, papel: 'especial', nombre: s.nombre };
+        emitir(d, 'leer', 'Leyendo para dar su opinión');
+        let r = null;
+        try {
+          r = await llamar(d, [{ role: 'system', content: sistemaEspecial(s, 'consultar', formato, modo) },
+            { role: 'user', content: 'INSTRUCCIÓN DEL ENCARGO:\n' + instruccion + '\n\n' + bloque('DOSSIER DEL LECTOR', dossierTexto(dossier)) + '\n\n' + bloque('TEXTO', actual) }],
+            { modelo: modeloDe(s, MODELO_ESPECIAL), temperatura: tempEsp(s), salidaEst: 900 });
+        } catch (e) { if (!(e instanceof Parada) || !e.transporte || PARAN.includes(e.codigo)) throw e; informe.avisos.push('«' + s.nombre + '» no pudo dar su opinión (' + e.message + ').'); continue; }
+        const t = limpiarTexto(r.texto);
+        if (!t) continue;
+        informe.opiniones.push({ id: s.id, nombre: s.nombre, texto: texto(t, 4000) });
+        informe.especiales.push({ id: s.id, nombre: s.nombre, accion: 'opinó', notas: linea(t, 800) });
+        emitir(d, 'hablar', t, { coste: r.coste });
       }
 
       /* lo que queda */
@@ -989,7 +1058,7 @@
     /* los especiales que traía y no quedaron (repetidos, o más de los que caben); el formateador que sembró `normalizar`, aparte */
     const idDe = d => String((d && d.id) || '').trim().toLowerCase();
     const traidos = limpio.duendes.filter(d => d && !FIJOS.includes(idDe(d))).length;
-    const sembradoAqui = especiales(equipo).some(d => d.id === 'formateador') && !limpio.duendes.some(d => d && idDe(d) === 'formateador') ? 1 : 0;
+    const sembradoAqui = SEMBRABLES.filter(id => especiales(equipo).some(d => d.id === id) && !limpio.duendes.some(d => d && idDe(d) === id)).length;
     descartados += Math.max(0, traidos - (n - sembradoAqui));
     /* los mods del teatro que trae (solo los que usan sus duendes) */
     const lm = leerModsRespaldo(mods0);
@@ -1011,7 +1080,7 @@
   const igualDuende = (a, b) => CAMPOS_IGUALES.every(k => estable(a[k]) === estable(b[k]));
   /* el formateador tal como viene de fábrica (en el equipo nuevo lo siembra la app al estrenarse: su fecha es más nueva que la del
      que Leo retocó en el otro equipo, y no debe ganarle) */
-  const deFabrica = d => d && d.id === 'formateador' && igualDuende(d, formateadorDePartida(1));
+  const deFabrica = d => !!d && SEMBRABLES.includes(d.id) && igualDuende(d, DE_FABRICA[d.id](1));
   /* ¿el del respaldo gana al de aquí? el retocado al de fábrica; si no, el de `modificado` más reciente */
   function gana(suyo, mio) {
     const fs = deFabrica(suyo), fm = deFabrica(mio);
@@ -1103,7 +1172,7 @@
     PAPELES, FIJOS, ROLES, ASPECTOS, MODELO_BARATO, MODELO_COORDINADOR, MODELO_ESPECIAL, MAX_ESPECIALES, MAX_PERSONALIDAD, MAX_EN_CONVERSACION,
     PERSONALIDAD_FORMATEADOR, TEMP_ESCRITOR, APPS_RESPALDO, FORMATO_RESPALDO,
     respaldo, nombreRespaldo, leerRespaldo, importarRespaldo, sanearAspecto, importarMods, quitarMods, modsDelEquipo,
-    porDefecto, normalizar, sanearDuende, crearEspecial, editarDuende, eliminarDuende, moverDuende, ajustar,
+    porDefecto, normalizar, sanearDuende, crearEspecial, editarDuende, eliminarDuende, moverDuende, ajustar, predeterminado, fijarPredeterminado,
     especiales, duendeDe, maestro, aspectoDe, vozDe, instantanea, sanearInstantanea, cambiado, participante, EN_LA_MESA, MODELO_PERSONAJE, TEMP_PERSONAJE,
     trabajar, comprobar, problemasNuevos, cuantoCambia, cambiaDeMas, veredictoDe, leerObjeto, limpiarTexto, personajesDeGuion, markdownSuelto
   };

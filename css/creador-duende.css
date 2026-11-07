@@ -24,7 +24,7 @@ body.con-asistente.asistente-plegado .cd-capa { right: 40px; }
 .cd-marco.girado { transform: scaleX(-1); }
 .cd-girar[aria-pressed="true"] { background: var(--foco-suave); border-color: var(--foco-linea); color: var(--foco); }
 .cd-escena-acc { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
-.cd-girar { flex: none; height: 30px; }
+.cd-girar, .cd-oir { flex: none; height: 30px; }
 .cd-gesto-l, .cd-desc-l { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cd-gesto-l { flex: 1; }
 .cd-gesto, .cd-desc { font: 13px var(--sans); color: var(--tinta); background: var(--papel); border: 1px solid var(--borde); border-radius: 4px; }

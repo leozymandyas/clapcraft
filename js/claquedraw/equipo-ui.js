@@ -58,9 +58,13 @@
   const ROLES = [
     { id: 'vetar', n: 'Revisa y puede vetar', d: 'Si algo no le cuadra, lo devuelve a la escritora y vuelve a pasar por el coordinador y por él.', rol: 'revisar', veto: true },
     { id: 'revisar', n: 'Revisa sin vetar', d: 'Da sus notas, que van en el informe; no detiene el trabajo.', rol: 'revisar', veto: false },
-    { id: 'transformar', n: 'Transforma el texto', d: 'Lo reescribe con su personalidad, sin cambiar lo que pasa ni lo que se dice.', rol: 'transformar', veto: false }
+    { id: 'transformar', n: 'Transforma el texto', d: 'Lo reescribe con su personalidad, sin cambiar lo que pasa ni lo que se dice.', rol: 'transformar', veto: false },
+    /* 1.1.70, Leo: «igual puede ser un consultor que lea y dé su opinión» */
+    { id: 'consultar', n: 'Solo opina', d: 'Un consultor: lee y te da su opinión (en la Mesa, o al final del trabajo del equipo). No toca el texto ni lo detiene.', rol: 'consultar', veto: false },
+    /* 1.1.74, Leo: «los duendes puedan editar documentos, como una especie de secretaria que tome notas durante la mesa» */
+    { id: 'anotar', n: 'Toma notas', d: 'Una secretaria: en la Mesa apunta en un acta lo que se decide y, si le hablas con @ (o la sientas sola), edita los documentos que le pidas. No trabaja en el equipo ni en el lienzo.', rol: 'anotar', veto: false }
   ];
-  const rolDe = d => (d.rol === 'transformar' ? 'transformar' : d.veto ? 'vetar' : 'revisar');
+  const rolDe = d => (d.rol === 'transformar' || d.rol === 'consultar' || d.rol === 'anotar' ? d.rol : d.veto ? 'vetar' : 'revisar');
   const MODOS = {
     fiel: 'Solo lo que está en tus fuentes: lo que falte queda como [hueco: …] para que lo escribas tú.',
     libre: 'Puede inventar lo que falte, pero lo inventado sale marcado entre ⟦ ⟧ para que lo revises.'
@@ -117,6 +121,11 @@
       const a = raiz.editorAPI;
       if (a && a.openFile) { const r = await a.openFile({ filters: [FILTRO_RESPALDO] }); return r ? { nombre: r.name, texto: String(r.content == null ? '' : r.content) } : null; }
       return elegirEnNavegador();
+    },
+    async copiar(t) {
+      const a = raiz.editorAPI;
+      if (a && a.copiarTexto) { await a.copiarTexto(t); return true; }
+      await navigator.clipboard.writeText(t); return true;
     },
     async version() {
       const a = raiz.editorAPI;
@@ -287,6 +296,7 @@
         <nav class="eq-lista" aria-label="Duendes">
           <div class="eq-items" role="listbox" aria-label="Duendes del asistente"></div>
           <button type="button" class="btn eq-nuevo" data-eq-nuevo>${ic('ic-plus', 14)} Nuevo duende especial</button>
+          <button type="button" class="btn eq-nuevo eq-claude" data-eq-claude-nuevo title="Copia un encargo para pegar en Claude (Cowork o Claude Code): te hará preguntas y creará el duende con una personalidad más completa">✨ Crear con Claude</button>
         </nav>
         <div class="eq-ficha">
           <div class="eq-retrato">
@@ -371,13 +381,15 @@
     return `<button type="button" class="eq-item${d.id === sel ? ' on' : ''}" role="option" aria-selected="${d.id === sel}" tabindex="${d.id === sel ? 0 : -1}" data-eq-id="${esc(d.id)}">
       <span class="eq-chip" style="--eq-c:${esc(colorDe(d))}" aria-hidden="true">${esc(inicial(d))}</span>
       <span class="eq-item-t"><span class="eq-item-n">${esc(d.nombre || 'Sin nombre')}</span><span class="eq-item-m">${esc(PAPEL[d.papel] || d.papel)} · ${esc(m)}</span></span>
-      ${d.fijo ? `<span class="eq-candado" title="Fijo: no se elimina" aria-label="Fijo">${ic('ic-candado', 13)}</span>` : ''}</button>`;
+      ${esPred(d) ? '<span class="eq-pred" title="Contesta en el chat del asistente" aria-label="Duende del chat">★</span>' : ''}${d.fijo ? `<span class="eq-candado" title="Fijo: no se elimina" aria-label="Fijo">${ic('ic-candado', 13)}</span>` : ''}</button>`;
   }
+  /* el duende predeterminado del chat (1.1.70): el maestro o uno de los especiales */
+  const esPred = d => !!d && (eq && eq.predeterminado ? d.id === eq.predeterminado : d.id === 'maestro');
   function pintarLista() {
     const l = duendes(), fijos = l.filter(d => d.fijo), esp = l.filter(d => !d.fijo);
     const el = q('.eq-items'), top = el.scrollTop;
     el.innerHTML = `<div class="eq-grupo-t">El equipo</div>${fijos.map(itemHtml).join('')}
-      <div class="eq-grupo-t">Especiales <span>${esp.length}</span></div>${esp.length ? esp.map(itemHtml).join('') : '<p class="eq-vacio">Aún no hay duendes especiales. Uno especial revisa o transforma el texto con la personalidad que le des.</p>'}`;
+      <div class="eq-grupo-t">Especiales <span>${esp.length}</span></div>${esp.length ? esp.map(itemHtml).join('') : '<p class="eq-vacio">Aún no hay duendes especiales. Uno especial revisa o transforma el texto, solo opina o toma notas en la Mesa, con la personalidad que le des.</p>'}`;
     el.scrollTop = top;
   }
   function pintarFicha() {
@@ -401,6 +413,8 @@
       <div class="eq-f-cab">
         <span class="eq-papel${d.fijo ? ' fijo' : ''}">${d.fijo ? ic('ic-candado', 12) : ''}${esc(PAPEL[d.papel] || d.papel)}${d.fijo ? ' · no se elimina' : ''}</span>
         <span class="eq-hueco"></span>
+        ${esEsp || (maestro && !esPred(d)) ? `<button type="button" class="btn eq-pred-btn${esPred(d) ? ' on' : ''}" data-eq-pred aria-pressed="${esPred(d)}" title="${esPred(d) ? 'Es el que te contesta en el chat del asistente (con su personalidad, su aspecto y su voz; el modelo es el de Configurar IA)' : 'Que te conteste él en el chat del asistente, en lugar del duende maestro'}">${esPred(d) ? '★ Duende del chat' : maestro ? '☆ Volver a ser el del chat' : '☆ Que sea el del chat'}</button>` : ''}
+        ${esEsp ? `<button type="button" class="btn eq-claude" data-eq-claude title="Copia un encargo para pegar en Claude (Cowork o Claude Code): lo mira, te pregunta lo que necesite y le da una personalidad más completa">✨ Pedir a Claude</button>` : ''}
         ${esEsp ? `<button type="button" class="icono" data-eq-mover="-1" title="Subirlo en la lista" aria-label="Subirlo" ${i <= 0 ? 'disabled' : ''}>↑</button>
           <button type="button" class="icono" data-eq-mover="1" title="Bajarlo en la lista" aria-label="Bajarlo" ${i < 0 || i >= lugar.length - 1 ? 'disabled' : ''}>↓</button>` : ''}
       </div>
@@ -485,6 +499,9 @@
       return;
     }
     if (b.matches('[data-eq-mover]')) { mover(Number(b.dataset.eqMover)); return; }
+    if (b.matches('[data-eq-pred]')) { hacerPredeterminado(); return; }
+    if (b.matches('[data-eq-claude]')) { pedirAClaude(sel); return; }
+    if (b.matches('[data-eq-claude-nuevo]')) { pedirAClaude(null); return; }
     if (b.matches('[data-eq-aspecto]')) { editarAspecto(); return; }
     if (b.matches('[data-eq-probar]')) { probarEnojo(); return; }
     if (b.matches('[data-eq-oir]')) { oir(); return; }
@@ -532,7 +549,7 @@
     const t = e.target;
     if (t.matches('[data-eq-rondas]')) { cambiarEquipo({ rondas: Number(t.value) }); return; }
     if (t.matches('[data-eq-campo="modelo"]')) { if (editar({ modelo: t.value || null }, { ya: true })) { pintarLista(); pintarFicha(); focoEn('[data-eq-campo="modelo"]'); } return; }
-    if (t.matches('[data-eq-campo="voz"]')) { editar({ voz: t.value || null }, { ya: true }); pintarLista(); return; }
+    if (t.matches('[data-eq-campo="voz"]')) { editar({ voz: t.value || null }, { ya: true }); pintarLista(); oir(); return; }   // al elegirla, suena (1.1.70)
     if (t.matches('[data-eq-temp-papel]')) {
       const d = duendeDe(sel); if (!d) return;
       const v = t.checked ? null : (d.papel === 'maestro' ? 0.7 : tempDePapel(d.papel, eq.modo));
@@ -541,7 +558,7 @@
     }
     if (t.matches('[data-eq-enojon]')) { if (editar({ enojon: !!t.checked }, { ya: true })) { q('[data-eq-probar]').hidden = !t.checked; } return; }
   }
-  const focoEn = s => { const el = q(s); if (el) el.focus(); };
+  const focoEn = s => { const el = q(s); if (el) el.focus(); return !!el; };
   /* el nombre y la personalidad se aplican al dejar de escribir (y al salir del campo) sin rehacer la ficha */
   function terminarPendiente() {
     clearTimeout(tTexto);
@@ -570,6 +587,32 @@
     if (!aplicar(r, { ya: true })) return null;
     sel = r.duende ? r.duende.id : sel;
     return r.duende || null;
+  }
+  /* ★: el duende del chat (1.1.70). En uno que ya lo es, lo devuelve al maestro. */
+  function hacerPredeterminado() {
+    const d = duendeDe(sel), e = E(); if (!d || !e || typeof e.fijarPredeterminado !== 'function') return;
+    terminarPendiente();
+    const ya = esPred(d) && d.id !== 'maestro';
+    const antes = (eq && eq.predeterminado) || 'maestro';
+    if (!aplicar(e.fijarPredeterminado(eq, ya ? 'maestro' : d.id), { ya: true })) return;
+    pintarLista(); pintarFicha(); focoEn('[data-eq-pred]') || focoEn('.eq-item.on');
+    const quien = ya || d.id === 'maestro' ? ((e.maestro(eq) || {}).nombre || 'El duende maestro') : d.nombre;
+    avisar('Ahora te contesta en el chat ' + quien, [{ texto: 'Deshacer', fn: () => { if (aplicar(E().fijarPredeterminado(eq, antes), { ya: true }) && capa) { pintarLista(); pintarFicha(); } } }]);
+  }
+  /* **Con Claude** (1.1.70, Leo: «que los duendes puedan conectarse con Claude Cowork para su creación… darles una personalidad más
+     avanzada»): copia un encargo para pegar en Claude; Claude los ve y los cambia con ver_duendes_asistente y editar_duendes_asistente
+     (js/claquedraw/equipo-claude.js) y lo que hace llega aquí solo (con «Deshacer» en el aviso) */
+  function encargoClaude(d) {
+    if (!d) return 'Quiero un duende especial nuevo para el asistente de ClapCraft (los duendes del asistente, no los del teatro). Antes de crearlo, mira el equipo y la guía con ver_duendes_asistente y hazme las preguntas que necesites para darle una personalidad avanzada: qué hace (revisar el texto, transformarlo o solo opinar como consultor), en qué es experto, qué busca en un texto, cómo habla y qué no debe hacer. Luego créalo con editar_duendes_asistente, con su aspecto y su voz.';
+    return 'Dale una personalidad más avanzada a «' + d.nombre + '», duende del asistente de ClapCraft (id ' + d.id + '). Míralo con ver_duendes_asistente { duende: "' + d.id + '" }, pregúntame lo que necesites y cámbialo con editar_duendes_asistente (su personalidad y, si hace falta, su papel, su voz y su aspecto). Dime qué cambiaste.';
+  }
+  async function pedirAClaude(id) {
+    terminarPendiente(); guardarYa();
+    const d = id ? duendeDe(id) : null;
+    let ok = false;
+    try { ok = !!(await gancho('copiar')(encargoClaude(d))); } catch (_) { ok = false; }
+    if (ok) avisar('Encargo copiado. Pégalo en Claude (Cowork o Claude Code) con el plugin de ClapCraft.');
+    else mostrarError('No se pudo copiar el encargo.');
   }
   function mover(dir) {
     const lugar = duendes().filter(x => !x.fijo), i = lugar.findIndex(x => x.id === sel);

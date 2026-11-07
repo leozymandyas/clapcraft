@@ -24,7 +24,7 @@ const imagenes = require('./imagenes');                        // las imágenes 
 
 const RAIZ = path.join(__dirname, '..');
 ['js/tramas/modelo.js', 'js/claquedraw/biblioteca.js', 'js/claquedraw/lienzo-modelo.js', 'js/claquedraw/formulas.js', 'js/claquedraw/documentos.js', 'js/claquedraw/plantillas.js', 'js/claquedraw/guion.js',
- 'js/claquedraw/relaciones.js', 'js/claquedraw/conversor.js', 'js/claquedraw/memoria.js', 'js/claquedraw/historial.js', 'js/claquedraw/enlaces.js', 'js/claquedraw/teatro-mods.js', 'js/claquedraw/duendes.js', 'js/claquedraw/equipo.js', 'js/claquedraw/herramientas.js'].forEach(f => require(path.join(RAIZ, f)));
+ 'js/claquedraw/relaciones.js', 'js/claquedraw/conversor.js', 'js/claquedraw/memoria.js', 'js/claquedraw/historial.js', 'js/claquedraw/enlaces.js', 'js/claquedraw/teatro-mods.js', 'js/claquedraw/duendes.js', 'js/claquedraw/equipo.js', 'js/claquedraw/equipo-claude.js', 'js/claquedraw/herramientas.js'].forEach(f => require(path.join(RAIZ, f)));
 const C = globalThis.Claquedraw;
 const H = C.herramientas;
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8')).version || '0'; } catch (_) { return '0'; } })();
@@ -55,14 +55,31 @@ function almacenTeatro() {
 /* los duendes del asistente (1.1.68): el equipo de Leo, de todos los proyectos, en `equipo-duendes.json` junto a su puente.json. Aquí
    solo se lee (lo escribe la app): `editar_lienzo` acepta por su nombre o su id los duendes especiales de Leo con el proyecto
    cerrado, como en vivo (ctx.equipo). Si no está o no se entiende, ninguno. */
+const dirApp = () => { const fs0 = candidatos(); return path.dirname(fs0.find(f => { try { return fs.existsSync(f); } catch (_) { return false; } }) || fs0[0]); };
 function equipoGlobal() {
   try {
-    const fs0 = candidatos(), dir = path.dirname(fs0.find(f => { try { return fs.existsSync(f); } catch (_) { return false; } }) || fs0[0]);
-    const f = path.join(dir, 'equipo-duendes.json');
+    const f = path.join(dirApp(), 'equipo-duendes.json');
     if (fs.statSync(f).size > 1024 * 1024) return null;             // el almacén de la app no pasa de 1 MB (electron/equipo.js)
     const x = JSON.parse(fs.readFileSync(f, 'utf8'));
     return C.equipo && C.equipo.normalizar ? C.equipo.normalizar(x) : null;
   } catch (_) { return null; }
+}
+/* Las conversaciones del asistente de un proyecto (1.1.75, para leer_conversacion): las guarda la app en `asistente/` de sus datos, un
+   archivo por clave (sha256 de la clave, 40 cifras; electron/ia.js `crearConversaciones`): el índice con la ruta del archivo del proyecto
+   y cada conversación con `<ruta>#chat:<id>`. Solo se leen. */
+function conversacionesDe(ruta) {
+  const crypto = require('crypto'), dir = path.join(dirApp(), 'asistente');
+  const leer = clave => {
+    try {
+      const f = path.join(dir, crypto.createHash('sha256').update(clave).digest('hex').slice(0, 40) + '.json');
+      if (fs.statSync(f).size > 3 * 1024 * 1024) return null;
+      const x = JSON.parse(fs.readFileSync(f, 'utf8'));
+      return x && typeof x === 'object' && x.clave === clave ? x.datos || null : null;
+    } catch (_) { return null; }
+  };
+  const claves = [ruta]; try { const r = fs.realpathSync(ruta); if (r !== ruta) claves.push(r); } catch (_) {}
+  const base = claves.find(k => leer(k)) || claves[0];
+  return { indice: () => leer(base), leer: id => (typeof id === 'string' && id ? leer(base + '#chat:' + id) : null) };
 }
 const vivo = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 /* El estado de la app: { pid, socket, activo, abiertos: [{ id, nombre, ruta }] } de la que esté en marcha, o null. */
@@ -230,7 +247,7 @@ async function enArchivo(ruta, nombre, args, app) {
   let cambio = false;
   const al = almacenTeatro();
   const ctx = { docs, origen, proyecto: { nombre: datos.nombre || path.basename(ruta, '.clapcraft'), ruta: bonito(ruta), vivo: false }, cambio: () => { cambio = true; },
-    teatroGlobal: { leer: () => al.leer(), escribir: t => al.escribir(t) }, equipo: () => equipoGlobal() };
+    teatroGlobal: { leer: () => al.leer(), escribir: t => al.escribir(t) }, equipo: () => equipoGlobal(), conversaciones: conversacionesDe(ruta) };
   const abiertoSinPuente = app && app.p && !app.p.activo && (app.p.abiertos || []).some(x => x.ruta && atomico.mismoArchivo(x.ruta, ruta));
   const meta = H.LISTA.find(t => t.name === nombre);
   if (masNuevo(datos) && !(meta && meta.annotations && meta.annotations.readOnlyHint)) return { ok: false, error: AVISO_FORMATO };
@@ -286,7 +303,39 @@ async function crearProyecto(args) {
   return { ok: true, texto: 'Proyecto «' + nombre + '» creado con la plantilla «' + pl.nombre + '» en ' + bonito(ruta) + extra + '.\n\n' + H.ejecutar({ docs, proyecto: { nombre, ruta: bonito(ruta) } }, 'ver_proyecto', {}).texto };
 }
 
-const HERRAMIENTAS = H.LISTA.concat([
+/* **Los duendes del asistente, desde Claude** (1.1.70, js/claquedraw/equipo-claude.js): no son de ningún proyecto. Con la app en marcha
+   y la conexión encendida, los atiende ella (electron/equipo.js: escribe, avisa a sus ventanas y enseña «Deshacer»); con la app
+   cerrada, aquí, en su `equipo-duendes.json`; con la app en marcha y la conexión apagada (o una versión que no los conoce), solo se
+   leen del archivo: escribir encima pisaría lo que tiene la app. */
+const Q = C.equipoClaude;
+async function llamarEquipo(nombre, args) {
+  const p = puente(), escribe = Q.escribe(nombre);
+  let sinSoporte = false;
+  if (p && p.activo) {
+    try {
+      const r = await pedir(p, { tipo: 'equipo', nombre, args, origen }, 30000);
+      if (r.ok && r.resultado) return r.resultado;
+      if (/desconocida/i.test(String(r.error || ''))) sinSoporte = true;
+      else if (!r.apagado) return { ok: false, error: r.error || 'ClapCraft no pudo' };
+    } catch (_) { /* la app no contestó: como si no estuviera */ }
+  }
+  if (p && escribe) return { ok: false, error: sinSoporte
+    ? 'La ClapCraft que está abierta es de una versión que aún no deja a Claude cambiar los duendes del asistente: actualízala (o ciérrala) y vuelve a intentarlo.'
+    : 'ClapCraft está abierta con la conexión con Claude apagada: enciéndela en el menú Claude › Permitir que Claude acceda (o cierra ClapCraft) y vuelve a intentarlo.' };
+  const f = path.join(dirApp(), 'equipo-duendes.json');
+  let actual = null;
+  try { if (fs.statSync(f).size <= 1024 * 1024) actual = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { actual = null; }
+  let mods = {}; try { mods = almacenTeatro().leer(); } catch (_) {}
+  const r = Q.ejecutar(actual, nombre, args, { mods });
+  if (r.ok && escribe && r.cambio) {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    atomico.escribirSync(f, JSON.stringify(r.equipo), 0o600);
+    r.texto = (r.texto || '') + '\n(Guardado en ' + bonito(f) + ': ClapCraft lo verá al abrirse.)';
+  }
+  return { ok: r.ok, texto: r.texto, error: r.error };
+}
+
+const HERRAMIENTAS = H.LISTA.concat(Q ? Q.HERRAMIENTAS : [], [
   { name: 'crear_proyecto', title: 'Crear un proyecto', soloServidor: true, annotations: { destructiveHint: false },
     description: 'Crea un proyecto nuevo de ClapCraft (un archivo .clapcraft) a partir de una plantilla de proyecto (no de nota: esas viven dentro de cada proyecto, en «Plantillas») — blanco (un contenedor con un esquema), largo (largometraje: tres actos con sus esquemas de secuencias), serie (una temporada de ocho capítulos), novela, corto o teatro— y lo abre en ClapCraft. Por defecto en ~/Documents/ClapCraft (o ~/Documents).',
     inputSchema: { type: 'object', required: ['nombre'], properties: { nombre: { type: 'string' }, plantilla: { type: 'string', enum: C.plantillas.PLANTILLAS.map(p => p.id) },
@@ -298,6 +347,7 @@ async function llamar(nombre, args) {
   args = args && typeof args === 'object' ? args : {};
   if (nombre === 'listar_proyectos') return listarProyectos(args);
   if (nombre === 'crear_proyecto') return crearProyecto(args);
+  if (Q && Q.NOMBRES.includes(nombre)) return llamarEquipo(nombre, args);
   if (!H.LISTA.some(t => t.name === nombre)) return { ok: false, error: 'No conozco la herramienta «' + nombre + '»' };
   if (nombre === 'ver_enlace' && !args.proyecto) {
     /* enlaces de varios proyectos: cada uno en el suyo */
@@ -335,6 +385,8 @@ const INSTRUCCIONES = 'ClapCraft es el programa de Leo para escribir guiones: ca
   + 'Si Leo pega enlaces de ClapCraft ([Nodo «…» · esquema «…»](clapcraft://…)), léelos con ver_enlace: dicen exactamente de qué habla, y valen en lugar de un id en cualquier herramienta. '
   + 'Un esquema puede estar conectado con bibliotecas (ver_proyecto y leer_esquema lo dicen): para partir su guion en fragmentos cortos de vídeo (Seedance, hasta 15 s) usa preparar_fragmentos, que no escribe nada, y luego una nota por fragmento en la biblioteca conectada (editar_biblioteca › crear_nota { fragmento }). '
   + 'Un proyecto puede tener lienzos de nodos (como los «Space» de Dreamina): entradas (notas, segmentos, bibliotecas, esquemas, personajes, textos, imágenes) conectadas a operaciones (generar guion, partir en fragmentos, escaleta, resumir, reescribir, traducir, instrucción libre) que ejecutas tú. Cuando Leo pulse ▶ o diga «ejecuta el lienzo»: leer_lienzo da las pendientes en orden; para cada una, ejecutar_nodo (el encargo, con las imágenes), escribe la salida con las herramientas de siempre y completar_nodo. '
+  + 'Si Leo comparte una conversación que tuvo con el asistente de IA de la app (un enlace clapcraft://…/conversacion/…), léela con leer_conversacion (o ver_enlace) y dale tu opinión o refina lo que salió de ella, como pida. '
+  + 'Los duendes del asistente de IA de la app (los que escriben, revisan u opinan en su chat; no los del teatro) se ven con ver_duendes_asistente y se crean o se afinan con editar_duendes_asistente: dales personalidades concretas, preguntándole a Leo lo que no sepas. '
   + 'Escribe en español y no inventes nombres de personajes o tramas que Leo no haya pedido.';
 /* El resultado de una herramienta en MCP: el texto y, si trae imágenes (ejecutar_nodo, 1.1.58), cada una como contenido de imagen,
    reducida (claude/imagenes.js); lo que no va se dice al final del texto. */

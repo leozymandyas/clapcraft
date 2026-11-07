@@ -189,6 +189,7 @@
           <div class="cd-marco-caja"><iframe class="cd-marco" title="Vista previa del duende" tabindex="-1"></iframe></div>
           <div class="cd-escena-acc">
             <button type="button" class="btn cd-girar" aria-pressed="false" title="Girar el retrato (mirar al otro lado)">⟲ Girar</button>
+            <button type="button" class="btn cd-oir" title="Oír su voz (al cambiarla en «Voz» también suena)">▶ Voz</button>
             <label class="cd-gesto-l"><span class="cd-mini">Gesto</span><select class="cd-gesto" aria-label="Probar un gesto"><option value="">Quieto</option></select></label>
           </div>
           <label class="cd-desc-l"><span class="cd-mini">Descripción (opcional)</span><textarea class="cd-desc" rows="3" maxlength="400" placeholder="Cómo es, en pocas palabras"></textarea></label>
@@ -237,6 +238,7 @@
     q('.cd-azar-cat').addEventListener('click', () => azar(estado.grupo));
     q('.cd-deshacer').addEventListener('click', deshacer);
     q('.cd-rehacer').addEventListener('click', rehacer);
+    q('.cd-oir').addEventListener('click', () => oir());
     q('.cd-girar').addEventListener('click', () => { estado.girado = !estado.girado; q('.cd-girar').setAttribute('aria-pressed', estado.girado); retrato('girar'); });
     sel.addEventListener('change', () => { estado.gesto = sel.value; retrato('gesto'); });
     q('.cd-desc').addEventListener('input', e => { const v = e.target.value.replace(/\s+/g, ' ').trim(); if (v) estado.d.descripcion = v; else delete estado.d.descripcion; pintarPie(); });
@@ -352,6 +354,18 @@
     apuntar(op && op.juntar);
     poner(campo, v);
     tras(campo === 'cuerpo');
+    if (campo === 'voz') oir();                                  // 1.1.70, Leo: «debería poder escucharla antes»
+  }
+  /* **Oír la voz** (1.1.70, Leo: «cuando estoy creando un duende, puedo seleccionar la voz, pero debería poder escucharla antes»): el
+     retrato «habla» una frase con la voz elegida (o, sin elegir, la que le da el teatro por su nombre), con el gibberish del teatro */
+  const FRASES_VOZ = ['Hola, así sueno yo.', '¡A escena! Esta es mi voz.', 'Mucho gusto, ¿me oyes bien?', 'Así hablo cuando salgo en una obra.'];
+  let fraseVoz = 0;
+  function oir() {
+    if (!capa || !estado) return false;
+    const w = q('.cd-marco').contentWindow, D = w && w.Duendes;
+    if (!D || typeof D.hablar !== 'function') return false;
+    const nombre = estado.g.nombre || estado.d.nombre || '';
+    try { return !!D.hablar({ texto: FRASES_VOZ[fraseVoz++ % FRASES_VOZ.length], voz: estado.d.voz || null, nombre }); } catch (err) { console.error(err); return false; }
   }
   function tras(todo) {
     if (todo) pintarFilas(); else refrescarFilas();
@@ -561,7 +575,7 @@
   /* Tab no sale de la ventana */
   function enfocables() { return qq('button:not([disabled]), select, textarea, [tabindex="0"]').filter(el => el.tabIndex >= 0 && el.offsetParent !== null); }
 
-  C.creadorDuende = { abrir, cerrar, guardar, abierto: () => !!capa, deshacer, rehacer, historia,
+  C.creadorDuende = { abrir, cerrar, guardar, abierto: () => !!capa, deshacer, rehacer, historia, oir,
     /* para las pruebas: lo que se está editando y las categorías que se ven */
     actual: () => (estado ? copia(estado.d) : null), categorias: () => (estado ? estado.grupos.map(x => ({ id: x.id, n: x.n, campos: x.filas.map(f => f.campo) })) : null),
     deRespaldo: () => !!(estado && estado.deRespaldo), normalizar, respaldo };

@@ -32,6 +32,7 @@ Leo copia en ClapCraft el enlace de lo que te quiere enseñar —«Copiar enlace
 | biblioteca, sección, segmento | `biblioteca/<id>` · `biblioteca/<id>/seccion/<id>` · `biblioteca/<id>/segmento/<id>` (`…/segmento/bandeja`: las notas sin segmento) |
 | nota de biblioteca (o un tramo) | `nota/<id>` · `nota/<id>?b=<desde>-<hasta>` |
 | un lienzo, uno de sus nodos | `lienzo/<id>` · `lienzo/<id>/nodo/<id>` |
+| una conversación del asistente de la app (vive en los datos de la app, no en el proyecto: la lee `leer_conversacion`) | `conversacion/<id>` |
 | las plantillas, una plantilla | `biblioteca/plantillas:biblioteca` · `nota/<id>` (su nombre dice «Plantilla «…» · Plantillas») |
 
 Pon delante un nombre que se lea, como los de Leo: `[Nodo «Título» · esquema «Nombre»](clapcraft://…)`.

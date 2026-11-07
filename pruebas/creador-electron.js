@@ -191,6 +191,17 @@ app.whenReady().then(async () => {
     const tieneGesto = await js(`return [...document.querySelectorAll('.cd-gesto option')].length > 10;`);
     comprobar('f) la lista de gestos del motor', tieneGesto);
 
+    /* ---------- f2) oír la voz (1.1.70, Leo: «puedo seleccionar la voz, pero debería poder escucharla antes») ---------- */
+    await js(`const w = document.querySelector('.cd-marco').contentWindow; w.__hablo = []; const o = w.Duendes.hablar; w.Duendes.hablar = function (op) { w.__hablo.push(op && op.voz || '(la suya)'); return o.apply(this, arguments); }; return true;`);
+    await aClic(`document.querySelector('.cd-oir')`, { tras: 250 });
+    comprobar('f2) «▶ Voz» hace hablar al retrato', await js(`const h = document.querySelector('.cd-marco').contentWindow.__hablo; return h.length === 1;`), await js(`return JSON.stringify(document.querySelector('.cd-marco').contentWindow.__hablo);`));
+    await aClic(pestana('voz'), { tras: 200 });
+    await aClic(`${fila('voz')}.querySelector('.cd-flecha[data-paso="1"]')`, { tras: 300 });
+    const vozElegida = (await actual()).voz;
+    comprobar('f2) cambiar la voz la hace sonar, con esa voz', !!vozElegida && await js(`return document.querySelector('.cd-marco').contentWindow.__hablo.slice(-1)[0] === ${JSON.stringify(vozElegida || '')};`),
+      vozElegida + ' · ' + await js(`return JSON.stringify(document.querySelector('.cd-marco').contentWindow.__hablo);`));
+    comprobar('f2) y suena de verdad (el motor lo atiende)', await js(`const w = document.querySelector('.cd-marco').contentWindow; return w.Duendes.hablar({ texto: 'Hola', voz: ${JSON.stringify(vozElegida || 'normal')} }) === true;`));
+
     /* ---------- g) aleatorio, deshacer y rehacer ---------- */
     const antesAzar = JSON.stringify(await actual());
     await aClic(`document.querySelector('.cd-azar')`, { tras: 300 });

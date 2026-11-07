@@ -124,6 +124,13 @@ module.exports = function iniciarClaude(o) {
           const resultado = await pedirAVentana(v.win, { nombre: String(m.nombre || ''), args: m.args || {}, origen: m.origen ? String(m.origen).slice(0, 40) : 'Claude' }, 55000);
           return { ok: true, resultado };
         }
+        /* los duendes del asistente (1.1.70): no son de ningún proyecto; los atiende electron/equipo.js y avisa la ventana de delante */
+        case 'equipo': {
+          if (!o.equipo || typeof o.equipo.deClaude !== 'function') return { ok: false, error: 'Esta versión de ClapCraft no trae los duendes del asistente para Claude' };
+          const delante = (ultimaEnfocada && ventanas.get(ultimaEnfocada)) || [...ventanas.values()].find(v => v.win && !v.win.isDestroyed());
+          const resultado = await o.equipo.deClaude(m.nombre, m.args || {}, m.origen ? String(m.origen).slice(0, 40) : 'Claude', delante && delante.win);
+          return { ok: true, resultado };
+        }
         case 'abrir': {
           const ruta = path.resolve(String(m.ruta || ''));
           if (!/\.clapcraft$/i.test(ruta) || !fs.existsSync(ruta)) return { ok: false, error: 'No existe ' + ruta };

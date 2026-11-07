@@ -60,6 +60,7 @@
     if (t === 'columnas') return ref.esquema && ref.desde ? ['esquema', ref.esquema].concat(ref.hasta && ref.hasta !== ref.desde ? ['columnas', ref.desde + '-' + ref.hasta] : ['columna', String(ref.desde)]) : null;
     if (t === 'seccion' || t === 'segmento') return ref.biblioteca && ref.id ? ['biblioteca', ref.biblioteca, t, ref.id] : null;
     if (t === 'lienzo') return ref.id ? ['lienzo', ref.id].concat(ref.nodo ? ['nodo', ref.nodo] : []) : null;
+    if (t === 'conversacion') return ref.id ? ['conversacion', ref.id] : null;   // una conversación del asistente (1.1.75)
     return null;
   }
   const conTexto = ref => ref.tipo === 'documento' || (ref.tipo === 'nota' && !ref.esquema);
@@ -103,6 +104,7 @@
       if (s.length === 4 && s[2] === 'nodo') return { tipo: 'lienzo', id, nodo: s[3] };
       return null;
     }
+    if (t === 'conversacion' && s.length === 2) return { tipo: 'conversacion', id };
     if (SUELTOS.includes(t) && s.length === 2) return { tipo: t, id };
     return null;
   }
@@ -188,6 +190,8 @@
     if (!docs || !ref) return no('No hay proyecto');
     const t = ref.tipo;
     if (t === 'proyecto') return { ok: true, etiqueta: 'Proyecto' + (op.proyecto ? ' ' + comillas(op.proyecto) : '') };
+    /* una conversación del asistente (1.1.75): vive en los datos de la app, no en el proyecto (la lee leer_conversacion) */
+    if (t === 'conversacion') return { ok: true, etiqueta: 'Conversación del asistente' + (op.titulo ? ' ' + comillas(op.titulo) : '') };
     if (t === 'contenedor') {
       const c = docs.contenedor(ref.id); if (!c) return no('Ese contenedor ya no está en el proyecto');
       return { ok: true, contenedor: c, etiqueta: 'Contenedor ' + comillas(c.nombre) };

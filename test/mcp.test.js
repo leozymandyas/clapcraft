@@ -122,7 +122,7 @@ test('MCP: saludo, lista de herramientas y, con el proyecto cerrado, lectura y e
     assert.match(ini.result.instructions, /ClapCraft es el programa de Leo/);
     const lista = (await c.pedir('tools/list', {})).result.tools;
     assert.deepEqual(lista.map(t => t.name), ['listar_proyectos', 'ver_proyecto', 'leer_esquema', 'editar_esquema', 'leer_documento', 'escribir_documento',
-      'leer_biblioteca', 'editar_biblioteca', 'editar_proyecto', 'preparar_fragmentos', 'leer_lienzo', 'editar_lienzo', 'ejecutar_nodo', 'completar_nodo', 'buscar', 'ver_enlace', 'ver_historial', 'revertir_cambio', 'usar_formula', 'recordar_estilo', 'olvidar_estilo', 'preparar_obra', 'dirigir_obra', 'duende_personaje', 'leer_teatro', 'editar_teatro', 'mostrar_en_clapcraft', 'crear_proyecto']);
+      'leer_biblioteca', 'editar_biblioteca', 'editar_proyecto', 'preparar_fragmentos', 'leer_lienzo', 'editar_lienzo', 'ejecutar_nodo', 'completar_nodo', 'buscar', 'ver_enlace', 'ver_historial', 'revertir_cambio', 'usar_formula', 'recordar_estilo', 'olvidar_estilo', 'preparar_obra', 'dirigir_obra', 'duende_personaje', 'leer_teatro', 'editar_teatro', 'leer_conversacion', 'mostrar_en_clapcraft', 'ver_duendes_asistente', 'editar_duendes_asistente', 'crear_proyecto']);
     assert.equal(lista.find(t => t.name === 'leer_esquema').annotations.readOnlyHint, true);
     assert.equal(lista.find(t => t.name === 'editar_esquema').annotations.destructiveHint, true);
     assert.equal((await c.pedir('ping', {})).result && true, true);
@@ -380,6 +380,10 @@ test('MCP: los duendes del asistente de Leo (1.1.68) — con el proyecto cerrado
     r = await c.llamar('editar_lienzo', { proyecto: ruta, lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: n.id, duendes: ['El que no existe'] }] });
     assert.equal(r.error, true);
     assert.match(r.texto, /Los especiales de Leo: «El formateador» \(formateador\), «La crítica»/);
+    /* la secretaria (1.1.74) toma notas en la Mesa: en el lienzo no trabaja (y no se ofrece) */
+    assert.doesNotMatch(r.texto, /secretaria/);
+    r = await c.llamar('editar_lienzo', { proyecto: ruta, lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: n.id, duendes: ['La secretaria'] }] });
+    assert.equal(r.error, true); assert.match(r.texto, /toma notas en la Mesa del asistente: en el lienzo no trabaja/);
     assert.equal(fs.readFileSync(archivoEquipo, 'utf8'), antes, 'el servidor no escribe el equipo');
     /* uno de más de 1 MB (el almacén de la app no pasa de ahí) no se lee: ningún especial */
     fs.writeFileSync(archivoEquipo, JSON.stringify(Object.assign({}, r0.equipo, { relleno: 'x'.repeat(1100 * 1024) })));
@@ -389,4 +393,99 @@ test('MCP: los duendes del asistente de Leo (1.1.68) — con el proyecto cerrado
     assert.equal(r.error, true, 'el formateador ya no está en el nodo y el equipo de más de 1 MB no se leyó');
     assert.doesNotMatch(r.texto, /Los especiales de Leo/);
   } finally { await c.cerrar(); try { fs.unlinkSync(archivoEquipo); } catch (_) {} }
+});
+
+/* 1.1.70: los duendes del asistente desde Claude (js/claquedraw/equipo-claude.js): no son de ningún proyecto. Con la app cerrada, al
+   archivo del equipo; con la app en marcha y la conexión encendida, a ella (el puente, `tipo: 'equipo'`); apagada, solo se leen. */
+test('MCP: los duendes del asistente — con la app cerrada, en su archivo; en vivo, por el puente; con la conexión apagada, solo leer', async () => {
+  const fEq = path.join(dir, 'equipo-duendes.json');
+  try { fs.unlinkSync(fEq); } catch (_) {}
+  let c = cliente();
+  try {
+    await c.pedir('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'Claude Cowork', version: '1' } });
+    const lista = (await c.pedir('tools/list', {})).result.tools;
+    assert.equal(lista.find(t => t.name === 'ver_duendes_asistente').annotations.readOnlyHint, true);
+    let r = await c.llamar('ver_duendes_asistente', {});
+    assert.equal(r.error, false, r.texto);
+    assert.match(r.texto, /EL EQUIPO FIJO/);
+    assert.match(r.texto, /«El formateador» \(id formateador\)/);
+    assert.match(r.texto, /CÓMO ESCRIBIR UNA PERSONALIDAD/);
+    assert.ok(!fs.existsSync(fEq), 'ver no escribe');
+    r = await c.llamar('editar_duendes_asistente', { operaciones: [
+      { op: 'crear', nombre: 'La cómica', personalidad: 'Soy guionista de comedia: busco el remate al final de la frase.', rol: 'consultar', voz: 'graciosa', aspecto: { hat: 'boina', hatCol: '#aa3344' } }] });
+    assert.equal(r.error, false, r.texto);
+    assert.match(r.texto, /Creado «La cómica» \(id d-[a-z0-9]+, solo opina \(consultor\)/);
+    assert.match(r.texto, /Guardado en .*equipo-duendes\.json/);
+    let eq = JSON.parse(fs.readFileSync(fEq, 'utf8'));
+    const comica = eq.duendes.find(d => d.nombre === 'La cómica');
+    assert.equal(comica.rol, 'consultar');
+    assert.equal(comica.duende.hat, 'boina');
+    assert.equal((fs.statSync(fEq).mode & 0o777), 0o600);
+    /* entero o nada: la segunda falla y la primera no se hace */
+    r = await c.llamar('editar_duendes_asistente', { operaciones: [{ op: 'cambiar', duende: 'la comica', temperatura: 0.9 }, { op: 'eliminar', duende: 'maestro' }] });
+    assert.equal(r.error, true);
+    assert.match(r.texto, /Operación 2 \(eliminar\): El duende maestro no se puede eliminar/);
+    assert.equal(JSON.parse(fs.readFileSync(fEq, 'utf8')).duendes.find(d => d.nombre === 'La cómica').temperatura, null);
+    r = await c.llamar('ver_duendes_asistente', { duende: 'cómica', guia: false });
+    assert.match(r.texto, /PERSONALIDAD \(\d+ de 4000 caracteres\):\n    Soy guionista de comedia/);
+    assert.doesNotMatch(r.texto, /CÓMO ESCRIBIR/);
+  } finally { await c.cerrar(); }
+  /* en vivo: la app de mentira contesta `equipo`; el servidor no toca el archivo */
+  const antes = fs.readFileSync(fEq, 'utf8'), recibidas = [];
+  const srv = net.createServer(s => {
+    let buf = ''; s.setEncoding('utf8');
+    s.on('data', x => { buf += x; let i; while ((i = buf.indexOf('\n')) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); recibidas.push(m);
+      s.write(JSON.stringify({ id: m.id, ok: true, resultado: { ok: true, texto: 'hecho en la app: ' + m.nombre } }) + '\n'); } });
+  });
+  await new Promise(res => srv.listen(SOCKET, res));
+  fs.writeFileSync(PUENTE, JSON.stringify({ pid: process.pid, activo: true, socket: SOCKET, abiertos: [] }));
+  c = cliente();
+  try {
+    await c.pedir('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'Claude Cowork', version: '1' } });
+    const r = await c.llamar('editar_duendes_asistente', { operaciones: [{ op: 'cambiar', duende: 'La cómica', temperatura: 0.8 }] });
+    assert.equal(r.texto, 'hecho en la app: editar_duendes_asistente');
+    assert.equal(recibidas[0].tipo, 'equipo');
+    assert.equal(recibidas[0].origen, 'Cowork');
+    assert.equal(fs.readFileSync(fEq, 'utf8'), antes, 'en vivo escribe la app, no el servidor');
+  } finally { await c.cerrar(); }
+  /* la conexión apagada: se lee del archivo y no se escribe */
+  fs.writeFileSync(PUENTE, JSON.stringify({ pid: process.pid, activo: false, socket: null, abiertos: [] }));
+  c = cliente();
+  try {
+    await c.pedir('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '1' } });
+    let r = await c.llamar('ver_duendes_asistente', { guia: false });
+    assert.equal(r.error, false);
+    assert.match(r.texto, /«La cómica»/);
+    r = await c.llamar('editar_duendes_asistente', { operaciones: [{ op: 'eliminar', duende: 'La cómica' }] });
+    assert.equal(r.error, true);
+    assert.match(r.texto, /conexión con Claude apagada/);
+    assert.equal(fs.readFileSync(fEq, 'utf8'), antes);
+  } finally { await c.cerrar(); fs.unlinkSync(PUENTE); await new Promise(r => srv.close(r)); try { fs.unlinkSync(fEq); } catch (_) {} }
+});
+
+test('MCP: las conversaciones del asistente (1.1.75) — con el proyecto cerrado, leer_conversacion y ver_enlace las leen de los datos de la app', async () => {
+  const ruta = archivo('Charlas'), c = cliente();
+  const cv = require('../electron/ia.js').crearConversaciones({ dir });
+  const meta = { id: 'cx1', titulo: 'La escena del faro', creado: 1e12, modificado: 1e12 + 60000, mensajes: 2, modelo: 'deepseek-v4-flash', modo: 'maestro' };
+  assert.ok(cv.escribir(ruta, { version: 2, actual: 'cx1', chats: [meta] }).ok);
+  assert.ok(cv.escribir(ruta + '#chat:cx1', { version: 1, vista: [{ tipo: 'yo', texto: '¿Mara sube al faro?' }, { tipo: 'ia', texto: 'Sí, de noche.' }] }).ok);
+  try {
+    await c.pedir('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '1' } });
+    const tools = (await c.pedir('tools/list', {})).result.tools.map(t => t.name);
+    assert.ok(tools.includes('leer_conversacion'));
+    let r = await c.llamar('leer_conversacion', { proyecto: ruta });
+    assert.equal(r.error, false, r.texto);
+    assert.match(r.texto, /- «La escena del faro» · id cx1 · [^\n]*clapcraft:\/\/charlas\/conversacion\/cx1/);
+    r = await c.llamar('leer_conversacion', { proyecto: ruta, conversacion: 'faro' });
+    assert.match(r.texto, /### Leo\n¿Mara sube al faro\?\n\n### El asistente \(el duende maestro\)\nSí, de noche\./);
+    /* con su enlace (el que copia «Compartir con Claude»); sin «proyecto», el servidor lo busca por el nombre del archivo en el equipo
+       (aquí, en una carpeta temporal que no busca, así que se le da) */
+    r = await c.llamar('ver_enlace', { proyecto: ruta, enlace: '[Conversación «La escena del faro»](clapcraft://charlas/conversacion/cx1)' });
+    assert.equal(r.error, false, r.texto); assert.match(r.texto, /Sí, de noche\./);
+    r = await c.llamar('leer_conversacion', { proyecto: ruta, conversacion: 'clapcraft://charlas/conversacion/cx1' });
+    assert.equal(r.error, false, r.texto); assert.match(r.texto, /¿Mara sube al faro\?/);
+    /* un proyecto sin conversaciones */
+    r = await c.llamar('leer_conversacion', { proyecto: archivo('Mudo') });
+    assert.equal(r.error, true); assert.match(r.texto, /aún no tiene conversaciones/);
+  } finally { await c.cerrar(); }
 });

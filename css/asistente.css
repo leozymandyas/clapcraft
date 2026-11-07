@@ -498,6 +498,9 @@ body.con-asistente.asistente-plegado .gd-modal-capa, body.con-asistente.asistent
 .as-dn-chip { border-color: color-mix(in srgb, var(--dc, var(--foco)) 45%, var(--borde)); background: color-mix(in srgb, var(--dc, var(--foco)) 10%, var(--papel)); color: var(--tinta); }
 .as-dn-chip .as-fx-nom span em { font-style: italic; color: var(--palido); font-size: 11px; }
 .as-dn-chip.cambiado { border-style: dashed; }
+/* el «＋» al final de los chips: sentar a más duendes (1.1.74) */
+.as-dn-mas { justify-content: center; width: 24px; padding: 0; border-style: dashed; color: var(--palido); background: transparent; cursor: pointer; }
+.as-dn-mas:hover, .as-dn-mas:focus-visible { color: var(--foco); border-color: var(--foco-linea); background: var(--foco-suave); outline: none; }
 .as-dn-pop .as-fx-op { align-items: center; }
 .as-dn-pop .as-dn-punto { margin-right: 2px; }
 .as-dn-rol { font: 500 9.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--palido); font-weight: 500; }
@@ -579,6 +582,7 @@ html[data-estilo="synthwave"] .as-mascota { box-shadow: inset 0 0 0 1px var(--fo
 .gd-pop .as-mesa-rondas button:first-child { border-radius: 4px 0 0 4px; }
 .gd-pop .as-mesa-rondas button:last-child { border-radius: 0 4px 4px 0; }
 .gd-pop .as-mesa-rondas button.on::after { content: none; }
+.gd-pop .as-mesa-acta-fila .as-mesa-acta { width: auto; flex: 0 1 auto; height: 20px; padding: 0 8px; }
 .as-mesa-resume { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; cursor: pointer; }
 /* las burbujas de la mesa: su nombre, su color */
 .as-msg.as-mesa { padding-left: 10px; border-left: 3px solid color-mix(in srgb, var(--dc, var(--foco)) 60%, transparent); }
@@ -589,6 +593,14 @@ html[data-estilo="synthwave"] .as-mascota { box-shadow: inset 0 0 0 1px var(--fo
 .as-mesa-coord { flex-basis: 100%; margin-left: 0; }
 .as-mesa-revisa { padding: 1px 5px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--dc, var(--foco)) 45%, var(--borde)); color: var(--tenue); }
 .as-mesa-revisa.con-problemas { border-color: color-mix(in srgb, var(--t-ambar, #c98a1a) 70%, transparent); background: color-mix(in srgb, var(--t-ambar, #c98a1a) 14%, transparent); color: color-mix(in srgb, var(--t-ambar, #c98a1a) 70%, var(--tinta)); }
+/* la secretaria (1.1.74): su distintivo, «Ver el acta» y, en el menú de la Mesa, dónde va el acta */
+.as-mesa-anota { padding: 1px 5px; border-radius: 8px; border: 1px dashed color-mix(in srgb, var(--dc, var(--foco)) 55%, var(--borde)); color: var(--tenue); }
+.as-mesa-acta { margin-left: 2px; padding: 1px 7px; height: 18px; border-radius: 9px; border: 1px solid var(--foco-linea); background: var(--foco-suave); color: var(--foco); font: 500 11px var(--ui, inherit); cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-mesa-acta:hover, .as-mesa-acta:focus-visible { background: var(--foco); color: var(--papel); outline: none; }
+.as-msg.as-mesa.anota.sin-notas .as-md { color: var(--palido); font-style: italic; }
+.as-mesa-acta-fila { display: flex; align-items: center; gap: 6px; flex-basis: 100%; min-width: 0; font-size: 12px; color: var(--tenue); }
+.as-mesa-acta-fila > span { flex: none; }
+.as-mesa-acta-fila select { flex: 1 1 auto; min-width: 0; height: 24px; border: 1px solid var(--borde); border-radius: 4px; background: var(--papel); color: var(--tinta); font: inherit; }
 .as-msg.as-mesa.revisa.con-problemas { border-left-color: color-mix(in srgb, var(--t-ambar, #c98a1a) 80%, transparent); background: color-mix(in srgb, var(--t-ambar, #c98a1a) 6%, transparent); border-radius: 0 6px 6px 0; }
 /* la pelea de la mesa (§14): una línea discreta entre burbujas */
 .as-pelea { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 2px 0 10px; font: 500 11px var(--mono); letter-spacing: .03em; color: var(--peligro); opacity: .85; }
@@ -609,7 +621,7 @@ html[data-estilo="synthwave"] .as-mascota { box-shadow: inset 0 0 0 1px var(--fo
    los botones se estrechan un poco */
 #asistente .as-cab { container: as-cab / inline-size; }
 @container as-cab (max-width: 400px) {
-  #asistente .as-cab > .icono { width: 24px; }
+  #asistente .as-cab > .icono { width: 20px; }   /* (1.1.73: 22 y no 24, con el reloj del historial; 1.1.75: 20, con «Compartir con Claude» son nueve) */
   #asistente .as-cab-tit { display: grid; grid-template-columns: minmax(0, auto) auto auto; justify-content: start; column-gap: 6px; row-gap: 1px; align-items: center; }
   #asistente .as-cab-tit .as-cab-fila { display: contents; }
   #asistente .as-cab-tit .as-maestro { grid-column: 1 / -1; grid-row: 1; }
@@ -620,9 +632,55 @@ html[data-estilo="synthwave"] .as-mascota { box-shadow: inset 0 0 0 1px var(--fo
 }
 /* aún más estrecha: la memoria de estilo sigue en Claude › Memoria de estilo… */
 @container as-cab (max-width: 340px) {
-  #asistente .as-cab > .icono { width: 22px; }
-  #asistente .as-cab > [data-as-memoria] { display: none; }
+  #asistente .as-cab > .icono { width: 20px; }
+  #asistente .as-cab > [data-as-memoria], #asistente .as-cab > [data-as-compartir] { display: none; }   /* (compartir sigue en cada fila del historial) */
   #asistente .as-cab-tit { column-gap: 4px; }
   #asistente .as-cab-tit .as-modelo { font-size: 11px; }
   #asistente .as-cab-tit .as-coste::before { margin-right: 4px; }
 }
+
+/* ---------- el historial de conversaciones (1.1.73) ----------
+   El reloj de la cabecera abre, encima de la conversación (la mascota, los mensajes y el campo), la lista de las de este proyecto:
+   por días, con su título, la hora, los mensajes, lo gastado y el modo; renombrar y eliminar al pasar el ratón (o con el foco). */
+#asistente .as-cab > [data-as-hist].on { background: var(--foco-suave); color: var(--foco); }
+.as-hist { position: absolute; top: 50px; left: 0; right: 0; bottom: 0; z-index: 25; display: flex; flex-direction: column; min-height: 0;
+  padding: 10px 10px 8px; background: var(--lienzo); font-family: var(--sans); }
+.as-hist[hidden] { display: none; }
+.as-hist-cab { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 2px 8px 4px; }
+.as-hist-cuenta { font: 500 10px var(--mono); color: var(--tenue); }
+.as-hist-cab .as-rotulo + .as-hist-cuenta::before { content: '·'; margin-right: 6px; color: var(--palido); }
+.as-hist-nueva { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px 0 7px; border: 1px solid var(--borde);
+  border-radius: 4px; background: var(--papel); color: var(--tinta); font: 500 12px var(--sans); cursor: pointer; }
+.as-hist-nueva:hover, .as-hist-nueva:focus-visible { background: var(--hover); border-color: var(--foco-linea); outline: none; }
+.as-hist-nueva svg { color: var(--foco); }
+.as-hist-buscar { margin: 0 2px 8px; }
+.as-hist-lista { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding-bottom: 6px; }
+.as-hist-grupo { padding: 10px 8px 3px; }
+.as-hist-grupo:first-child { padding-top: 2px; }
+.as-hist-fila { position: relative; display: flex; align-items: center; gap: 0; border-radius: 6px; }
+.as-hist-fila:hover, .as-hist-fila:focus-within { background: var(--hover); }
+.as-hist-fila.on { background: var(--foco-suave); box-shadow: inset 2px 0 0 var(--foco); }
+.as-hist-abrir { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 7px 8px 7px 10px; border: 0; border-radius: 6px; background: none;
+  color: var(--tinta); text-align: left; cursor: pointer; }
+.as-hist-abrir:focus-visible { outline: 2px solid var(--foco-linea); outline-offset: -2px; }
+.as-hist-tit { font: 500 13px/1.35 var(--sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-hist-abrir em { font: normal 400 10.5px var(--mono); color: var(--palido); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-hist-ahora { margin-right: 6px; padding: 0 5px; border-radius: 3px; background: var(--foco); color: var(--foco-sobre); font-weight: 500; }
+.as-hist-ahora::after { content: none; }
+.as-hist-acc { flex: none; width: 26px; height: 26px; color: var(--palido); opacity: 0; }
+.as-hist-fila:hover .as-hist-acc, .as-hist-fila:focus-within .as-hist-acc { opacity: 1; }
+.as-hist-acc:hover, .as-hist-acc:focus-visible { color: var(--tinta); }
+.as-hist-acc[data-as-chat-borrar]:hover { color: var(--peligro); }
+.as-hist-fila:last-child .as-hist-acc:last-child { margin-right: 2px; }
+.as-hist-edit { flex: 1; min-width: 0; height: 24px; margin: -2px 0 -1px -4px; padding: 0 4px; border: 1px solid var(--foco-linea); border-radius: 4px;
+  background: var(--papel); color: var(--tinta); font: 500 13px var(--sans); outline: none; box-shadow: 0 0 0 3px var(--foco-halo); }
+.as-hist-fila.editando .as-hist-acc { visibility: hidden; }
+.as-hist-vacio { margin: 18px 12px; color: var(--tenue); font: 400 12.5px/1.5 var(--sans); text-align: center; }
+html[data-estilo="synthwave"] .as-hist-fila.on { box-shadow: inset 2px 0 0 var(--foco), 0 0 8px color-mix(in srgb, var(--foco) 25%, transparent); }
+
+/* compartir una conversación con Claude (1.1.75): el menú, con lo que hace cada opción */
+.gd-pop.as-comp-pop { max-width: 320px; }
+.gd-pop.as-comp-pop button { align-items: flex-start; }
+.as-comp-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.as-comp-txt b { font-weight: 500; }
+.as-comp-txt em { font-style: normal; font-size: 11px; color: var(--tenue); white-space: normal; }

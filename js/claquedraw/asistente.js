@@ -119,6 +119,8 @@
   const SVG_SONIDO = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h2.4L8.5 3v10L4.9 10H2.5z" fill="currentColor" fill-opacity=".18"/><path d="M10.6 5.6a3.4 3.4 0 0 1 0 4.8M12.4 3.9a5.8 5.8 0 0 1 0 8.2"/></svg>';
   const SVG_SONIDO_NO = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h2.4L8.5 3v10L4.9 10H2.5z" fill="currentColor" fill-opacity=".18"/><path d="M10.8 6.2l3.4 3.6M14.2 6.2l-3.4 3.6"/></svg>';
   const SVG_DUENDE = '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3.5 9.5L8.6 1.6l3.9 7.9z" fill="currentColor" fill-opacity=".22"/><circle cx="8" cy="11.6" r="3"/><path d="M2.5 9.5h11"/></svg>';
+  /* 1.1.73: el reloj del historial de conversaciones */
+  const SVG_HISTORIAL = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"/><path d="M2.4 2.6v2.6H5"/><path d="M8 5.2V8l2 1.4"/></svg>';
   const corto = (s, n) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t; };
   const promesa = x => Promise.resolve().then(() => (typeof x === 'function' ? x() : x));
   function leerPref() { try { return JSON.parse(localStorage.getItem(CLAVE_PREF) || '{}') || {}; } catch (_) { return {}; } }
@@ -144,6 +146,8 @@
   let enCurso = false, iaActual = null, pintarPend = null, cargada = false;
   let panel = null, cuerpo = null, campo = null;
   let progreso = null;               // la ejecución de un nodo de lienzo: { lid, nodoId, alPaso }
+  let chatId = null;                 // la conversación del historial que está en el panel (1.1.73); null = una nueva, aún sin guardar
+  let cargaN = 0;                    // la última carga pedida (un cambio de proyecto o de conversación a mitad no pinta la de antes)
   const hayTransporte = () => !!(g.transporte && typeof g.transporte.chat === 'function');
   const hayClave = () => !!(cfg && cfg.hayClave);
   const motor = () => g.motor || C.asistenteMotor || null;
@@ -249,7 +253,9 @@
       /* el equipo de duendes (1.1.68): la herramienta del maestro (la define el motor; la ejecuta `ejecutarEquipo`) y los especiales */
       herramientasPropias: M.herramientaEquipo && EQ() && typeof EQ().trabajar === 'function' ? [M.herramientaEquipo(ejecutarEquipo)] : undefined,
       especiales: datos ? undefined : dnVista(),
-      maestro: () => { const m = maestro(); return m ? { nombre: m.nombre } : null; }
+      maestro: () => { const m = principal(); return m ? { nombre: m.nombre } : null; },
+      /* el duende predeterminado del chat (1.1.70): uno de los especiales, con su personalidad (el maestro no trae) */
+      persona: () => { const m = principal(); return m && m.papel === 'especial' && m.personalidad ? { nombre: m.nombre, personalidad: m.personalidad } : null; }
     });
     /* lo que llega de una conversación que ya no es la del panel (Nueva conversación, u otro proyecto, a mitad) no se pinta */
     const suya = f => (x => { if (conv === c) f(x); });
@@ -395,10 +401,10 @@
     /* la mesa (1.1.68, §13): conversan los elegidos (un mensaje que empieza por @Nombre, solo esos) */
     if (!op.equipo && !op.lienzo && modoLocal === 'mesa') {   // (el lienzo nunca va a la mesa)
       const ps = mesaCfg.participantes;
-      const conPj = ps.some(p => p.papel === 'personaje');
+      const conPj = ps.some(p => p.papel === 'personaje') || ps.some(esSecretaria);   // con un personaje basta, y con la secretaria (le dictas)
       if (ps.length < (conPj ? 1 : 2)) { avisar('Sienta al menos a dos duendes en la mesa, o llama a un personaje (el botón «Mesa»)'); abrir({ sinTutorial: true }); if (!dnPop) abrirDn(); return null; }
       const soloA = soloDe(texto, ps);
-      return correr(c => (typeof c.enviarMesa === 'function' ? c.enviarMesa(texto, Object.assign({ participantes: ps.slice(), rondas: mesaCfg.rondas, resumen: mesaCfg.resumen }, mesaCfg.resumenSolo ? { resumenSolo: true } : {}, soloA.length ? { soloA } : {}, eop))
+      return correr(c => (typeof c.enviarMesa === 'function' ? c.enviarMesa(texto, Object.assign({ participantes: ps.slice(), rondas: mesaCfg.rondas, resumen: mesaCfg.resumen }, mesaCfg.resumenSolo ? { resumenSolo: true } : {}, soloA.length ? { soloA } : {}, ps.some(esSecretaria) ? { acta: destinoActa() } : {}, eop))
         : c.enviar(texto, Object.keys(eop).length ? eop : undefined)), { yo: texto, visible: op.visible, mesa: true, imagenes: imgs.map(x => ({ src: x.mini || '', nombre: x.nombre })) });
     }
     return correr(c => c.enviar(texto, Object.keys(eop).length ? eop : undefined), { yo: texto, visible: op.visible, imagenes: imgs.map(x => ({ src: x.mini || '', nombre: x.nombre })) });
@@ -480,21 +486,48 @@
     if (!enCurso || !conv) return;
     try { conv.detener(); } catch (_) { /* ya estaba */ }
   }
-  function nuevaConversacion() {
+  /* todo lo de la conversación del panel, a cero (una nueva, otra del historial, otro proyecto) */
+  function reiniciar() {
+    const trabajaba = enCurso;
     if (enCurso) detener();
     soltarConv(); enCurso = false; items = []; iaActual = null; coste = { usd: 0, entrada: 0, salida: 0 };
     fxActivas = [];                                            // las fórmulas activas son de la conversación
-    dnActivos = null; cerrarDn();                              // y los duendes especiales: ninguno (1.1.68)
-    modoLocal = 'maestro'; mesaCfg = { participantes: [], rondas: 2, resumen: true, resumenSolo: false };   // una conversación nueva empieza con el maestro solo (§13)
+    dnActivos = null; equipoVivo = null; cerrarFx(); cerrarDn(); cerrarPj();   // y los duendes especiales: ninguno (1.1.68)
+    modoLocal = 'maestro'; mesaCfg = { participantes: [], rondas: 2, resumen: true, resumenSolo: false, acta: null };   // una conversación nueva empieza con el maestro solo (§13)
     alPelea(null, { sinLinea: true });                         // y sin pelea (§14)
+    chatId = null;
+    if (trabajaba) { vigilarDuende(false); ponerEstado('quieto'); }   // lo de la de antes ya no se espera aquí (`correr` no sigue)
+  }
+  /* la conversación que se deja (1.1.73): se guarda tal como esté —a mitad, con lo que estaba en curso cortado— y, si no llegó a
+     tener ningún mensaje (solo fórmulas o duendes elegidos), no se queda en el historial */
+  function dejarChat() {
+    if (enCurso) {
+      detener();
+      if (iaActual) { iaActual.vivo = false; iaActual.cerrado = true; }
+      items.forEach(i => {
+        if (i.tipo === 'paso' && i.estado === 'en-curso') i.estado = i.provisional ? 'quitar' : 'cortado';
+        if (i.tipo === 'permiso' && i.estado === 'pendiente') { const f = i._resolver; delete i._resolver; i.estado = 'sin-respuesta'; if (f) f('no'); }
+      });
+      items = items.filter(i => i.estado !== 'quitar');
+    }
+    const id = chatId;
+    if (id && !conMensajes() && g.chats) { Promise.resolve(g.chats.borrar(id)).catch(() => {}); return; }
     guardar();
+  }
+  function nuevaConversacion() {
+    dejarChat();
+    reiniciar();
+    if (g.chats) Promise.resolve(g.chats.actual(null)).then(() => { if (histAbierto()) pintarHist(); }, () => {});
+    else guardar();                                            // (sin historial: la de antes se va, como hasta la 1.1.72)
+    cargaN++;
+    cerrarHist();
     pintarTodo();
     if (campo) campo.focus();
   }
 
   /* ---------- guardar y cargar (por proyecto, lo hace app.js) ---------- */
   function guardar() {
-    if (!g.guardarConversacion) return;
+    if (!g.chats && !g.guardarConversacion) return;
     const limpio = items.map(i => { const x = Object.assign({}, i); delete x.vivo; delete x.fin; delete x._resolver; if (x.tipo === 'permiso' && x.estado === 'pendiente') x.estado = 'sin-respuesta'; return x; });
     let datos = null;
     try { datos = conv && typeof conv.toJSON === 'function' ? conv.toJSON() : null; } catch (_) { datos = null; }
@@ -502,18 +535,42 @@
     let todo = { version: 1, conversacion: datos, vista: limpio, coste, modelo: modeloActual(), fecha: Date.now(), modo: modoLocal, mesa: mesaCfg };
     const M = motor();
     try { if (M && M.compactarGuardado) todo = M.compactarGuardado(todo, { max: 300000 }); } catch (_) { /* tal cual */ }
-    try { g.guardarConversacion(items.length || fxActivas.length || (conv && (dnActivos !== null || modoLocal !== 'maestro')) ? todo : null); } catch (_) { /* nada */ }   // (solo con fórmulas activas o duendes elegidos, también)
+    const conAlgo = items.length || fxActivas.length || (conv && (dnActivos !== null || modoLocal !== 'maestro'));   // (solo con fórmulas activas o duendes elegidos, también)
+    if (!g.chats) { try { g.guardarConversacion(conAlgo ? todo : null); } catch (_) { /* nada */ } return; }
+    /* en el historial (1.1.73): una nueva entra en cuanto tiene algo, con su id */
+    if (!conAlgo) return;
+    if (!chatId) chatId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    Promise.resolve(g.chats.guardar(chatId, todo, metaChat())).then(() => { if (histAbierto()) pintarHist(); }, () => {});
+  }
+  /* lo que el índice del historial apunta de la conversación: el título (lo primero que se pidió), cuántos mensajes, lo gastado, el
+     modelo, el modo y, para buscar, lo que pidió Leo */
+  const conMensajes = () => items.some(i => i.tipo === 'yo' || i.tipo === 'ia');
+  const textoPlano = t => String(t || '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/^>\s?/gm, '').replace(/[*_`#~=]+/g, '').replace(/\s+/g, ' ').trim();
+  function metaChat() {
+    const yo = items.filter(i => i.tipo === 'yo').map(i => textoPlano(i.texto)).filter(Boolean);
+    return { titulo: corto(yo[0] || 'Conversación nueva', 70), modificado: Date.now(), mensajes: items.filter(i => i.tipo === 'yo' || i.tipo === 'ia').length,
+      coste: +coste.usd || 0, modelo: modeloActual(), modo: modoLocal, busca: yo.join(' ').slice(0, 600) };
   }
   async function recargar() {
-    if (enCurso) detener();
-    soltarConv(); enCurso = false; items = []; iaActual = null; coste = { usd: 0, entrada: 0, salida: 0 }; cargada = true; fxActivas = [];
-    dnActivos = null; equipoVivo = null; modoLocal = 'maestro'; mesaCfg = { participantes: [], rondas: 2, resumen: true, resumenSolo: false };
-    cerrarFx(); cerrarDn();
+    reiniciar(); cargada = true;
+    const n = ++cargaN;
     let d = null;
-    if (g.cargarConversacion) { try { d = await g.cargarConversacion(); } catch (_) { d = null; } }
+    if (g.chats) {
+      /* la que estaba abierta en el historial (1.1.73); sin ninguna, una nueva */
+      let idx = null; try { idx = await g.chats.indice(); } catch (_) { idx = null; }
+      const id = idx && idx.actual && idx.chats.some(c => c.id === idx.actual) ? idx.actual : null;
+      if (id) { try { d = await g.chats.leer(id); } catch (_) { d = null; } }
+      if (n !== cargaN) return;
+      if (d) chatId = id;
+    } else if (g.cargarConversacion) { try { d = await g.cargarConversacion(); } catch (_) { d = null; } if (n !== cargaN) return; }
+    cargarDatos(d);
+    if (histAbierto()) pintarHist();
+  }
+  /* lo guardado de una conversación, al panel (tras `reiniciar`) */
+  function cargarDatos(d) {
     if (d && d.mesa && typeof d.mesa === 'object') {                  // la mesa de esta conversación (1.1.68, §13)
       const ps = Array.isArray(d.mesa.participantes) ? d.mesa.participantes.filter(x => x && x.id) : [];
-      mesaCfg = { participantes: ps.slice(0, 6), rondas: [1, 2, 3].includes(+d.mesa.rondas) ? +d.mesa.rondas : 2, resumen: d.mesa.resumen !== false, resumenSolo: !!d.mesa.resumenSolo };
+      mesaCfg = { participantes: ps.slice(0, 6), rondas: [1, 2, 3].includes(+d.mesa.rondas) ? +d.mesa.rondas : 2, resumen: d.mesa.resumen !== false, resumenSolo: !!d.mesa.resumenSolo, acta: typeof d.mesa.acta === 'string' ? d.mesa.acta : null };
     }
     if (d && Array.isArray(d.vista)) {
       items = d.vista.map(i => (i.tipo === 'paso' && i.estado === 'en-curso' ? Object.assign({}, i, { estado: 'cortado' }) : i.tipo === 'permiso' && i.estado === 'pendiente' ? Object.assign({}, i, { estado: 'sin-respuesta' }) : i));
@@ -523,7 +580,7 @@
       /* sin lo que se veía (de otra versión): se rehace con lo que recuerda el motor */
       conv = crearConversacion(d.conversacion);
       const es = conv && typeof conv.entradas === 'function' ? conv.entradas() : [];
-      items = es.map(e => e.tipo === 'usuario' ? { tipo: 'yo', texto: e.texto } : e.tipo === 'asistente' ? Object.assign({ tipo: 'ia', texto: e.texto, cerrado: true }, e.quien ? turnoDe(e.quien, e) : {}, e.revisa ? { revisa: true, problemas: +e.problemas || 0 } : {})
+      items = es.map(e => e.tipo === 'usuario' ? { tipo: 'yo', texto: e.texto } : e.tipo === 'asistente' ? Object.assign({ tipo: 'ia', texto: e.texto, cerrado: true }, e.quien ? turnoDe(e.quien, e) : {}, e.revisa ? { revisa: true, problemas: +e.problemas || 0 } : {}, e.anota ? { anota: true, acta: !!e.acta, notaActa: e.notaActa || null, sinNotas: !!e.sinNotas } : {})
         : e.tipo === 'aviso' ? { tipo: 'aviso', texto: e.texto }
         : Object.assign({ tipo: 'paso', id: e.id, nombre: e.herramienta, args: e.args || {}, estado: e.ok === false ? 'error' : 'hecho', titulo: e.titulo, texto: e.texto || e.error || '', entrada: e.historial || null, imagenes: e.imagenes || 0, descritas: e.descritas || 0, vision: e.vision || '' },
           e.equipo ? { equipo: { eventos: Array.isArray(e.eventos) ? e.eventos.slice() : [], enCurso: false, rondas: e.equipo.rondas || 0, problemas: e.equipo.correcciones ?? null, huecos: e.equipo.huecos || 0, coste: e.equipo.coste || 0, ref: e.equipo.ref || null } } : {}));
@@ -534,6 +591,257 @@
     /* una pelea que no se paró (hasta el siguiente mensaje de Leo) vuelve (§14) */
     alPelea(conv && conv.pelea && Array.isArray(conv.pelea.entre) && conv.pelea.entre.length ? conv.pelea : null, { sinLinea: true });
     pintarTodo(); abajo(true);
+  }
+
+  /* ---------- el historial de conversaciones (1.1.73) ----------
+     Leo: «Implementa en el asistente de IA un historial de chats». El reloj de la cabecera abre, encima de la conversación, la lista
+     de las de este proyecto (las guarda app.js, `chatsIA`): por días, la más reciente arriba, con su título (lo primero que se
+     pidió, o el que se le ponga), la hora, cuántos mensajes, lo gastado y el modo; un buscador por título y por lo que se pidió;
+     abrir una (la de ahora queda guardada tal cual), renombrarla (doble clic o el lápiz: salir del campo guarda, Esc lo deja) y
+     eliminarla (con «Deshacer» en el aviso). Esc o el reloj la cierran. */
+  let hist = null, histIdx = null, histBusca = '', histPinta = 0;
+  const histAbierto = () => !!(hist && !hist.hidden);
+  const sinAcentos = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  function crearHist() {
+    if (hist || !panel) return hist;
+    hist = document.createElement('div');
+    hist.className = 'as-hist'; hist.hidden = true;
+    hist.setAttribute('role', 'dialog'); hist.setAttribute('aria-label', 'Conversaciones anteriores');
+    hist.innerHTML = `
+      <div class="as-hist-cab"><span class="as-rotulo">Conversaciones</span><span class="as-hist-cuenta" data-as-hist-cuenta></span>
+        <button type="button" class="as-hist-nueva" data-as-nueva title="Empezar una conversación nueva (la de ahora se queda aquí)">${ic('ic-plus', 13)}<span>Nueva</span></button>
+        <button type="button" class="icono" data-as-hist-cerrar title="Volver a la conversación (Esc)" aria-label="Volver a la conversación">${ic('ic-close', 15)}</button></div>
+      <input type="search" class="as-fx-buscar as-hist-buscar" data-as-hist-buscar placeholder="Buscar en las conversaciones…" aria-label="Buscar en las conversaciones" spellcheck="false">
+      <div class="as-hist-lista" data-as-hist-lista role="list"></div>`;
+    const cab = panel.querySelector('.as-cab');
+    if (cab) cab.after(hist); else panel.prepend(hist);
+    const buscar = hist.querySelector('[data-as-hist-buscar]');
+    buscar.addEventListener('input', () => { histBusca = buscar.value; pintarLista(); });
+    hist.addEventListener('dblclick', e => { const t = e.target.closest('.as-hist-tit'); if (t) { clearTimeout(tClicChat); renombrarChat(t.closest('[data-as-chat]')); } });
+    hist.addEventListener('keydown', alTeclaHist);
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !histAbierto()) return;
+      const a = document.activeElement;
+      if (a && a !== document.body && !hist.contains(a)) return;
+      if (document.querySelector('dialog[open]')) return;
+      e.preventDefault(); cerrarHist(true);
+    });
+    return hist;
+  }
+  function abrirHist() {
+    if (!panel) return;
+    abrir({ sinTutorial: true, foco: false });
+    crearHist();
+    cerrarFx(); cerrarDn(); cerrarPj();
+    hist.hidden = false;
+    const b = panel.querySelector('[data-as-hist]'); if (b) { b.classList.add('on'); b.setAttribute('aria-expanded', 'true'); }
+    const q = hist.querySelector('[data-as-hist-buscar]'); q.value = histBusca = '';
+    pintarHist().then(() => { if (histAbierto()) { try { q.focus({ preventScroll: true }); } catch (_) { /* nada */ } } });
+  }
+  function cerrarHist(volver) {
+    if (!hist || hist.hidden) return false;
+    hist.hidden = true;
+    const b = panel && panel.querySelector('[data-as-hist]'); if (b) { b.classList.remove('on'); b.setAttribute('aria-expanded', 'false'); }
+    if (volver && campo && panel && !panel.hidden && !pref.plegado) { try { campo.focus({ preventScroll: true }); } catch (_) { /* nada */ } }
+    return true;
+  }
+  async function pintarHist() {
+    if (!hist) return;
+    const n = ++histPinta;
+    let idx = null;
+    if (g.chats) { try { idx = await g.chats.indice(); } catch (_) { idx = null; } }
+    if (n !== histPinta) return;
+    histIdx = idx;
+    pintarLista();
+  }
+  /* «Hoy», «Ayer», «Esta semana» y luego por meses («Septiembre de 2026») */
+  function grupoFecha(ms) {
+    const d = new Date(ms), hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const dia = new Date(d); dia.setHours(0, 0, 0, 0);
+    const dias = Math.round((hoy - dia) / 86400000);
+    if (dias <= 0) return 'Hoy';
+    if (dias === 1) return 'Ayer';
+    if (dias < 7) return 'Esta semana';
+    const m = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+    return m.charAt(0).toUpperCase() + m.slice(1);
+  }
+  function horaDe(ms) {
+    const d = new Date(ms), hoy = new Date();
+    const h = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === hoy.toDateString()) return h;
+    return d.toLocaleDateString('es', { day: 'numeric', month: 'short' }).replace('.', '') + ' · ' + h;
+  }
+  const NOMBRE_MODO = { equipo: 'Equipo', mesa: 'Mesa' };
+  function pintarLista() {
+    if (!hist) return;
+    const lista = hist.querySelector('[data-as-hist-lista]'), cuenta = hist.querySelector('[data-as-hist-cuenta]');
+    if (!g.chats) { lista.innerHTML = '<p class="as-hist-vacio">El historial de conversaciones es de la app de escritorio.</p>'; cuenta.textContent = ''; return; }
+    if (!histIdx) { lista.innerHTML = '<p class="as-hist-vacio">Abre un proyecto para ver sus conversaciones.</p>'; cuenta.textContent = ''; return; }
+    /* las que tienen algún mensaje (una con solo fórmulas o duendes elegidos, si es la abierta) */
+    const todas = histIdx.chats.filter(c => c && c.id && ((+c.mensajes || 0) > 0 || c.id === chatId)).sort((a, b) => (b.modificado || 0) - (a.modificado || 0));
+    cuenta.textContent = todas.length ? String(todas.length) : '';
+    const q = sinAcentos(histBusca).trim().split(/\s+/).filter(Boolean);
+    const vistas = q.length ? todas.filter(c => { const t = sinAcentos((c.titulo || '') + ' ' + (c.busca || '')); return q.every(p => t.includes(p)); }) : todas;
+    if (!todas.length) { lista.innerHTML = '<p class="as-hist-vacio">Aún no hay conversaciones en este proyecto. Las que tengas con el asistente se guardan aquí.</p>'; return; }
+    if (!vistas.length) { lista.innerHTML = '<p class="as-hist-vacio">Ninguna conversación tiene «' + esc(histBusca.trim()) + '».</p>'; return; }
+    /* la fila con el foco lo conserva al repintar (tras renombrar, eliminar o un guardado) */
+    const act = document.activeElement, conFoco = act && hist.contains(act) && act.closest('[data-as-chat]') ? act.closest('[data-as-chat]').dataset.asChat : null;
+    let html = '', grupo = null;
+    for (const c of vistas) {
+      const gr = grupoFecha(c.modificado || c.creado || Date.now());
+      if (gr !== grupo) { html += `<div class="as-fx-grupo as-hist-grupo">${esc(gr)}</div>`; grupo = gr; }
+      const m = +c.mensajes || 0;
+      const meta = [horaDe(c.modificado || c.creado || Date.now()), m + (m === 1 ? ' mensaje' : ' mensajes')];
+      if (+c.coste > 0) meta.push(usd(c.coste));
+      if (NOMBRE_MODO[c.modo]) meta.push(NOMBRE_MODO[c.modo]);
+      const on = c.id === chatId;
+      html += `<div class="as-hist-fila${on ? ' on' : ''}" data-as-chat="${esc(c.id)}" role="listitem">
+        <button type="button" class="as-hist-abrir" data-as-chat-abrir${on ? ' aria-current="true"' : ''} title="${on ? 'La conversación de ahora' : 'Abrir esta conversación'}">
+          <b class="as-hist-tit">${esc(c.titulo || 'Conversación')}</b><em>${on ? '<span class="as-hist-ahora">Abierta</span>' : ''}${esc(meta.join(' · '))}</em></button>
+        <button type="button" class="icono as-hist-acc" data-as-chat-compartir aria-haspopup="true" title="Compartir con Claude" aria-label="Compartir con Claude">${ic('ic-link', 13)}</button>
+        <button type="button" class="icono as-hist-acc" data-as-chat-renombrar title="Renombrar" aria-label="Renombrar">${ic('ic-edit', 13)}</button>
+        <button type="button" class="icono as-hist-acc" data-as-chat-borrar title="Eliminar" aria-label="Eliminar">${ic('ic-trash', 13)}</button></div>`;
+    }
+    lista.innerHTML = html;
+    if (conFoco || (histAbierto() && (!document.activeElement || document.activeElement === document.body))) {
+      const b = (conFoco && lista.querySelector(`[data-as-chat="${CSS.escape(conFoco)}"] [data-as-chat-abrir]`)) || hist.querySelector('[data-as-hist-buscar]');
+      if (b) { try { b.focus({ preventScroll: true }); } catch (_) { /* nada */ } }
+    }
+  }
+  /* un clic en una fila la abre; en su título, tras 260 ms (el doble clic lo renombra, como en el árbol), y el segundo clic de un
+     doble clic no cuenta. Con el teclado (Enter, espacio: `detail` 0), al momento */
+  let tClicChat = null;
+  function clicChat(b, e) {
+    const id = b.closest('[data-as-chat]').dataset.asChat;
+    clearTimeout(tClicChat);
+    if (e && e.detail >= 2) return;
+    if (e && e.detail === 1 && e.target.closest('.as-hist-tit')) { tClicChat = setTimeout(() => abrirChat(id), 260); return; }
+    abrirChat(id);
+  }
+  /* abrir una del historial: la de ahora se guarda tal cual (si nunca tuvo mensajes, se va) y se carga la elegida */
+  /* **Compartir una conversación con Claude** (1.1.75, Leo: «quiero poder compartir una conversación que tuve en el asistente con
+     Claude para pedir opiniones o refinamientos»). Claude (Cowork, Claude Code) la lee con `leer_conversacion` o `ver_enlace` por su
+     enlace `clapcraft://<proyecto>/conversacion/<id>` (vive en los datos de la app; ver herramientas.js). El menú copia el enlace con
+     un encargo («su opinión» o «que refine lo que salió») listo para pegar, solo el enlace, o la conversación entera en texto (para
+     pegarla en cualquier sitio, también en claude.ai). `id` null: la que está en el panel. */
+  const ENCARGO_CONV = {
+    opinion: 'Quiero tu opinión: qué te parece lo que se habló y lo que se hizo, qué funciona, qué no y qué cambiarías. Todavía no cambies nada en el proyecto.',
+    refinar: 'Refina lo que salió de ella: lee en el proyecto lo que el asistente escribió o cambió (los «Paso:» dicen dónde) y mejóralo con las herramientas de ClapCraft. Antes de cambiar nada, dime qué vas a hacer.'
+  };
+  async function conversacionParaCompartir(id) {
+    if (!g.chats || !g.enlaceConversacion) return { error: 'Compartir conversaciones es de la app de escritorio' };
+    if (!id || id === chatId) {
+      if (!items.some(i => i.tipo === 'yo')) return { error: 'Aún no hay nada que compartir: escríbele algo al asistente primero' };
+      guardar();
+      if (!chatId) return { error: 'No se pudo guardar la conversación' };
+      id = chatId;
+    }
+    let idx = null; try { idx = await g.chats.indice(); } catch (_) { idx = null; }
+    const meta = (idx && (idx.chats || []).find(c => c.id === id)) || (id === chatId ? Object.assign({ id }, metaChat()) : null);
+    if (!meta) return { error: 'No se encontró esa conversación' };
+    const e = g.enlaceConversacion(id, meta.titulo);
+    if (!e || !e.markdown) return { error: 'No se pudo hacer el enlace (¿hay un proyecto abierto?)' };
+    return { id, meta, enlace: e };
+  }
+  async function copiarCompartir(id, que) {
+    const x = await conversacionParaCompartir(id);
+    if (x.error) { avisar(x.error); return false; }
+    let t;
+    if (que === 'texto') {
+      let d = null;
+      if (x.id === chatId) d = { vista: items.map(i => Object.assign({}, i)), modelo: modeloActual(), modo: modoLocal, mesa: mesaCfg };
+      else { try { d = await g.chats.leer(x.id); } catch (_) { d = null; } }
+      if (!d) { avisar('No pude leer esa conversación'); return false; }
+      const H = C.herramientas, pr = g.proyecto ? g.proyecto() : null;
+      if (!H || !H.textoConversacion) { avisar('Esta versión no sabe pasar la conversación a texto'); return false; }
+      t = H.textoConversacion(d, x.meta, { proyecto: pr && pr.nombre, enlace: x.enlace.url, maestro: nombrePrincipal() });
+    } else if (que === 'enlace') t = x.enlace.markdown;
+    else t = 'Te comparto una conversación que tuve en ClapCraft con el asistente de IA de la app (' + (x.meta.modelo || modeloActual() || 'DeepSeek') + '). Léela con leer_conversacion (o ver_enlace):\n' + x.enlace.markdown + '\n\n' + ENCARGO_CONV[que === 'refinar' ? 'refinar' : 'opinion'];
+    const copiar = g.copiarPortapapeles || g.copiarTexto;
+    if (!copiar) { avisar('No se puede copiar aquí'); return false; }
+    let ok = false; try { ok = (await copiar(t)) !== false; } catch (_) { ok = false; }
+    avisar(!ok ? 'No se pudo copiar' : que === 'texto' ? 'Conversación copiada en texto: pégala donde quieras' : que === 'enlace' ? 'Enlace de la conversación copiado: pégalo en Claude' : 'Copiado para Claude: pégalo en Cowork o Claude Code (y añade lo que quieras pedirle)');
+    return ok;
+  }
+  function menuCompartir(b, id) {
+    const pop = C.gestor && C.gestor.pop;
+    if (!pop) { copiarCompartir(id, 'opinion'); return; }
+    const f = document.createDocumentFragment();
+    const tit = document.createElement('div'); tit.className = 'gd-pop-tit'; tit.textContent = 'Compartir con Claude'; f.appendChild(tit);
+    const op = (texto, sub, que) => {
+      const x = document.createElement('button'); x.type = 'button'; x.setAttribute('role', 'menuitem'); x.dataset.asCompartirOp = que;
+      x.innerHTML = '<span class="as-comp-txt"><b>' + esc(texto) + '</b><em>' + esc(sub) + '</em></span>';
+      x.addEventListener('click', () => { if (C.gestor.cerrarPop) C.gestor.cerrarPop(); copiarCompartir(id, que); });
+      f.appendChild(x);
+    };
+    op('Pedirle su opinión', 'Copia el enlace con el encargo, para pegarlo en Cowork o Claude Code', 'opinion');
+    op('Pedirle que lo refine', 'Que mejore en el proyecto lo que salió de la conversación', 'refinar');
+    op('Copiar solo el enlace', 'clapcraft://… (Claude la lee con ver_enlace)', 'enlace');
+    op('Copiar la conversación en texto', 'Para pegarla en cualquier sitio, también en claude.ai', 'texto');
+    pop(b, f);
+    const el = [...document.querySelectorAll('body > .gd-pop')].pop(); if (el) el.classList.add('as-comp-pop');
+  }
+  async function abrirChat(id) {
+    if (!id || !g.chats) return false;
+    if (id === chatId) { cerrarHist(true); return true; }
+    let d = null; try { d = await g.chats.leer(id); } catch (_) { d = null; }
+    if (!d) { avisar('No se encontró esa conversación'); pintarHist(); return false; }
+    dejarChat();
+    reiniciar(); cargaN++;
+    chatId = id;
+    cargarDatos(d);
+    Promise.resolve(g.chats.actual(id)).catch(() => {});
+    cerrarHist(true);
+    return true;
+  }
+  function renombrarChat(fila) {
+    if (!fila || !g.chats || fila.querySelector('.as-hist-edit')) return;
+    const id = fila.dataset.asChat, tit = fila.querySelector('.as-hist-tit'); if (!tit) return;
+    const antes = tit.textContent;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'as-hist-edit'; inp.value = antes; inp.maxLength = 120; inp.setAttribute('aria-label', 'Nombre de la conversación');
+    tit.replaceWith(inp);
+    fila.classList.add('editando');
+    let hecho = false;
+    const acabar = guardarlo => {
+      if (hecho) return; hecho = true;
+      const t = inp.value.replace(/\s+/g, ' ').trim();
+      if (guardarlo && t && t !== antes) Promise.resolve(g.chats.renombrar(id, t)).then(pintarHist, pintarHist);
+      else pintarLista();
+    };
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); acabar(true); const b = hist.querySelector(`[data-as-chat="${CSS.escape(id)}"] [data-as-chat-abrir]`); if (b) b.focus(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); acabar(false); const b = hist.querySelector(`[data-as-chat="${CSS.escape(id)}"] [data-as-chat-abrir]`); if (b) b.focus(); }
+    });
+    inp.addEventListener('blur', () => acabar(true));       // salir del campo guarda, como en el resto de ClapCraft
+    inp.addEventListener('click', e => e.stopPropagation());
+    inp.focus(); inp.select();
+  }
+  async function borrarChat(id) {
+    if (!id || !g.chats) return;
+    const era = id === chatId;
+    if (era) { reiniciar(); cargaN++; pintarTodo(); }          // la de ahora: el panel se queda con una nueva
+    let r = null; try { r = await g.chats.borrar(id); } catch (_) { r = null; }
+    pintarHist();
+    if (!r) return;
+    const tit = r.meta && r.meta.titulo ? '«' + corto(r.meta.titulo, 40) + '»' : '';
+    avisar('Conversación eliminada' + (tit ? ': ' + tit : ''), r.datos ? [{ texto: 'Deshacer', fn: () => { Promise.resolve(g.chats.restaurar(r.meta, r.datos)).then(() => { if (histAbierto()) pintarHist(); }, () => {}); } }] : undefined);
+    const sig = hist && hist.querySelector('[data-as-chat-abrir]'); if (sig && histAbierto()) setTimeout(() => { const b = hist.querySelector('[data-as-chat-abrir]'); if (b) b.focus(); }, 0);
+  }
+  /* Esc vuelve a la conversación; ↑ ↓ entre el buscador y las filas; Enter en el buscador abre la primera; Supr elimina la del foco */
+  function alTeclaHist(e) {
+    if (e.target.classList.contains('as-hist-edit')) return;
+    const botones = () => [hist.querySelector('[data-as-hist-buscar]')].concat(Array.from(hist.querySelectorAll('[data-as-chat-abrir]')));
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarHist(true); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const bs = botones(), i = bs.indexOf(document.activeElement);
+      const j = i < 0 ? 0 : Math.max(0, Math.min(bs.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)));
+      if (bs[j]) { e.preventDefault(); bs[j].focus(); }
+      return;
+    }
+    if (e.key === 'Enter' && e.target.matches('[data-as-hist-buscar]')) { e.preventDefault(); const b = hist.querySelector('[data-as-chat-abrir]'); if (b) abrirChat(b.closest('[data-as-chat]').dataset.asChat); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.matches('[data-as-chat-abrir]')) { e.preventDefault(); borrarChat(e.target.closest('[data-as-chat]').dataset.asChat); return; }
+    if (e.key === 'F2' && e.target.matches('[data-as-chat-abrir]')) { e.preventDefault(); renombrarChat(e.target.closest('[data-as-chat]')); }
   }
 
   /* ---------- los lienzos: «Ejecutar con IA» ---------- */
@@ -592,6 +900,8 @@
         </div>
         <button type="button" class="icono as-sonido" data-as-sonido aria-pressed="false" title="Sonido: que los duendes «hablen» al contestar (apagado)" aria-label="Sonido de los duendes">${SVG_SONIDO_NO}</button>
         <button type="button" class="icono" data-as-memoria title="Memoria de estilo: las reglas de tono y forma que la IA aprende de tus correcciones" aria-label="Memoria de estilo">${ic('ic-edit', 15)}</button>
+        <button type="button" class="icono" data-as-compartir aria-haspopup="true" title="Compartir esta conversación con Claude (para pedirle su opinión o que refine lo que salió)" aria-label="Compartir la conversación con Claude">${ic('ic-link', 15)}</button>
+        <button type="button" class="icono" data-as-hist aria-expanded="false" title="Conversaciones anteriores" aria-label="Conversaciones anteriores">${SVG_HISTORIAL}</button>
         <button type="button" class="icono" data-as-nueva title="Nueva conversación" aria-label="Nueva conversación">${ic('ic-plus', 16)}</button>
         <button type="button" class="icono" data-as-ajustes title="Configurar el asistente" aria-label="Configurar el asistente">${ic('ic-ajustes', 16)}</button>
         <button type="button" class="icono" data-as-plegar title="Plegar el panel" aria-label="Plegar el panel">${ic('ic-chev-r', 16)}</button>
@@ -605,7 +915,7 @@
         <div class="as-modos" data-as-modos role="radiogroup" aria-label="Quién contesta" hidden>
           <button type="button" role="radio" data-as-modo="maestro" title="Maestro: contesta solo el duende maestro (de partida)">Maestro</button>
           <button type="button" role="radio" data-as-modo="equipo" title="Equipo: el maestro encarga lo largo (escenas, notas, fragmentos) a su equipo de duendes, que lo escribe, lo revisa y lo corrige">Equipo</button>
-          <button type="button" role="radio" data-as-modo="mesa" title="Mesa: varios duendes conversan entre ellos sobre lo que les pidas (solo leen el proyecto; no escriben nada)">Mesa</button>
+          <button type="button" role="radio" data-as-modo="mesa" title="Mesa: varios duendes conversan entre ellos sobre lo que les pidas (solo leen el proyecto; la secretaria, si la sientas, toma notas y edita lo que le pidas). Pulsado otra vez, la lista para sentar a más">Mesa</button>
           <span class="as-modos-nota" data-as-modos-nota></span>
         </div>
         <div class="as-fx" data-as-fx hidden></div>
@@ -655,7 +965,7 @@
     });
     /* un clic fuera cierra la lista de las fórmulas */
     document.addEventListener('pointerdown', e => { if (fxPop && !fxPop.contains(e.target) && !e.target.closest('[data-as-fx-abrir]')) cerrarFx(); }, true);
-    document.addEventListener('pointerdown', e => { if (dnPop && !dnPop.contains(e.target) && !e.target.closest('[data-as-dn-abrir]')) cerrarDn(); }, true);
+    document.addEventListener('pointerdown', e => { if (dnPop && !dnPop.contains(e.target) && !e.target.closest('[data-as-dn-abrir], [data-as-dn-mas], [data-as-modo="mesa"]')) cerrarDn(); }, true);
     document.addEventListener('pointerdown', e => { if (pjPop && !pjPop.contains(e.target) && !e.target.closest('[data-as-pj-menu]')) cerrarPj(); }, true);
     aplicarAncho();
     const btn = document.getElementById('asistenteBtn');
@@ -703,7 +1013,7 @@
     pref.abierto = false; guardarPref();
     document.body.classList.remove('con-asistente');
     const btn = document.getElementById('asistenteBtn'); if (btn) { btn.classList.remove('on'); btn.setAttribute('aria-pressed', 'false'); }
-    cerrarFx(); cerrarDn(); cerrarPj();                        // sus menús no se quedan abiertos para la próxima vez
+    cerrarFx(); cerrarDn(); cerrarPj(); cerrarHist();          // sus menús no se quedan abiertos para la próxima vez
     sonidoAlDia(); pausarMascota();
   }
   function alternar() { if (!panel) return; if (panel.hidden) abrir(); else if (pref.plegado) { pref.plegado = false; guardarPref(); aplicarPlegado(); } else cerrar(); }
@@ -732,6 +1042,14 @@
     else if (b.matches('[data-as-desplegar]')) plegar(false);
     else if (b.matches('[data-as-ajustes]')) configurar();
     else if (b.matches('[data-as-nueva]')) nuevaConversacion();
+    /* el historial de conversaciones (1.1.73) */
+    else if (b.matches('[data-as-hist]')) { if (histAbierto()) cerrarHist(true); else abrirHist(); }
+    else if (b.matches('[data-as-hist-cerrar]')) cerrarHist(true);
+    else if (b.matches('[data-as-chat-abrir]')) clicChat(b, e);
+    else if (b.matches('[data-as-chat-renombrar]')) renombrarChat(b.closest('[data-as-chat]'));
+    else if (b.matches('[data-as-chat-borrar]')) borrarChat(b.closest('[data-as-chat]').dataset.asChat);
+    else if (b.matches('[data-as-chat-compartir]')) menuCompartir(b, b.closest('[data-as-chat]').dataset.asChat);
+    else if (b.matches('[data-as-compartir]')) menuCompartir(b, null);
     else if (b.matches('[data-as-mandar]')) mandarCampo();
     else if (b.matches('[data-as-detener]')) detener();
     else if (b.matches('[data-as-tutorial]')) tutorial(b.dataset.asTutorial || 0);
@@ -755,7 +1073,8 @@
     }
     else if (b.matches('[data-as-fx-quitar]')) fijarFx(fxActivas.filter(x => x !== b.dataset.asFxQuitar));
     /* el equipo de duendes (1.1.68): los especiales de la conversación, el taller y el sonido */
-    else if (b.matches('[data-as-dn-abrir]')) { if (dnPop) cerrarDn(); else abrirDn(); }
+    else if (b.matches('[data-as-dn-abrir], [data-as-dn-mas]')) { if (dnPop) cerrarDn(); else abrirDn(); }
+    else if (b.matches('[data-as-acta]')) verActa(b.dataset.asActa);
     else if (b.matches('[data-as-modo]')) ponerModo(b.dataset.asModo);
     else if (b.matches('[data-as-pj-menu]')) { if (pjPop) cerrarPj(); else abrirMenuPj(b.dataset.asPjMenu); }
     else if (b.matches('[data-as-pj-rehacer-chip]')) {
@@ -1278,7 +1597,9 @@
   const EQ = () => C.equipo || null;
   const HERR_EQUIPO = 'trabajar_en_equipo';
   const PAPEL_TXT = { maestro: 'Maestro', lector: 'Lector', escritor: 'Escritor', coordinador: 'Coordinador', especial: 'Especial' };
-  const ROL_TXT = { revisar: 'Revisa', transformar: 'Transforma' };
+  const ROL_TXT = { revisar: 'Revisa', transformar: 'Transforma', consultar: 'Opina', anotar: 'Toma notas' };
+  /* la secretaria (1.1.74): toma notas en la Mesa y edita documentos cuando Leo le habla; no trabaja en el modo Equipo */
+  const esSecretaria = d => !!d && d.papel !== 'personaje' && d.rol === 'anotar';
   /* el color de un duende sin aspecto propio (el de su papel) */
   const COLOR_PAPEL = { maestro: '#6141C9', lector: '#2F7FC1', escritor: '#2E9E6B', coordinador: '#4A4E5A', especial: '#C9772B' };
   let equipoCache = null;                                      // el último que se leyó (si la UI de duendes no está)
@@ -1304,6 +1625,14 @@
     return duendesDe(e).find(d => d.papel === 'maestro') || null;
   }
   const nombreMaestro = () => (maestro() && maestro().nombre) || 'El duende maestro';
+  /* **El duende predeterminado del chat** (1.1.70, Leo: «que pueda cambiar al duende maestro del asistente para poner a otro como
+     predeterminado»): el que contesta, se ve en la mascota y habla con su voz; de partida, el maestro (C.equipo.predeterminado) */
+  function principal() {
+    const E = EQ(), e = equipoAhora();
+    try { if (E && E.predeterminado && e) { const m = E.predeterminado(e); if (m) return m; } } catch (_) { /* el maestro */ }
+    return maestro();
+  }
+  const nombrePrincipal = () => (principal() && principal().nombre) || nombreMaestro();
   function especialesEquipo() {
     const E = EQ(), e = equipoAhora(); if (!e) return [];
     try { if (E && E.especiales) return E.especiales(e) || []; } catch (_) { /* a mano */ }
@@ -1336,7 +1665,7 @@
      mesa (participantes, rondas, resumen) van con lo que guarda el panel. */
   const MODOS = ['maestro', 'equipo', 'mesa'];
   let modoLocal = 'maestro';
-  let mesaCfg = { participantes: [], rondas: 2, resumen: true, resumenSolo: false };
+  let mesaCfg = { participantes: [], rondas: 2, resumen: true, resumenSolo: false, acta: null };
   /* el modo de una conversación del motor (el nombre de su campo, sin confundirlo con el de las herramientas: tools/texto) */
   function modoDe(c) {
     if (!c) return null;
@@ -1350,6 +1679,10 @@
   }
   function ponerModo(m) {
     if (!MODOS.includes(m) || !EQ()) return;
+    /* «Mesa» ya elegida: abre (o cierra) la lista para sentar a más duendes en cualquier momento (1.1.74, Leo: «durante las mesas, no
+       puedo agregar nuevos duendes hasta haber quitado todos»: solo se abría con menos de dos sentados); también con la mesa en marcha,
+       para el siguiente mensaje */
+    if (m === 'mesa' && modoLocal === 'mesa') { if (dnPop) cerrarDn(true); else abrirDn(); return; }
     if (enCurso) { avisar('Espera a que termine (o pulsa Detener) para cambiar quién contesta'); pintarModos(); return; }
     modoLocal = m;
     if (!conv) conv = crearConversacion();
@@ -1373,8 +1706,40 @@
   function fijarLista(l) { if (modoLocal === 'mesa') fijarMesa(l); else fijarDn(l); }
   function fijarMesa(l) {
     const vistos = new Set();
+    const antes = mesaCfg.participantes.some(esSecretaria);
     mesaCfg.participantes = (l || []).filter(x => x && x.id && !vistos.has(x.id) && vistos.add(x.id)).slice(0, 6);
     pintarDn(); marcarDn(); pintarModos(); guardar();
+    if (dnPop && antes !== mesaCfg.participantes.some(esSecretaria)) { const f = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.asDnOp; abrirDn().then(() => { const b = f && dnPop && dnPop.querySelector('[data-as-dn-op="' + CSS.escape(f) + '"]'); if (b) b.focus({ preventScroll: true }); }); }   // sale (o se va) «El acta va en»
+  }
+  /* **El acta de la secretaria** (1.1.74): la biblioteca donde nace (la elegida en el menú de la Mesa; si no, la de la nota que se ve,
+     o la primera del proyecto). Una vez creada, la conversación sigue escribiendo en esa misma nota. */
+  function bibliotecasActa() {
+    const d = docsFx(); if (!d || typeof d.todasLasBibliotecas !== 'function') return [];
+    try { return d.todasLasBibliotecas().map(x => ({ id: x.sub.id, nombre: x.sub.nombre, contenedor: x.contenedor.nombre })); } catch (_) { return []; }
+  }
+  function destinoActa() {
+    const bs = bibliotecasActa(); if (!bs.length) return null;
+    let b = mesaCfg.acta && bs.find(x => x.id === mesaCfg.acta);
+    if (!b) {
+      try { const e = g.estado ? g.estado() : null, d = docsFx(), n = e && e.documento && d && d.nota(e.documento.id); b = n && bs.find(x => x.id === n.subId); } catch (_) { b = null; }
+    }
+    b = b || bs[0];
+    return { biblioteca: b.id, nombre: b.nombre };
+  }
+  function actaHtml() {
+    const bs = bibliotecasActa(), hay = conv && conv.acta && conv.acta.nota;
+    if (hay) return `<div class="as-mesa-acta-fila"><span>La secretaria anota en</span><button type="button" class="as-mesa-acta" data-as-acta="${esc(conv.acta.nota)}" title="Abrir el acta">${esc(corto(conv.acta.titulo || 'el acta', 40))}</button></div>`;
+    if (!bs.length) return `<div class="as-mesa-acta-fila"><span>La secretaria necesita una biblioteca para el acta: crea una en el proyecto.</span></div>`;
+    const sel = mesaCfg.acta && bs.some(x => x.id === mesaCfg.acta) ? mesaCfg.acta : '';
+    return `<label class="as-mesa-acta-fila" title="La primera vez que anote, la secretaria crea ahí el acta de esta conversación; luego sigue en la misma nota"><span>El acta va en</span><select data-as-mesa-acta>`
+      + `<option value=""${sel ? '' : ' selected'}>La de la nota que se ve (o la primera)</option>`
+      + bs.map(x => `<option value="${esc(x.id)}"${sel === x.id ? ' selected' : ''}>${esc(corto(x.contenedor + ' › ' + x.nombre, 48))}</option>`).join('') + `</select></label>`;
+  }
+  function verActa(id) {
+    if (!id) return;
+    const d = docsFx(); if (d && !d.nota(id)) { avisar('El acta ya no está (¿la tiraste a la papelera?): la secretaria creará otra la próxima vez que anote'); return; }
+    const u = C.enlaces && C.enlaces.crear ? C.enlaces.crear(proyectoSlug(), { tipo: 'nota', id }) : null;
+    if (u && g.irAEnlace) g.irAEnlace(u); else avisar('No se pudo abrir el acta');
   }
   /* los fijos también se sientan a la mesa (con su papel como personalidad) y el maestro, como moderador */
   const PERSONALIDAD_FIJA = {
@@ -1438,6 +1803,7 @@
       /* §17: el coordinador revisa lo dicho; con problemas, su burbuja lo marca y entra enojado a la mascota con la primera corrección */
       const revisa = revisaTurno(t, q), nProb = Math.max(0, Math.round(+t.problemas || 0));
       if (it && revisa) { it.revisa = true; it.problemas = nProb; }
+      if (it && t.anota) { it.anota = true; it.acta = !!t.acta; it.notaActa = t.notaActa || null; it.sinNotas = !!t.sinNotas; }
       const dicho = revisa && nProb > 0 ? primeraCorreccion(t.texto || (it && it.texto) || '') : primerasPalabras(t.texto || (it && it.texto) || '');
       if (revisa && nProb > 0 && dicho) tallerEvento({ quien: t.quien, papel: q.papel, nombre: q.nombre, accion: 'enojo', texto: dicho, ronda: t.ronda });
       if (dicho) {
@@ -1595,6 +1961,7 @@
     caja.hidden = !lista.length;
     caja.classList.toggle('mesa', mesa);
     if (!lista.length) { caja.innerHTML = ''; return; }
+    const mas = `<button type="button" class="as-fx-chip as-dn-mas" data-as-dn-mas title="${mesa ? 'Sentar a más duendes o personajes a la mesa (también en medio de la conversación)' : 'Elegir más duendes especiales'}" aria-label="${mesa ? 'Añadir a la mesa' : 'Añadir duendes'}" aria-haspopup="true">${ic('ic-plus', 11)}</button>`;
     caja.innerHTML = (mesa ? `<span class="as-fx-rot" title="Conversan en la mesa, por turnos y en este orden, con la personalidad que tenían al elegirlos">Mesa</span>`
       : `<span class="as-fx-rot" title="Revisan o transforman lo que escribe el equipo en esta conversación, en este orden, con la personalidad que tenían al elegirlos">Duendes</span>`) + lista.map(x => {
       const nom = x.nombre || 'Duende';
@@ -1609,7 +1976,7 @@
       const tit = nom + (x.personalidad ? ': ' + corto(primeraLinea(x.personalidad), 140) : '') + (cambio ? ' (como al elegirlo: ' + cambio + ')' : '');
       return `<span class="as-fx-chip as-dn-chip${cambio ? ' cambiado' : ''}" style="--dc:${esc(colorDuende(Object.assign({ papel: 'especial' }, x)))}" data-as-dn-id="${esc(x.id)}"><button type="button" class="as-fx-nom" data-as-dn-ver="${esc(x.id)}" title="${esc(tit)}"><i class="as-dn-punto" aria-hidden="true"></i><span>${esc(corto(nom, 32))}${cambio ? ' <em>(como al elegirlo)</em>' : ''}</span></button>`
         + `<button type="button" class="as-fx-x" data-as-dn-quitar="${esc(x.id)}" title="Quitarlo de la conversación" aria-label="Quitar a «${esc(nom)}» de la conversación">${ic('ic-close', 10)}</button></span>`;
-    }).join('');
+    }).join('') + mas;
   }
   function cerrarDn(volver) { if (!dnPop) return; dnPop.remove(); dnPop = null; if (volver && campo) cursorAlFinal(); }
   function marcarDn() {
@@ -1633,7 +2000,7 @@
     cerrarFx(); cerrarDn();
     await leerEquipo();
     const mesa = modoLocal === 'mesa';
-    const es = mesa ? candidatosMesa() : especialesEquipo();
+    const es = mesa ? candidatosMesa() : especialesEquipo().filter(d => !esSecretaria(d));
     const pop = document.createElement('div');
     pop.className = 'gd-pop as-fx-pop as-dn-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', mesa ? 'La mesa de duendes' : 'Duendes especiales');
     const sub = d => (d.papel && d.papel !== 'especial' ? (d.papel === 'maestro' ? 'modera' : PAPEL_TXT[d.papel] || '') : (ROL_TXT[d.rol] || '') + (d.rol === 'revisar' && d.veto ? ' · veta' : ''));
@@ -1649,6 +2016,7 @@
     const ajustes = mesa ? `<div class="gd-pop-sep"></div><div class="as-mesa-ajustes"><span>Rondas</span><span class="as-seg as-mesa-rondas" role="radiogroup">${[1, 2, 3].map(n => `<button type="button" role="radio" data-as-mesa-rondas="${n}" class="${mesaCfg.rondas === n ? 'on' : ''}" aria-checked="${mesaCfg.rondas === n}" title="${n === 1 ? 'Cada uno dice lo suyo una vez' : 'En la ' + (n === 2 ? 'segunda' : 'segunda y la tercera') + ' se contestan entre ellos'}">${n}</button>`).join('')}</span>`
       + `<label class="as-mesa-resume"><input type="checkbox" data-as-mesa-resumen${mesaCfg.resumen ? ' checked' : ''}> El maestro resume</label>`
       + `<label class="as-mesa-resume" title="En una entrevista (contesta uno solo), el maestro no resume salvo que lo marques"><input type="checkbox" data-as-mesa-resumen-solo${mesaCfg.resumenSolo ? ' checked' : ''}> también si contesta uno solo</label>`
+      + (mesaCfg.participantes.some(esSecretaria) ? actaHtml() : '')
       + (coordinadorEquipo() ? `<label class="as-mesa-resume as-mesa-coord" title="El coordinador habla el último de cada ronda: contrasta lo que dijeron los demás con el proyecto y dice lo que no se sostiene (lo mismo que elegirlo en la lista)"><input type="checkbox" data-as-mesa-coord${mesaCfg.participantes.some(x => x.id === ID_COORD) ? ' checked' : ''}> Invitar al coordinador (revisa lo que se dice)</label>` : '') + `</div>` : '';
     pop.innerHTML = (mesa ? `<div class="gd-pop-tit">La mesa <span>· de 2 a 6 duendes (o un personaje), en este orden</span></div>` : `<div class="gd-pop-tit">Duendes especiales <span>· en esta conversación</span></div>`)
       + (es.length > 5 ? `<input type="search" class="as-fx-buscar" placeholder="Buscar un duende" aria-label="Buscar un duende">` : '')
@@ -1663,6 +2031,7 @@
     pop.addEventListener('change', e => {
       if (e.target.matches('[data-as-mesa-resumen]')) { mesaCfg.resumen = !!e.target.checked; pintarModos(); guardar(); }
       if (e.target.matches('[data-as-mesa-resumen-solo]')) { mesaCfg.resumenSolo = !!e.target.checked; guardar(); }
+      if (e.target.matches('[data-as-mesa-acta]')) { mesaCfg.acta = e.target.value || null; guardar(); }
       /* §17: invitar al coordinador es lo mismo que elegirlo en la lista (va al final: el motor lo hace hablar el último de cada ronda) */
       if (e.target.matches('[data-as-mesa-coord]')) {
         const ahora = listaModo(), esta = ahora.some(x => x.id === ID_COORD), c = coordinadorEquipo();
@@ -2146,7 +2515,7 @@
     sitio.appendChild(f); duendeMarco = f;
     caja.addEventListener('click', e => { if (!e.target.closest('button')) saludarMascota(); });
   }
-  const maestroMasc = () => { const m = maestro(); return { id: m ? m.id : 'maestro', nombre: m ? m.nombre : 'El duende maestro', duende: m ? aspecto(m) : null, voz: vozDe(m) || 'normal' }; };
+  const maestroMasc = () => { const m = principal(); return { id: m ? m.id : 'maestro', nombre: m ? m.nombre : 'El duende maestro', duende: m ? aspecto(m) : null, voz: vozDe(m) || 'normal' }; };
   function prepararMascota(f) {
     conDuendes(f, D => {
       if (D.mascota) D.mascota({ maestro: maestroMasc(), sonido: sonidoActivo() });
@@ -2376,7 +2745,7 @@
       + (cfg && cfg.topeDiario ? ' Hoy: ' + usd(cfg.gastoHoy || 0) + ' de ' + usd(cfg.topeDiario) + ' (tope diario).' : '');
     const punto = panel.querySelector('[data-as-riel-punto]'); if (punto) punto.hidden = !enCurso;
     /* el duende maestro (1.1.68): su nombre (Leo puede cambiárselo) */
-    const mae = panel.querySelector('[data-as-maestro]'); if (mae) { const n = nombreMaestro(); if (mae.textContent !== n) mae.textContent = n; }
+    const mae = panel.querySelector('[data-as-maestro]'); if (mae) { const n = nombrePrincipal(); if (mae.textContent !== n) mae.textContent = n; }
     pintarSonido();
     pintarSaldo();
   }
@@ -2457,7 +2826,7 @@
     return `<div class="as-bienvenida as-bv-vacio">
         <span class="as-bv-ic">${ic('ic-asistente', 26)}</span>
         <h3>¿En qué te ayudo?</h3>
-        <p class="as-bv-nota">Soy ${esc(nombreMaestro())}: te contesto yo y, para escribir guion o notas largas, pongo a trabajar a mi equipo de duendes.</p>
+        <p class="as-bv-nota">Soy ${esc(nombrePrincipal())}: te contesto yo y, para escribir guion o notas largas, pongo a trabajar a mi equipo de duendes.</p>
         <p>Veo lo que tienes abierto en ClapCraft. Pega un enlace (${atajo('C', true)} copia el de lo que tienes delante) para decirme exactamente de qué hablas.</p>
         <div class="as-sugerencias">${sug.map(s => `<button type="button" class="as-sug" data-as-sugerencia="${esc(s)}">${esc(s)}</button>`).join('')}</div>
       </div>`;
@@ -2470,10 +2839,10 @@
       const hay = String(it.texto || '').trim();
       const copiar = hay && !it.vivo && g.copiarTexto ? `<button type="button" class="as-copiar" data-as-copiar title="Copiar la respuesta" aria-label="Copiar la respuesta">${ic('ic-docs', 13)}</button>` : '';
       /* en la mesa (1.1.68, §13): su nombre y el chip de su color; mientras piensa, su burbuja ya está (con los tres puntos) */
-      const quien = it.quien ? `<div class="as-mesa-quien"><span class="as-eq-chip" style="--dc:${esc(it.color || COLOR_PAPEL.especial)}">${esc(corto(it.nombre || 'Duende', 32))}</span>${it.revisa ? `<span class="as-mesa-rol as-mesa-revisa${it.problemas > 0 ? ' con-problemas' : ''}" title="${esc(it.problemas > 0 ? plural(it.problemas, 'cosa que no se sostiene', 'cosas que no se sostienen') : 'Revisa lo que se dijo contra el proyecto')}">revisa${it.problemas > 0 ? ' · ' + esc(it.problemas) : ''}</span>` : ''}${it.resumen ? '<span class="as-mesa-rol">resume</span>' : it.ronda > 1 ? `<span class="as-mesa-rol">ronda ${esc(it.ronda)}</span>` : ''}</div>` : '';
+      const quien = it.quien ? `<div class="as-mesa-quien"><span class="as-eq-chip" style="--dc:${esc(it.color || COLOR_PAPEL.especial)}">${esc(corto(it.nombre || 'Duende', 32))}</span>${it.revisa ? `<span class="as-mesa-rol as-mesa-revisa${it.problemas > 0 ? ' con-problemas' : ''}" title="${esc(it.problemas > 0 ? plural(it.problemas, 'cosa que no se sostiene', 'cosas que no se sostienen') : 'Revisa lo que se dijo contra el proyecto')}">revisa${it.problemas > 0 ? ' · ' + esc(it.problemas) : ''}</span>` : ''}${it.anota ? `<span class="as-mesa-rol as-mesa-anota" title="${esc(it.acta ? 'Lo que apuntó en el acta de esta conversación' : 'Lo que hizo en los documentos')}">${it.acta ? 'acta' : 'anota'}</span>${it.notaActa ? `<button type="button" class="as-mesa-acta" data-as-acta="${esc(it.notaActa)}" title="Abrir el acta de esta conversación">Ver el acta</button>` : ''}` : ''}${it.resumen ? '<span class="as-mesa-rol">resume</span>' : it.ronda > 1 ? `<span class="as-mesa-rol">ronda ${esc(it.ronda)}</span>` : ''}</div>` : '';
       const espera = it.quien && it.vivo && !hay && !razon ? '<div class="as-pensando" aria-label="Pensando"><i></i><i></i><i></i></div>' : '';
       /* una burbuja de la mesa que se quedó vacía (el duende leyó antes de hablar: lo suyo va en la siguiente) no se pinta (en vivo) */
-      return hay || razon || (quien && it.vivo) ? `<div class="as-msg as-ia${it.vivo ? ' vivo' : ''}${it.quien ? ' as-mesa' : ''}${it.revisa ? ' revisa' + (it.problemas > 0 ? ' con-problemas' : '') : ''}"${d}${it.quien ? ` style="--dc:${esc(it.color || COLOR_PAPEL.especial)}"` : ''}>${quien}${razon}${espera}${hay ? `<div class="as-md">${chipsDeIds(mdHtml(it.texto.trim()))}</div>` : ''}${copiar}</div>` : '';
+      return hay || razon || (quien && it.vivo) ? `<div class="as-msg as-ia${it.vivo ? ' vivo' : ''}${it.quien ? ' as-mesa' : ''}${it.revisa ? ' revisa' + (it.problemas > 0 ? ' con-problemas' : '') : ''}${it.anota ? ' anota' + (it.sinNotas ? ' sin-notas' : '') : ''}"${d}${it.quien ? ` style="--dc:${esc(it.color || COLOR_PAPEL.especial)}"` : ''}>${quien}${razon}${espera}${hay ? `<div class="as-md">${chipsDeIds(mdHtml(it.texto.trim()))}</div>` : ''}${copiar}</div>` : '';
     }
     if (it.tipo === 'paso') return pasoHtml(it, i);
     if (it.tipo === 'pelea') return `<div class="as-pelea nivel-${esc(it.nivel || 1)}"${d} role="note"><span aria-hidden="true">💥</span><span>${esc(it.texto)}</span></div>`;
@@ -3210,6 +3579,8 @@
   C.asistente = {
     iniciar, abrir, cerrar, alternar, plegar, mandar, insertar, detener, ejecutarNodo, ejecutarLienzo, tutorial, configurar,
     nuevaConversacion, recargar,
+    /* el historial de conversaciones (1.1.73): la lista, abrir una y la que está en el panel */
+    abrirHistorial: () => abrirHist(), cerrarHistorial: () => cerrarHist(), abrirConversacion: id => abrirChat(id), conversacionActual: () => chatId, guardarAhora: () => guardar(), compartir: (id, que) => copiarCompartir(id || null, que || 'opinion'), textoConversacion: async id => { const x = await conversacionParaCompartir(id || null); if (x.error) return null; const d = x.id === chatId ? { vista: items.map(i => Object.assign({}, i)), modelo: modeloActual(), modo: modoLocal, mesa: mesaCfg } : await g.chats.leer(x.id); return d && C.herramientas ? C.herramientas.textoConversacion(d, x.meta, { enlace: x.enlace.url, maestro: nombrePrincipal() }) : null; },
     /* las fórmulas activas de la conversación (1.1.60): cuáles y cambiarlas; `repintarFormulas` tras un cambio en «Fórmulas» */
     formulasActivas: () => fxActivas.slice(), activarFormulas: ids => fijarFx(ids), repintarFormulas: () => { pintarFx(); },
     /* citar un texto (1.1.60): { texto, enlace (clapcraft://… del tramo o la nota), etiqueta (de dónde es) } → un chip de cita en el campo */

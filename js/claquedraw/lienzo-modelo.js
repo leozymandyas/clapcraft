@@ -94,7 +94,7 @@
     if (!esObj(x)) return null;
     const id = typeof x.id === 'string' ? x.id.trim().toLowerCase() : '';
     if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(id) || DUENDES_FIJOS.includes(id)) return null;
-    const rol = x.rol === 'transformar' ? 'transformar' : 'revisar';
+    const rol = x.rol === 'transformar' || x.rol === 'consultar' ? x.rol : 'revisar';   // consultar (1.1.70): solo opina
     const t = x.temperatura, temp = t !== null && t !== '' && typeof t !== 'boolean' && isFinite(+t) ? Math.round(Math.max(0, Math.min(2, +t)) * 100) / 100 : null;
     const voces = raiz.Claquedraw && raiz.Claquedraw.teatroMods && Array.isArray(raiz.Claquedraw.teatroMods.VOCES) ? raiz.Claquedraw.teatroMods.VOCES : null;
     const voz = typeof x.voz === 'string' && /^[a-z][a-z_-]{0,23}$/.test(x.voz.trim()) && (!voces || voces.includes(x.voz.trim())) ? x.voz.trim() : null;

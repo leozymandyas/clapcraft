@@ -1263,7 +1263,7 @@ function mesaFalsa(resp, op) {
   const fn = async q => {
     peticiones.push(JSON.parse(JSON.stringify(q)));
     const s = q.mensajes[0].content;
-    const quien = /moderas la mesa de duendes\. Resume/.test(s) ? 'resumen' : (/^Eres «([^»]+)», (un duende de la mesa|el coordinador del equipo de duendes de ClapCraft, y Leo te invitó)/.exec(s) || [])[1] || 'maestro';
+    const quien = /moderas la mesa de duendes\. Resume/.test(s) ? 'resumen' : (/^Eres «([^»]+)», (un duende de la mesa|el coordinador del equipo de duendes de ClapCraft, y Leo te invitó|la secretaria de la mesa)/.exec(s) || [])[1] || 'maestro';
     const cola = resp[quien];
     let r = Array.isArray(cola) ? (cola.length > 1 ? cola.shift() : cola[0]) : cola;
     if (typeof r === 'function') r = await r(q, peticiones);
@@ -1271,7 +1271,7 @@ function mesaFalsa(resp, op) {
     return { ok: true, mensaje: { role: 'assistant', content: r === undefined ? quien + ' habla.' : r }, usage: op.usage || { prompt_tokens: 800, completion_tokens: 60 }, finish_reason: 'stop' };
   };
   fn.peticiones = peticiones;
-  fn.quien = q => { const s = q.mensajes[0].content; return /moderas la mesa/.test(s) ? 'resumen' : (/^Eres «([^»]+)», (un duende de la mesa|el coordinador del equipo de duendes de ClapCraft, y Leo te invitó)/.exec(s) || [])[1] || 'maestro'; };
+  fn.quien = q => { const s = q.mensajes[0].content; return /moderas la mesa/.test(s) ? 'resumen' : (/^Eres «([^»]+)», (un duende de la mesa|el coordinador del equipo de duendes de ClapCraft, y Leo te invitó|la secretaria de la mesa)/.exec(s) || [])[1] || 'maestro'; };
   return fn;
 }
 
@@ -1637,4 +1637,123 @@ test('personajes · mezclados con duendes: la crítica interroga a Mara, cada un
   await conv.enviarMesa('@Mara ¿y tú qué dices?', { participantes: [critica, mara] });
   assert.deepEqual(peticiones.map(quien), ['Mara'], 'solo ella, una ronda y sin resumen');
   assert.deepEqual(M.arrobas('@pj:p7 hola', [critica, mara]), ['pj:p7']);
+});
+
+/* ====================================================================
+   La secretaria de la mesa (1.1.74, Leo: «Que en el asistente, los duendes puedan editar documentos, como una especie de secretaria
+   que tome notas durante la mesa, que pueda personalizarse su personalidad como a los otros duendes»)
+   ==================================================================== */
+test('mesa · la secretaria: no conversa; tras el resumen apunta en el acta (la crea la primera vez, luego añade), con su personalidad, y se guarda', async () => {
+  const p = proyecto();
+  const eq = EQ.porDefecto();
+  const crit = EQ.instantanea(EQ.crearEspecial(eq, { nombre: 'La crítica', personalidad: 'Seca.' }).duende);
+  const sec = EQ.instantanea(EQ.editarDuende(eq, 'secretaria', { personalidad: 'Apunto con viñetas y nada más.' }).duende);
+  const poeta = EQ.instantanea(EQ.crearEspecial(eq, { nombre: 'El poeta', personalidad: 'Rima.' }).duende);
+  const vistos = [];
+  const t = mesaFalsa({
+    'La crítica': 'Que Mara llegue de noche.', 'El poeta': 'De acuerdo, con luna.', resumen: 'Acuerdo: de noche.',
+    'La secretaria': [q => { vistos.push(q); return '**Acuerdos**\n- Mara llega de noche (la crítica; el poeta, con luna).'; },
+      q => { vistos.push(q); return '⟦sin notas⟧'; },
+      q => { vistos.push(q); return '**Pendientes**\n- Decidir el bar.'; }]
+  });
+  const turnos = [], pasos = [];
+  const c = new M.Conversacion({ transporte: t, ejecutar: p.ejecutar, alTurno: x => turnos.push(x), alPaso: x => pasos.push(x), ahora: () => new Date(2026, 10, 6, 14, 32).getTime() });
+  c.fijarModo('mesa');
+  const acta = { biblioteca: p.b.id, nombre: 'Ideas' };
+  const r = await c.enviarMesa('@La crítica @El poeta ¿De día o de noche?', { participantes: [crit, sec, poeta], rondas: 1, acta });
+  assert.equal(r.motivo, 'fin', r.error);
+  assert.deepEqual(t.peticiones.map(t.quien), ['La crítica', 'El poeta', 'resumen', 'La secretaria'], 'ella no conversa: apunta al final, tras el resumen');
+  assert.equal(r.texto, 'Acuerdo: de noche.', 'lo último que se le dice a Leo sigue siendo el resumen');
+  const q0 = vistos[0];
+  assert.match(q0.mensajes[0].content, /^Eres «La secretaria», la secretaria de la mesa/);
+  assert.match(q0.mensajes[0].content, /Apunto con viñetas y nada más\./, 'su personalidad, la que Leo le dio');
+  assert.match(q0.mensajes[0].content, /⟦sin notas⟧/);
+  assert.ok(!q0.tools, 'para el acta no lee: todo va en la transcripción');
+  assert.match(q0.mensajes[1].content, /LA ÚLTIMA VUELTA DE LA MESA:[\s\S]*Leo: @La crítica[\s\S]*«La crítica»: Que Mara[\s\S]*«El poeta»: De acuerdo/);
+  /* el acta: una nota nueva en Ideas, con la entrada */
+  assert.ok(c.acta && c.acta.nota, 'apunta su acta');
+  const n = p.docs.nota(c.acta.nota);
+  assert.equal(n.subId, p.b.id); assert.equal(n.titulo, 'Acta de la mesa · 6/11/2026 14:32');
+  const txt = C.conversor.textoPlano(n.html);
+  assert.match(txt, /14:32 · ¿De día o de noche\?/, 'la entrada lleva la hora y el asunto (sin las @)');
+  assert.match(txt, /Mara llega de noche/);
+  /* su paso, con quién; su burbuja marcada */
+  const fin = pasos.filter(x => x.fase === 'fin');
+  assert.deepEqual(fin.map(x => x.herramienta), ['editar_biblioteca']); assert.ok(fin.every(x => x.quien === sec.id && x.ok));
+  const ent = c.entradas(), suya = ent.find(e => e.tipo === 'asistente' && e.anota);
+  assert.ok(suya && suya.acta && suya.notaActa === c.acta.nota); assert.match(suya.texto, /Mara llega de noche/);
+  assert.equal(ent[ent.indexOf(suya) + 1].tipo, 'paso', 'el paso va con su burbuja');
+  const ts = turnos.filter(x => x.quien === sec.id);
+  assert.deepEqual(ts.map(x => x.fase), ['empieza', 'termina']); assert.ok(ts[1].anota && ts[1].acta && ts[1].notaActa === c.acta.nota);
+  /* la siguiente vuelta: «sin notas» no escribe; la de después añade a la misma nota */
+  const id = c.acta.nota;
+  assert.equal((await c.enviarMesa('Hola a todos', { participantes: [crit, sec, poeta], rondas: 1, acta })).motivo, 'fin');
+  assert.match(c.entradas().filter(e => e.anota).at(-1).texto, /Nada nuevo que anotar/);
+  assert.match(vistos[1].mensajes[1].content, /Leo: Hola a todos/); assert.doesNotMatch(vistos[1].mensajes[1].content, /De día o de noche/, 'solo la última vuelta');
+  assert.equal(pasos.filter(x => x.fase === 'fin').length, 1, 'sin notas, no se escribe');
+  await c.enviarMesa('¿Y el bar?', { participantes: [crit, sec, poeta], rondas: 1, acta });
+  assert.equal(c.acta.nota, id, 'la misma acta');
+  assert.equal(c.acta.entradas, 2);
+  const txt2 = C.conversor.textoPlano(p.docs.nota(id).html);
+  assert.match(txt2, /Mara llega de noche[\s\S]*¿Y el bar\?[\s\S]*Decidir el bar/, 'añade al final');
+  assert.equal(pasos.filter(x => x.fase === 'fin').at(-1).herramienta, 'escribir_documento');
+  /* lo que apuntó no entra en lo que leen los demás */
+  assert.doesNotMatch(c._transcripcion(), /Nada nuevo que anotar|Decidir el bar/);
+  /* se guarda y vuelve; una conversación nueva la olvida */
+  const otra = new M.Conversacion({ transporte: () => {} }).cargar(JSON.parse(JSON.stringify(c)));
+  assert.deepEqual(otra.acta, c.acta);
+  assert.deepEqual(otra.entradas(), c.entradas());
+  c.vaciar(); assert.equal(c.acta, null);
+});
+
+test('mesa · a la secretaria se le habla con @ (o sola): edita los documentos que pide Leo, pide permiso para reemplazar, anota en el acta y no pelea', async () => {
+  const p = proyecto();
+  const eq = EQ.porDefecto();
+  const sec = EQ.instantanea(EQ.duendeDe(eq, 'secretaria'));
+  const crit = EQ.instantanea(EQ.crearEspecial(eq, { nombre: 'La crítica', personalidad: 'Seca.' }).duende);
+  const nota = p.docs.crearNota(p.b.id, null, 'Escaleta').nota;
+  p.docs.guardarNota(nota.id, { title: 'Escaleta', html: '<p>Uno.</p>', characters: {} });
+  let k = 0;
+  const t = mesaFalsa({
+    'La crítica': 'no debería hablar',
+    'La secretaria': q => {
+      k++;
+      if (k === 1) {
+        assert.match(q.mensajes[0].content, /Leo te habla A TI/);
+        assert.match(q.mensajes[0].content, /aún no existe: la primera vez que anotes nacerá en la biblioteca «Ideas»/);
+        const nombres = q.tools.map(x => x.function.name);
+        ['escribir_documento', 'editar_biblioteca', 'anotar_en_acta', 'leer_documento'].forEach(x => assert.ok(nombres.includes(x), x));
+        assert.ok(!nombres.includes('editar_esquema'), 'solo documentos y notas');
+        return pide([llamada('s1', 'escribir_documento', { nota: 'Escaleta', contenido: 'Dos.', como: 'prosa', modo: 'anadir' }), llamada('s2', 'anotar_en_acta', { contenido: '- La escaleta lleva «Dos».' })]);
+      }
+      if (k === 2) { assert.match(q.mensajes.at(-1).content, /Anotado en el acta/); return pide([llamada('s3', 'escribir_documento', { nota: 'Escaleta', contenido: 'Todo nuevo.', como: 'prosa' })]); }
+      if (k === 3) { assert.match(q.mensajes.at(-1).content, /NO SE HIZO: Leo no dio permiso/); return 'Añadí «Dos» a la Escaleta y lo apunté en el acta. No reemplacé nada.'; }
+      return 'Hecho.';
+    }
+  });
+  const permisos = [];
+  const c = new M.Conversacion({ transporte: t, ejecutar: p.ejecutar, alPermiso: x => { permisos.push(x); return 'no'; } });
+  const r = await c.enviarMesa('@La secretaria añade «Dos» a la escaleta y apúntalo', { participantes: [crit, sec], acta: { biblioteca: p.b.id, nombre: 'Ideas' } });
+  assert.equal(r.motivo, 'fin', r.error);
+  assert.deepEqual(t.peticiones.map(t.quien), ['La secretaria', 'La secretaria', 'La secretaria'], 'solo ella: la crítica no habla y no hay resumen');
+  assert.equal(r.texto, 'Añadí «Dos» a la Escaleta y lo apunté en el acta. No reemplacé nada.');
+  assert.match(C.conversor.textoPlano(p.docs.nota(nota.id).html), /Uno\.[\s\S]*Dos\./, 'añadió');
+  assert.doesNotMatch(C.conversor.textoPlano(p.docs.nota(nota.id).html), /Todo nuevo/, 'sin permiso, no reemplaza');
+  assert.equal(permisos.length, 1); assert.match(permisos[0].motivos.join(' '), /reemplaz/i);
+  assert.ok(c.acta && /La escaleta lleva «Dos»/.test(C.conversor.textoPlano(p.docs.nota(c.acta.nota).html)), 'el acta nació con lo apuntado');
+  assert.ok(!c.pelea);
+  /* sola en la mesa: le dictas, sin @ */
+  k = 10;
+  const t2 = mesaFalsa({ 'La secretaria': () => 'Hecho.' });
+  c.transporte = t2;
+  assert.equal((await c.enviarMesa('apunta que el bar se llama La Ola', { participantes: [sec] })).motivo, 'fin');
+  assert.deepEqual(t2.peticiones.map(t2.quien), ['La secretaria']);
+  assert.match(t2.peticiones[0].mensajes[0].content, /El acta de esta conversación es la nota «Acta de la mesa/);
+  /* sin biblioteca donde poner el acta: lo dice, sin romper la mesa */
+  const t3 = mesaFalsa({ 'La crítica': 'Algo.', 'La secretaria': '- Algo.' });
+  const c3 = new M.Conversacion({ transporte: t3, ejecutar: p.ejecutar });
+  assert.equal((await c3.enviarMesa('hola', { participantes: [crit, sec], resumen: false })).motivo, 'fin');
+  assert.match(c3.entradas().filter(e => e.anota).at(-1).texto, /No pude escribirlo en el acta: no hay ninguna biblioteca/);
+  /* la secretaria no basta con un solo duende para no ser mesa: con uno más vale */
+  assert.equal((await new M.Conversacion({ transporte: mesaFalsa({}) }).enviarMesa('hola', { participantes: [crit] })).motivo, 'mesa');
 });

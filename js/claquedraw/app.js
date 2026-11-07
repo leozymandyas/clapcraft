@@ -2871,7 +2871,29 @@
   }
   async function atenderClaude(p) {
     if (p.nombre === '_recientes') return recientes().map(r => ({ nombre: r.nombre, ruta: r.ruta || null }));
-    return ejecutarEnVivo(p.nombre, p.args, { origen: p.origen || 'Claude' });
+    const op = { origen: p.origen || 'Claude' };
+    /* las conversaciones del asistente (1.1.75): viven en los datos de la app, así que se leen antes (las herramientas son síncronas) */
+    let json = ''; try { json = JSON.stringify(p.args || {}); } catch (_) { json = ''; }
+    if (p.nombre === 'leer_conversacion' || (p.nombre === 'ver_enlace' && /\/conversacion\//.test(json))) op.conversaciones = await conversacionesParaClaude(p.args || {});
+    return ejecutarEnVivo(p.nombre, p.args, op);
+  }
+  /* { indice(), leer(id) } con lo que la herramienta va a pedir: el índice y las conversaciones que nombra la petición (por su id o su
+     enlace, por su título, o la última); antes, lo del panel se guarda (va por la misma cola) */
+  async function conversacionesParaClaude(args) {
+    try { if (C.asistente && C.asistente.guardarAhora) C.asistente.guardarAhora(); } catch (_) { /* sigue */ }
+    const ch = chatsIA();
+    let idx = null; try { idx = await ch.indice(); } catch (_) { idx = null; }
+    const cache = {};
+    if (idx && Array.isArray(idx.chats)) {
+      let json = ''; try { json = JSON.stringify(args); } catch (_) { json = ''; }
+      const plano = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase().trim();
+      const q = plano(args.conversacion), orden = idx.chats.filter(c => c && c.id).sort((a, b) => (b.modificado || 0) - (a.modificado || 0));
+      const ids = new Set(orden.filter(c => json.includes(c.id) || (q && q.length > 1 && plano(c.titulo).includes(q))).map(c => c.id));
+      if (!q || /^(la )?(ultima|reciente)$/.test(q)) { if (orden[0]) ids.add(orden[0].id); }
+      if (/^(la )?(actual|abierta)$/.test(q) && idx.actual) ids.add(idx.actual);
+      for (const id of [...ids].slice(0, 6)) { try { cache[id] = await ch.leer(id); } catch (_) { cache[id] = null; } }
+    }
+    return { indice: () => idx, leer: id => cache[id] || null };
   }
   /* Una herramienta sobre el proyecto de esta ventana, en vivo (1.1.59: lo que hacía `atenderClaude`, para que el asistente con otra
      IA lo haga igual sin pasar por el socket): se vuelca lo del tablero y del editor, se ejecuta con el contexto de la ventana y, si
@@ -2892,6 +2914,7 @@
       equipo: () => equipoActual(),                            // los duendes del asistente (1.1.68): `editar_lienzo` los acepta por su nombre
       /* la memoria de estilo (1.1.60, js/claquedraw/memoria-ui.js): la general, de este equipo; el asistente ya la lleva en su prompt */
       memoriaGeneral: C.memoriaUI && C.memoriaUI.ctxGeneral ? C.memoriaUI.ctxGeneral() : null, memoriaEnPrompt: !!op.memoriaEnPrompt,
+      conversaciones: op.conversaciones || null,               // las del asistente, para leer_conversacion (1.1.75)
       cambio: () => { cambio = true; }, estado: estadoEnPantalla, mostrar: mostrarClaude, ponerNombre: ponerNombreProyecto,
       renombrarProyecto: n => (renombrarProyecto(abiertoId, n) ? { ok: true, aviso: 'Proyecto «' + n + '» (su archivo se sigue llamando igual)' } : { ok: false, aviso: 'No se pudo renombrar el proyecto' }) };
     /* lo que escribe la IA se apunta para aprender de lo que Leo le corrija después (la memoria de estilo, 1.1.60) */
@@ -3078,9 +3101,39 @@
      topes: los pone asistente.js al guardar). La clave es la de siempre (sin el prefijo): su archivo o `p:<id>`. */
   const iaConv = () => (api && api.ia && typeof api.ia.conversacion === 'function' ? api.ia.conversacion : null);
   const claveCorta = k => (k && k.startsWith(PREFIJO_ASISTENTE) ? k.slice(PREFIJO_ASISTENTE.length) : k);
-  function borrarConversacionIA(corta) {
+  /* **El historial de conversaciones** (1.1.73, Leo: «Implementa en el asistente de IA un historial de chats»). Hasta la 1.1.72 cada
+     proyecto tenía una sola conversación y «Nueva conversación» la borraba. Ahora la clave del proyecto guarda un **índice**
+     (`{ version: 2, actual, chats: [{ id, titulo, propio?, creado, modificado, mensajes, coste, modelo, modo, busca }] }`) y cada
+     conversación va en su propia clave, `<clave>#chat:<id>` (un archivo cada una en electron/ia.js: el índice se lee sin cargarlas
+     todas). Lo de antes (`version: 1`, una conversación sola) pasa a ser la primera del índice al leerlo; un proyecto sin archivo que
+     ya lo tiene se lleva sus conversaciones de `p:<id>` a la clave de su archivo. Borrar el índice (`borrar`) y moverlo (`mover`, al
+     renombrar el archivo) se llevan sus conversaciones: lo hace electron/ia.js, y aquí `borrarConversacionIA`/`migrarConversacion`
+     en el localStorage del navegador.
+     (Con `function` y `var`, como el resto de esta parte: `montar` le da `chatsIA()` al asistente antes de llegar aquí.) */
+  var SEP_CHAT = '#chat:', MAX_CHATS = 200;
+  function claveChat(corta, id) { return corta + SEP_CHAT + id; }
+  function esIndice(x) { return !!(x && typeof x === 'object' && x.version === 2 && Array.isArray(x.chats)); }
+  async function almLeer(corta) {
+    const f = iaConv();
+    if (f) { try { return (await f({ accion: 'leer', clave: corta })) || null; } catch (_) { return null; } }
+    return leerJSON(PREFIJO_ASISTENTE + corta);
+  }
+  async function almEscribir(corta, datos) {
+    const f = iaConv();
+    if (f) { try { const r = await f({ accion: 'escribir', clave: corta, datos }); return !!(r && r.ok); } catch (_) { return false; } }
+    return escribirJSON(PREFIJO_ASISTENTE + corta, datos) || (!esIndice(datos) && escribirJSON(PREFIJO_ASISTENTE + corta, recortarConversacion(datos)));
+  }
+  async function almBorrar(corta) {
+    const f = iaConv();
+    if (f) { try { await f({ accion: 'borrar', clave: corta, solo: true }); } catch (_) {} return; }
     try { localStorage.removeItem(PREFIJO_ASISTENTE + corta); } catch (_) {}
-    const f = iaConv(); if (f) Promise.resolve(f({ accion: 'borrar', clave: corta })).catch(() => {});
+  }
+  function borrarConversacionIA(corta) {
+    const f = iaConv();
+    if (f) { Promise.resolve(f({ accion: 'borrar', clave: corta })).catch(() => {}); return; }   // (con sus conversaciones)
+    const x = leerJSON(PREFIJO_ASISTENTE + corta);
+    if (esIndice(x)) x.chats.forEach(c => { try { localStorage.removeItem(PREFIJO_ASISTENTE + claveChat(corta, c.id)); } catch (_) {} });
+    try { localStorage.removeItem(PREFIJO_ASISTENTE + corta); } catch (_) {}
   }
   /* lo que quedara en el localStorage de antes, a los datos de la app (y fuera de aquí) */
   async function mudarConversacionesIA() {
@@ -3097,40 +3150,100 @@
       } catch (_) {}
     }
   }
-  function guardarConversacion(json) {
-    const k = claveConversacion(); if (!k) return false;
-    const kp = PREFIJO_ASISTENTE + 'p:' + abiertoId;
-    const vacia = !json || (Array.isArray(json.mensajes) && !json.mensajes.length && !(json.pasos && json.pasos.length));
-    const f = iaConv();
-    if (f) {
-      if (vacia) { borrarConversacionIA(claveCorta(k)); if (k !== kp) borrarConversacionIA(claveCorta(kp)); return true; }
-      return Promise.resolve(f({ accion: 'escribir', clave: claveCorta(k), datos: json })).then(r => {
-        if (r && r.ok && k !== kp) borrarConversacionIA(claveCorta(kp));   // ya tiene archivo: la de sin archivo sobra
-        return !!(r && r.ok);
-      }).catch(() => false);
-    }
-    if (vacia) { try { localStorage.removeItem(k); if (k !== kp) localStorage.removeItem(kp); } catch (_) {} return true; }
-    const ok = escribirJSON(k, json) || escribirJSON(k, recortarConversacion(json));
-    if (ok && k !== kp) { try { localStorage.removeItem(kp); } catch (_) {} }   // ya tiene archivo: la de sin archivo sobra
-    return ok;
+  function nuevoIdChat() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  /* lo que el índice apunta de una conversación (lo calcula asistente.js; aquí, solo lo de una de antes) */
+  function metaDeAntes(x, id) {
+    const vista = Array.isArray(x && x.vista) ? x.vista : [];
+    const yo = vista.filter(i => i && i.tipo === 'yo').map(i => String(i.texto || ''));
+    const f = +(x && x.fecha) || Date.now();
+    return { id, titulo: (yo[0] || 'Conversación').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/^>\s?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 70) || 'Conversación',
+      creado: f, modificado: f, mensajes: vista.filter(i => i && (i.tipo === 'yo' || i.tipo === 'ia')).length, coste: +(x && x.coste && x.coste.usd) || 0, modelo: (x && x.modelo) || '', modo: (x && x.modo) || 'maestro', busca: yo.join(' ').slice(0, 600) };
   }
-  async function cargarConversacion() {
+  /* el índice de la conversación del proyecto abierto, puesto al día (lo de antes, mudado). Una sola a la vez: `colaChats` */
+  var colaChats = null;
+  function enCola(fn) { const p = (colaChats || Promise.resolve()).then(fn, fn); colaChats = p.catch(() => {}); return p; }
+  async function indiceChats() {
     const k = claveConversacion(); if (!k) return null;
-    const f = iaConv();
-    if (f) {
-      await mudarConversacionesIA();
-      try {
-        const x = await f({ accion: 'leer', clave: claveCorta(k) });
-        return x || (abiertoId ? await f({ accion: 'leer', clave: 'p:' + abiertoId }) : null);
-      } catch (_) { return null; }
+    const corta = claveCorta(k), cortaP = abiertoId ? 'p:' + abiertoId : null;
+    await mudarConversacionesIA();
+    let x = await almLeer(corta);
+    /* sin archivo hasta ahora: lo de `p:<id>` va a la clave de su archivo (el índice y cada conversación) */
+    if (!x && cortaP && cortaP !== corta) {
+      const xp = await almLeer(cortaP);
+      if (esIndice(xp)) {
+        for (const c of xp.chats) { const d = await almLeer(claveChat(cortaP, c.id)); if (d) await almEscribir(claveChat(corta, c.id), d); }
+        if (await almEscribir(corta, xp)) { x = xp; borrarConversacionIA(cortaP); }
+      } else if (xp) { x = xp; await almBorrar(cortaP); }
     }
-    return leerJSON(k) || (abiertoId ? leerJSON(PREFIJO_ASISTENTE + 'p:' + abiertoId) : null);
+    if (esIndice(x)) return { corta, idx: x };
+    const idx = { version: 2, actual: null, chats: [] };
+    if (x && (x.vista || x.conversacion)) {                     // una conversación de antes de la 1.1.73: la primera del historial
+      const id = nuevoIdChat();
+      if (await almEscribir(claveChat(corta, id), x)) { idx.chats.push(metaDeAntes(x, id)); idx.actual = id; }
+    }
+    if (idx.chats.length || x) await almEscribir(corta, idx);
+    return { corta, idx };
   }
-  /* el archivo se renombró: la conversación va con él */
+  /* sin la última pasada de `MAX_CHATS`: las más viejas se van (nunca la que está abierta) */
+  async function podarChats(corta, idx) {
+    if (idx.chats.length <= MAX_CHATS) return;
+    const orden = idx.chats.slice().sort((a, b) => (a.modificado || 0) - (b.modificado || 0));
+    while (idx.chats.length > MAX_CHATS && orden.length) {
+      const c = orden.shift(); if (c.id === idx.actual) continue;
+      idx.chats = idx.chats.filter(x => x.id !== c.id);
+      await almBorrar(claveChat(corta, c.id));
+    }
+  }
+  function chatsIA() { return {
+    /* { actual, chats } (copias: asistente.js no toca el índice) */
+    indice: () => enCola(async () => { const r = await indiceChats(); return r ? JSON.parse(JSON.stringify(r.idx)) : null; }),
+    leer: id => enCola(async () => { const r = await indiceChats(); return r && id ? almLeer(claveChat(r.corta, id)) : null; }),
+    /* guarda una conversación (y su línea del índice) y la deja como la abierta */
+    guardar: (id, datos, meta) => enCola(async () => {
+      const r = await indiceChats(); if (!r || !id || !datos) return false;
+      if (!(await almEscribir(claveChat(r.corta, id), datos))) return false;
+      const i = r.idx.chats.findIndex(c => c.id === id), antes = i >= 0 ? r.idx.chats[i] : null;
+      const m = Object.assign({}, antes || { creado: Date.now() }, meta || {}, { id });
+      if (antes && antes.propio && !(meta && meta.propio)) { m.titulo = antes.titulo; m.propio = true; }   // un nombre puesto a mano se queda
+      if (i >= 0) r.idx.chats[i] = m; else r.idx.chats.push(m);
+      r.idx.actual = id;
+      await podarChats(r.corta, r.idx);
+      return almEscribir(r.corta, r.idx);
+    }),
+    /* cuál se abre al volver al proyecto (null: una nueva, vacía) */
+    actual: id => enCola(async () => { const r = await indiceChats(); if (!r) return false; if (r.idx.actual === (id || null)) return true; r.idx.actual = id || null; return almEscribir(r.corta, r.idx); }),
+    renombrar: (id, titulo) => enCola(async () => {
+      const r = await indiceChats(); const c = r && r.idx.chats.find(x => x.id === id); if (!c) return false;
+      const t = String(titulo || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      if (t) { c.titulo = t; c.propio = true; } else delete c.propio;   // vacío: vuelve el automático (lo pone asistente.js al guardar)
+      return almEscribir(r.corta, r.idx);
+    }),
+    /* la quita y devuelve lo que era, para «Deshacer» ({ meta, datos }) */
+    borrar: id => enCola(async () => {
+      const r = await indiceChats(); const meta = r && r.idx.chats.find(x => x.id === id); if (!meta) return null;
+      const datos = await almLeer(claveChat(r.corta, id));
+      r.idx.chats = r.idx.chats.filter(x => x.id !== id);
+      if (r.idx.actual === id) r.idx.actual = null;
+      await almBorrar(claveChat(r.corta, id));
+      await almEscribir(r.corta, r.idx);
+      return { meta, datos };
+    }),
+    restaurar: (meta, datos) => enCola(async () => {
+      const r = await indiceChats(); if (!r || !meta || !meta.id || !datos) return false;
+      if (!(await almEscribir(claveChat(r.corta, meta.id), datos))) return false;
+      r.idx.chats = r.idx.chats.filter(x => x.id !== meta.id).concat([meta]);
+      return almEscribir(r.corta, r.idx);
+    })
+  }; }
+  /* el archivo se renombró: la conversación va con él (electron/ia.js mueve también las del índice) */
   function migrarConversacion(antes, ahora) {
     const f = iaConv();
     if (f) { Promise.resolve(f({ accion: 'mover', clave: antes, a: ahora })).catch(() => {}); return; }
     const x = leerJSON(PREFIJO_ASISTENTE + antes); if (!x) return;
+    if (esIndice(x)) x.chats.forEach(c => {
+      const d = leerJSON(PREFIJO_ASISTENTE + claveChat(antes, c.id));
+      if (d && escribirJSON(PREFIJO_ASISTENTE + claveChat(ahora, c.id), d)) { try { localStorage.removeItem(PREFIJO_ASISTENTE + claveChat(antes, c.id)); } catch (_) {} }
+    });
     if (escribirJSON(PREFIJO_ASISTENTE + ahora, x)) { try { localStorage.removeItem(PREFIJO_ASISTENTE + antes); } catch (_) {} }
   }
   /* parar lo que el asistente esté haciendo: al cerrar el proyecto, al salir y al recargar la ventana */
@@ -3285,11 +3398,28 @@
         /* el respaldo de los duendes (los diálogos de guardar y abrir son los de equipo-ui.js): la versión que lleva y los mods del
            teatro, la copia de esta ventana (escribirlos por aquí la pone al día; por editorAPI.teatro, main.js no avisa a quien escribe) */
         mods: () => modsGlobales, escribirMods: m => escribirModsGlobales(m),
+        copiar: t => copiarTexto(t),                           // «Pedir a Claude» (1.1.70)
         version: () => (api && api.version ? api.version() : fetch('package.json').then(r => r.json()).then(j => j.version)).catch(() => null)
       });
       if (typeof C.equipoUI.alCambio === 'function') C.equipoUI.alCambio(eq => { if (eq) equipoApp = eq; avisarEquipo(equipoApp); });
     }
     leerEquipoApp().then(eq => avisarEquipo(eq)).catch(() => {});
+    /* **Lo que cambió Claude** (1.1.70, editar_duendes_asistente por el puente): ya llegó por `equipo:cambio`; aquí, el aviso con
+       «Ver» (el diálogo en ese duende) y «Deshacer» (vuelve el equipo de antes de esa petición, entero) */
+    const ae = apiEquipo();
+    if (ae && typeof ae.alClaude === 'function') ae.alClaude(x => {
+      if (!x) return;
+      const acc = [];
+      if (Array.isArray(x.ids) && x.ids[0]) acc.push({ texto: 'Ver', fn: () => abrirEquipoUI({ id: x.ids[0] }) });
+      if (x.antes && typeof x.antes === 'object') acc.push({ texto: 'Deshacer', fn: () => {
+        escribirEquipoApp(x.antes).then(r => {
+          if (r && r.ok === false) { T.tablero.avisar(r.error || 'No se pudo deshacer'); return; }
+          if (C.equipoUI && C.equipoUI.recargar) C.equipoUI.recargar();
+          T.tablero.avisar('Deshecho lo que hizo Claude en los duendes del asistente');
+        });
+      } });
+      T.tablero.avisar(String(x.texto || 'Claude cambió los duendes del asistente'), acc);
+    });
   }
 
   function iniciarAsistente() {
@@ -3313,7 +3443,11 @@
       deshacer: id => deshacerIA(id),
       verCambio: id => verCambioIA(id),
       historial: () => abrirHistorialClaude(),
-      guardarConversacion, cargarConversacion,
+      chats: chatsIA(),                                       // el historial de conversaciones (1.1.73)
+      /* compartir una con Claude (1.1.75): su enlace en Markdown, con el nombre del proyecto de los demás enlaces, y copiar al portapapeles */
+      enlaceConversacion: (id, titulo) => { const d = docs(); if (!d || !C.enlaces || !id) return null; if (sellarEnlaces(abiertoId)) { biblioteca.marcar(abiertoId); persistir(); }
+        return { markdown: C.enlaces.markdown(d, proyectoEnlace(), { tipo: 'conversacion', id }, opEnlace({ titulo })), url: C.enlaces.crear(proyectoEnlace(), { tipo: 'conversacion', id }) }; },
+      copiarPortapapeles: t => copiarTexto(t),
       abrirWeb: abrirWebIA,
       avisar: (msg, accion) => T.tablero.avisar(msg, accion),
       confirmar: (msg, si) => T.tablero.confirmar(msg, si),
@@ -3538,6 +3672,9 @@
   /* **Cmd+Shift+C**: lo elegido o, sin nada elegido, lo que se ve */
   function copiarLoElegido() {
     if (!docs()) { T.tablero.avisar('Abre un proyecto para copiar enlaces'); return; }
+    /* con el foco en el panel del asistente: el enlace de su conversación (1.1.75) */
+    const ae = document.activeElement, pa = $('asistente');
+    if (pa && ae && pa.contains(ae) && C.asistente && C.asistente.compartir) { C.asistente.compartir(null, 'enlace'); return; }
     const conNota = document.body.classList.contains('nota-abierta');
     /* en el lienzo: sus nodos elegidos (1.1.58) */
     if (vista.modo === 'lienzo' && lienzoMontado) {
@@ -3628,6 +3765,13 @@
     if (['contenedor', 'carpeta', 'grupo', 'personaje', 'biblioteca', 'seccion', 'segmento', 'lienzo'].includes(x.tipo) && C.gestor.ventanaAbierta && C.gestor.ventanaAbierta()) C.gestor.cerrarVentana();
     if (pantalla === 'nuevo') { pantalla = 'proyecto'; aplicarPantalla(); }
     const listo = aviso => ({ ok: true, aviso: 'A la vista: ' + (aviso || R.etiqueta) });
+    /* una conversación del asistente (1.1.75): el panel del asistente, con ella abierta */
+    if (x.tipo === 'conversacion') {
+      const A = C.asistente; if (!A || !A.abrirConversacion) return { ok: false, aviso: 'Esta versión no tiene el asistente' };
+      if (A.abrir) A.abrir({ sinTutorial: true });
+      Promise.resolve(A.abrirConversacion(x.id)).catch(() => {});
+      return listo('la conversación del asistente');
+    }
     const aTramo = (n, eid) => {
       if (!x.bloques || !n) return;
       const t = C.enlaces.tramo(n.html, x);

@@ -427,7 +427,7 @@ test('duendes: editar_lienzo los valida y guarda; leer_lienzo los nombra; ejecut
   /* validación: lo raro no pasa y el lote no cambia nada */
   const antes = JSON.stringify(lienzo(p));
   [[{ id: 'maestro', nombre: 'El maestro' }, /duende fijo/], [{ id: 'x y', nombre: 'Uno' }, /necesita su "id"/], [{ id: 'd-1' }, /necesita su "nombre"/],
-    [{ id: 'd-1', nombre: 'U', rol: 'mandar' }, /revisar o transformar/], [{ id: 'd-1', nombre: 'U', personalidad: 3 }, /es un texto/], ['Nadie', /No conozco el duende «Nadie»/], [42, /Cada duende es/],
+    [{ id: 'd-1', nombre: 'U', rol: 'mandar' }, /revisar, transformar o consultar/], [{ id: 'd-1', nombre: 'U', personalidad: 3 }, /es un texto/], ['Nadie', /No conozco el duende «Nadie»/], [42, /Cada duende es/],
     [[1, 2, 3, 4, 5, 6, 7].map(i => ({ id: 'd-' + i, nombre: 'D' + i })), /Como mucho 6 duendes/]].forEach(([v, re]) => {
     const e = H.ejecutar(p.ctx, 'editar_lienzo', { lienzo: 'Taller', operaciones: [{ op: 'editar_nodo', nodo: 'Escena 1', duendes: Array.isArray(v) ? v : [v] }] });
     assert.equal(e.ok, false); assert.match(e.error, re);

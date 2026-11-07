@@ -94,6 +94,12 @@ contextBridge.exposeInMainWorld('editorAPI', {
       const f = (_e, datos) => { try { fn(datos || null); } catch (_) {} };
       ipcRenderer.on('equipo:cambio', f);
       return () => ipcRenderer.removeListener('equipo:cambio', f);
+    },
+    /* lo que cambió Claude (1.1.70, editar_duendes_asistente): { texto, antes (el equipo de antes, para «Deshacer»), ids } */
+    alClaude: fn => {
+      const f = (_e, x) => { try { fn(x || null); } catch (_) {} };
+      ipcRenderer.on('equipo:claude', f);
+      return () => ipcRenderer.removeListener('equipo:claude', f);
     }
   },
   /* salir de la app (1.1.55): Electron pide a la ventana que escriba lo pendiente y espera su respuesta */

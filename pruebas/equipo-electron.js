@@ -136,6 +136,15 @@ const servidor = http.createServer((req, res) => {
       responder(req, res, b, { texto: S.verificaTexto || 'Todo lo dicho se sostiene.', pausa: 8 });
       return;
     }
+    /* la secretaria de la mesa (1.1.74): redacta el acta o, si Leo le habla, llama a sus herramientas y luego dice qué hizo */
+    if (/la secretaria de la mesa de duendes/.test(sis0)) {
+      const directa = /Leo te habla A TI/.test(sis0), yaHizo = (b.messages || []).some(m => m.role === 'tool');
+      S.sec = (S.sec || []).concat([{ directa, modelo: b.model, sistema: sis0, usuario: String(((b.messages || [])[1] || {}).content || ''), tools: (b.tools || []).map(t => t.function && t.function.name) }]);
+      S.orden = (S.orden || []).concat(['SECRETARIA']);
+      if (directa && !yaHizo) responder(req, res, b, { llamadas: [{ name: 'anotar_en_acta', args: { contenido: '- **Acuerdo de Leo**: la lluvia se queda.' } }], pausa: 8 });
+      else responder(req, res, b, { texto: directa ? 'Apunté en el acta que la lluvia se queda.' : '**Acuerdos**\n- La lluvia sobra en la estación (la crítica y el lector).\n\n**Pendientes**\n- Decidir si Mara lleva paraguas.', pausa: 8 });
+      return;
+    }
     /* la mesa (§13): cada duende en su turno y el maestro que resume (por su prompt de sistema) */
     if (/un duende de la mesa de duendes/.test(sis0) || /moderas la mesa de duendes/.test(sis0)) {
       const nombre = (/Eres «([^»]+)»/.exec(sis0) || [])[1] || '?', resumen = /moderas la mesa/.test(sis0);
@@ -249,7 +258,7 @@ app.whenReady().then(async () => {
       if (!r.ok) return JSON.stringify({ error: r.error });
       await window.editorAPI.equipo.escribir(r.equipo); await Claquedraw.equipoUI.recargar(); await W(200);
       return JSON.stringify({ id: r.duende.id, n: E.especiales(Claquedraw.equipoUI.equipo()).length });`));
-    comprobar('un especial nuevo en el equipo («La crítica»)', creada.id && creada.n === 2, JSON.stringify(creada));
+    comprobar('un especial nuevo en el equipo («La crítica», con el formateador y la secretaria de fábrica)', creada.id && creada.n === 3, JSON.stringify(creada));
 
     /* ---------- el panel: el duende maestro y el formateador de partida ---------- */
     /* de ClapBook: la mascota se monta la primera vez que se abre el panel (duendes.html pide sus fuentes a Google en cada carga) */
@@ -412,6 +421,25 @@ app.whenReady().then(async () => {
     ch = await chips();
     comprobar('una conversación nueva vuelve a «Maestro», sin duendes elegidos', !ch.length && await js(`return document.querySelector('#asistente [data-as-modo="maestro"]').classList.contains('on');`), JSON.stringify(ch));
 
+    /* ---------- 1.1.70: el duende predeterminado del chat («La crítica» en lugar del maestro) ---------- */
+    await espiar(MASCOTA, 'mascota');
+    await js(`const E = Claquedraw.equipo; const r = E.fijarPredeterminado(Claquedraw.equipoUI.equipo(), ${JSON.stringify(creada.id)});
+      await window.editorAPI.equipo.escribir(r.equipo); await Claquedraw.equipoUI.recargar(); await W(300); return true;`);
+    comprobar('predeterminado: la cabecera nombra a «La crítica»', await hasta(`const m = document.querySelector('#asistente [data-as-maestro]'); return !!m && m.textContent === 'La crítica';`, 3000),
+      await js(`return (document.querySelector('#asistente [data-as-maestro]') || {}).textContent;`));
+    comprobar('predeterminado: la mascota es ella', (await llamadas(MASCOTA, 'mascota')).some(x => x && x.maestro && x.maestro.nombre === 'La crítica'), JSON.stringify(await llamadas(MASCOTA, 'mascota')).slice(0, 300));
+    S.maestro.push({ texto: 'Soy la crítica, y te contesto yo.' });
+    antesM = S.peticiones.length;
+    await mandar('¿Quién eres?');
+    await hastaLibre();
+    pm = S.peticiones.slice(antesM).filter(p => p.cuerpo && p.cuerpo.stream && Array.isArray(p.cuerpo.messages));
+    const sis = pm.length ? String(pm[0].cuerpo.messages[0].content || '') : '';
+    comprobar('predeterminado: la IA recibe su nombre y su personalidad', /^Eres «La crítica», el asistente de ClapCraft/.test(sis) && /## Tu personalidad\nAhora es amable/.test(sis), sis.slice(0, 200));
+    await js(`const E = Claquedraw.equipo; const r = E.fijarPredeterminado(Claquedraw.equipoUI.equipo(), 'maestro');
+      await window.editorAPI.equipo.escribir(r.equipo); await Claquedraw.equipoUI.recargar(); await W(300); return true;`);
+    comprobar('predeterminado: de vuelta al maestro', await hasta(`const m = document.querySelector('#asistente [data-as-maestro]'); return !!m && /duende maestro/i.test(m.textContent);`, 3000));
+    await aClic(`document.querySelector('#asistente [data-as-nueva]')`, { tras: 400 });
+
     /* ---------- «Duendes del asistente…» (menú Claude) y Cmd+W ---------- */
     const md = menuItem('Duendes del asistente…');
     comprobar('el menú Claude lleva «Duendes del asistente…»', !!md);
@@ -524,6 +552,42 @@ app.whenReady().then(async () => {
     await tecla('Escape', [], 250);
     ch = await chips();
     comprobar('§17 · desmarcarla lo levanta de la mesa', ch.length === 2 && !ch.some(x => /coordinador/i.test(x)), JSON.stringify(ch));
+    /* ---------- 1.1.74: sentar a más duendes en cualquier momento (Leo: «durante las mesas, no puedo agregar nuevos duendes hasta haber
+       quitado todos, quiero poder agregar duendes a la mesa en cualquier momento») y la secretaria que toma notas ---------- */
+    await aClic(`document.querySelector('#asistente [data-as-modo="mesa"]')`, { tras: 400 });
+    comprobar('1.1.74 · con dos ya sentados, pulsar «Mesa» otra vez abre la lista para sentar a más', await hasta(`return !!document.querySelector('#asistente .as-dn-pop [data-as-dn-op="secretaria"]');`, 3000));
+    await aClic(`document.querySelector('#asistente [data-as-modo="mesa"]')`, { tras: 300 });
+    comprobar('1.1.74 · y otra vez la cierra', await hasta(`return !document.querySelector('#asistente .as-dn-pop');`, 2000));
+    comprobar('1.1.74 · la fila de la mesa lleva un «＋» al final', await js(`const c = document.querySelector('#asistente [data-as-dn]'); const m = c.querySelector('[data-as-dn-mas]'); return !!m && c.lastElementChild === m;`));
+    await aClic(`document.querySelector('#asistente [data-as-dn] [data-as-dn-mas]')`, { tras: 400 });
+    comprobar('1.1.74 · el «＋» abre la lista (con la secretaria, «toma notas»)', await hasta(`const b = document.querySelector('#asistente .as-dn-pop [data-as-dn-op="secretaria"]'); return !!b && /toma notas/i.test(b.textContent);`, 3000));
+    await js(`await Claquedraw.app.ejecutarEnVivo('editar_proyecto', { operaciones: [{ op: 'crear_biblioteca', contenedor: ${JSON.stringify(ids.cid)}, nombre: 'Notas de la mesa' }] }, { origen: 'Claude', avisar: false }); await W(200); return true;`);
+    await aClic(`document.querySelector('#asistente .as-dn-pop [data-as-dn-op="secretaria"]')`, { tras: 500 });
+    ch = await chips();
+    comprobar('1.1.74 · la secretaria se sienta con los dos de antes', ch.length === 3 && /secretaria/i.test(ch[2]), JSON.stringify(ch));
+    comprobar('1.1.74 · y en el menú sale dónde va el acta, con la biblioteca del proyecto', await hasta(`const s = document.querySelector('#asistente .as-dn-pop [data-as-mesa-acta]'); return !!s && [...s.options].some(o => /Notas de la mesa/.test(o.textContent));`, 2000));
+    await tecla('Escape', [], 250);
+    S.orden = []; S.sec = [];
+    await mandar('¿Llueve en la estación o no?');
+    comprobar('1.1.74 · la mesa con la secretaria termina', await hastaLibre(30000));
+    comprobar('1.1.74 · ella no conversa: apunta al final, tras el resumen', S.orden.join(',') === 'La crítica,El lector,La crítica,El lector,RESUMEN,SECRETARIA', JSON.stringify(S.orden));
+    comprobar('1.1.74 · para el acta, con la última vuelta, su personalidad y sin herramientas', S.sec.length === 1 && !S.sec[0].directa && /LA ÚLTIMA VUELTA/.test(S.sec[0].usuario) && /Soy la secretaria de la mesa/.test(S.sec[0].sistema) && !S.sec[0].tools.length && S.sec[0].modelo === 'deepseek-v4-flash', JSON.stringify(S.sec.map(x => [x.directa, x.modelo, x.tools])));
+    const acta = JSON.parse(await js(`const d = ${D}, n = d.datos.notas.find(x => /^Acta de la mesa/.test(x.titulo)); return JSON.stringify(n ? { id: n.id, sub: d.sub(n.subId).sub.nombre, txt: Claquedraw.conversor.textoPlano(n.html) } : null);`));
+    comprobar('1.1.74 · el acta nace en «Notas de la mesa» con lo apuntado (la hora y el asunto)', !!acta && acta.sub === 'Notas de la mesa' && /\d\d:\d\d · ¿Llueve en la estación o no\?/.test(acta.txt) && /La lluvia sobra/.test(acta.txt) && /Pendientes/.test(acta.txt), JSON.stringify(acta));
+    comprobar('1.1.74 · su burbuja: «acta» y «Ver el acta», con el paso de lo que escribió', await js(`const b = [...document.querySelectorAll('#asistente .as-msg.as-mesa.anota')].pop(); return !!b && /secretaria/i.test(b.querySelector('.as-mesa-quien').textContent) && /acta/i.test(b.querySelector('.as-mesa-anota').textContent) && !!b.querySelector('[data-as-acta]') && /La lluvia sobra/.test(b.textContent);`)
+      && await js(`return [...document.querySelectorAll('#asistente .as-paso')].some(p => /biblioteca/i.test(p.textContent));`), await js(`return [...document.querySelectorAll('#asistente .as-msg.as-mesa')].slice(-2).map(x => x.innerText.slice(0, 120)).join(' | ');`));
+    S.orden = []; S.sec = [];
+    await mandar('@La secretaria apunta que la lluvia se queda');
+    await hastaLibre(20000);
+    comprobar('1.1.74 · «@La secretaria»: solo ella, con herramientas para escribir', S.orden.join(',') === 'SECRETARIA,SECRETARIA' && S.sec[0].directa && ['escribir_documento', 'editar_biblioteca', 'anotar_en_acta'].every(n => S.sec[0].tools.includes(n)), JSON.stringify({ o: S.orden, t: (S.sec[0] || {}).tools }));
+    const acta2 = await js(`const n = ${D}.nota(${JSON.stringify(acta && acta.id)}); return n ? Claquedraw.conversor.textoPlano(n.html) : '';`);
+    comprobar('1.1.74 · y lo añade a la misma acta', /La lluvia sobra[\s\S]*apunta que la lluvia se queda[\s\S]*la lluvia se queda/.test(acta2), acta2);
+    comprobar('1.1.74 · su respuesta dice lo que hizo', await js(`const b = [...document.querySelectorAll('#asistente .as-msg.as-mesa.anota')].pop(); return !!b && /Apunté en el acta/.test(b.textContent);`));
+    await aClic(`[...document.querySelectorAll('#asistente [data-as-acta]')].pop()`, { tras: 900 });
+    comprobar('1.1.74 · «Ver el acta» la abre', await hasta(`const e = Claquedraw.app.estadoEnPantalla ? Claquedraw.app.estadoEnPantalla() : null; return (!!e && !!e.documento && e.documento.id === ${JSON.stringify(acta && acta.id)}) || Claquedraw.gestor.notaElegida() === ${JSON.stringify(acta && acta.id)} || Claquedraw.gestor.notaAbierta() === ${JSON.stringify(acta && acta.id)};`, 4000));
+    await js(`if (Claquedraw.gestor.cerrarVentana) Claquedraw.gestor.cerrarVentana(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await W(300); return true;`);
+    await aClic(`document.querySelector('#asistente [data-as-dn] [data-as-dn-quitar="secretaria"]')`, { tras: 300 });
+
     /* ---------- §15: un personaje en la mesa (una entrevista) ---------- */
     const pj = JSON.parse(await js(`const d = ${D}; let p = d.elenco().find(x => x.nombre.toLowerCase() === 'mara');
       if (!p) { const r = d.crearPersonaje('Mara'); p = r.personaje; }

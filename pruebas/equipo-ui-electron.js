@@ -234,11 +234,11 @@ app.whenReady().then(async () => {
 
     /* ---------- f) ordenar ---------- */
     const esp = async () => (await eq()).duendes.filter(x => !x.fijo).map(x => x.id);
-    comprobar('f) el nuevo va detrás del formateador', JSON.stringify(await esp()) === JSON.stringify(['formateador', nuevo]), JSON.stringify(await esp()));
+    comprobar('f) el nuevo va detrás de los de fábrica (el formateador y la secretaria)', JSON.stringify(await esp()) === JSON.stringify(['formateador', 'secretaria', nuevo]), JSON.stringify(await esp()));
     await aClic(`document.querySelector('[data-eq-mover="-1"]')`);
-    comprobar('f) ↑ lo sube delante del formateador', JSON.stringify(await esp()) === JSON.stringify([nuevo, 'formateador']), JSON.stringify(await esp()));
+    comprobar('f) ↑ lo sube uno (delante de la secretaria)', JSON.stringify(await esp()) === JSON.stringify(['formateador', nuevo, 'secretaria']), JSON.stringify(await esp()));
     await aClic(`document.querySelector('[data-eq-mover="1"]')`);
-    comprobar('f) ↓ lo vuelve a bajar', JSON.stringify(await esp()) === JSON.stringify(['formateador', nuevo]), JSON.stringify(await esp()));
+    comprobar('f) ↓ lo vuelve a bajar', JSON.stringify(await esp()) === JSON.stringify(['formateador', 'secretaria', nuevo]), JSON.stringify(await esp()));
 
     /* ---------- g) el modo y las rondas ---------- */
     await aClic(`document.querySelector('[data-eq-modo="libre"]')`);
@@ -284,7 +284,7 @@ app.whenReady().then(async () => {
     comprobar('i) el aviso trae «Deshacer», a la vista encima de la ventana', await js(`const av = document.getElementById('aviso'), b = av && av.querySelector('.aviso-accion'); if (!b || !av.classList.contains('show')) return false;
       const r = b.getBoundingClientRect(), el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return el === b;`));
     await aClic(`document.querySelector('#aviso .aviso-accion')`, { tras: 400 });
-    comprobar('i) «Deshacer» lo recupera, en su sitio y con todo', JSON.stringify(await esp()) === JSON.stringify(['formateador', nuevo]) && (await duende(nuevo)).personalidad === 'Eres una correctora estricta.', JSON.stringify(await esp()));
+    comprobar('i) «Deshacer» lo recupera, en su sitio y con todo', JSON.stringify(await esp()) === JSON.stringify(['formateador', 'secretaria', nuevo]) && (await duende(nuevo)).personalidad === 'Eres una correctora estricta.', JSON.stringify(await esp()));
     comprobar('i) y lo deja elegido', (await elegido()) === nuevo);
     /* el formateador (de partida) sí se elimina */
     await aClic(item('formateador'));
@@ -393,8 +393,8 @@ app.whenReady().then(async () => {
     comprobar('m) Importar (el menú) abre la ventana y el selector de archivos (.json)', await hasta(`return Claquedraw.equipoUI.abierto() && Claquedraw.equipoUI._pregunta();`, 4000) &&
       JSON.stringify((abiertos[abiertos.length - 1] || {}).filters || []).includes('"json"'), JSON.stringify(abiertos[abiertos.length - 1]));
     const texto = await js(`return document.querySelector('.eq-preg').textContent.replace(/\\s+/g, ' ');`);
-    comprobar('m) la pregunta: lo que trae (con sus mods) y lo que hace cada opción', /Trae 2 duendes especiales \(«Doña Rigor», «Don Prisa»\)/.test(texto) && /de ClapCraft [\d.]+, exportado/.test(texto) && /3 mods del teatro/.test(texto) &&
-      /Añadir a los míos: 2 nuevos · 3 mods del teatro que no tenías/.test(texto) && /Reemplazar todos: .*modo Libre, 3 rondas/.test(texto) && /1 tuyo que no viene en él se quita/.test(texto), texto);
+    comprobar('m) la pregunta: lo que trae (con sus mods) y lo que hace cada opción', /Trae 3 duendes especiales \(«La secretaria», «Doña Rigor», «Don Prisa»\)/.test(texto) && /de ClapCraft [\d.]+, exportado/.test(texto) && /3 mods del teatro/.test(texto) &&
+      /Añadir a los míos: 2 nuevos · 1 ya lo tienes igual · 3 mods del teatro que no tenías/.test(texto) && /Reemplazar todos: .*modo Libre, 3 rondas/.test(texto) && /1 tuyo que no viene en él se quita/.test(texto), texto);
     comprobar('m) «Añadir a los míos» es el de partida (tiene el foco)', await js(`return document.activeElement === document.querySelector('[data-eq-preg="anadir"]');`));
     comprobar('m) no es un diálogo del sistema: va dentro de la ventana', await js(`return !!document.querySelector('.eq-ventana .eq-preg-capa .eq-preg[role="alertdialog"]');`));
     await captura('5-respaldo-pregunta');
@@ -432,7 +432,7 @@ app.whenReady().then(async () => {
     await aClic(`document.querySelector('[data-eq-preg="reemplazar"]')`, { tras: 700 });
     tras = await eq();
     comprobar('m) Reemplazar todos: el equipo del respaldo entero (modo, rondas y sin el formateador, que allí se había eliminado)', JSON.stringify(tras) === JSON.stringify(esperado), JSON.stringify(tras).slice(0, 300));
-    comprobar('m) el aviso lo dice', /reemplazados por los del respaldo \(2 especiales\) · 3 mods del teatro/.test(await avisoTxt()), await avisoTxt());
+    comprobar('m) el aviso lo dice', /reemplazados por los del respaldo \(3 especiales\) · 3 mods del teatro/.test(await avisoTxt()), await avisoTxt());
     comprobar('m) la ventana lo enseña (modo Libre, la lista)', await js(`return document.querySelector('[data-eq-modo="libre"]').classList.contains('on') && [...document.querySelectorAll('.eq-item-n')].some(x => x.textContent === 'Doña Rigor');`));
 
     /* archivos que no valen */
@@ -487,6 +487,70 @@ app.whenReady().then(async () => {
     await js(`document.removeEventListener('drop', window.__oyeSoltar); return true;`);
     comprobar('m) nada de lo tecleado llegó a la app de debajo', await js(`return window.__abajo === 0;`), await js(`return window.__abajo;`));
     await captura('6-respaldo');
+
+    /* ---------- n) 1.1.70: Claude los crea (MCP en vivo), el consultor, el duende del chat y «Pedir a Claude» ---------- */
+    {
+      const srv = spawn(process.execPath, [path.join(__dirname, '..', 'claude', 'servidor.js')], {
+        env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1', CLAPCRAFT_PUENTE: path.join(DATOS, 'puente.json') }), stdio: ['pipe', 'pipe', 'pipe'] });
+      let buf = '', sig = 0; const esperas = new Map();
+      srv.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const x = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); const f = esperas.get(x.id); if (f) { esperas.delete(x.id); f(x); } } });
+      const rpc = (method, params) => new Promise(r => { const k = ++sig; esperas.set(k, r); srv.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: k, method, params }) + '\n'); });
+      const llamar = async (name, a) => { const r = await rpc('tools/call', { name, arguments: a }); return { error: !!r.result.isError, texto: r.result.content[0].text }; };
+      await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'Claude Cowork', version: '1' } });
+      if (!(await js(`return Claquedraw.equipoUI.abierto();`))) await js(`await Claquedraw.equipoUI.abrir(); return true;`);
+      let r = await llamar('ver_duendes_asistente', { guia: false });
+      comprobar('n) Claude ve el equipo por MCP (en vivo)', !r.error && /EL EQUIPO FIJO/.test(r.texto), r.texto);
+      r = await llamar('editar_duendes_asistente', { operaciones: [{ op: 'crear', nombre: 'La cómica', rol: 'consultar', voz: 'graciosa',
+        personalidad: 'Soy guionista de comedia: busco el remate al final de la frase.\nEjemplo: «Aquí el chiste llega tarde».', aspecto: { hat: 'boina', hatCol: '#B8323C' } }] });
+      comprobar('n) Claude crea un consultor', !r.error && /Creado «La cómica»/.test(r.texto) && /Ya está en ClapCraft/.test(r.texto), r.texto);
+      comprobar('n) llega a la ventana abierta sin recargar', await hasta(`return !![...document.querySelectorAll('.eq-item .eq-item-n')].find(x => x.textContent === 'La cómica');`, 4000));
+      comprobar('n) y al archivo', !!(archivo().duendes || []).find(d => d.nombre === 'La cómica'));
+      comprobar('n) el aviso dice que fue Claude, con «Ver» y «Deshacer»', await hasta(`const av = document.getElementById('aviso'); return av.classList.contains('show') && /Cowork creó «La cómica»/.test(av.textContent)
+        && [...av.querySelectorAll('.aviso-accion')].map(b => b.textContent).join('|') === 'Ver|Deshacer';`, 3000), await js(`return document.getElementById('aviso').textContent;`));
+      await aClic(`[...document.querySelectorAll('#aviso .aviso-accion')].find(b => b.textContent === 'Ver')`, { tras: 400 });
+      const cid = (archivo().duendes || []).find(d => d.nombre === 'La cómica').id;
+      comprobar('n) «Ver» elige su ficha', (await elegido()) === cid, await elegido());
+      comprobar('n) su papel es «Solo opina»', await js(`const b = document.querySelector('[data-eq-rol="consultar"]'); return !!b && b.classList.contains('on') && /Solo opina/.test(b.textContent);`));
+      comprobar('n) y su personalidad, la de Claude', await js(`return /remate al final/.test(${campo('personalidad')}.value);`));
+      /* ★: que sea el del chat */
+      await aClic(`document.querySelector('[data-eq-pred]')`, { tras: 400 });
+      comprobar('n) ★ lo hace el duende del chat (se guarda)', (await eq()).predeterminado === cid && archivo().predeterminado === cid, JSON.stringify((await eq()).predeterminado));
+      comprobar('n) su fila lleva la estrella y el maestro ya no', await js(`return !!document.querySelector('.eq-item[data-eq-id="${cid}"] .eq-pred') && !document.querySelector('.eq-item[data-eq-id="maestro"] .eq-pred');`));
+      comprobar('n) el asistente contesta con su nombre y su personalidad', await js(`const E = Claquedraw.equipo, e = Claquedraw.equipoUI.equipo(), p = E.predeterminado(e);
+        const s = Claquedraw.asistenteMotor.promptSistema({ persona: { nombre: p.nombre, personalidad: p.personalidad }, fecha: false }); return /^Eres «La cómica»/.test(s) && /remate al final/.test(s);`));
+      await aClic(item('maestro'), { tras: 300 });
+      comprobar('n) en el maestro, «Volver a ser el del chat»', await js(`return /Volver a ser el del chat/.test(document.querySelector('[data-eq-pred]').textContent);`));
+      await aClic(`document.querySelector('[data-eq-pred]')`, { tras: 400 });
+      comprobar('n) y vuelve a serlo', !('predeterminado' in (await eq())) && !('predeterminado' in archivo()));
+      /* «Pedir a Claude» copia el encargo */
+      await aClic(item(cid), { tras: 300 });
+      portapapeles = '';
+      await aClic(`document.querySelector('[data-eq-claude]')`, { tras: 400 });
+      comprobar('n) «Pedir a Claude» copia el encargo de ese duende', /Dale una personalidad más avanzada a «La cómica»/.test(portapapeles) && portapapeles.includes('ver_duendes_asistente { duende: "' + cid + '" }'), portapapeles);
+      portapapeles = '';
+      await aClic(`document.querySelector('[data-eq-claude-nuevo]')`, { tras: 400 });
+      comprobar('n) «Crear con Claude» copia el de uno nuevo', /Quiero un duende especial nuevo/.test(portapapeles), portapapeles);
+      /* la voz suena al elegirla (el retrato habla) */
+      await js(`const w = document.querySelector('.eq-marco').contentWindow; w.__hablo = []; const o = w.Duendes.hablar; w.Duendes.hablar = function (op) { w.__hablo.push(op && op.voz); return o.apply(this, arguments); }; return true;`);
+      await elegirEn(campo('voz'), 'robot');
+      comprobar('n) elegir otra voz la hace sonar', await js(`return (document.querySelector('.eq-marco').contentWindow.__hablo || []).includes('robot');`));
+      /* Claude cambia y Leo deshace desde el aviso */
+      r = await llamar('editar_duendes_asistente', { operaciones: [{ op: 'eliminar', duende: 'La cómica' }] });
+      comprobar('n) Claude lo elimina', !r.error && /Eliminado «La cómica»/.test(r.texto), r.texto);
+      await hasta(`return !document.querySelector('.eq-item[data-eq-id="${cid}"]');`, 3000);
+      await hasta(`return [...document.querySelectorAll('#aviso .aviso-accion')].some(b => b.textContent === 'Deshacer');`, 3000);
+      await aClic(`[...document.querySelectorAll('#aviso .aviso-accion')].find(b => b.textContent === 'Deshacer')`, { tras: 600 });
+      comprobar('n) «Deshacer» del aviso lo devuelve (en la ventana y en el archivo)', await hasta(`return !!document.querySelector('.eq-item[data-eq-id="${cid}"]');`, 3000) && !!(archivo().duendes || []).find(d => d.id === cid));
+      /* con la conexión apagada, Claude solo lee */
+      menu('Claude', 'Permitir que Claude acceda').click(); await espera(300);
+      r = await llamar('editar_duendes_asistente', { operaciones: [{ op: 'eliminar', duende: 'La cómica' }] });
+      comprobar('n) con la conexión apagada no escribe', r.error && /conexión con Claude apagada/.test(r.texto) && !!(archivo().duendes || []).find(d => d.id === cid), r.texto);
+      r = await llamar('ver_duendes_asistente', { duende: 'La cómica', guia: false });
+      comprobar('n) pero sí lee', !r.error && /solo opina \(consultor\)/.test(r.texto), r.texto);
+      menu('Claude', 'Permitir que Claude acceda').click(); await espera(300);
+      await new Promise(res => { srv.on('exit', res); srv.stdin.end(); });
+      await captura('7-claude');
+    }
 
     /* ---------- l) los cuatro temas ---------- */
     /* de ClapBook: el retrato sigue al tema de la app con la ventana abierta (antes se quedaba en el de cuando se abrió) */
